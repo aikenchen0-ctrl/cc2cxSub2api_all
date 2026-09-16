@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL转二维码功能演示</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .demo-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        h2 {
+            color: #666;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+        }
+        .step-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 URL转二维码功能演示</h1>
+    
+    <div class="demo-section">
+        <h2>功能说明</h2>
+        <p>本功能允许用户直接输入URL地址，系统会自动将其转换为二维码图片，然后可以进行艺术化处理。</p>
+        
+        <div class="success">
+            ✅ 已集成到现有的二维码艺术化处理流程中
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h2>使用步骤</h2>
+        
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>选择输入模式</strong>
+            <p>在页面顶部，你会看到两个选项：</p>
+            <ul>
+                <li><code>我有二维码图片</code> - 上传已有的二维码文件</li>
+                <li><code>我有URL</code> - 输入URL生成二维码 ⭐ 新功能</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>输入URL地址</strong>
+            <p>切换到"我有URL"模式后：</p>
+            <ul>
+                <li>在输入框中输入完整的URL</li>
+                <li>必须包含协议前缀：<code>http://</code> 或 <code>https://</code></li>
+                <li>示例：<code>https://www.example.com</code></li>
+            </ul>
+            
+            <div class="note">
+                ⚠️ 注意：URL必须以 http:// 或 https:// 开头，否则会提示格式错误
+            </div>
+        </div>
+
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>转换为二维码</strong>
+            <p>点击"转换为二维码"按钮，系统会：</p>
+            <ul>
+                <li>验证URL格式</li>
+                <li>调用后端API生成二维码</li>
+                <li>显示生成的二维码预览</li>
+                <li>自动集成到后续处理流程</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <span class="step-number">4</span>
+            <strong>继续艺术化处理</strong>
+            <p>生成的二维码可以像普通上传的二维码一样：</p>
+            <ul>
+                <li>在Canvas上框选区域</li>
+                <li>调整位置和大小</li>
+                <li>点击"艺术化二维码"</li>
+                <li>设置模板和参考图</li>
+                <li>生成最终的艺术化二维码</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h2>技术细节</h2>
+        
+        <h3>前端实现</h3>
+        <ul>
+            <li><strong>输入模式切换</strong>：使用radio按钮切换文件上传和URL输入</li>
+            <li><strong>URL验证</strong>：前端简单验证URL格式</li>
+            <li><strong>API调用</strong>：通过Fetch API调用后端接口</li>
+            <li><strong>数据转换</strong>：将DataURL转换为File对象，集成到现有流程</li>
+        </ul>
+
+        <h3>后端实现</h3>
+        <ul>
+            <li><strong>依赖库</strong>：使用 <code>qrcode</code> 库生成二维码</li>
+            <li><strong>API端点</strong>：<code>POST /api/url-to-qr</code></li>
+            <li><strong>图片处理</strong>：使用 <code>sharp</code> 统一输出格式为PNG</li>
+            <li><strong>容错级别</strong>：使用H级别（高容错率），适合艺术化处理</li>
+        </ul>
+
+        <h3>配置参数</h3>
+        <ul>
+            <li><strong>尺寸</strong>：512x512像素</li>
+            <li><strong>边距</strong>：4个模块</li>
+            <li><strong>颜色</strong>：黑色前景，白色背景</li>
+            <li><strong>容错率</strong>：H（High）- 约30%容错能力</li>
+        </ul>
+    </div>
+
+    <div class="demo-section">
+        <h2>常见问题</h2>
+        
+        <h3>Q: 为什么我的URL无法转换？</h3>
+        <p>A: 请确保URL以 <code>http://</code> 或 <code>https://</code> 开头。例如：</p>
+        <ul>
+            <li>✅ 正确：<code>https://www.baidu.com</code></li>
+            <li>❌ 错误：<code>www.baidu.com</code></li>
+        </ul>
+
+        <h3>Q: 生成的二维码能扫描吗？</h3>
+        <p>A: 是的，生成的二维码完全可扫描。使用了高容错率（H级别），即使经过艺术化处理，只要核心区域不被严重破坏，仍可正常扫描。</p>
+
+        <h3>Q: URL长度有限制吗？</h3>
+        <p>A: 理论上没有严格限制，但过长的URL会生成更复杂的二维码，可能影响美观和扫描效果。建议使用短链接服务处理长URL。</p>
+
+        <h3>Q: 可以自定义二维码样式吗？</h3>
+        <p>A: 当前版本使用默认样式（黑白）。未来可以考虑添加颜色、Logo等自定义选项。</p>
+    </div>
+
+    <div class="demo-section">
+        <h2>测试建议</h2>
+        <ol>
+            <li>访问 <a href="http://127.0.0.1:3100" target="_blank">http://127.0.0.1:3100</a></li>
+            <li>选择"我有URL"选项</li>
+            <li>输入测试URL，如：<code>https://www.example.com</code></li>
+            <li>点击"转换为二维码"</li>
+            <li>验证二维码是否正确生成</li>
+            <li>尝试后续的框选和艺术化处理</li>
+        </ol>
+        
+        <div class="success">
+            💡 提示：可以使用手机扫描二维码测试是否能正常跳转到目标URL
+        </div>
+    </div>
+</body>
+</html>
