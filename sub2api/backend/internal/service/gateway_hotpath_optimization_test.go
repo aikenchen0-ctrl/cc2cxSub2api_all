@@ -649,6 +649,29 @@ func TestGetAvailableModels_ErrorAndGlobalListBranches(t *testing.T) {
 	require.Equal(t, int64(1), okRepo.listAllCalls.Load())
 }
 
+func TestGetAvailableModels_GlobalListIncludesAutoDLWorkflowCatalog(t *testing.T) {
+	repo := &modelsListAccountRepoStub{
+		all: []Account{{
+			ID:       29,
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Credentials: map[string]any{
+				"base_url": "https://autodl.art",
+			},
+		}},
+	}
+	svc := &GatewayService{
+		accountRepo:        repo,
+		modelsListCache:    gocache.New(time.Minute, time.Minute),
+		modelsListCacheTTL: time.Minute,
+	}
+
+	models := svc.GetAvailableModels(context.Background(), nil, "")
+	require.Len(t, models, 17)
+	require.Contains(t, models, "minimax_h3_b99_002")
+	require.Contains(t, models, "indextts2-v1")
+}
+
 func TestGetAvailableModels_OpenAIPassthroughUsesDefaultFallback(t *testing.T) {
 	groupID := int64(10)
 

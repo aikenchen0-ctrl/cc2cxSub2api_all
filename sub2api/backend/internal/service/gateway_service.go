@@ -1426,7 +1426,11 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		// AutoDL exposes one workflow per model and does not provide a useful
 		// model_mapping payload. Advertise the canonical workflow catalog whenever
 		// an eligible AutoDL account is present in this group.
-		if platform == PlatformOpenAI && IsAutoDLBaseURL(acc.GetOpenAIBaseURL()) {
+		// A Super Key is not bound to a group, so model discovery can arrive
+		// without a concrete platform. AutoDL is still an OpenAI-compatible
+		// account and must contribute its canonical workflow catalog in that
+		// unscoped discovery path.
+		if (platform == PlatformOpenAI || platform == "") && IsAutoDLBaseURL(acc.GetOpenAIBaseURL()) {
 			hasAnyMapping = true
 			for _, model := range mediaadapter.AutoDLWorkflowModels() {
 				modelSet[model] = struct{}{}

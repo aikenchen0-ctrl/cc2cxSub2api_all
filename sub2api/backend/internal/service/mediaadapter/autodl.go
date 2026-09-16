@@ -11,11 +11,11 @@ import (
 const ProfileAutoDL Profile = "autodl"
 
 var autodlWorkflows = map[string]string{
-	"minimax_h3_z0901":                    "minimax_h3_z0901",
-	"minimax_h3_z0902":                    "minimax_h3_z0902",
-	"minimax_h3_z0903":                    "minimax_h3_z0903",
-	"minimax_h3_zm_u24":                   "minimax_h3_zm_u24",
-	"minimax_h3_zm_u08":                   "minimax_h3_zm_u08",
+	"minimax_h3_z0901":                       "minimax_h3_z0901",
+	"minimax_h3_z0902":                       "minimax_h3_z0902",
+	"minimax_h3_z0903":                       "minimax_h3_z0903",
+	"minimax_h3_zm_u24":                      "minimax_h3_zm_u24",
+	"minimax_h3_zm_u08":                      "minimax_h3_zm_u08",
 	"minimax_h3_b99_001":                     "minimax_h3_b99_001",
 	"minimax_h3_b99_002":                     "minimax_h3_b99_002",
 	"minimax_h3_b99_003_12s":                 "minimax_h3_b99_003_12s",
@@ -26,7 +26,8 @@ var autodlWorkflows = map[string]string{
 	"minimax_h3_lightx2v_v5":                 "minimax_h3_lightx2v_v5",
 	"minimax_h3_lightx2v_no_pic":             "minimax_h3_lightx2v_no_pic",
 	"minimax_h3_lightx2v":                    "minimax_h3_lightx2v",
-	"wan2.2animate-v4-motion_retargeting":   "wan2.2animate-v4-motion_retargeting",
+	"indextts2-v1":                           "indextts2-v1",
+	"wan2.2animate-v4-motion_retargeting":    "wan2.2animate-v4-motion_retargeting",
 }
 
 var autodlModelAliases = map[string]string{
@@ -70,7 +71,7 @@ func NormalizeAutoDLResponse(payload []byte) (AutoDLResponse, error) {
 		Code    json.RawMessage `json:"code"`
 		Msg     string          `json:"msg"`
 		Message string          `json:"message"`
-		Data json.RawMessage `json:"data"`
+		Data    json.RawMessage `json:"data"`
 	}
 	data := bytes.TrimSpace(payload)
 	if err := json.Unmarshal(data, &envelope); err != nil {

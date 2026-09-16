@@ -12,14 +12,15 @@ func TestAutoDLWorkflowForModel(t *testing.T) {
 		"minimax_h3_z0903":                    "minimax_h3_z0903",
 		"minimax_h3_zm_u24":                   "minimax_h3_zm_u24",
 		"minimax_h3_zm_u08":                   "minimax_h3_zm_u08",
-		"minimax_h3_b99_001":                 "minimax_h3_b99_001",
-		"minimax_h3_b99_002":                 "minimax_h3_b99_002",
-		"minimax_h3_b99_003_12s":             "minimax_h3_b99_003_12s",
-		"minimax_h3_lightx2v_v5_15s":         "minimax_h3_lightx2v_v5_15s",
-		"minimax_h3_image_audio_to_video_v2": "minimax_h3_image_audio_to_video_v2",
-		"minimax_h3_image_audio_to_video":    "minimax_h3_image_audio_to_video",
-		"minimax_h3_lightx2v_v5":             "minimax_h3_lightx2v_v5",
-		"minimax_h3_lightx2v_no_pic":         "minimax_h3_lightx2v_no_pic",
+		"minimax_h3_b99_001":                  "minimax_h3_b99_001",
+		"minimax_h3_b99_002":                  "minimax_h3_b99_002",
+		"minimax_h3_b99_003_12s":              "minimax_h3_b99_003_12s",
+		"minimax_h3_lightx2v_v5_15s":          "minimax_h3_lightx2v_v5_15s",
+		"minimax_h3_image_audio_to_video_v2":  "minimax_h3_image_audio_to_video_v2",
+		"minimax_h3_image_audio_to_video":     "minimax_h3_image_audio_to_video",
+		"minimax_h3_lightx2v_v5":              "minimax_h3_lightx2v_v5",
+		"minimax_h3_lightx2v_no_pic":          "minimax_h3_lightx2v_no_pic",
+		"indextts2-v1":                        "indextts2-v1",
 		"wan2.2animate-v4-motion_retargeting": "wan2.2animate-v4-motion_retargeting",
 	}
 	for model, want := range tests {
@@ -34,8 +35,8 @@ func TestAutoDLWorkflowForModel(t *testing.T) {
 
 func TestAutoDLWorkflowModelsReturnsCompleteStableCatalog(t *testing.T) {
 	models := AutoDLWorkflowModels()
-	if len(models) != 16 {
-		t.Fatalf("AutoDLWorkflowModels() returned %d models, want 16", len(models))
+	if len(models) != 17 {
+		t.Fatalf("AutoDLWorkflowModels() returned %d models, want 17", len(models))
 	}
 	for i := 1; i < len(models); i++ {
 		if models[i-1] >= models[i] {
