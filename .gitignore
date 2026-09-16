@@ -31,3 +31,7 @@
 /dist
 /dist/**
 **/dist/**
+
+# Local deployment artifacts and database backups
+/sub2api-local-http.new
+/sub2api-postgres18-*.dump
