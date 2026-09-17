@@ -1,0 +1,16 @@
+services:
+  qrcode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sub2api/qrcode:online-http
+    container_name: qrcode
+    restart: unless-stopped
+    ports:
+      - "${QRCODE_PORT:-5221}:5221"
+    environment:
+      NODE_ENV: production
+      PORT: 5221
+      QR_CORS_ORIGIN: ${QR_CORS_ORIGIN:-http://localhost:5221}
+      QR_API_BASE_URL: ${QR_API_BASE_URL:-http://localhost:18080}
+      QR_API_KEY: ${QR_API_KEY:-}

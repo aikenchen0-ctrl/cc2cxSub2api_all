@@ -1,0 +1,78 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  application:
+    name: livart-backend
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: ${SPRING_RABBITMQ_LISTENER_SIMPLE_AUTO_STARTUP:true}
+        concurrency: ${RABBITMQ_LISTENER_CONCURRENCY:3}
+        max-concurrency: ${RABBITMQ_LISTENER_MAX_CONCURRENCY:6}
+        prefetch: ${RABBITMQ_LISTENER_PREFETCH:1}
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2
+          max-interval: 10000ms
+
+mybatis-plus:
+  type-handlers-package: com.artisanlab.common
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+artisan:
+  canvas:
+    default-canvas-id: ${CANVAS_ID:00000000-0000-0000-0000-000000000001}
+  external-images:
+    endpoint: ${LIVART_EXTERNAL_IMAGES_ENDPOINT:https://gogotool.top/api/v1/external/images}
+    api-key: ${LIVART_EXTERNAL_IMAGES_API_KEY:}
+    timeout-seconds: ${LIVART_EXTERNAL_IMAGES_TIMEOUT_SECONDS:45}
+  external-skills:
+    directory: ${LIVART_EXTERNAL_SKILLS_DIR:}
+  ai:
+    default-base-url: ${LIVART_DEFAULT_API_BASE_URL:}
+    default-api-key: ${LIVART_DEFAULT_API_KEY:}
+    default-image-model: ${LIVART_DEFAULT_IMAGE_MODEL:gpt-image-2}
+    default-chat-model: ${LIVART_DEFAULT_CHAT_MODEL:gpt-5.4-mini}
+    default-image-size-enabled: ${LIVART_DEFAULT_IMAGE_SIZE_ENABLED:true}
+    default-image-long-side: ${LIVART_DEFAULT_IMAGE_LONG_SIDE:2048}
+    image-job-worker-count: ${LIVART_IMAGE_JOB_WORKER_COUNT:16}
+    product-industry-web-search-enabled: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_ENABLED:true}
+    product-industry-web-search-model: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_MODEL:}
+    product-industry-web-search-timeout-seconds: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_TIMEOUT_SECONDS:25}
+  knowledge:
+    auto-index-enabled: ${LIVART_KNOWLEDGE_AUTO_INDEX_ENABLED:true}
+    embedding-base-url: ${LIVART_KNOWLEDGE_EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+    embedding-api-key: ${LIVART_KNOWLEDGE_EMBEDDING_API_KEY:}
+    embedding-model: ${LIVART_KNOWLEDGE_EMBEDDING_MODEL:BAAI/bge-m3}
+    embedding-batch-size: ${LIVART_KNOWLEDGE_EMBEDDING_BATCH_SIZE:24}
+    search-limit: ${LIVART_KNOWLEDGE_SEARCH_LIMIT:4}
+  memory:
+    search-limit: ${LIVART_MEMORY_SEARCH_LIMIT:4}
+    recent-limit: ${LIVART_MEMORY_RECENT_LIMIT:6}
+    score-threshold: ${LIVART_MEMORY_SCORE_THRESHOLD:0.35}
+    capture-worker-count: ${LIVART_MEMORY_CAPTURE_WORKER_COUNT:2}
+  redis:
+    embedding-cache:
+      enabled: ${LIVART_REDIS_EMBEDDING_CACHE_ENABLED:true}
+      ttl-days: ${LIVART_REDIS_EMBEDDING_CACHE_TTL_DAYS:30}
+
+logging:
+  level:
+    com.artisanlab: INFO
