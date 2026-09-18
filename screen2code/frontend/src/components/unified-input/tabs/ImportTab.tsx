@@ -5,12 +5,14 @@ import { Textarea } from "../../ui/textarea";
 import OutputSettingsSection from "../../settings/OutputSettingsSection";
 import toast from "react-hot-toast";
 import { Stack } from "../../../lib/stacks";
+import { useI18n } from "../../../i18n";
 
 interface Props {
   importFromCode: (code: string, stack: Stack) => void;
 }
 
 function ImportTab({ importFromCode }: Props) {
+  const { t } = useI18n();
   const [code, setCode] = useState("");
   const [stack, setStack] = useState<Stack | undefined>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -22,12 +24,12 @@ function ImportTab({ importFromCode }: Props) {
 
   const doImport = () => {
     if (code === "") {
-      toast.error("Please paste in some code");
+      toast.error(t("codeRequired"));
       return;
     }
 
     if (stack === undefined) {
-      toast.error("Please select your stack");
+      toast.error(t("stackRequired"));
       return;
     }
 
@@ -84,7 +86,7 @@ function ImportTab({ importFromCode }: Props) {
             </div>
 
             <div className="text-center">
-              <h3 className="text-gray-700 dark:text-zinc-200 font-medium">Import Existing Code</h3>
+              <h3 className="text-gray-700 dark:text-zinc-200 font-medium">{t("importCode")}</h3>
             </div>
           </div>
 
@@ -103,7 +105,7 @@ function ImportTab({ importFromCode }: Props) {
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="w-full h-48 font-mono text-sm resize-none"
-                placeholder="Paste your HTML code here or drag/drop a .html file..."
+                placeholder={t("pasteCode")}
                 data-testid="import-input"
               />
             </div>
@@ -111,7 +113,7 @@ function ImportTab({ importFromCode }: Props) {
             <OutputSettingsSection
               stack={stack}
               setStack={(config: Stack) => setStack(config)}
-              label="Stack:"
+              label={t("stack")}
               shouldDisableUpdates={false}
             />
 
@@ -121,11 +123,11 @@ function ImportTab({ importFromCode }: Props) {
               size="lg"
               data-testid="import-submit"
             >
-              Import Code
+              {t("importButton")}
             </Button>
 
             <p className="text-xs text-gray-400 dark:text-zinc-500 text-center">
-              Press Cmd/Ctrl + Enter to import
+              {t("importShortcut")}
             </p>
           </div>
         </div>

@@ -7,6 +7,7 @@ import UrlTab from "./tabs/UrlTab";
 import TextTab from "./tabs/TextTab";
 import ImportTab from "./tabs/ImportTab";
 import { DesignSystemSelectorProps } from "../settings/DesignSystemSelector";
+import { useI18n } from "../../i18n";
 
 interface Props {
   doCreate: (
@@ -37,6 +38,7 @@ function UnifiedInputPane({
   onManageDesignSystems,
 }: Props) {
   const [activeTab, setActiveTab] = useState<InputTab>("upload");
+  const { t } = useI18n();
 
   function setStack(stack: Stack) {
     setSettings((prev: Settings) => ({
@@ -74,7 +76,7 @@ function UnifiedInputPane({
             data-testid="tab-upload"
           >
             <UploadIcon />
-            <span className="hidden sm:inline">Upload</span>
+            <span className="hidden sm:inline">{t("upload")}</span>
           </TabsTrigger>
           <TabsTrigger
             value="url"
@@ -82,7 +84,7 @@ function UnifiedInputPane({
             data-testid="tab-url"
           >
             <UrlIcon />
-            <span className="hidden sm:inline">URL</span>
+            <span className="hidden sm:inline">{t("url")}</span>
           </TabsTrigger>
           <TabsTrigger
             value="text"
@@ -90,7 +92,7 @@ function UnifiedInputPane({
             data-testid="tab-text"
           >
             <TextIcon />
-            <span className="hidden sm:inline">Text</span>
+            <span className="hidden sm:inline">{t("text")}</span>
           </TabsTrigger>
           <TabsTrigger
             value="import"
@@ -98,7 +100,7 @@ function UnifiedInputPane({
             data-testid="tab-import"
           >
             <ImportIcon />
-            <span className="hidden sm:inline">Import</span>
+            <span className="hidden sm:inline">{t("import")}</span>
           </TabsTrigger>
         </TabsList>
 

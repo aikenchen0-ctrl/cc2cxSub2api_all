@@ -11,6 +11,7 @@ import {
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { HTTP_BACKEND_URL, IS_RUNNING_ON_CLOUD } from "../../config";
+import { useI18n, type Language } from "../../i18n";
 
 interface Props {
   settings: Settings;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
+  const { language, setLanguage, t } = useI18n();
   // null = not yet known (loading / unreachable); otherwise the backend's answer.
   const [screenshotPreviewAvailable, setScreenshotPreviewAvailable] = useState<
     boolean | null
@@ -55,7 +57,7 @@ function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Settings
+            {t("settings")}
           </h1>
         </div>
 
@@ -64,17 +66,17 @@ function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
           <div className="rounded-lg border border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800/60">
             <div className="border-b border-gray-100 px-4 py-3 dark:border-zinc-700">
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">
-                Theme
+                {t("theme")}
               </h2>
             </div>
             <div className="divide-y divide-gray-100 dark:divide-zinc-700">
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
                   <span className="text-sm text-gray-700 dark:text-zinc-300">
-                    App Theme
+                    {t("appTheme")}
                   </span>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
-                    System default, with optional light/dark override
+                    {t("appThemeHelp")}
                   </p>
                 </div>
                 <Select
@@ -83,19 +85,19 @@ function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
                   onValueChange={(value) => setAppTheme(value as AppTheme)}
                 >
                   <SelectTrigger className="w-[140px]">
-                    {capitalize(appTheme)}
+                    {appTheme === AppTheme.SYSTEM ? t("system") : appTheme === AppTheme.LIGHT ? t("light") : t("dark")}
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={AppTheme.SYSTEM}>System</SelectItem>
-                    <SelectItem value={AppTheme.LIGHT}>Light</SelectItem>
-                    <SelectItem value={AppTheme.DARK}>Dark</SelectItem>
+                    <SelectItem value={AppTheme.SYSTEM}>{t("system")}</SelectItem>
+                    <SelectItem value={AppTheme.LIGHT}>{t("light")}</SelectItem>
+                    <SelectItem value={AppTheme.DARK}>{t("dark")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
                   <span className="text-sm text-gray-700 dark:text-zinc-300">
-                    Code Editor Theme
+                    {t("editorTheme")}
                   </span>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
                     Requires page refresh to update
@@ -123,6 +125,19 @@ function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <span className="text-sm text-gray-700 dark:text-zinc-300">{t("language")}</span>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-400">{t("languageHelp")}</p>
+                </div>
+                <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+                  <SelectTrigger className="w-[140px]">{language === "zh-CN" ? t("chinese") : t("english")}</SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">{t("english")}</SelectItem>
+                    <SelectItem value="zh-CN">{t("chinese")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -130,7 +145,7 @@ function SettingsTab({ settings, setSettings, appTheme, setAppTheme }: Props) {
           <div className="rounded-lg border border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800/60">
             <div className="border-b border-gray-100 px-4 py-3 dark:border-zinc-700">
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">
-                API Keys
+                {t("apiKeys")}
               </h2>
             </div>
             <div className="space-y-4 p-4">

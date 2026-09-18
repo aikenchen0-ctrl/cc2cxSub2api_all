@@ -11,6 +11,7 @@ import StackLabel from "../core/StackLabel";
 import DesignSystemSelector, {
   DesignSystemSelectorProps,
 } from "./DesignSystemSelector";
+import { useI18n } from "../../i18n";
 
 interface Props {
   stack: Stack | undefined;
@@ -29,6 +30,8 @@ function OutputSettingsSection({
   designSystem,
   inline = false,
 }: Props) {
+  const { t } = useI18n();
+  label = label === "Stack:" ? t("stack") : label;
   const stackSelect = (
     <Select
       value={stack ?? ""}
@@ -40,7 +43,7 @@ function OutputSettingsSection({
         id="output-settings-js"
         data-testid="stack-select"
       >
-        <SelectValue placeholder="Select a stack" />
+        <SelectValue placeholder={t("selectStack")} />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

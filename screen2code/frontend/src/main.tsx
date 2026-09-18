@@ -12,11 +12,13 @@ import PromptReportsPage from "./components/evals/PromptReportsPage.tsx";
 import AgentRunsPage from "./components/evals/AgentRunsPage.tsx";
 import EvalSessionsPage from "./components/evals/EvalSessionsPage.tsx";
 import EvalComparePage from "./components/evals/EvalComparePage.tsx";
+import { I18nProvider } from "./i18n";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Router>
-      <Routes>
+    <I18nProvider>
+      <Router>
+        <Routes>
         <Route path="/" element={<App />} />
         <Route path="/evals" element={<AllEvalsPage />} />
         <Route path="/evals/best-of-n" element={<BestOfNEvalsPage />} />
@@ -29,8 +31,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/evals/agent-runs" element={<AgentRunsPage />} />
         <Route path="/evals/sessions" element={<EvalSessionsPage />} />
         <Route path="/evals/compare" element={<EvalComparePage />} />
-      </Routes>
-    </Router>
+        </Routes>
+      </Router>
+    </I18nProvider>
     <Toaster toastOptions={{ className: "dark:bg-zinc-950 dark:text-white" }} />
   </React.StrictMode>
 );

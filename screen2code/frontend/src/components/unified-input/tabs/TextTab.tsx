@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import OutputSettingsSection from "../../settings/OutputSettingsSection";
 import { DesignSystemSelectorProps } from "../../settings/DesignSystemSelector";
 import { Stack } from "../../../lib/stacks";
+import { useI18n } from "../../../i18n";
 
 interface Props {
   doCreateFromText: (text: string) => void;
@@ -21,6 +22,7 @@ const EXAMPLE_PROMPTS = [
 ];
 
 function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -30,7 +32,7 @@ function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
 
   const handleGenerate = () => {
     if (text.trim() === "") {
-      toast.error("Please enter a description");
+      toast.error(t("descriptionRequired"));
       return;
     }
     doCreateFromText(text);
@@ -73,7 +75,7 @@ function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
             </div>
 
             <div className="text-center">
-              <h3 className="text-gray-700 dark:text-zinc-200 font-medium">Generate from Text</h3>
+              <h3 className="text-gray-700 dark:text-zinc-200 font-medium">{t("generateFromText")}</h3>
             </div>
           </div>
 
@@ -81,7 +83,7 @@ function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
             <Textarea
               ref={textareaRef}
               rows={4}
-              placeholder="Describe the UI you want to create..."
+              placeholder={t("describeUi")}
               className="w-full resize-none"
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -90,7 +92,7 @@ function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
             />
 
             <div className="flex flex-col gap-2">
-              <p className="text-xs text-gray-500 dark:text-zinc-400">Try an example:</p>
+              <p className="text-xs text-gray-500 dark:text-zinc-400">{t("tryExample")}</p>
               <div className="flex flex-wrap gap-2">
                 {EXAMPLE_PROMPTS.map((example, index) => (
                   <button
@@ -117,11 +119,11 @@ function TextTab({ doCreateFromText, stack, setStack, designSystem }: Props) {
               size="lg"
               data-testid="text-generate"
             >
-              Generate
+              {t("generate")}
             </Button>
 
             <p className="text-xs text-gray-400 dark:text-zinc-500 text-center">
-              Press Cmd/Ctrl + Enter to generate
+              {t("generateShortcut")}
             </p>
           </div>
         </div>
