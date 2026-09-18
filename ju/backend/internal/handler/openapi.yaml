@@ -22,6 +22,61 @@ tags:
   - name: tasks
   - name: assets
 paths:
+  /auth/sso/callback:
+    get:
+      tags: [auth]
+      security: []
+      summary: Validate a one-time Sub2API ticket and create a 60-second handoff
+      parameters:
+        - in: query
+          name: ticket
+          required: true
+          schema: { type: string, maxLength: 8192 }
+      responses:
+        "302":
+          description: Redirect to /auth/sso or /login?sso_error=1 without credentials
+        "429":
+          $ref: "#/components/responses/Error"
+  /auth/sso/exchange:
+    post:
+      tags: [auth]
+      security: []
+      summary: Consume the HttpOnly handoff cookie and establish a local session
+      parameters:
+        - in: header
+          name: X-Ju-SSO
+          required: true
+          schema: { type: string, enum: ["1"] }
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Envelope containing next; sets the session cookie and deletes the handoff cookie
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          description: Cross-origin exchange rejected
+  /auth/sso/logout:
+    post:
+      tags: [auth]
+      security: []
+      summary: Revoke sessions with a signed ju:logout assertion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket]
+              properties:
+                ticket: { type: string, maxLength: 8192 }
+      responses:
+        "200":
+          description: Envelope containing revoked=true
+        "401":
+          $ref: "#/components/responses/Error"
   /openapi.yaml:
     get:
       tags: [meta]

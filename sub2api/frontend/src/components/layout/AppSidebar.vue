@@ -48,6 +48,13 @@
           :title="sidebarCollapsed ? item.label : undefined"
           @click="handleQuickAppClick($event, item)"
         >
+          <span
+            class="quick-app-icon"
+            :class="`quick-app-icon-${item.icon}`"
+            aria-hidden="true"
+          >
+            <Icon :name="item.icon" size="sm" :stroke-width="2" />
+          </span>
           <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
         </a>
       </div>
@@ -294,9 +301,11 @@ const quickAppItems = computed(() => {
     import.meta.env.VITE_SUPER_CANVAS_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/livart/start')}?next=%2F`
   const pptSsoUrl = `${buildApiUrl('/auth/integrations/ppt/start')}?next=%2Fupload`
-  const aiExcelDefaultUrl = new URL(window.location.origin)
-  aiExcelDefaultUrl.port = '4173'
-  const aiExcelUrl = import.meta.env.VITE_AIEXCEL_URL?.trim() || aiExcelDefaultUrl.toString()
+  const aiCutSsoUrl = `${buildApiUrl('/auth/integrations/aicut/start')}?next=%2F`
+  const screen2codeSsoUrl =
+    import.meta.env.VITE_SCREEN2CODE_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/screen2code/start')}?next=%2F`
+  const aiExcelUrl = `${buildApiUrl('/auth/integrations/aiexcel/start')}?next=%2F`
   const qrcodeUrl = isLocalHost ? 'http://localhost:5221' : 'http://qrcode.cc2.cx'
   const apiBaseUrl = isLocalHost ? 'http://localhost:18080' : 'https://api.cc2.cx'
   const makeUrl = (origin: string, baseUrl = apiBaseUrl, includeApiKey = false) => {
@@ -309,12 +318,14 @@ const quickAppItems = computed(() => {
     return url.toString()
   }
   return [
-    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl || makeUrl(canvasUrl), includeApiKey: !canvasSsoUrl, sso: Boolean(canvasSsoUrl) },
-    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true },
-    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true },
-    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true },
-    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: false },
-    { label: t('nav.artQr'), href: makeUrl(qrcodeUrl), includeApiKey: true, sso: false },
+    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl || makeUrl(canvasUrl), includeApiKey: !canvasSsoUrl, sso: Boolean(canvasSsoUrl), icon: 'grid' as const },
+    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: 'play' as const },
+    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: 'sparkles' as const },
+    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: 'document' as const },
+    { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: 'edit' as const },
+    { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: 'terminal' as const },
+    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: 'calculator' as const },
+    { label: t('nav.artQr'), href: makeUrl(qrcodeUrl), includeApiKey: true, sso: false, icon: 'grid' as const },
   ]
 })
 
@@ -1235,4 +1246,36 @@ onBeforeUnmount(() => {
   width: 1.25rem;
   height: 1.25rem;
 }
+
+.quick-app-icon {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+
+.sidebar-link:hover .quick-app-icon {
+  transform: translateY(-1px);
+}
+
+.quick-app-icon-grid { color: rgb(37 99 235); background: rgb(239 246 255); border-color: rgb(191 219 254); }
+.quick-app-icon-play { color: rgb(219 39 119); background: rgb(253 242 248); border-color: rgb(251 207 232); }
+.quick-app-icon-sparkles { color: rgb(124 58 237); background: rgb(245 243 255); border-color: rgb(221 214 254); }
+.quick-app-icon-document { color: rgb(5 150 105); background: rgb(236 253 245); border-color: rgb(167 243 208); }
+.quick-app-icon-edit { color: rgb(234 88 12); background: rgb(255 247 237); border-color: rgb(254 215 170); }
+.quick-app-icon-terminal { color: rgb(8 145 178); background: rgb(236 254 255); border-color: rgb(165 243 252); }
+.quick-app-icon-calculator { color: rgb(22 163 74); background: rgb(240 253 244); border-color: rgb(187 247 208); }
+
+.dark .quick-app-icon-grid { color: rgb(147 197 253); background: rgb(30 58 138 / 0.35); border-color: rgb(59 130 246 / 0.35); }
+.dark .quick-app-icon-play { color: rgb(249 168 212); background: rgb(131 24 67 / 0.35); border-color: rgb(190 24 93 / 0.35); }
+.dark .quick-app-icon-sparkles { color: rgb(196 181 253); background: rgb(76 29 149 / 0.35); border-color: rgb(124 58 237 / 0.35); }
+.dark .quick-app-icon-document { color: rgb(110 231 183); background: rgb(6 78 59 / 0.35); border-color: rgb(5 150 105 / 0.35); }
+.dark .quick-app-icon-edit { color: rgb(253 186 116); background: rgb(124 45 18 / 0.35); border-color: rgb(234 88 12 / 0.35); }
+.dark .quick-app-icon-terminal { color: rgb(103 232 249); background: rgb(22 78 99 / 0.35); border-color: rgb(8 145 178 / 0.35); }
+.dark .quick-app-icon-calculator { color: rgb(134 239 172); background: rgb(20 83 45 / 0.35); border-color: rgb(22 163 74 / 0.35); }
 </style>

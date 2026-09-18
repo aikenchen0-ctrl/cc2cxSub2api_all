@@ -23,14 +23,17 @@ export function llmProviderForRequest(req?: IncomingMessage): LlmProvider {
 }
 
 export function llmTarget(req?: IncomingMessage): string {
-  if (gatewayEnabled() && currentTenant()?.userApiKey) return `${sub2apiBase()}/v1`;
+  // Gateway mode is tenant-authoritative. Never fall back to a process-level
+  // provider key, otherwise a missing/expired tenant credential bypasses
+  // Sub2API billing and can mix users' usage.
+  if (gatewayEnabled()) return `${sub2apiBase()}/v1`;
   return resolveLlmProviderConfig(llmProviderForRequest(req), keyReader).baseUrl;
 }
 
 export function llmHeaders(req?: IncomingMessage): Record<string, string> {
   const tenantKey = currentTenant()?.userApiKey;
-  if (gatewayEnabled() && tenantKey) {
-    return { authorization: `Bearer ${tenantKey}` };
+  if (gatewayEnabled()) {
+    return tenantKey ? { authorization: `Bearer ${tenantKey}` } : {};
   }
   const config = resolveLlmProviderConfig(llmProviderForRequest(req), keyReader);
   if (config.provider === 'xai-oauth') {
@@ -75,6 +78,11 @@ export function llmProxyPlugin(): Plugin {
     name: 'openchatcut-llm-proxy',
     configureServer(server) {
       server.middlewares.use('/llm', (req, res, next) => {
+        if (gatewayEnabled() && !currentTenant()?.userApiKey) {
+          res.writeHead(401, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: { message: 'Sub2API tenant credential is unavailable' } }));
+          return;
+        }
         try {
           llmProviderForRequest(req);
         } catch {

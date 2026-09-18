@@ -131,6 +131,11 @@ type superAPIKeyFinder interface {
 	GetByUserIDAndName(ctx context.Context, userID int64, name string) (*APIKey, error)
 }
 
+// Screen2CodeAPIKeyName is the server-managed credential used by the
+// screen2code application. It is deliberately a normal user key, not a Super
+// Key, so it remains subject to the user's group permissions and quota.
+const Screen2CodeAPIKeyName = "Screen2Code Application Key"
+
 // APIKeyRateLimitData holds rate limit usage and window state for an API key.
 type APIKeyRateLimitData struct {
 	Usage5h       float64
@@ -428,6 +433,44 @@ func (s *APIKeyService) GetOrCreateSuperAPIKey(ctx context.Context, userID int64
 	s.InvalidateAuthCacheByKey(ctx, created.Key)
 	s.compileAPIKeyIPRules(created)
 	return created, nil
+}
+
+// GetOrCreateScreen2CodeAPIKey provisions one ordinary, application-scoped
+// key per user. The lookup and create path is idempotent under concurrent SSO
+// starts: a unique (user, name) repository constraint or the follow-up lookup
+// returns the same key instead of creating a second credential.
+func (s *APIKeyService) GetOrCreateScreen2CodeAPIKey(ctx context.Context, userID int64) (*APIKey, error) {
+	finder, ok := s.apiKeyRepo.(superAPIKeyFinder)
+	if !ok {
+		return nil, fmt.Errorf("api key repository does not support application key lookup")
+	}
+	if key, err := finder.GetByUserIDAndName(ctx, userID, Screen2CodeAPIKeyName); err == nil && key != nil {
+		s.compileAPIKeyIPRules(key)
+		return key, nil
+	} else if err != nil && !errors.Is(err, ErrAPIKeyNotFound) {
+		return nil, fmt.Errorf("find screen2code api key: %w", err)
+	}
+
+	groups, err := s.GetAvailableGroups(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("find screen2code groups: %w", err)
+	}
+	if len(groups) == 0 {
+		return nil, ErrGroupNotAllowed
+	}
+	groupID := groups[0].ID
+	key, err := s.Create(ctx, userID, CreateAPIKeyRequest{
+		Name:    Screen2CodeAPIKeyName,
+		GroupID: &groupID,
+	})
+	if err == nil {
+		return key, nil
+	}
+	if existing, findErr := finder.GetByUserIDAndName(ctx, userID, Screen2CodeAPIKeyName); findErr == nil && existing != nil {
+		s.compileAPIKeyIPRules(existing)
+		return existing, nil
+	}
+	return nil, fmt.Errorf("create screen2code api key: %w", err)
 }
 
 func (s *APIKeyService) ResolveSuperAPIKeyGroup(ctx context.Context, user *User, requestedID *int64) (*Group, error) {

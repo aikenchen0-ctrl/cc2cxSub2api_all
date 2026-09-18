@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.v1.auth.config import SESSION_COOKIE_NAME
-from api.v1.auth.sub2api_sso import verify_ticket, safe_next
+from api.v1.auth.sub2api_sso import HANDOFF_COOKIE_NAME, verify_ticket, safe_next
 from models.sql.key_value import KeyValueSqlModel
 from models.sql.user import User
 from tests.integration.test_auth_endpoints import _build_client
@@ -23,7 +23,7 @@ SECRET = "integration-sso-secret-" * 2
 
 def ticket(**overrides):
     now = int(time.time())
-    payload = {"aud": "presenton", "sub": "7", "jti": str(uuid.uuid4()), "iat": now, "exp": now + 120, "next": "/upload", **overrides}
+    payload = {"iss": "sub2api", "aud": "presenton", "sub": "7", "jti": str(uuid.uuid4()), "iat": now, "exp": now + 120, "next": "/upload", **overrides}
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=")
     signature = base64.urlsafe_b64encode(hmac.digest(SECRET.encode(), body, "sha256")).rstrip(b"=")
     return (body + b"." + signature).decode()
@@ -50,21 +50,30 @@ def callback(client, raw):
     return client.get("/api/v1/auth/sso/callback", params={"ticket": raw}, follow_redirects=False)
 
 
+def exchange(client, headers=None):
+    return client.post("/api/v1/auth/sso/exchange", headers={"X-Presenton-SSO": "1", **(headers or {})})
+
+
 def test_sso_creates_ordinary_account_and_reuses_identity(sso_client):
     client, engine = sso_client
     response = callback(client, ticket(username="admin"))
     assert response.status_code == 303
-    assert response.headers["location"] == "/upload"
-    assert "HttpOnly" in response.headers["set-cookie"]
-    assert "SameSite=lax" in response.headers["set-cookie"]
+    assert response.headers["location"] == "/?sso=1"
+    assert HANDOFF_COOKIE_NAME in response.headers["set-cookie"]
+    assert "SameSite=strict" in response.headers["set-cookie"]
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"
+    exchanged = exchange(client)
+    assert exchanged.status_code == 200
+    assert exchanged.json()["redirect"] == "/upload"
+    assert SESSION_COOKIE_NAME in exchanged.headers["set-cookie"]
     status = client.get("/api/v1/auth/status").json()
     assert status["authenticated"] and status["role"] == "user"
     assert status["username"] != "admin"
     assert client.get("/api/v1/admin/provider-settings").status_code == 403
     client.cookies.clear()
-    assert callback(client, ticket()).headers["location"] == "/upload"
+    assert callback(client, ticket()).headers["location"] == "/?sso=1"
+    assert exchange(client).status_code == 200
     assert client.get("/api/v1/auth/status").json()["user_id"] == status["user_id"]
     client.cookies.clear()
     callback(client, ticket(sub="8"))
@@ -74,31 +83,53 @@ def test_sso_creates_ordinary_account_and_reuses_identity(sso_client):
 def test_ticket_cannot_be_replayed_after_new_session(sso_client):
     client, engine = sso_client
     raw = ticket()
-    assert callback(client, raw).headers["location"] == "/upload"
+    assert callback(client, raw).headers["location"] == "/?sso=1"
+    assert exchange(client).status_code == 200
     client.cookies.clear()
     asyncio.run(engine.dispose())
     response = callback(client, raw)
-    assert response.headers["location"] == "/login?error=SSO_failed"
+    assert response.headers["location"] == "/?error=SSO_failed"
     assert SESSION_COOKIE_NAME not in response.cookies
     assert client.get("/api/v1/auth/status").json()["authenticated"] is False
 
 
+def test_exchange_rejects_cross_site_and_consumes_handoff(sso_client):
+    client, _ = sso_client
+    callback(client, ticket())
+    rejected = exchange(client, {"Sec-Fetch-Site": "cross-site"})
+    assert rejected.status_code == 403
+    assert rejected.headers["cache-control"] == "no-store"
+    assert HANDOFF_COOKIE_NAME not in client.cookies
+    assert exchange(client).status_code == 401
+
+
+def test_exchange_requires_marker_and_is_one_time(sso_client):
+    client, _ = sso_client
+    callback(client, ticket())
+    rejected = client.post("/api/v1/auth/sso/exchange")
+    assert rejected.status_code == 403
+    assert HANDOFF_COOKIE_NAME not in client.cookies
+    callback(client, ticket())
+    assert exchange(client).status_code == 200
+    assert exchange(client).status_code == 401
+
+
 @pytest.mark.parametrize("changes", [
-    {"aud": "canvas"}, {"aud": None}, {"sub": ""}, {"sub": 7}, {"jti": ""},
+    {"iss": "canvas"}, {"iss": None}, {"aud": "canvas"}, {"aud": None}, {"sub": ""}, {"sub": 7}, {"jti": ""},
     {"exp": 1}, {"exp": int(time.time()) + 300}, {"iat": int(time.time()) + 60},
     {"iat": True}, {"sub": "a\nb"},
 ])
 def test_bad_tickets_do_not_authenticate(sso_client, changes):
     client, _ = sso_client
     response = callback(client, ticket(**changes))
-    assert response.headers["location"] == "/login?error=SSO_failed"
+    assert response.headers["location"] == "/?error=SSO_failed"
     assert SESSION_COOKIE_NAME not in response.cookies
 
 
 @pytest.mark.parametrize("raw", ["", ".", "not.signed", "a.b.c", "a" * 9000])
 def test_malformed_ticket_fails_closed(sso_client, raw):
     client, _ = sso_client
-    assert callback(client, raw).headers["location"] == "/login?error=SSO_failed"
+    assert callback(client, raw).headers["location"] == "/?error=SSO_failed"
 
 
 @pytest.mark.parametrize("next_path", ["//evil.example", "https://evil.example", "/\\evil.example", "/a\nb", None])
@@ -109,12 +140,13 @@ def test_next_is_local(next_path):
 def test_missing_secret_disables_sso(sso_client, monkeypatch):
     client, _ = sso_client
     monkeypatch.delenv("SUB2API_SSO_SECRET")
-    assert callback(client, ticket()).headers["location"] == "/login?error=SSO_failed"
+    assert callback(client, ticket()).headers["location"] == "/?error=SSO_failed"
 
 
 def test_disabled_or_promoted_identity_is_rejected(sso_client):
     client, engine = sso_client
     callback(client, ticket())
+    exchange(client)
     user_id = uuid.UUID(client.get("/api/v1/auth/status").json()["user_id"])
     async def update_user(active, admin):
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
@@ -125,7 +157,7 @@ def test_disabled_or_promoted_identity_is_rejected(sso_client):
     for active, admin in [(False, False), (True, True)]:
         asyncio.run(update_user(active, admin))
         client.cookies.clear()
-        assert callback(client, ticket()).headers["location"] == "/login?error=SSO_failed"
+        assert callback(client, ticket()).headers["location"] == "/?error=SSO_failed"
 
 
 def test_ticket_tampering_and_wrong_signer():

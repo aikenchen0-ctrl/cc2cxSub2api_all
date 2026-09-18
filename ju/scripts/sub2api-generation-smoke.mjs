@@ -21,11 +21,15 @@ async function save() {
 }
 await save();
 const now = Math.floor(Date.now() / 1000);
-const payload = Buffer.from(JSON.stringify({ sub: state.subject, iat: now, exp: now + 120, jti: randomUUID(), next: "/projects" })).toString("base64url");
+const payload = Buffer.from(JSON.stringify({ iss: "sub2api", aud: "ju", sub: state.subject, iat: now, exp: now + 120, jti: randomUUID(), next: "/projects" })).toString("base64url");
 const ticket = `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
 const callback = await fetch(new URL(`/api/auth/sso/callback?ticket=${ticket}`, base), { redirect: "manual", signal: AbortSignal.timeout(20_000) });
-assert.equal(callback.headers.get("location"), "/projects", "SSO receiver login failed");
-const cookie = callback.headers.get("set-cookie")?.split(";")[0];
+assert.equal(callback.headers.get("location"), "/auth/sso", "SSO receiver login failed");
+const handoff = callback.headers.get("set-cookie")?.split(";")[0];
+assert(handoff, "SSO handoff missing");
+const exchange = await fetch(new URL("/api/auth/sso/exchange", base), { method: "POST", redirect: "manual", signal: AbortSignal.timeout(20_000), headers: { Cookie: handoff, Origin: new URL(base).origin, "X-Ju-SSO": "1" } });
+assert.equal(exchange.status, 200);
+const cookie = exchange.headers.getSetCookie().find((value) => !value.startsWith("ju_sso_handoff="))?.split(";")[0];
 assert(cookie, "SSO session missing");
 async function request(path, init = {}) {
   return fetch(new URL(path, base), {

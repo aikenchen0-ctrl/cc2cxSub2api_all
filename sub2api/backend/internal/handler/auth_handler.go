@@ -27,9 +27,19 @@ type AuthHandler struct {
 	redeemService        *service.RedeemService
 	totpService          *service.TotpService
 	userAttributeService *service.UserAttributeService
+	apiKeyService        *service.APIKeyService
 
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
+}
+
+// SetAPIKeyService wires the relay-key issuer after the generated dependency
+// graph has constructed both services. Keeping this setter preserves the
+// existing constructor contract used by handler tests and plugins.
+func (h *AuthHandler) SetAPIKeyService(apiKeyService *service.APIKeyService) {
+	if h != nil {
+		h.apiKeyService = apiKeyService
+	}
 }
 
 // NewAuthHandler creates a new AuthHandler
@@ -755,6 +765,14 @@ func (h *AuthHandler) RevokeAllSessions(c *gin.Context) {
 		return
 	}
 
+	if err := revokeJuSessions(c.Request.Context(), subject.UserID); err != nil {
+		response.Error(c, 502, "Unable to revoke Ju sessions; retry global logout")
+		return
+	}
+	if err := revokeScreen2CodeSessions(c.Request.Context(), subject.UserID); err != nil {
+		response.Error(c, 502, "Unable to revoke Screen2Code sessions; retry global logout")
+		return
+	}
 	if err := h.authService.RevokeAllUserTokens(c.Request.Context(), subject.UserID); err != nil {
 		slog.Error("failed to revoke all sessions", "user_id", subject.UserID, "error", err)
 		response.InternalError(c, "Failed to revoke sessions")

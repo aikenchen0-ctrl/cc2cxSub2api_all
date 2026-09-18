@@ -17,6 +17,7 @@ import (
 
 	"infinite-canvas/backend/internal/kernel"
 	"infinite-canvas/backend/internal/model"
+	"infinite-canvas/backend/internal/repository"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -36,6 +37,7 @@ func TestVerifySub2APITicketAcceptsAndConsumesTicket(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	secret := strings.Repeat("s", 32)
 	raw, err := signSub2APITicket(Sub2APISSOPayload{
+		Issuer: "sub2api", Audience: "ju",
 		Subject: "sub-1", IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix(), Nonce: kernel.NewID(),
 	}, secret)
 	if err != nil {
@@ -53,6 +55,7 @@ func TestVerifySub2APITicketRejectsExpiredAndInvalidTickets(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	secret := strings.Repeat("s", 32)
 	expired, err := signSub2APITicket(Sub2APISSOPayload{
+		Issuer: "sub2api", Audience: "ju",
 		Subject: "sub-expired", IssuedAt: now.Add(-time.Minute).Unix(), ExpiresAt: now.Unix(), Nonce: "nonce-expired",
 	}, secret)
 	if err != nil {
@@ -92,23 +95,24 @@ func TestSSONextRejectsExternalRedirects(t *testing.T) {
 func TestVerifySub2APITicketLifetimeBounds(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	secret := strings.Repeat("s", 32)
+	maxLifetime := int64((3 * 24 * time.Hour).Seconds())
 	for _, test := range []struct {
 		name            string
 		issued, expires int64
 		accept          bool
 	}{
-		{"maximum lifetime", 0, 120, true},
-		{"maximum future skew", 30, 150, true},
-		{"just before expiry", -119, 1, true},
-		{"expired", -120, 0, false},
-		{"too long", 0, 121, false},
-		{"too long with skew", 30, 151, false},
-		{"future issue", 31, 120, false},
+		{"maximum lifetime", 0, maxLifetime, true},
+		{"maximum future skew", 30, maxLifetime + 30, true},
+		{"just before expiry", -(maxLifetime - 1), 1, true},
+		{"expired", -maxLifetime, 0, false},
+		{"too long", 0, maxLifetime + 1, false},
+		{"too long with skew", 30, maxLifetime + 31, false},
+		{"future issue", 31, maxLifetime, false},
 		{"zero lifetime", 10, 10, false},
 		{"negative lifetime", 10, 9, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			payload := Sub2APISSOPayload{Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix() + test.issued, ExpiresAt: now.Unix() + test.expires}
+			payload := Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix() + test.issued, ExpiresAt: now.Unix() + test.expires}
 			raw, err := signSub2APITicket(payload, secret)
 			if err != nil {
 				t.Fatal(err)
@@ -131,6 +135,10 @@ func TestVerifySub2APITicketRejectsInvalidPayload(t *testing.T) {
 		name   string
 		mutate func(*Sub2APISSOPayload)
 	}{
+		{"wrong issuer", func(p *Sub2APISSOPayload) { p.Issuer = "other" }},
+		{"missing issuer", func(p *Sub2APISSOPayload) { p.Issuer = "" }},
+		{"cross application", func(p *Sub2APISSOPayload) { p.Audience = "canvas" }},
+		{"missing audience", func(p *Sub2APISSOPayload) { p.Audience = "" }},
 		{"missing issue time", func(p *Sub2APISSOPayload) { p.IssuedAt = 0 }},
 		{"negative issue time", func(p *Sub2APISSOPayload) { p.IssuedAt = -1 }},
 		{"overflow expiry", func(p *Sub2APISSOPayload) { p.ExpiresAt = 1<<63 - 1 }},
@@ -148,7 +156,7 @@ func TestVerifySub2APITicketRejectsInvalidPayload(t *testing.T) {
 		{"redirect control", func(p *Sub2APISSOPayload) { p.Next = "/\t/evil.example" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			payload := Sub2APISSOPayload{Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
+			payload := Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
 			test.mutate(&payload)
 			raw, err := signSub2APITicket(payload, secret)
 			if err != nil {
@@ -188,7 +196,7 @@ func TestVerifySub2APITicketRejectsMalformedEncodings(t *testing.T) {
 func TestVerifySub2APITicketConcurrentLocalReplay(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	secret := strings.Repeat("s", 32)
-	raw, err := signSub2APITicket(Sub2APISSOPayload{Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}, secret)
+	raw, err := signSub2APITicket(Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +227,7 @@ func TestVerifySub2APITicketRedisReplayAndTTL(t *testing.T) {
 	t.Cleanup(func() { _ = first.Close(); _ = second.Close() })
 	now := time.Unix(1_800_000_000, 250_000_000)
 	secret := strings.Repeat("s", 32)
-	payload := Sub2APISSOPayload{Subject: "user-redis", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
+	payload := Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "user-redis", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
 	raw, err := signSub2APITicket(payload, secret)
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +276,7 @@ func TestVerifySub2APITicketRedisReplayAndTTL(t *testing.T) {
 func TestVerifySub2APITicketRedisFailsClosedAndBoundsIO(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	secret := strings.Repeat("s", 32)
-	raw, err := signSub2APITicket(Sub2APISSOPayload{Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}, secret)
+	raw, err := signSub2APITicket(Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "user-1", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,6 +328,9 @@ func TestCompleteSub2APISSORetainsIdentityAndRejectsDisabledUser(t *testing.T) {
 	if first == nil || first.Session == "" || first.User.ID == "" {
 		t.Fatal("SSO ticket completion did not issue a ju session")
 	}
+	if first.MaxAgeSecs != int((3 * 24 * time.Hour).Seconds()) {
+		t.Fatalf("SSO session max age = %d, want three days", first.MaxAgeSecs)
+	}
 	second, err := svc.CompleteSub2APISSO(payload)
 	if err != nil || first.User.ID != second.User.ID {
 		t.Fatalf("SSO identity was not reused: %v", err)
@@ -368,5 +379,104 @@ func TestSub2APIDuplicateIdentityCreationRollsBackUser(t *testing.T) {
 		if err := db.Model(table).Count(&count).Error; err != nil || count != 1 {
 			t.Fatalf("failed identity write left partial rows: %T count %d, err %v", table, count, err)
 		}
+	}
+}
+
+func TestSub2APIPersistentReplayAndHandoff(t *testing.T) {
+	svc, db := newPasswordResetTestService(t)
+	if err := db.AutoMigrate(&model.UserIdentity{}, &model.CreditAccount{}, &model.SSOTicket{}, &model.SSOHandoff{}, &model.SSORevocation{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	payload := Sub2APISSOPayload{Issuer: "sub2api", Audience: "ju", Subject: "persistent-user", Nonce: kernel.NewID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix(), Next: "/projects?tab=recent"}
+	secret := strings.Repeat("s", 32)
+	raw, err := signSub2APITicket(payload, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = VerifySub2APITicketWithRepository(raw, secret, now, svc.repo); err != nil {
+		t.Fatal(err)
+	}
+	// A new repository has no process-local replay state.
+	if _, err = VerifySub2APITicketWithRepository(raw, secret, now, repository.New(db)); err == nil {
+		t.Fatal("persistent ticket was replayed")
+	}
+	var stored model.SSOTicket
+	if err = db.First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.ID == payload.Nonce || len(stored.ID) != 64 {
+		t.Fatal("nonce was not hashed")
+	}
+	handoff, err := svc.CreateSSOHandoff(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sessions int64
+	db.Model(&model.AuthSession{}).Count(&sessions)
+	if sessions != 0 {
+		t.Fatal("callback created a session before exchange")
+	}
+	result, next, err := svc.ExchangeSSOHandoff(handoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.User.Role != model.UserRoleUser || result.User.IdentityProvider != "sub2api" || next != payload.Next {
+		t.Fatal("handoff lost identity or destination")
+	}
+	if _, _, err = svc.ExchangeSSOHandoff(handoff); err == nil {
+		t.Fatal("handoff replay accepted")
+	}
+	handoff, err = svc.CreateSSOHandoff(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Model(&model.SSOHandoff{}).Where("id = ?", HashToken(handoff)).Update("expires_at", now.Add(-time.Minute))
+	if _, _, err = svc.ExchangeSSOHandoff(handoff); err == nil {
+		t.Fatal("expired handoff accepted")
+	}
+	t.Setenv("SUB2API_SSO_SECRET", secret)
+	pending, err := svc.CreateSSOHandoff(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logout := payload
+	logout.Audience, logout.Nonce = "ju:logout", kernel.NewID()
+	logoutRaw, err := signSub2APITicket(logout, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = VerifySub2APITicketWithRepository(logoutRaw, secret, now, svc.repo); err == nil {
+		t.Fatal("logout assertion accepted as login")
+	}
+	if err = svc.RevokeSub2APISessions(raw); err == nil {
+		t.Fatal("login assertion accepted as logout")
+	}
+	legacy := model.AuthSession{ID: kernel.NewID(), UserID: result.User.ID, TokenHash: "legacy", ExpiresAt: now.Add(time.Hour)}
+	if err = db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Model(&legacy).Update("sso_issued_at", nil).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err = svc.RevokeSub2APISessions(logoutRaw); err != nil {
+		t.Fatal(err)
+	}
+	var legacyCount int64
+	if err = db.Model(&model.AuthSession{}).Where("id = ?", legacy.ID).Count(&legacyCount).Error; err != nil || legacyCount != 0 {
+		t.Fatal("legacy session survived global logout")
+	}
+	if _, err = svc.CurrentUser(result.Session); err == nil {
+		t.Fatal("global logout left session active")
+	}
+	if _, _, err = svc.ExchangeSSOHandoff(pending); err == nil {
+		t.Fatal("pending handoff bypassed logout")
+	}
+	if err = svc.RevokeSub2APISessions(logoutRaw); err == nil {
+		t.Fatal("logout assertion replay accepted")
+	}
+	payload.IssuedAt = logout.IssuedAt + 1
+	if _, err = svc.CompleteSub2APISSO(payload); err != nil {
+		t.Fatalf("fresh login after logout failed: %v", err)
 	}
 }

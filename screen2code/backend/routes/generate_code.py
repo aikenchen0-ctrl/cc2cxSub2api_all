@@ -19,7 +19,10 @@ from config import (
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
     REPLICATE_API_KEY,
+    SCREEN2CODE_AUTH_REQUIRED,
+    SUB2API_RELAY_BASE_URL,
 )
+from auth import decrypt_relay_key, get_identity, origin_is_allowed
 from custom_types import InputMode
 from llm import (
     Llm,
@@ -281,7 +284,7 @@ class ParameterExtractionStage:
         self.throw_error = throw_error
         self.asset_base_url = asset_base_url
 
-    async def extract_and_validate(self, params: Dict[str, Any]) -> ExtractedParams:
+    async def extract_and_validate(self, params: Dict[str, Any], identity: Any = None) -> ExtractedParams:
         """Extract and validate all parameters from the request"""
         # Read the code config settings (stack) from the request.
         generated_code_config = params.get("generatedCodeConfig", "")
@@ -323,6 +326,18 @@ class ParameterExtractionStage:
             )
         if not openai_base_url:
             print("Using official OpenAI URL")
+
+        # Hosted mode pins model calls to the user's Sub2API relay credential.
+        # Browser-supplied provider keys and base URLs are ignored in this mode.
+        if SCREEN2CODE_AUTH_REQUIRED:
+            relay_key = decrypt_relay_key(getattr(identity, "relay_key_ciphertext", None))
+            if not relay_key or not SUB2API_RELAY_BASE_URL:
+                await self.throw_error("当前账户的 AI 服务尚未准备好，请稍后重试")
+                raise ValueError("Sub2API relay credential is unavailable")
+            openai_api_key = relay_key
+            anthropic_api_key = None
+            gemini_api_key = None
+            openai_base_url = SUB2API_RELAY_BASE_URL
 
         # Feature preferences default to enabled for older clients.
         should_generate_images = bool(params.get("isImageGenerationEnabled", True))
@@ -566,6 +581,7 @@ class AgenticGenerationStage:
         stack: str | None = None,
         input_mode: str | None = None,
         generation_type: str | None = None,
+        user_id: str | None = None,
     ):
         self.send_message = send_message
         self.openai_api_key = openai_api_key
@@ -585,6 +601,7 @@ class AgenticGenerationStage:
         self.stack = stack
         self.input_mode = input_mode
         self.generation_type = generation_type
+        self.user_id = user_id
 
     async def process_variants(
         self,
@@ -654,6 +671,7 @@ class AgenticGenerationStage:
                 initial_file_state=self.file_state,
                 option_codes=self.option_codes,
                 recorder=recorder,
+                user_id=self.user_id,
             )
             completion = await runner.run(model, prompt_messages)
             if completion:
@@ -749,7 +767,7 @@ class ParameterExtractionMiddleware(Middleware):
             infer_local_asset_base_url(context.websocket),
         )
         context.extracted_params = await param_extractor.extract_and_validate(
-            context.params
+            context.params, context.websocket.scope.get("screen2code_identity")
         )
 
         # Log what we're generating
@@ -840,6 +858,11 @@ class CodeGenerationMiddleware(Middleware):
                 stack=str(context.extracted_params.stack),
                 input_mode=str(context.extracted_params.input_mode),
                 generation_type=context.extracted_params.generation_type,
+                user_id=(
+                    str(context.websocket.scope["screen2code_identity"].user_id)
+                    if context.websocket.scope.get("screen2code_identity")
+                    else None
+                ),
             )
 
             context.variant_completions = await generation_stage.process_variants(
@@ -886,7 +909,15 @@ class PostProcessingMiddleware(Middleware):
 
 @router.websocket("/generate-code")
 async def stream_code(websocket: WebSocket):
-    """Handle WebSocket code generation requests using a pipeline pattern"""
+    """Handle WebSocket code generation requests using a pipeline pattern."""
+    identity = get_identity(websocket) if SCREEN2CODE_AUTH_REQUIRED else None
+    if SCREEN2CODE_AUTH_REQUIRED and identity is None:
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    if SCREEN2CODE_AUTH_REQUIRED and not origin_is_allowed(websocket):
+        await websocket.close(code=1008, reason="Invalid origin")
+        return
+    websocket.scope["screen2code_identity"] = identity
     pipeline = Pipeline()
 
     # Configure the pipeline

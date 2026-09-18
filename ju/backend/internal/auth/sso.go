@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -18,14 +19,18 @@ import (
 
 	"infinite-canvas/backend/internal/kernel"
 	"infinite-canvas/backend/internal/model"
+	"infinite-canvas/backend/internal/repository"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 const (
-	ssoTicketMaxBytes    = 8 * 1024
-	ssoTicketMaxLifetime = 2 * time.Minute
+	ssoTicketMaxBytes = 8 * 1024
+	// SSO login assertions remain usable for three days so a user can
+	// complete the cross-application handoff without being forced back to
+	// Sub2API for a fresh login.
+	ssoTicketMaxLifetime = 3 * 24 * time.Hour
 	ssoTicketClockSkew   = 30 * time.Second
 	ssoReplayTimeout     = 2 * time.Second
 )
@@ -33,6 +38,8 @@ const (
 // Sub2APISSOPayload is the minimal identity assertion exchanged between the
 // two applications. It never contains a JWT or an API key.
 type Sub2APISSOPayload struct {
+	Issuer      string `json:"iss"`
+	Audience    string `json:"aud"`
 	Subject     string `json:"sub"`
 	Email       string `json:"email,omitempty"`
 	Username    string `json:"username,omitempty"`
@@ -50,11 +57,10 @@ var (
 	ssoUsername   = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 )
 
-// VerifySub2APITicket validates a short-lived HMAC ticket and consumes its
-// nonce. Consumption is process-local to avoid adding a database table; use a
-// shared Redis-backed one-time store when running multiple replicas.
+// VerifySub2APITicket is the process-local verifier for isolated callers.
+// HTTP login uses VerifySub2APITicketWithRepository for durable replay protection.
 func VerifySub2APITicket(raw, secret string, now time.Time) (Sub2APISSOPayload, error) {
-	return verifySub2APITicket(raw, secret, now, nil)
+	return verifySub2APITicket(raw, secret, now, nil, nil, "ju")
 }
 
 // VerifySub2APITicketWithRedis uses Redis as the shared one-time ticket store.
@@ -63,10 +69,25 @@ func VerifySub2APITicketWithRedis(raw, secret string, now time.Time, client *red
 	if client == nil {
 		return Sub2APISSOPayload{}, errors.New("sso replay store is not configured")
 	}
-	return verifySub2APITicket(raw, secret, now, client)
+	return verifySub2APITicket(raw, secret, now, client, nil, "ju")
 }
 
-func verifySub2APITicket(raw, secret string, now time.Time, client *redis.Client) (Sub2APISSOPayload, error) {
+func VerifySub2APITicketWithRepository(raw, secret string, now time.Time, repo *repository.Repository) (Sub2APISSOPayload, error) {
+	if repo == nil {
+		return Sub2APISSOPayload{}, errors.New("sso replay store is not configured")
+	}
+	return verifySub2APITicket(raw, secret, now, nil, repo, "ju")
+}
+
+func (s *Service) RevokeSub2APISessions(raw string) error {
+	payload, err := verifySub2APITicket(raw, Sub2APISSOSecret(), time.Now(), nil, s.repo, "ju:logout")
+	if err != nil {
+		return kernel.Unauthorized("Invalid SSO logout assertion")
+	}
+	return s.repo.RevokeSSOSessions(payload.Subject, payload.IssuedAt)
+}
+
+func verifySub2APITicket(raw, secret string, now time.Time, client *redis.Client, repo *repository.Repository, audience string) (Sub2APISSOPayload, error) {
 	var zero Sub2APISSOPayload
 	secret = strings.TrimSpace(secret)
 	if len(secret) < 32 {
@@ -90,13 +111,22 @@ func verifySub2APITicket(raw, secret string, now time.Time, client *redis.Client
 	if err != nil || json.Unmarshal(payloadBytes, &payload) != nil {
 		return zero, errors.New("invalid sso ticket payload")
 	}
-	if err := validateSub2APISSOPayload(payload); err != nil {
+	if err := validateSub2APISSOPayload(payload, audience); err != nil {
 		return zero, err
 	}
 	if payload.IssuedAt <= 0 || payload.ExpiresAt <= payload.IssuedAt || payload.ExpiresAt-payload.IssuedAt > int64(ssoTicketMaxLifetime/time.Second) || payload.ExpiresAt <= now.Unix() || payload.IssuedAt > now.Add(ssoTicketClockSkew).Unix() || payload.ExpiresAt > now.Add(ssoTicketMaxLifetime+ssoTicketClockSkew).Unix() {
 		return zero, errors.New("expired sso ticket")
 	}
 	payload.Subject, payload.Nonce = strings.TrimSpace(payload.Subject), strings.TrimSpace(payload.Nonce)
+	if repo != nil {
+		digest := sha256.Sum256([]byte("sub2api:ju:" + payload.Nonce))
+		ctx, cancel := context.WithTimeout(context.Background(), ssoReplayTimeout)
+		defer cancel()
+		if err := repo.WithContext(ctx).ConsumeSSOTicket(fmt.Sprintf("%x", digest), time.Unix(payload.ExpiresAt, 0), now); err != nil {
+			return zero, err
+		}
+		return payload, nil
+	}
 	if client != nil {
 		keyHash := sha256.Sum256([]byte(payload.Nonce))
 		key := fmt.Sprintf("canvas:sso:sub2api:%x", keyHash[:])
@@ -131,7 +161,10 @@ func verifySub2APITicket(raw, secret string, now time.Time, client *redis.Client
 	return payload, nil
 }
 
-func validateSub2APISSOPayload(payload Sub2APISSOPayload) error {
+func validateSub2APISSOPayload(payload Sub2APISSOPayload, audience string) error {
+	if payload.Issuer != "sub2api" || payload.Audience != audience {
+		return errors.New("invalid sso issuer or audience")
+	}
 	if strings.TrimSpace(payload.Subject) == "" || strings.TrimSpace(payload.Nonce) == "" {
 		return errors.New("invalid sso identity or nonce")
 	}
@@ -154,6 +187,15 @@ func validateSub2APISSOPayload(payload Sub2APISSOPayload) error {
 // provisions a normal user on first use, and creates a regular canvas session.
 func (s *Service) CompleteSub2APISSO(payload Sub2APISSOPayload) (*AuthSessionResult, error) {
 	provider, subject := "sub2api", strings.TrimSpace(payload.Subject)
+	if payload.IssuedAt > 0 {
+		revoked, err := s.repo.SSORevoked(subject, payload.IssuedAt)
+		if err != nil {
+			return nil, err
+		}
+		if revoked {
+			return nil, kernel.Unauthorized("SSO 登录已撤销")
+		}
+	}
 	identity, err := s.repo.UserIdentity(provider, subject)
 	var user *model.User
 	if err == nil {
@@ -173,7 +215,15 @@ func (s *Service) CompleteSub2APISSO(payload Sub2APISSOPayload) (*AuthSessionRes
 			return nil, err
 		}
 		if err := s.repo.CreateOAuthUser(user, identity); err != nil {
-			return nil, err
+			// A concurrent first login may have committed the same identity.
+			existing, lookupErr := s.repo.UserIdentity(provider, subject)
+			if lookupErr != nil {
+				return nil, err
+			}
+			user, lookupErr = s.repo.User(existing.UserID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
 		}
 	} else {
 		return nil, err
@@ -186,11 +236,11 @@ func (s *Service) CompleteSub2APISSO(payload Sub2APISSOPayload) (*AuthSessionRes
 	}
 	now := time.Now()
 	user.LastLoginAt, user.UpdatedAt = &now, now
-	if err := s.repo.Save(user); err != nil {
+	if err := s.repo.TouchSSOUserLogin(user.ID, now); err != nil {
 		return nil, err
 	}
 	s.host.RecordActivity(user.ID, "login", 1)
-	return s.createAuthSession(user)
+	return s.createAuthSessionWithSSO(user, subject, payload.IssuedAt)
 }
 
 func (s *Service) createSub2APIUser(payload Sub2APISSOPayload) (*model.User, *model.UserIdentity, error) {
@@ -230,6 +280,37 @@ func (s *Service) createSub2APIUser(payload Sub2APISSOPayload) (*model.User, *mo
 }
 
 func Sub2APISSOSecret() string { return os.Getenv("SUB2API_SSO_SECRET") }
+
+func (s *Service) CreateSSOHandoff(payload Sub2APISSOPayload) (string, error) {
+	var token [32]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return "", err
+	}
+	raw := base64.RawURLEncoding.EncodeToString(token[:])
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	err = s.repo.CreateSSOHandoff(&model.SSOHandoff{ID: HashToken(raw), Payload: string(body), ExpiresAt: now.Add(ssoTicketMaxLifetime)}, now)
+	return raw, err
+}
+
+func (s *Service) ExchangeSSOHandoff(raw string) (*AuthSessionResult, string, error) {
+	if len(raw) != 43 {
+		return nil, "", kernel.Unauthorized("SSO 登录已失效，请重新进入")
+	}
+	handoff, err := s.repo.ConsumeSSOHandoff(HashToken(raw), time.Now())
+	if err != nil {
+		return nil, "", kernel.Unauthorized("SSO 登录已失效，请重新进入")
+	}
+	var payload Sub2APISSOPayload
+	if err := json.Unmarshal([]byte(handoff.Payload), &payload); err != nil {
+		return nil, "", err
+	}
+	result, err := s.CompleteSub2APISSO(payload)
+	return result, SSONext(payload), err
+}
 
 func safeSSONext(value string) string {
 	if len(value) > 2048 || strings.IndexFunc(value, unicode.IsControl) >= 0 {

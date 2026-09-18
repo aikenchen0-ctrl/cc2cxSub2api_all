@@ -23,6 +23,10 @@ docs/content/docs/backend/*
 !docs/content/docs/backend/code-map.mdx
 !docs/content/docs/backend/newapi-channel-2.mdx
 !docs/content/docs/backend/sub2api-integration.mdx
+!docs/content/docs/backend/backend-database.mdx
+!docs/content/docs/progress/
+docs/content/docs/progress/*
+!docs/content/docs/progress/pending-test.mdx
 !docs/content/docs/backend/creative-agent-runtime.mdx
 # Keep the creative Agent design versioned without unignoring generated docs.
 !docs/content/docs/overview/

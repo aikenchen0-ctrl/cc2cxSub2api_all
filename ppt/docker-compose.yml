@@ -1,7 +1,7 @@
 services:
   production:
     platform: ${PRESENTON_DOCKER_PLATFORM:-linux/amd64}
-    # image: ghcr.io/presenton/presenton:latest
+    image: ${PRESENTON_IMAGE:-ppt:sub2api-integration}
     build:
       context: .
       dockerfile: Dockerfile
@@ -20,7 +20,7 @@ services:
     environment:
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HTTP_HOST_PORT:-8341}
-      - MIGRATE_DATABASE_ON_STARTUP=true
+      - MIGRATE_DATABASE_ON_STARTUP=${MIGRATE_DATABASE_ON_STARTUP:-false}
       - CAN_CHANGE_KEYS=${CAN_CHANGE_KEYS:-}
       - LLM=${LLM:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

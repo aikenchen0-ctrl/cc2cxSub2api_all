@@ -3,6 +3,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,45 @@ func TestJuSSOStartRejectsUnauthenticated(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), "ticket=")
 }
 
+func TestJuSSOGlobalLogoutDelivery(t *testing.T) {
+	secret := strings.Repeat("s", 32)
+	t.Setenv("SUB2API_SSO_SECRET", secret)
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/api/auth/sso/logout", r.URL.Path)
+		require.Empty(t, r.URL.RawQuery)
+		var body struct {
+			Ticket string `json:"ticket"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		payload := decodeLivartSSOTicket(t, body.Ticket, secret)
+		require.Equal(t, "ju:logout", payload.Audience)
+		require.Equal(t, "sub2api", payload.Issuer)
+		require.Equal(t, "7", payload.Subject)
+		_, _ = w.Write([]byte(`{"code":0,"data":{"revoked":true}}`))
+	}))
+	defer server.Close()
+	t.Setenv("JU_SSO_CALLBACK_URL", server.URL+"/api/auth/sso/callback")
+	require.NoError(t, revokeJuSessions(context.Background(), 7))
+	require.Equal(t, 1, calls)
+	server.Close()
+	require.Error(t, revokeJuSessions(context.Background(), 7))
+}
+
+func TestJuSSOStartRejectsDisabledUser(t *testing.T) {
+	t.Setenv("SUB2API_SSO_SECRET", strings.Repeat("s", 32))
+	handler := &AuthHandler{userService: service.NewUserService(&userHandlerRepoStub{user: &service.User{ID: 7, Status: "disabled"}}, nil, nil, nil)}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/integrations/ju/start", nil)
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7})
+	handler.JuSSOStart(c)
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.NotContains(t, w.Body.String(), "ticket=")
+}
+
 func TestJuSSOStartIssuesCallbackTicketWithoutSecrets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	secret := strings.Repeat("ju-sso-secret-value-", 2)
@@ -45,7 +85,7 @@ func TestJuSSOStartIssuesCallbackTicketWithoutSecrets(t *testing.T) {
 	t.Setenv("JU_SSO_CALLBACK_URL", "http://localhost:3000/api/auth/sso/callback")
 
 	handler := &AuthHandler{userService: service.NewUserService(&userHandlerRepoStub{
-		user: &service.User{ID: 7, Email: "user@example.com", Username: "ju-user", AvatarURL: "https://cdn.example/a.png"},
+		user: &service.User{ID: 7, Status: service.StatusActive, Email: "user@example.com", Username: "ju-user", AvatarURL: "https://cdn.example/a.png"},
 	}, nil, nil, nil)}
 
 	recorder := httptest.NewRecorder()
@@ -56,6 +96,8 @@ func TestJuSSOStartIssuesCallbackTicketWithoutSecrets(t *testing.T) {
 	handler.JuSSOStart(c)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", recorder.Header().Get("Referrer-Policy"))
 
 	var resp struct {
 		Code int `json:"code"`
@@ -85,6 +127,8 @@ func TestJuSSOStartIssuesCallbackTicketWithoutSecrets(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), secret)
 
 	payload := decodeLivartSSOTicket(t, ticket, secret)
+	require.Equal(t, "sub2api", payload.Issuer)
+	require.Equal(t, "ju", payload.Audience)
 	require.Equal(t, "7", payload.Subject)
 	require.Equal(t, "user@example.com", payload.Email)
 	require.Equal(t, "ju-user", payload.Username)

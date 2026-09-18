@@ -67,6 +67,7 @@ class AgentEngine:
         initial_file_state: Optional[Dict[str, str]] = None,
         option_codes: Optional[List[str]] = None,
         recorder: Optional[AgentRunRecorder] = None,
+        user_id: Optional[str] = None,
     ):
         self.send_message = send_message
         self.variant_index = variant_index
@@ -92,6 +93,7 @@ class AgentEngine:
             gemini_api_key=gemini_api_key,
             replicate_api_key=replicate_api_key,
             asset_base_url=asset_base_url,
+            user_id=user_id,
             option_codes=option_codes,
         )
         self._tool_preview_lengths: Dict[str, int] = {}

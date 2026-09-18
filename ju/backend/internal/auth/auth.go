@@ -20,7 +20,10 @@ import (
 
 const SessionCookieName = "open_ai_canvas_session"
 
-const sessionMaxAge = 30 * 24 * time.Hour
+const (
+	sessionMaxAge    = 30 * 24 * time.Hour
+	ssoSessionMaxAge = 3 * 24 * time.Hour
+)
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,32}$`)
 
@@ -224,6 +227,15 @@ func (s *Service) CurrentUser(cookieValue string) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	if session.SSOSubject != "" {
+		revoked, revokeErr := s.repo.SSORevoked(session.SSOSubject, session.SSOIssuedAt)
+		if revokeErr != nil {
+			return nil, revokeErr
+		}
+		if revoked {
+			return nil, kernel.Unauthorized("SSO 登录已撤销")
+		}
+	}
 	if user.Status != model.UserStatusActive {
 		return nil, kernel.Forbidden("该账号已被禁用")
 	}
@@ -234,6 +246,9 @@ func (s *Service) CurrentUser(cookieValue string) (*model.User, error) {
 func (s *Service) PublicAuthUser(user *model.User) (AuthUser, error) {
 	result := AuthUser{User: *user}
 	identity, err := s.repo.UserIdentityForUser(user.ID, "linuxdo")
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		identity, err = s.repo.UserIdentityForUser(user.ID, "sub2api")
+	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return result, nil
 	}
@@ -248,24 +263,33 @@ func (s *Service) PublicAuthUser(user *model.User) (AuthUser, error) {
 }
 
 func (s *Service) createAuthSession(user *model.User) (*AuthSessionResult, error) {
+	return s.createAuthSessionWithSSO(user, "", 0)
+}
+
+func (s *Service) createAuthSessionWithSSO(user *model.User, subject string, issuedAt int64) (*AuthSessionResult, error) {
 	publicUser, err := s.PublicAuthUser(user)
 	if err != nil {
 		return nil, err
 	}
 	token := RandomToken()
 	now := time.Now()
+	maxAge := sessionMaxAge
+	if subject != "" {
+		maxAge = ssoSessionMaxAge
+	}
 	session := model.AuthSession{
+		SSOSubject: subject, SSOIssuedAt: issuedAt,
 		ID:        kernel.NewID(),
 		UserID:    user.ID,
 		TokenHash: HashToken(token),
-		ExpiresAt: now.Add(sessionMaxAge),
+		ExpiresAt: now.Add(maxAge),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	if err := s.repo.Create(&session); err != nil {
 		return nil, err
 	}
-	return &AuthSessionResult{User: publicUser, Session: session.ID + "." + token, MaxAgeSecs: int(sessionMaxAge.Seconds())}, nil
+	return &AuthSessionResult{User: publicUser, Session: session.ID + "." + token, MaxAgeSecs: int(maxAge.Seconds())}, nil
 }
 
 func HashPassword(password string) (string, error) {

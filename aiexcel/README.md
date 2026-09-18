@@ -87,31 +87,18 @@ npm run dev
 http://localhost:3000
 ```
 
-## DeepSeek 配置
+## Sub2API 配置
 
-### 页面设置
+从 Sub2API 左侧的“AI表格”入口打开应用。登录通过短期一次性 SSO 票据完成，模型请求由 AIExcel 服务端转发到 Sub2API，浏览器不会接触 API Key。
 
-点击页面右上角的设置按钮，可以输入自己的 DeepSeek API Key。
-
-- 自定义密钥仅保存在当前浏览器的 `localStorage`
-- 不会写入 Excel 文件或操作历史
-- 静态版本必须在页面设置中填写 API Key
-
-默认接口配置：
-
-```text
-URL: https://api.deepseek.com
-Model: deepseek-v4-pro
-```
-
-### 本地服务端配置
-
-非静态开发模式也可以创建 `.env.local`：
+服务端配置 `.env.local`：
 
 ```env
-DEEPSEEK_API_KEY=你的_API_Key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-pro
+SUB2API_SSO_SECRET=与 Sub2API 相同的至少 32 位密钥
+SUB2API_RELAY_BASE_URL=http://localhost:18080/v1
+SUB2API_RELAY_API_KEY=Sub2API 中的服务端 API Key
+SUB2API_RELAY_MODEL=deepseek-chat
+AIEXCEL_SSO_CALLBACK_URL=http://localhost:4173/api/auth/sso/callback
 ```
 
 `.env.local` 已被 Git 忽略，请勿将真实密钥提交到仓库。
@@ -126,7 +113,7 @@ npm run build
 
 构建结果位于 `dist`，适用于 Vinext 运行环境。
 
-### 纯静态网站
+### 纯静态网站（仅本地预览）
 
 ```bash
 npm run build:static
@@ -141,7 +128,7 @@ out/
 └── favicon.svg
 ```
 
-可以使用任意静态服务器运行：
+可以使用任意静态服务器运行，但静态服务器不提供 SSO 回调和 `/api/ai`，不能用于 Sub2API 集成环境：
 
 ```bash
 python3 -m http.server 4173 --directory out
@@ -199,7 +186,7 @@ npm run lint         # 代码检查
 
 - 大型工作簿的解析和导出速度取决于浏览器性能。
 - ExcelJS 无法生成原生可交互 Excel 图表，因此导出文件中保存静态图表；网页预览提供完整交互图表。
-- 静态版本会从浏览器直接请求 DeepSeek，是否成功取决于 API 服务的跨域访问策略和当前网络环境。
+- 生产环境必须使用完整的 Vinext 服务端版本，以提供 SSO 回调、会话和 Sub2API 中转请求。
 - 使用 AI 修改重要文件前，建议保留原文件备份。
 
 ## License

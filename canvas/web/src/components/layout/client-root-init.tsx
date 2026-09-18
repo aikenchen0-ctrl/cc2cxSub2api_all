@@ -51,6 +51,12 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     }, [channelMode, token, updateConfig, user?.role]);
 
     useEffect(() => {
+        if (!token || !publicSettings || channelMode !== "local") return;
+        const hasRemoteChannel = publicSettings.modelChannel.channels?.some((channel) => channel.id === "sub2api-relay" && channel.enabled !== false);
+        if (hasRemoteChannel) updateConfig("channelMode", "remote");
+    }, [channelMode, publicSettings, token, updateConfig]);
+
+    useEffect(() => {
         if (!token || !user?.id) return;
         void fetchUserConfig(token)
             .then((payload) => {

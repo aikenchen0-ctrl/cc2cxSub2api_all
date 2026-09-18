@@ -22,6 +22,27 @@ import (
 
 func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
 	registerChannelOrderRoutes(r, svc)
+	r.POST("/auth/sso/logout", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Header("Referrer-Policy", "no-referrer")
+		if !enforceRateLimit(c, "sso-logout:"+c.ClientIP(), 30, time.Minute) {
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 12<<10)
+		var req struct {
+			Ticket string `json:"ticket"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+		if err := svc.RevokeSub2APISessions(req.Ticket); err != nil {
+			failService(c, err)
+			return
+		}
+		log.Printf("sso event=logout result=success")
+		ok(c, gin.H{"revoked": true})
+	})
 	r.GET("/auth/sso/callback", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		c.Header("Referrer-Policy", "no-referrer")
@@ -30,16 +51,41 @@ func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
 		}
 		payload, err := svc.VerifySub2APITicket(c.Query("ticket"), service.Sub2APISSOSecret(), time.Now())
 		if err != nil {
+			log.Printf("sso event=callback result=rejected")
 			c.Redirect(http.StatusFound, "/login?sso_error=1")
 			return
 		}
-		result, err := svc.CompleteSub2APISSO(payload)
+		handoff, err := svc.CreateSSOHandoff(payload)
 		if err != nil {
 			c.Redirect(http.StatusFound, "/login?sso_error=1")
 			return
 		}
+		setSSOHandoffCookie(c, handoff, int((3 * 24 * time.Hour).Seconds()))
+		log.Printf("sso event=callback result=accepted")
+		c.Redirect(http.StatusFound, "/auth/sso")
+	})
+	r.POST("/auth/sso/exchange", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Header("Referrer-Policy", "no-referrer")
+		if !enforceRateLimit(c, "sso-exchange:"+c.ClientIP(), 30, 10*time.Minute) {
+			return
+		}
+		if !validSSOExchangeOrigin(c) {
+			log.Printf("sso event=exchange result=origin_rejected")
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		raw, _ := c.Cookie("ju_sso_handoff")
+		setSSOHandoffCookie(c, "", -1)
+		result, next, err := svc.ExchangeSSOHandoff(raw)
+		if err != nil {
+			log.Printf("sso event=exchange result=rejected")
+			failService(c, err)
+			return
+		}
 		setSessionCookie(c, result.Session, result.MaxAgeSecs)
-		c.Redirect(http.StatusFound, service.SSONext(payload))
+		log.Printf("sso event=exchange result=success user_id=%s", result.User.ID)
+		ok(c, gin.H{"next": next})
 	})
 	r.GET("/auth/settings", func(c *gin.Context) {
 		settings, err := svc.PublicAuthSettings()

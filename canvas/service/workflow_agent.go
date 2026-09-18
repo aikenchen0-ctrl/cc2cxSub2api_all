@@ -28,16 +28,26 @@ func DraftCreativeWorkflow(ctx context.Context, request WorkflowAgentDraftReques
 	if err != nil {
 		return WorkflowAgentDraftResponse{}, err
 	}
-	if request.ChannelMode != "local" && !UserCanUseRemoteModelChannel(user) {
+	forceRelay := user.Role != model.UserRoleAdmin && Sub2APIRelayEnabled()
+	if !forceRelay && request.ChannelMode != "local" && !UserCanUseRemoteModelChannel(user) {
 		return WorkflowAgentDraftResponse{}, safeMessageError{message: "当前账号未开放云端渠道"}
 	}
+	if forceRelay {
+		request.ChannelMode = "remote"
+		request.ChannelID = ""
+		request.BaseURL = ""
+		request.APIKey = ""
+	}
 	channel, err := workflowDraftChannel(request, modelName)
+	if forceRelay {
+		channel, err = SelectSub2APIRelayChannelForModel(modelName)
+	}
 	if err != nil {
 		return WorkflowAgentDraftResponse{}, err
 	}
 
 	credits, _ := ModelCost(modelName)
-	chargedCredits := request.ChannelMode != "local"
+	chargedCredits := forceRelay || request.ChannelMode != "local"
 	if chargedCredits {
 		if err := ConsumeUserCredits(user.ID, modelName, credits, "/workflows/agent-draft"); err != nil {
 			return WorkflowAgentDraftResponse{}, err
@@ -339,5 +349,3 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
-
-

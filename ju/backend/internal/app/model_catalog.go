@@ -23,8 +23,8 @@ const (
 // Source=frontend 时读取 Models；Source=system 时读取 Channels。
 type ModelCatalogResponse struct {
 	Source   ModelCatalogSource     `json:"source"`
-	Models   []PublicLogicalModel   `json:"models,omitempty"`
-	Channels []PublicChannelCatalog `json:"channels,omitempty"`
+	Models   []PublicLogicalModel   `json:"models,omitzero"`
+	Channels []PublicChannelCatalog `json:"channels,omitzero"`
 }
 
 // PublicChannelCatalog 公开的渠道目录信息（脱敏）
@@ -78,6 +78,9 @@ func (s *Service) ModelCatalog(intent *ModelRequestIntent) (*ModelCatalogRespons
 		models, err := s.PublicLogicalModels(intent)
 		if err != nil {
 			return nil, err
+		}
+		if models == nil {
+			models = []PublicLogicalModel{}
 		}
 		return &ModelCatalogResponse{
 			Source: ModelCatalogSourceFrontend,

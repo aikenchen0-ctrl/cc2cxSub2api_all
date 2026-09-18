@@ -15,13 +15,22 @@ func VerifySub2APITicket(raw, secret string, now time.Time) (Sub2APISSOPayload, 
 }
 
 func (s *Service) VerifySub2APITicket(raw, secret string, now time.Time) (Sub2APISSOPayload, error) {
-	if s != nil && s.coordinator != nil && s.coordinator.HasRedis() {
-		return auth.VerifySub2APITicketWithRedis(raw, secret, now, s.coordinator.Redis())
-	}
-	return auth.VerifySub2APITicket(raw, secret, now)
+	return auth.VerifySub2APITicketWithRepository(raw, secret, now, s.repo)
 }
 
 func Sub2APISSOSecret() string { return auth.Sub2APISSOSecret() }
+
+func (s *Service) CreateSSOHandoff(payload Sub2APISSOPayload) (string, error) {
+	return s.authDomain().CreateSSOHandoff(payload)
+}
+
+func (s *Service) ExchangeSSOHandoff(raw string) (*AuthSessionResult, string, error) {
+	return s.authDomain().ExchangeSSOHandoff(raw)
+}
+
+func (s *Service) RevokeSub2APISessions(raw string) error {
+	return s.authDomain().RevokeSub2APISessions(raw)
+}
 
 func SSONext(payload Sub2APISSOPayload) string { return auth.SSONext(payload) }
 

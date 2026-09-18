@@ -90,6 +90,25 @@ pnpm dev
 
 Open http://localhost:5173 to use the app.
 
+### Sub2API single sign-on
+
+The hosted deployment can use Sub2API as its identity provider. Configure the
+same random `SUB2API_SSO_SECRET` (at least 32 characters) in both services,
+set Sub2API's `SCREEN2CODE_SSO_CALLBACK_URL` to the public screen2code URL
+ending in `/api/auth/sso/callback`, and set `SCREEN2CODE_AUTH_REQUIRED=true`.
+Also set `SUB2API_RELAY_BASE_URL` to the server-side Sub2API OpenAI-compatible
+endpoint. In required-auth mode, each SSO ticket carries only an AES-GCM
+encrypted per-user relay credential; browser-supplied provider keys are ignored
+and generation is charged to that user's Sub2API account.
+Set `SCREEN2CODE_ALLOWED_ORIGINS` to a comma-separated list of deployed
+frontend origins when the frontend and backend use different origins.
+Mutating session endpoints require the `X-CSRF-Token` returned by
+`/api/auth/csrf` and an allowed `Origin` header.
+The screen2code backend stores only a local identity mapping and an opaque
+HttpOnly session in `SCREEN2CODE_AUTH_DB`; it never receives a Sub2API JWT or
+API key. For local development, leave `SCREEN2CODE_AUTH_REQUIRED` unset and
+continue using provider keys directly.
+
 If you prefer to run the backend on a different port, update `VITE_WS_BACKEND_URL` in `frontend/.env.local`.
 
 ## Docker

@@ -21,7 +21,7 @@ func TestPPTSSOStart(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	secret := strings.Repeat("p", 32)
 	handler := &AuthHandler{userService: service.NewUserService(&userHandlerRepoStub{
-		user: &service.User{ID: 7, Username: "ppt-user"},
+		user: &service.User{ID: 7, Status: service.StatusActive, Username: "ppt-user"},
 	}, nil, nil, nil)}
 	for _, tc := range []struct {
 		name, secret, callback, next string
@@ -40,6 +40,7 @@ func TestPPTSSOStart(t *testing.T) {
 		{"query", secret, "https://ppt.example/callback?key=secret", "", true, 503},
 		{"fragment", secret, "https://ppt.example/callback#secret", "", true, 503},
 		{"credentials", secret, "https://user:secret@ppt.example/callback", "", true, 503},
+		{"wrong path", secret, "https://ppt.example/callback", "", true, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("SUB2API_SSO_SECRET", tc.secret)
@@ -67,6 +68,7 @@ func TestPPTSSOStart(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, parsed.Query(), 1)
 			payload := decodeCanvasSSOTicket(t, parsed.Query().Get("ticket"), secret)
+			require.Equal(t, "sub2api", payload.Issuer)
 			require.Equal(t, "presenton", payload.Audience)
 			require.Equal(t, "7", payload.Subject)
 			require.Equal(t, "/upload", payload.Next)

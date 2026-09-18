@@ -22,10 +22,10 @@ export default function LoginPage() {
 
     // 如果已登录，直接跳转
     useEffect(() => {
-        if (hydrated && user) {
+        if (hydrated && user && !params.has("sso_error")) {
             navigate(next, { replace: true });
         }
-    }, [hydrated, user, next, navigate]);
+    }, [hydrated, user, next, navigate, params]);
 
     useEffect(() => {
         void getAuthSettings()
@@ -37,6 +37,7 @@ export default function LoginPage() {
             });
         const oauthError = params.get("oauth_error");
         if (oauthError) message.error(oauthError);
+        if (params.has("sso_error")) message.error("单点登录已失效，请返回 Sub2API 重新进入");
     }, [message, params]);
 
     const submit = async (event: FormEvent<HTMLFormElement>) => {

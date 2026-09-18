@@ -143,6 +143,102 @@ h1 {
   color: var(--muted);
 }
 
+.picker-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.template-picker-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 14px 18px;
+  align-items: center;
+  padding: 16px;
+  border: 1.5px solid rgba(29, 111, 130, 0.44);
+  border-radius: 8px;
+  background: #f7fbfa;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.template-picker-card.is-custom {
+  box-shadow: inset 4px 0 0 var(--accent-warm);
+}
+
+.template-picker-card.is-selected {
+  border-color: rgba(29, 111, 130, 0.62);
+}
+
+.template-picker-card.has-error {
+  border-color: rgba(155, 52, 37, 0.45);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.template-picker-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.template-picker-copy .picker-title {
+  font-size: 19px;
+}
+
+.template-picker-copy .picker-copy {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.template-picker-thumb {
+  position: relative;
+  width: 104px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(29, 111, 130, 0.2);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.template-picker-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(23, 32, 27, 0.25);
+}
+
+.template-upload-link {
+  justify-self: start;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.template-upload-link:hover {
+  color: var(--accent-dark);
+}
+
+.template-picker-card > input[type="file"] {
+  display: none;
+}
+
 .picker textarea {
   width: 100%;
   min-height: 140px;
@@ -1194,6 +1290,16 @@ h1 {
 
   .image-frame {
     min-height: 210px;
+  }
+
+  .template-picker-card {
+    grid-template-columns: minmax(0, 1fr) 82px;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .template-picker-thumb {
+    width: 82px;
   }
 
   .download-image-button {

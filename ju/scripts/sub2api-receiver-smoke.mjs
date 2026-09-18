@@ -13,7 +13,7 @@ const request = (path, cookie, init = {}) => fetch(new URL(path, base), {
 });
 const ticket = (subject, overrides = {}) => {
   const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(JSON.stringify({ sub: subject, username: `smoke_${subject.slice(0, 8)}`, iat: now, exp: now + 120, jti: randomUUID(), next: "/projects", ...overrides })).toString("base64url");
+  const body = Buffer.from(JSON.stringify({ iss: "sub2api", aud: "ju", sub: subject, username: `smoke_${subject.slice(0, 8)}`, iat: now, exp: now + 120, jti: randomUUID(), next: "/projects", ...overrides })).toString("base64url");
   return `${body}.${createHmac("sha256", secret).update(body).digest("base64url")}`;
 };
 async function json(path, cookie, init) {
@@ -27,7 +27,7 @@ async function login(subject) {
   const raw = ticket(subject);
   const response = await request(`/api/auth/sso/callback?ticket=${encodeURIComponent(raw)}`);
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get("location"), "/projects");
+  assert.equal(response.headers.get("location"), "/auth/sso");
   assert.equal(response.headers.get("cache-control"), "no-store");
   const referrerPolicies = response.headers.get("referrer-policy")?.split(",").map((value) => value.trim());
   assert(referrerPolicies?.length && referrerPolicies.every((value) => value === "no-referrer"), "callback must suppress referrers");
@@ -35,7 +35,19 @@ async function login(subject) {
   assert(header?.includes("HttpOnly"), "session must be HttpOnly");
   const replay = await request(`/api/auth/sso/callback?ticket=${encodeURIComponent(raw)}`);
   assert.equal(replay.headers.get("location"), "/login?sso_error=1");
-  return header.split(";")[0];
+  const handoff = header.split(";")[0];
+  const crossSite = await request("/api/auth/sso/exchange", handoff, { method: "POST", headers: { "X-Ju-SSO": "1", Origin: "https://evil.example" } });
+  assert.equal(crossSite.status, 403);
+  const exchange = await request("/api/auth/sso/exchange", handoff, { method: "POST", headers: { "X-Ju-SSO": "1" } });
+  assert.equal(exchange.status, 200);
+  assert.equal((await exchange.json()).data.next, "/projects");
+  const cookies = exchange.headers.getSetCookie();
+  assert(cookies.some((value) => value.startsWith("ju_sso_handoff=;") && value.includes("Max-Age=0")));
+  const duplicate = await request("/api/auth/sso/exchange", handoff, { method: "POST", headers: { "X-Ju-SSO": "1" } });
+  assert.equal(duplicate.status, 401);
+  const session = cookies.find((value) => !value.startsWith("ju_sso_handoff="));
+  assert(session?.includes("HttpOnly"));
+  return session.split(";")[0];
 }
 
 const firstSubject = randomUUID();
@@ -47,12 +59,14 @@ assert.equal(session.user.id, reused.user.id, "SSO must reuse the existing ident
 assert.notEqual(session.user.id, (await json("/api/auth/session", second)).user.id);
 console.log("PASS SSO session, identity reuse, one-time replay, user separation");
 
-for (const overrides of [{ exp: Math.floor(Date.now() / 1000) - 1 }, { exp: Math.floor(Date.now() / 1000) + 600 }]) {
+for (const overrides of [{ exp: Math.floor(Date.now() / 1000) - 1 }, { exp: Math.floor(Date.now() / 1000) + 600 }, { iss: "other" }, { aud: "canvas" }, { aud: "" }]) {
   const invalid = await request(`/api/auth/sso/callback?ticket=${encodeURIComponent(ticket(firstSubject, overrides))}`);
   assert.equal(invalid.headers.get("location"), "/login?sso_error=1");
 }
 const unsafeNext = await request(`/api/auth/sso/callback?ticket=${encodeURIComponent(ticket(firstSubject, { next: "https://example.com" }))}`);
-assert.equal(unsafeNext.headers.get("location"), "/projects");
+assert.equal(unsafeNext.headers.get("location"), "/auth/sso");
+const safeExchange = await json("/api/auth/sso/exchange", unsafeNext.headers.get("set-cookie").split(";")[0], { method: "POST", headers: { "X-Ju-SSO": "1" } });
+assert.equal(safeExchange.next, "/projects");
 console.log("PASS expired/overlong tickets and external redirect rejection");
 
 const catalog = await json("/api/model-catalog", first);

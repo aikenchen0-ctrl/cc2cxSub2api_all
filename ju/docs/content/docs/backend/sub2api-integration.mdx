@@ -7,11 +7,27 @@ description: SSO、后端共享 Super Key 与 Docker 部署边界
 
 ## 目标与边界
 
-用户已经登录 Sub2API 后，点击左侧「智能剧场」，通过两分钟内有效的一次性 HMAC 票据建立影策会话，进入 `/projects`。用户不填写渠道地址、API Key 或模型配置。SSO 仅解决用户身份，模型调用使用管理员预置的后端共享 Super Key。
+用户已经登录 Sub2API 后，点击左侧「智能剧场」，通过三天内有效的一次性 HMAC 票据建立影策会话，进入 `/projects`。用户不填写渠道地址、API Key 或模型配置。SSO 仅解决用户身份，模型调用使用管理员预置的后端共享 Super Key。
 
 共享 Key 的调用统一记到 **Key 拥有者** 的 Sub2API 账户，不等于按每个 SSO 用户的 Sub2API 余额计费。影策内的用户、项目、任务、资源仍按用户隔离。管理员应设置共享账户额度、并发、上游分组和可用模型；不要将 Super Key 交给浏览器或放入跳转 URL。
 
-此接入复用现有用户、身份、会话、模型渠道、价格档、任务和资源表，不增加表或字段。启动时允许幂等写入配置与业务记录，不等于修改数据库结构。既有数据库保持 `CANVAS_AUTO_MIGRATE=false`；结构不匹配应停止启动并检查版本，不能为接入自动迁移。
+本次 SSO 加固使用数据库版本 11：新增一次性票据摘要、短期交换和撤销记录，并为本地会话记录 SSO subject 与签发时间。既有数据库保持 `CANVAS_AUTO_MIGRATE=false`，部署前备份并显式执行 `go run ./cmd/migrate-schema up` 和 `go run ./cmd/migrate-schema verify`，连接参数沿用实际部署配置。不要将旧文档中的“无需结构升级”用于本版本。
+
+## 登录与撤销协议
+
+两端需同时升级：签发方固定 `iss=sub2api`、`aud=ju`，接收方拒绝缺失或不匹配的声明，不兼容旧的无 audience 票据。签名为 `base64url(JSON).base64url(HMAC-SHA256(encodedPayload, secret))`；登录票据最长三天，允许签发时间最多提前 30 秒。
+
+1. Sub2API 校验 JWT、用户启用状态，返回 Ju 固定回调地址与一次性票据。
+2. Ju 校验签名、字段和时效，在数据库原子插入 jti 的 SHA-256 摘要；重启及多副本共用数据库时仍防重放，数据库故障拒绝登录。
+3. 回调创建三天交换记录，设置 `ju_sso_handoff` HttpOnly、SameSite=Strict Cookie，重定向到无票据的 `/auth/sso`。
+4. 前端同源 POST `/api/auth/sso/exchange`，携带 `X-Ju-SSO: 1`。服务端校验 Origin、Sec-Fetch-Site，删除 Cookie 并原子消费交换记录，再建立 Ju 自己的 HttpOnly 会话。生产 Cookie 为 Secure。
+5. 页面整体跳转到安全的 `next`，重新初始化用户缓存。最终地址无票据、JWT 或 Key；失败只返回固定提示。
+
+身份始终按 `sub2api + sub` 唯一映射。邮箱不用于合并账户；首次创建普通用户，重复或并发登录复用唯一身份。昵称保留本地修改，外部用户名与头像更新为展示资料；本地禁用用户不得登录。管理端删除账号采用现有禁用策略，保留身份与数据归属，避免下次 SSO 重新建号绕过禁用。
+
+普通 Ju 登出只撤销当前本地会话。全局登出使用 Sub2API 已有的 `POST /api/v1/auth/revoke-all-sessions`：服务端向注册回调同域的 `/api/auth/sso/logout` POST 独立 `aud=ju:logout` 票据，Ju 持久化撤销时间并撤销映射账号会话，再由 Sub2API 撤销门户会话。旧登录票据、尚未交换的 Cookie 和并发建立的旧会话都受撤销时间约束。撤销通知最长 60 秒有效，禁止跳转，5 秒超时；Ju 未确认时接口返回 502，调用方应重试，不能宣称全局登出成功。普通门户 `/auth/logout` 仍是门户本地登出。
+
+回调、交换、撤销均限流；审计只记录事件、结果及本地用户 ID。Nginx 不记录查询字符串或 Referer；上层网关同样必须脱敏。过期票据和交换记录在下一次写入时清理，撤销记录保留以阻止旧凭据恢复。后台 Relay Key、计费和模型权限保持独立，不随 SSO 传递。
 
 ## 管理员一次性配置
 
@@ -22,7 +38,7 @@ SUB2API_SSO_SECRET=<两端相同的至少32字符随机密钥>
 JU_SSO_CALLBACK_URL=https://ju.example.com/api/auth/sso/callback
 ```
 
-回调地址必须显式配置，使用 HTTP(S) 绝对地址且不能包含用户名、密码或 `#` 片段；生产使用 HTTPS。缺失或非法配置返回 503，不再回退到固定本机地址。签发接口的成功和失败响应都设置 `Cache-Control: no-store`，避免含短时票据的响应被缓存。这些约束需部署包含对应 handler 修复的 Sub2API 版本后生效，不能以独立前端更新代替后端部署。
+回调地址必须显式配置为 HTTPS，路径精确为 `/api/auth/sso/callback`，不能包含用户名、密码、查询或片段。仅 localhost、127.0.0.1、::1 允许开发 HTTP。缺失或非法配置返回 503。签发、回调、交换和撤销接口均设置 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`。Sub2API 后端还须能访问 Ju 注册域名，以发送撤销通知。
 
 影策后端配置：
 
@@ -67,7 +83,7 @@ CANVAS_CORS_ORIGINS=https://ju.example.com
 
 Sub2API 和影策可由独立 Compose 管理。只将影策 backend 加入现有 Sub2API 网络，不公开影策 backend、数据库或 Redis 端口。查询现有网络名称后设置 `SUB2API_DOCKER_NETWORK`，再叠加接入配置：
 
-接入叠加文件同时提供内部 `sso-redis`，AOF 持久化使用 `appendfsync always`。所有影策实例必须使用同一个 `REDIS_URL`，使两分钟票据在跨副本及正常重启后仍只消费一次；不要让生产 SSO 依赖进程内临时防重放缓存。已有可靠 Redis 可通过 `REDIS_URL` 指向它，但仍应配置持久化，不要将 Redis 端口暴露公网。
+接入叠加文件同时提供内部 `sso-redis`，AOF 持久化使用 `appendfsync always`。所有影策实例必须使用同一个 `REDIS_URL`，使三天票据在跨副本及正常重启后仍只消费一次；不要让生产 SSO 依赖进程内临时防重放缓存。已有可靠 Redis 可通过 `REDIS_URL` 指向它，但仍应配置持久化，不要将 Redis 端口暴露公网。
 
 ```bash
 docker inspect sub2api --format '{{json .NetworkSettings.Networks}}'
@@ -90,6 +106,19 @@ Sub2API 自身每次启动都会检查并执行其内嵌迁移，影策的 `CANV
 白名单填写实际页面 Origin，包含协议及非默认端口，不含路径；多个 Origin 用逗号分隔。不要配置 `*`，不要在 Nginx 额外反射任意 Origin，也不要吞掉不受信任来源的 403。跨站直接携带 Cookie 还受浏览器 SameSite 策略约束，优先同源代理而不是放宽 Cookie。现有文本 SSE 专用代理保持禁缓冲，普通 API 和资源不套用全局禁缓冲。
 
 ## 验收清单
+
+以下历史部署与人工记录仅描述旧版结果，不证明本次版本 11 已部署。新版本需重新执行双端签发、交换、跨用户隔离、全局撤销和生产代理检查。
+
+### 本次本地验证
+
+- Ju `go test ./internal/auth ./internal/database ./internal/handler -count=1`：认证、数据库迁移、HTTP 回调与交换、Cookie 属性、重放、跨站、用户禁用、本地登出及全局撤销通过。
+- Ju `go test ./internal/repository -run TestSSOTicket -count=1`：关闭并重开数据库后的重放拒绝、八个并发消费者仅一次成功、过期记录清理通过。
+- Ju `go test ./internal/app -run 'TestEmptyModelCatalog|TestSub2API|TestDirectResourceURLChecksOwnership' -count=1`：Relay 目录脱敏、能力配置、模拟视频任务与资源归属通过。空模型目录会保留空数组，SSO 不依赖管理员先配置 Relay。
+- Sub2API `go test -tags unit ./internal/handler -run 'TestJuSSO|TestSafeJu|TestAuthHandlerRevokeAll' -count=1`：签发、禁用账号、回调地址、声明及撤销通知通过。
+- Ju `bun run build`：类型检查与生产构建通过；保留既有大 chunk 提示。
+- 隔离 SQLite 部署配合真实 Chromium：验证同源 Cookie 交换、最终项目页、刷新、桌面/手机视口、一次性 Cookie 清除、重放拒绝及撤销通知后的会话失效。开发 Vite 代理保留浏览器 Host，保证与生产同源校验一致。
+
+扩展运行既有 `TestCreationRunOwnershipCASAndFence` 时，其 Windows 临时 SQLite 文件未关闭导致清理失败；本次新增的 HTTP 双用户项目、资源、任务隔离测试已通过。未调用付费模型，也未替换真实部署或运行本次 PostgreSQL 集群验收。
 
 ### 可重复的接收端冒烟
 

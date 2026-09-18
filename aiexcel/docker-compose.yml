@@ -4,5 +4,20 @@ services:
     build: .
     container_name: aiexcel
     restart: unless-stopped
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_RELAY_API_KEY: ${SUB2API_RELAY_API_KEY:-}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-deepseek-chat}
     ports:
       - "${AIEXCEL_BIND_HOST:-0.0.0.0}:${AIEXCEL_PORT:-4173}:80"
+    networks:
+      - aiexcel_default
+      - sub2api-network
+
+networks:
+  aiexcel_default:
+    driver: bridge
+  sub2api-network:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}

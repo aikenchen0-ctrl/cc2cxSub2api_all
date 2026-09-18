@@ -35,6 +35,7 @@ const StoryboardPromptsPage = lazy(() => import("@/pages/admin/storyboard-prompt
 const UsersPage = lazy(() => import("@/pages/admin/users/users-page"));
 const AssetsPage = lazy(loadAssetsPage);
 const LoginPage = lazy(() => import("@/pages/auth/login"));
+const SSOPage = lazy(() => import("@/pages/auth/sso"));
 const RegisterPage = lazy(() => import("@/pages/auth/register"));
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/forgot-password"));
 const CanvasPage = lazy(loadCanvasPage);
@@ -87,6 +88,7 @@ function devRoutes() {
 }
 
 export const router = createBrowserRouter([
+    { path: "/auth/sso", element: fullScreenDeferred(<SSOPage />), errorElement: <RouteErrorPage /> },
     {
         element: <AuthScene />,
         errorElement: <RouteErrorPage />,

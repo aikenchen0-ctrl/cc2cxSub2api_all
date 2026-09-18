@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readSession, SESSION_COOKIE } from "../../auth-sso";
+
+const activeRequests = new Set<string>();
 
 const systemPrompt = `你是 AI Excel Copilot 的操作规划引擎。根据工作簿结构与用户请求返回严格 JSON，不要 Markdown。
 输出结构：
@@ -33,21 +36,28 @@ const systemPrompt = `你是 AI Excel Copilot 的操作规划引擎。根据工�
 可组合多个操作。跨表公式引用需使用 Excel 标准语法；工作表名含空格时用单引号。仅使用实际存在的字段和工作表，不要虚构。公式无需前导等号。`;
 
 export async function POST(request: NextRequest) {
+  let activeUserSub = "";
   try {
+    const user = readSession(request.cookies.get(SESSION_COOKIE)?.value || "");
+    if (!user) return NextResponse.json({ error: "请先通过 Sub2API 登录" }, { status: 401 });
+    activeUserSub = user.sub;
+    if (activeRequests.has(activeUserSub)) return NextResponse.json({ error: "当前用户已有 AI 任务执行中，请稍后再试" }, { status: 429 });
+    activeRequests.add(activeUserSub);
     const body = await request.json();
-    const key = typeof body.apiKey === "string" && body.apiKey.trim() ? body.apiKey.trim() : process.env.DEEPSEEK_API_KEY;
-    if (!key) return NextResponse.json({ error: "服务端尚未配置 DEEPSEEK_API_KEY" }, { status: 503 });
-    const response = await fetch(`${process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"}/chat/completions`, {
+    const key = process.env.SUB2API_RELAY_API_KEY?.trim();
+    const baseUrl = (process.env.SUB2API_RELAY_BASE_URL || "http://localhost:18080/v1").replace(/\/$/, "");
+    if (!key) return NextResponse.json({ error: "服务端尚未配置 SUB2API_RELAY_API_KEY" }, { status: 503 });
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
+        model: process.env.SUB2API_RELAY_MODEL || "deepseek-chat",
         temperature: 0.1,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           ...(Array.isArray(body.history) ? body.history.slice(-6) : []),
-          { role: "user", content: JSON.stringify({ activeSheet: body.activeSheet, workbook: body.schema, request: body.request }) }
+          { role: "user", content: JSON.stringify({ userId: user.sub, activeSheet: body.activeSheet, workbook: body.schema, request: body.request }) }
         ]
       })
     });
@@ -59,5 +69,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(plan);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "AI 服务异常" }, { status: 500 });
+  } finally {
+    if (activeUserSub) activeRequests.delete(activeUserSub);
   }
 }

@@ -20,6 +20,13 @@ import (
 const userModelChannelHeader = "X-User-Model-Channel-ID"
 
 func selectAIRequestChannel(user model.AuthUser, modelName string, channelID string, userChannelID string) (model.ModelChannel, string, error) {
+	// Ordinary users always use the server-managed Sub2API relay when it is
+	// configured. This keeps provider credentials and billing ownership out of
+	// the browser and makes all user model calls follow one policy.
+	if user.Role != model.UserRoleAdmin && service.Sub2APIRelayEnabled() {
+		channel, err := service.SelectSub2APIRelayChannelForModel(modelName)
+		return channel, "", err
+	}
 	userChannelID = strings.TrimSpace(userChannelID)
 	if userChannelID != "" {
 		channel, err := service.SelectUserLocalModelChannelForModel(user.ID, modelName, userChannelID)

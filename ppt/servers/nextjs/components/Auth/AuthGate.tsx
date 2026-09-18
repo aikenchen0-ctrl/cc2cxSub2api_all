@@ -33,6 +33,7 @@ export default function AuthGate() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasMetSplashDuration, setHasMetSplashDuration] = useState(false);
+  const [ssoRedirect, setSsoRedirect] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -63,22 +64,28 @@ export default function AuthGate() {
       return;
     }
 
-    void refreshStatus();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sso") === "1") {
+      void exchangeSSO();
+    } else {
+      void refreshStatus();
+    }
   }, []);
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      isLoading ||
-      !status.authenticated ||
-      isRedirecting
-    ) {
+    if (typeof window === "undefined" || isLoading || isRedirecting) {
       return;
     }
 
+    if (ssoRedirect) {
+      setIsRedirecting(true);
+      window.location.replace(ssoRedirect);
+      return;
+    }
+    if (!status.authenticated) return;
     setIsRedirecting(true);
     window.location.replace("/");
-  }, [isLoading, isRedirecting, status.authenticated]);
+  }, [isLoading, isRedirecting, ssoRedirect, status.authenticated]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isLoading) {
@@ -141,6 +148,51 @@ export default function AuthGate() {
         "Could not load login",
         "We could not connect to the login service. Please refresh and try again."
       );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exchangeSSO = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(getApiUrl("/api/v1/auth/sso/exchange"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-Presenton-SSO": "1" },
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as {
+        authenticated?: boolean;
+        username?: string;
+        role?: "admin" | "user" | null;
+        redirect?: string;
+      } | null;
+      if (!response.ok || data?.authenticated !== true) {
+        throw new Error("SSO exchange failed");
+      }
+      const redirect = data.redirect;
+      if (
+        typeof redirect !== "string" ||
+        !redirect.startsWith("/") ||
+        redirect.startsWith("//") ||
+        redirect.includes("\\") ||
+        /[\u0000-\u001f]/.test(redirect)
+      ) {
+        throw new Error("Invalid SSO redirect");
+      }
+      setStatus({
+        configured: true,
+        authenticated: true,
+        username: data.username ?? null,
+        role: data.role ?? "user",
+      });
+      setSsoRedirect(redirect);
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch (error) {
+      console.error(error);
+      notify.error("SSO sign-in failed", "Please return to Sub2API and try again.");
+      await refreshStatus();
     } finally {
       setIsLoading(false);
     }

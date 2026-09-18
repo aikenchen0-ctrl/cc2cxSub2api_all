@@ -1,6 +1,6 @@
 FROM python:3.12.3-slim-bookworm
 
-ENV POETRY_VERSION 1.8.0
+ENV POETRY_VERSION 2.4.1
 
 # Install system dependencies
 RUN pip install "poetry==$POETRY_VERSION"

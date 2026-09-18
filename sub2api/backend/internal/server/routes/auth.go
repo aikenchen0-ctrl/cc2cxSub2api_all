@@ -43,6 +43,15 @@ func RegisterAuthRoutes(
 		auth.GET("/integrations/livart/start", rateLimiter.LimitWithOptions("livart-sso-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), gin.HandlerFunc(jwtAuth), h.Auth.LivartSSOStart)
+		auth.GET("/integrations/aicut/start", rateLimiter.LimitWithOptions("aicut-sso-start", 20, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), gin.HandlerFunc(jwtAuth), h.Auth.AicutSSOStart)
+		auth.GET("/integrations/screen2code/start", rateLimiter.LimitWithOptions("screen2code-sso-start", 20, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), gin.HandlerFunc(jwtAuth), h.Auth.Screen2CodeSSOStart)
+		auth.GET("/integrations/aiexcel/start", rateLimiter.LimitWithOptions("aiexcel-sso-start", 20, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), gin.HandlerFunc(jwtAuth), h.Auth.AIExcelSSOStart)
 		// 注册/登录/2FA/验证码发送均属于高风险入口，增加服务端兜底限流（Redis 故障时 fail-close）
 		auth.POST("/register", rateLimiter.LimitWithOptions("auth-register", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

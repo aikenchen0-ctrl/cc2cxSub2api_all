@@ -20,6 +20,26 @@ func IsSub2APIChannel(channel model.ModelChannel) bool {
 	return channel.ID == sub2APIRelayChannelID
 }
 
+// SelectSub2APIRelayChannelForModel returns the managed server-side relay.
+// It is used for ordinary users so browser-supplied channel IDs cannot bypass
+// the shared Sub2API billing and access policy.
+func SelectSub2APIRelayChannelForModel(modelName string) (model.ModelChannel, error) {
+	return SelectModelChannelForModel(modelName, sub2APIRelayChannelID)
+}
+
+func Sub2APIRelayEnabled() bool {
+	settings, err := repository.GetSettings()
+	if err != nil {
+		return false
+	}
+	for _, channel := range normalizePrivateSetting(settings.Private).Channels {
+		if IsSub2APIChannel(channel) && channel.Enabled && channel.BaseURL != "" && channel.APIKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate everything before writing; restarting also rotates keys and retires removed models.
 func EnsureSub2APIRelayChannel() error {
 	channel, err := configuredSub2APIChannel()
@@ -65,7 +85,7 @@ func EnsureSub2APIRelayChannel() error {
 		}
 	}
 	settings.Public.ModelChannel.AvailableModels = uniqueModelNames(append(available, channel.Models...))
-	if channel.Enabled && settings.Public.ModelChannel.AllowUserRemoteChannel == nil {
+	if channel.Enabled {
 		enabled := true
 		settings.Public.ModelChannel.AllowUserRemoteChannel = &enabled
 	}

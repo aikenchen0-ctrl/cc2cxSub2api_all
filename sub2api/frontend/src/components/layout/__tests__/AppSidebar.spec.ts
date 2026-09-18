@@ -91,6 +91,14 @@ describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
   })
 })
 
+describe('AppSidebar AI剪辑 SSO entry', () => {
+  it('opens aicut through authenticated SSO without exposing an API key', () => {
+    expect(zhCommon.nav.aiCut).toBe('AI剪辑')
+    expect(componentSource).toContain("/auth/integrations/aicut/start")
+    expect(componentSource).toMatch(/label: t\('nav\.aiCut'\),\s*href: aiCutSsoUrl,\s*includeApiKey: false,\s*sso: true/)
+  })
+})
+
 describe('AppSidebar subscription feature flag', () => {
   it('gates the My Subscriptions entry behind the subscription public-settings flag', () => {
     expect(componentSource).toContain('const flagSubscription = makeSidebarFlag(FeatureFlags.subscription)')

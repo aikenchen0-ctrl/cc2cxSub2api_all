@@ -6,7 +6,9 @@ import { createHtmlPlugin } from "vite-plugin-html";
 
 // https://vitejs.dev/config/
 export default ({ mode }) => {
-  process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
+  // The backend proxy target is intentionally a non-VITE variable so it is
+  // never exposed to browser code. Load all env keys for Vite's server config.
+  process.env = { ...process.env, ...loadEnv(mode, process.cwd(), "") };
   const CODEGEN_BACKEND =
     process.env.PROXY_CODEGEN_BACKEND || "http://127.0.0.1:7001";
 

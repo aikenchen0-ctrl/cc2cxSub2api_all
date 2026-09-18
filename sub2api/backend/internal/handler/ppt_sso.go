@@ -30,8 +30,13 @@ func (h *AuthHandler) PPTSSOStart(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "PPT SSO is unavailable")
 		return
 	}
-	if _, err := h.userService.GetByID(c.Request.Context(), subject.UserID); err != nil {
+	user, err := h.userService.GetByID(c.Request.Context(), subject.UserID)
+	if err != nil {
 		response.ErrorFrom(c, err)
+		return
+	}
+	if user == nil || !user.IsActive() {
+		response.Forbidden(c, "User is disabled")
 		return
 	}
 	callback := strings.TrimSpace(os.Getenv("PPT_SSO_CALLBACK_URL"))
@@ -39,7 +44,7 @@ func (h *AuthHandler) PPTSSOStart(c *gin.Context) {
 		callback = "http://localhost:8341/api/v1/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.ForceQuery {
+	if err != nil || !validPPTCallback(parsed) {
 		response.Error(c, http.StatusServiceUnavailable, "PPT_SSO_CALLBACK_URL is invalid")
 		return
 	}
@@ -49,7 +54,7 @@ func (h *AuthHandler) PPTSSOStart(c *gin.Context) {
 	}
 	now := time.Now()
 	raw, err := signJuTicket(juSSOTicket{
-		Audience: "presenton", Subject: strconvInt64(subject.UserID),
+		Issuer: "sub2api", Audience: "presenton", Subject: strconvInt64(subject.UserID),
 		IssuedAt: now.Unix(), ExpiresAt: now.Add(2 * time.Minute).Unix(),
 		Nonce: randomNonce(), Next: next,
 	}, secret)
@@ -61,4 +66,14 @@ func (h *AuthHandler) PPTSSOStart(c *gin.Context) {
 	query.Set("ticket", raw)
 	parsed.RawQuery = query.Encode()
 	response.Success(c, gin.H{"redirect_url": parsed.String()})
+}
+
+func validPPTCallback(u *url.URL) bool {
+	if u == nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
+		u.RawQuery != "" || u.Fragment != "" || u.ForceQuery ||
+		u.Path != "/api/v1/auth/sso/callback" || u.RawPath != "" {
+		return false
+	}
+	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
+	return u.Scheme == "https" || (u.Scheme == "http" && local)
 }

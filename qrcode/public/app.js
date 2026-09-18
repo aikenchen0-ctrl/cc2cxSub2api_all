@@ -28,6 +28,7 @@ const statusNode = document.querySelector("#status");
 const inputPreview = document.querySelector("#inputPreview");
 const artisticPreview = document.querySelector("#artisticPreview");
 const templatePreview = document.querySelector("#templatePreview");
+const templatePresetCard = document.querySelector("[data-template-preset]");
 const outputPreview = document.querySelector("#outputPreview");
 const batchResultGrid = document.querySelector("#batchResultGrid");
 const inputDownloadLink = document.querySelector("#downloadInputImage");
@@ -99,6 +100,11 @@ let isStylizingQr = false;
 let stylizeProgressTimer = null;
 let wechatOperationProgressTimer = null;
 let wechatOperationProgressHideTimer = null;
+let defaultTemplateFile = null;
+
+function getTemplateFile() {
+  return templateInput.files?.[0] || defaultTemplateFile;
+}
 
 positivePromptInput.value =
   "延展盘子空白处周围荷花纹理，严格锁定中心方形内全部像素与四角定位图形，不移动、不重绘、不改对比度；仅延展盘子空白处周围荷花纹理、色调与光影，让非定位区域边缘自然融合、无缝衔接不要有白边。把正方形的效果明显的边边角角也要融合到延展中融为一体。";
@@ -1144,7 +1150,7 @@ function scheduleMaskPreview() {
 
 async function previewMaskNow({ silent = false } = {}) {
   const file = getActiveQrFile();
-  const templateFile = templateInput.files?.[0];
+  const templateFile = getTemplateFile();
   const referenceFiles = Array.from(referenceInput.files ?? []).slice(0, 3);
 
   if (!file || !templateFile) {
@@ -1415,8 +1421,14 @@ templateInput.addEventListener("change", () => {
   const file = templateInput.files?.[0];
 
   if (!file) {
-    templatePreview.removeAttribute("src");
-    templateEmpty.hidden = false;
+    if (defaultTemplateFile) {
+      templatePreview.src = "./blank.jpg";
+      templateEmpty.hidden = true;
+      templatePresetCard?.classList.remove("is-custom");
+    } else {
+      templatePreview.removeAttribute("src");
+      templateEmpty.hidden = false;
+    }
     return;
   }
 
@@ -1432,9 +1444,42 @@ templateInput.addEventListener("change", () => {
 
   templatePreview.src = URL.createObjectURL(file);
   templateEmpty.hidden = true;
+  templatePresetCard?.classList.add("is-custom");
   setStatus("空白盘模板已载入。", "ready");
   scheduleMaskPreview();
 });
+
+async function loadDefaultTemplate() {
+  try {
+    const response = await fetch("./blank.jpg");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    defaultTemplateFile = new File([blob], "blank-porcelain-plate.jpg", {
+      type: blob.type || "image/jpeg"
+    });
+
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(defaultTemplateFile);
+      templateInput.files = transfer.files;
+    } catch {
+      // getTemplateFile() keeps the preset usable when programmatic file assignment is unavailable.
+    }
+
+    templatePreview.src = "./blank.jpg";
+    templateEmpty.hidden = true;
+    templatePresetCard?.classList.add("is-selected");
+    setStatus("默认空白青花瓷盘已就绪，请上传二维码开始制作。", "ready");
+  } catch (error) {
+    templatePresetCard?.classList.add("has-error");
+    setStatus(`默认模板加载失败：${error.message}，请手动选择模板。`, "error");
+  }
+}
+
+loadDefaultTemplate();
 
 referenceInput.addEventListener("change", () => {
   const files = Array.from(referenceInput.files ?? []);
@@ -1820,7 +1865,7 @@ document.querySelectorAll("[data-size]").forEach((button) => {
 
 generateButton.addEventListener("click", async () => {
   const file = getActiveQrFile();
-  const templateFile = templateInput.files?.[0];
+  const templateFile = getTemplateFile();
   const referenceFiles = Array.from(referenceInput.files ?? []).slice(0, 3);
   setGeneratedImageDataUrl(null);
 

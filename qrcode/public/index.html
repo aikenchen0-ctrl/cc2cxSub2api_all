@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260522-wechat-loading-feedback" />
+    <link rel="stylesheet" href="./styles.css?v=20260918-default-template" />
   </head>
   <body>
     <main class="page">
@@ -70,11 +70,19 @@
             <p class="picker-copy">艺术化过程中按钮会锁定，完成后会自动切换到艺术化二维码裁剪区。</p>
           </div>
 
-          <label class="picker" for="templateImage">
+          <div class="template-picker-card" data-template-preset="blank">
+            <div class="template-picker-copy">
+              <span class="picker-kicker">默认预选模板</span>
+              <span class="picker-title">空白青花瓷盘</span>
+              <span class="picker-copy">已内置并自动加载，可直接作为二维码合成底图。</span>
+            </div>
+            <div class="template-picker-thumb" aria-hidden="true">
+              <img src="./blank.jpg" alt="" />
+              <span class="template-check">✓</span>
+            </div>
+            <label class="template-upload-link" for="templateImage">更换本地模板</label>
             <input id="templateImage" type="file" accept="image/png,image/jpeg,image/webp" />
-            <span class="picker-title">选择空白盘模板</span>
-            <span class="picker-copy">必选：用于本地合成盘中二维码</span>
-          </label>
+          </div>
 
           <input id="referenceImages" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
 

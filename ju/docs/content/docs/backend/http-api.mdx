@@ -9,6 +9,14 @@ description: 信封、错误码与 OpenAPI
 
 机器可读规范：运行中的 `GET /api/openapi.yaml`，源文件 `backend/internal/handler/openapi.yaml`。前端 TypeScript 仍走 `web/src/services/api` 的 `http`，不从 OpenAPI 生成客户端。
 
+## Sub2API SSO
+
+- `GET /auth/sso/callback?ticket=...`：验证 `iss=sub2api`、`aud=ju` 的一次性票据（有效期三天），设置三天交换 Cookie，302 到 `/auth/sso`，失败到 `/login?sso_error=1`。
+- `POST /auth/sso/exchange`：仅允许同源 Origin，要求 `X-Ju-SSO: 1`；消费并删除交换 Cookie，设置本地会话 Cookie，返回 `{ next }`。无效或已消费凭据返回 401，跨站请求返回 403。
+- `POST /auth/sso/logout`：服务端通知，JSON `{ ticket }`，只接受 `aud=ju:logout` 的独立签名票据，持久化撤销点并返回 `{ revoked: true }`。不接受浏览器会话代替签名。
+
+三个接口均禁止缓存与 Referer，限流、签名及字段约束见 [Sub2API 接入](./sub2api-integration.mdx)。
+
 ## 管理员支付订单
 
 `GET /api/admin/payments/orders` 需要管理员权限，支持 `status`、`keyword`、`page`、`pageSize`。关键词匹配订单号、渠道交易号、用户名称、用户名或邮箱，也支持完整用户 ID 精确匹配。用户名和邮箱搜索忽略大小写；状态过滤同时生效，返回匹配总数和当前页订单。

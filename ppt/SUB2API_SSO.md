@@ -2,10 +2,17 @@
 
 The portal's Eternal PPT shortcut calls the authenticated
 `GET /api/v1/auth/integrations/ppt/start` endpoint. PPT validates a signed,
-two-minute ticket at `/api/v1/auth/sso/callback` and sets its existing HttpOnly
-session cookie. Each portal subject maps to a separate ordinary PPT user;
+two-minute ticket at `/api/v1/auth/sso/callback`, stores a short-lived,
+path-restricted HttpOnly handoff cookie, and redirects to `/?sso=1`. The PPT
+login page then performs a same-origin `POST /api/v1/auth/sso/exchange`; only
+that exchange creates the normal HttpOnly session cookie. Each portal subject maps to a separate ordinary PPT user;
 existing local users, passwords, presentations, and administrator privileges
 are not merged or replaced. Login by password remains available.
+
+The ticket must contain `iss=sub2api` and `aud=presenton`. PPT rejects tickets
+with another issuer or audience, and the portal only accepts a configured
+callback whose exact path is `/api/v1/auth/sso/callback` (HTTP is allowed only
+for localhost development; production deployments must use HTTPS).
 
 ## Configuration
 
@@ -51,6 +58,12 @@ Build the portal image `sub2api:ppt-integration` from `sub2api/Dockerfile` befor
 the last command. Back up the PPT data directory and portal database before
 replacing services. Do not delete volumes during an upgrade.
 
+The handoff cookie is valid for 60 seconds, is scoped only to the exchange
+endpoint, and is deleted before the exchange returns. Exchange requests require
+`X-Presenton-SSO: 1`, reject cross-site fetches, and return `Cache-Control:
+no-store` plus `Referrer-Policy: no-referrer`. The final URL contains only the
+validated local `next` path and never contains a ticket or session token.
+
 ## Verification
 
 - Log into Sub2API and click Eternal PPT. A new tab must open at `/upload`
@@ -58,6 +71,8 @@ replacing services. Do not delete volumes during an upgrade.
 - Reload the PPT page and confirm the ordinary session persists.
 - Runtime config returns masked credentials; admin provider APIs return 403.
 - Expired, altered, wrong-audience and replayed tickets must fail closed.
+- Cross-site or repeated handoff exchanges must fail closed and clear the
+  handoff cookie.
 - Callback query strings must not appear in nginx or Uvicorn access logs.
 - Run a small outline generation against the configured relay. Model listing
   alone does not prove an upstream can generate.

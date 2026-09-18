@@ -414,6 +414,10 @@ export async function login(input: { username: string; password: string }) {
     return result;
 }
 
+export function exchangeSub2APISSO() {
+    return http.post<{ next: string }>("/auth/sso/exchange", {}, { headers: { "X-Ju-SSO": "1" } });
+}
+
 export function sendRegistrationEmailCode(email: string) {
     return http.post<{ sent: boolean }>("/auth/email-code", { email });
 }

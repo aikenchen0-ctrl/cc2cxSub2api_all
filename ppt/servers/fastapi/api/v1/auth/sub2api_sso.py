@@ -6,12 +6,13 @@ import os
 import secrets
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from api.v1.auth.config import SESSION_COOKIE_NAME, SESSION_TTL_SECONDS
 from api.v1.auth.users import PASSWORD_HELPER, get_jwt_strategy
@@ -22,6 +23,9 @@ from services.database import get_async_session
 SUB2API_SSO_ROUTER = APIRouter()
 _NAMESPACE = uuid.UUID("ae47cb68-42e0-44cd-9572-e905c6684da9")
 _HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+HANDOFF_COOKIE_NAME = "presenton_sso_handoff"
+HANDOFF_KEY = "sub2api_sso_handoff"
+HANDOFF_TTL_SECONDS = 60
 
 
 def verify_ticket(raw: str, secret: str, now: int | None = None) -> dict:
@@ -33,7 +37,11 @@ def verify_ticket(raw: str, secret: str, now: int | None = None) -> dict:
     if not hmac.compare_digest(supplied, expected):
         raise ValueError("Invalid signature")
     payload = json.loads(base64.b64decode(encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True))
-    if not isinstance(payload, dict) or payload.get("aud") != "presenton":
+    if (
+        not isinstance(payload, dict)
+        or payload.get("iss") != "sub2api"
+        or payload.get("aud") != "presenton"
+    ):
         raise ValueError("Invalid audience")
     for name in ("sub", "jti"):
         value = payload.get(name)
@@ -52,12 +60,40 @@ def safe_next(value: object) -> str:
     return value
 
 
+def _secure_request(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
+
+
+def _clear_handoff_cookie(response: JSONResponse, request: Request) -> None:
+    response.delete_cookie(
+        HANDOFF_COOKIE_NAME,
+        path="/api/v1/auth/sso/exchange",
+        secure=_secure_request(request),
+        httponly=True,
+        samesite="strict",
+    )
+
+
+def _same_origin(request: Request) -> bool:
+    origin = request.headers.get("origin", "").strip()
+    if not origin or origin == "null":
+        return True
+    parsed = urlsplit(origin)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in {"", "/"}:
+        return False
+    forwarded_scheme = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    expected_scheme = forwarded_scheme or request.url.scheme
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    expected_host = forwarded_host or request.headers.get("host", "") or request.url.netloc
+    return parsed.scheme == expected_scheme and parsed.netloc.lower() == expected_host.lower()
+
+
 @SUB2API_SSO_ROUTER.get("/sso/callback")
 async def sub2api_sso_callback(request: Request, session: AsyncSession = Depends(get_async_session)):
     try:
         payload = verify_ticket(request.query_params.get("ticket", ""), os.environ.get("SUB2API_SSO_SECRET", "").strip())
     except (ValueError, TypeError, UnicodeError):
-        return RedirectResponse("/login?error=SSO_failed", status_code=303, headers=_HEADERS)
+        return RedirectResponse("/?error=SSO_failed", status_code=303, headers=_HEADERS)
     # Primary-key uniqueness consumes each ticket atomically across processes/restarts.
     nonce_id = uuid.uuid5(_NAMESPACE, "nonce:" + hashlib.sha256(payload["jti"].encode()).hexdigest())
     identity_id = uuid.uuid5(_NAMESPACE, "identity:" + payload["sub"])
@@ -86,8 +122,54 @@ async def sub2api_sso_callback(request: Request, session: AsyncSession = Depends
         await session.commit()
     except (IntegrityError, ValueError, KeyError):
         await session.rollback()
-        return RedirectResponse("/login?error=SSO_failed", status_code=303, headers=_HEADERS)
+        return RedirectResponse("/?error=SSO_failed", status_code=303, headers=_HEADERS)
+    handoff_id = uuid.uuid4()
+    session.add(KeyValueSqlModel(
+        id=handoff_id,
+        key=HANDOFF_KEY,
+        value={"user_id": str(user.id), "next": safe_next(payload.get("next")), "exp": int(time.time()) + HANDOFF_TTL_SECONDS},
+    ))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        return RedirectResponse("/?error=SSO_failed", status_code=303, headers=_HEADERS)
+    response = RedirectResponse("/?sso=1", status_code=303, headers=_HEADERS)
+    response.set_cookie(HANDOFF_COOKIE_NAME, str(handoff_id), max_age=HANDOFF_TTL_SECONDS, httponly=True, secure=_secure_request(request), samesite="strict", path="/api/v1/auth/sso/exchange")
+    return response
+
+
+@SUB2API_SSO_ROUTER.post("/sso/exchange")
+async def sub2api_sso_exchange(request: Request, session: AsyncSession = Depends(get_async_session)):
+    response_headers = dict(_HEADERS)
+    if request.headers.get("x-presenton-sso") != "1" or request.headers.get("sec-fetch-site", "").lower() == "cross-site" or not _same_origin(request):
+        response = JSONResponse({"detail": "SSO exchange rejected"}, status_code=403, headers=response_headers)
+        _clear_handoff_cookie(response, request)
+        return response
+    response = JSONResponse({"detail": "SSO handoff expired"}, status_code=401, headers=response_headers)
+    _clear_handoff_cookie(response, request)
+    raw_id = request.cookies.get(HANDOFF_COOKIE_NAME, "")
+    try:
+        handoff_id = uuid.UUID(raw_id)
+    except (ValueError, AttributeError):
+        return response
+    result = await session.execute(
+        delete(KeyValueSqlModel)
+        .where(KeyValueSqlModel.id == handoff_id, KeyValueSqlModel.key == HANDOFF_KEY)
+        .returning(KeyValueSqlModel.value)
+    )
+    value = result.scalar_one_or_none()
+    await session.commit()
+    if not isinstance(value, dict) or not isinstance(value.get("exp"), int) or value["exp"] < int(time.time()):
+        return response
+    try:
+        user = await session.get(User, uuid.UUID(str(value["user_id"])))
+    except (ValueError, KeyError, TypeError):
+        user = None
+    if user is None or not user.is_active or user.is_superuser:
+        return response
     token = await get_jwt_strategy().write_token(user)
-    response = RedirectResponse(safe_next(payload.get("next")), status_code=303, headers=_HEADERS)
-    response.set_cookie(SESSION_COOKIE_NAME, token, max_age=SESSION_TTL_SECONDS, httponly=True, secure=request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https", samesite="lax", path="/")
+    response = JSONResponse({"authenticated": True, **{"id": str(user.id), "username": user.username, "role": "user", "created_at": user.created_at.isoformat() if user.created_at else None}, "redirect": safe_next(value.get("next"))}, headers=response_headers)
+    _clear_handoff_cookie(response, request)
+    response.set_cookie(SESSION_COOKIE_NAME, token, max_age=SESSION_TTL_SECONDS, httponly=True, secure=_secure_request(request), samesite="lax", path="/")
     return response

@@ -35,3 +35,13 @@ LOCAL_ASSET_BASE_URL = os.environ.get("LOCAL_ASSET_BASE_URL", "http://127.0.0.1:
 # Set to True when running in production (on the hosted version)
 # Used as a feature flag to enable or disable certain features
 IS_PROD = os.environ.get("IS_PROD", False)
+
+# Hosted deployments can require the sub2api-issued local session. Local
+# development remains usable with provider keys when this is disabled.
+SCREEN2CODE_AUTH_REQUIRED = os.environ.get("SCREEN2CODE_AUTH_REQUIRED", "").strip().lower() in {"1", "true", "yes", "on"}
+SUB2API_RELAY_BASE_URL = os.environ.get("SUB2API_RELAY_BASE_URL", "").strip() or None
+SCREEN2CODE_ALLOWED_ORIGINS = tuple(
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("SCREEN2CODE_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+)

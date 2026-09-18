@@ -35,19 +35,6 @@ type DashboardRow = { group: string; count: number; average: number; min: number
 type DashboardData = { groupLabel: string; valueLabel: string; sourceSheet: string; rows: DashboardRow[] };
 
 const COLORS = { green: "167D5A", mint: "DCF3E9", ink: "172621", amber: "ECA72C", red: "E95D4E", blue: "3975C6" };
-const STATIC_AI_PROMPT = `你是 AI Excel Copilot。只返回严格 JSON：{"title":"标题","summary":"说明","operations":[],"warnings":[]}。
-必须根据 headerCandidates 判断真实表头行，sample 不是完整数据。可用操作：
-add_formula(sheet,column,formula), set_formula(sheet,range,formula), beautify(sheet), style_range(sheet,range,style),
-conditional_format(sheet,range,condition), create_analysis(sourceSheet,title), find_replace(sheet,find,replace),
-delete_rows(sheet,startRow,count), insert_rows(sheet,startRow,values), set_cells(sheet,cells),
-delete_columns(sheet,startColumn,count), add_column(sheet,startColumn,header,values),
-fill_blank(sheet,headerRow,startDataRow,columns,value), enable_filter(sheet,headerRow),
-sort_rows(sheet,headerRow,startDataRow,column,order), filter_rows(sheet,headerRow,startDataRow,column,operator,filterValue,min,max),
-clear_filter(sheet,headerRow), highlight_rows(sheet,headerRow,startDataRow,column,operator,matchValue,backgroundColor,fontColor),
-create_dashboard(sheet,headerRow,startDataRow,groupByColumn,valueColumn,sheetName)。
-fill_blank 的 columns 优先使用用户点名的完整表头文字；也允许使用 Excel 列号，如 ["R","S","T"]。
-所有空白填充、排序、筛选和条件高亮必须生成批量操作，禁止根据 sample 枚举单元格。颜色使用6位十六进制。
-用户要求新 Sheet 报表图表时使用 create_dashboard。公式无需前导等号。不要说功能不支持。`;
 
 function columnLetter(n: number) {
   let s = "";
@@ -259,6 +246,13 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("sso") !== "1") return;
+    fetch("/api/auth/sso/exchange", { method: "POST", headers: { "x-aiexcel-sso": "1" }, credentials: "include", cache: "no-store" })
+      .then(() => window.history.replaceState({}, "", "/"))
+      .catch(() => undefined);
+  }, []);
+
   const active = sheets.find(s => s.name === activeSheet);
   const filteredRows = useMemo(() => {
     if (!active) return [];
@@ -305,7 +299,7 @@ export default function Home() {
       let wb = new ExcelJS.Workbook();
       let compatibilityMode = false;
       let largeFileMode = false;
-      let fullRowCounts = new Map<string, number>();
+      const fullRowCounts = new Map<string, number>();
       if (/\.xlsx$/i.test(file.name) && file.size >= 5 * 1024 * 1024) {
         const preview = XLSX.read(data, { type: "array", cellStyles: true, cellFormula: true, cellDates: true, dense: true, sheetRows: 501 });
         for (const name of preview.SheetNames) {
@@ -730,23 +724,11 @@ export default function Home() {
     const request = prompt.trim(); if (!request || !workbook) return;
     setPrompt(""); setThinking(true); setMessages(prev => [...prev, { role: "user", text: request, timestamp: Date.now() }]);
     try {
-      const apiKey = localStorage.getItem("deepseek-api-key") || "";
-      const isStatic = document.querySelector('meta[name="static-build"]')?.getAttribute("content") === "true";
-      if (isStatic && !apiKey) throw new Error("静态版本需要先在设置中填写 DeepSeek API Key");
-      const payload = { request, activeSheet, schema: getWorkbookSchema(sheets), history: messages.slice(-6).map(m => ({ role: m.role, content: m.text })), apiKey: apiKey || undefined };
-      const response = isStatic
-        ? await fetch("https://api.deepseek.com/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: "deepseek-v4-pro", temperature: 0.1, response_format: { type: "json_object" },
-              messages: [{ role: "system", content: STATIC_AI_PROMPT }, ...payload.history, { role: "user", content: JSON.stringify({ activeSheet, workbook: payload.schema, request }) }]
-            })
-          })
-        : await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const payload = { request, activeSheet, schema: getWorkbookSchema(sheets), history: messages.slice(-6).map(m => ({ role: m.role, content: m.text })) };
+      const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
       if (!response.ok) throw new Error((await response.json()).error || "AI 请求失败");
       const result = await response.json();
-      const plan: Plan = isStatic ? JSON.parse(result?.choices?.[0]?.message?.content || "{}") : result;
+      const plan: Plan = result;
       if (!plan.title || !Array.isArray(plan.operations)) throw new Error("AI 返回的操作计划格式不正确");
       plan.operations = plan.operations.map(operation => {
         const normalized = normalizeOperation(operation as Operation & Record<string, unknown>);
@@ -803,7 +785,7 @@ export default function Home() {
         </div>
         <div className="trust-row"><span><Check/> 公式与样式保留</span><span><Check/> 跨表关联</span><span><Check/> 随时撤销</span><span><Check/> 一键导出</span></div>
       </section>
-      <footer className="landing-footer">你的数据不离开浏览器 · Powered by DeepSeek</footer>
+      <footer className="landing-footer">工作簿在浏览器解析 · AI 请求通过 Sub2API 服务端转发</footer>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)}/>}
       {toast && <div className="toast">{toast}</div>}
     </main>
@@ -934,20 +916,14 @@ function InteractiveDashboard({ data }: { data: DashboardData }) {
 }
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [key, setKey] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("deepseek-api-key") || "");
-  const [visible, setVisible] = useState(false);
   const [saved, setSaved] = useState(false);
   const save = () => {
-    const value = key.trim();
-    if (value) localStorage.setItem("deepseek-api-key", value);
-    else localStorage.removeItem("deepseek-api-key");
     setSaved(true); window.setTimeout(() => setSaved(false), 1800);
   };
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="modal"><div className="modal-head"><div><span className="ai-avatar"><Settings/></span><div><strong>连接设置</strong><small>配置你的 DeepSeek API</small></div></div><button className="icon-btn" onClick={onClose}><X/></button></div>
-    <div className="setting-status"><span><i/> {key ? "使用自定义密钥" : "使用默认配置"}</span><strong>DeepSeek · deepseek-v4-pro</strong><small>接口地址：https://api.deepseek.com</small></div>
-    <div className="api-key-field"><label htmlFor="api-key">API Key</label><div><input id="api-key" type={visible ? "text" : "password"} value={key} onChange={e => setKey(e.target.value)} placeholder="sk-••••••••••••••••"/><button onClick={() => setVisible(value => !value)}>{visible ? "隐藏" : "显示"}</button></div><small>留空将使用应用的默认配置。自定义密钥仅保存在当前浏览器中。</small></div>
+    <div className="setting-status"><span><i/> Sub2API 已接入</span><strong>统一账号与中转额度</strong><small>AI 请求由服务端转发到 Sub2API，浏览器不会接触模型 API Key。</small></div>
     <div className="security-card"><ShieldCheck/><div><strong>本地优先，数据最小化</strong><p>Excel 文件始终在浏览器内解析。AI 仅接收字段名、行列数及少量结构样例，用于生成可审阅的操作计划。</p></div></div>
-    <div className="settings-actions"><button onClick={() => { setKey(""); localStorage.removeItem("deepseek-api-key"); setSaved(true); }}>清除自定义密钥</button><button className="modal-done" onClick={() => { save(); window.setTimeout(onClose, 450); }}>{saved ? <><Check/> 已保存</> : "保存设置"}</button></div></div></div>;
+    <div className="settings-actions"><button className="modal-done" onClick={() => { save(); window.setTimeout(onClose, 450); }}>{saved ? <><Check/> 已保存</> : "关闭"}</button></div></div></div>;
 }
 
 function FilterMenu({ menu, onClose, onApply }: {

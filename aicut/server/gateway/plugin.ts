@@ -16,7 +16,8 @@ import {
 } from './session.ts';
 import { listModels, loginWithPassword, registerWithPassword } from './sub2api-client.ts';
 import { runWithTenant } from './tenant-context.ts';
-import { loadVault } from './vault.ts';
+import { loadVault, saveVault } from './vault.ts';
+import { verifyAicutSSOTicket } from './sso.ts';
 
 function isAuthPath(pathname: string): boolean {
   return pathname === '/api/auth/login'
@@ -24,7 +25,8 @@ function isAuthPath(pathname: string): boolean {
     || pathname === '/api/auth/me'
     || pathname === '/api/auth/models'
     || pathname === '/api/auth/register'
-    || pathname === '/api/auth/config';
+    || pathname === '/api/auth/config'
+    || pathname === '/api/auth/sso/callback';
 }
 
 function rejectAuthRate(req: IncomingMessage, res: ServerResponse, action: string): boolean {
@@ -106,6 +108,25 @@ async function handleConfig(_req: IncomingMessage, res: ServerResponse): Promise
   sendJson(res, 200, { openRegister: openRegisterEnabled() });
 }
 
+async function handleSSOCallback(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const raw = url.searchParams.get('ticket') ?? '';
+  const ticket = verifyAicutSSOTicket(raw);
+  const existing = await loadVault(ticket.userId);
+  await saveVault({
+    userId: ticket.userId,
+    email: ticket.email || existing?.email || '',
+    refreshToken: existing?.refreshToken || '',
+    userApiKey: ticket.relayKey,
+  });
+  setSessionCookie(res, newSession(ticket.userId, ticket.email));
+  res.statusCode = 302;
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Location', ticket.next);
+  res.end();
+}
+
 async function handleMe(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const session = sessionFromRequest(req);
   if (!session) {
@@ -138,6 +159,10 @@ export function gatewayPlugin(): Plugin {
         const pathname = requestPath(req);
         if (gatewayEnabled() && isAuthPath(pathname)) {
           try {
+            if (pathname === '/api/auth/sso/callback' && req.method === 'GET') {
+              await handleSSOCallback(req, res);
+              return;
+            }
             if (pathname === '/api/auth/login' && req.method === 'POST') {
               await handleLogin(req, res);
               return;

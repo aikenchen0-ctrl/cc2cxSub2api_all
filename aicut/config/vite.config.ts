@@ -107,6 +107,8 @@ export default defineConfig(({ mode }) => {
   // startup snapshot for the `define` (initial agent capability manifest).
   for (const name of [
     'SUB2API_BASE',
+    'SUB2API_SSO_SECRET',
+    'OPENCHATCUT_SSO_CALLBACK_URL',
     'OCC_SESSION_SECRET',
     'OCC_OPEN_REGISTER',
     'OCC_SUB2API_KEY_NAME',
