@@ -52,6 +52,9 @@ func RegisterAuthRoutes(
 		auth.GET("/integrations/aiexcel/start", rateLimiter.LimitWithOptions("aiexcel-sso-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), gin.HandlerFunc(jwtAuth), h.Auth.AIExcelSSOStart)
+		auth.GET("/integrations/yibiao/start", rateLimiter.LimitWithOptions("yibiao-sso-start", 20, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), gin.HandlerFunc(jwtAuth), h.Auth.YibiaoSSOStart)
 		// 注册/登录/2FA/验证码发送均属于高风险入口，增加服务端兜底限流（Redis 故障时 fail-close）
 		auth.POST("/register", rateLimiter.LimitWithOptions("auth-register", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

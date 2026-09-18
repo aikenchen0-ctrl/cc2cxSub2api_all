@@ -152,7 +152,7 @@ base64url(JSON payload).base64url(HMAC-SHA256(payload, SUB2API_SSO_SECRET))
 
 票据有效期最多 120 秒，`jti` 只能消费一次，`aud` 必须固定为 `yibiao-bidmonitor`，`next` 只能是融合项目内部的相对路径。Sub2API JWT、模型 API Key 和服务令牌不能放入票据。
 
-### 4.3 载体仓库需要提供的启动接口
+### 4.3 载体仓库启动接口
 
 载体仓库的 Sub2API 后端应增加与现有兄弟应用一致的登录启动接口，例如：
 
@@ -173,9 +173,10 @@ GET /api/v1/auth/integrations/yibiao/start?next=/
 ```dotenv
 SUB2API_SSO_SECRET=<与 OpenBidKit 相同的随机密钥>
 YIBIAO_SSO_CALLBACK_URL=https://bidmonitor.example.com/api/auth/sso/callback
+YIBIAO_LINK=https://bidmonitor.example.com
 ```
 
-若载体仓库尚未包含 `yibiao` 专用 handler，先按 `sub2api/backend/internal/handler/aiexcel_sso.go` 的结构增加 handler、路由和测试，再在自定义菜单中调用该启动接口。融合目录自身不接收或解析 Sub2API JWT。
+实现位置：`cc2cxSub2api_all/sub2api/backend/internal/handler/yibiao_sso.go`，路由位置：`sub2api/backend/internal/server/routes/auth.go`。接口使用当前 Sub2API 登录用户生成票据，并通过速率限制器保护。融合目录自身不接收或解析 Sub2API JWT。
 
 ### 4.4 OpenBidKit 回调边界
 

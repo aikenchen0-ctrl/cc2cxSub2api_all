@@ -176,6 +176,7 @@ export default {
     aiCut: 'AI剪辑',
     screen2code: 'AI识屏转代码',
     aiExcel: 'AI表格',
+    yibiaoBidMonitor: '易标招标监控',
     artQr: '艺术二维码',
     dashboard: '仪表盘',
     announcements: '公告',

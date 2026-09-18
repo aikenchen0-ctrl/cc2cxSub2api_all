@@ -310,6 +310,9 @@ const quickAppItems = computed(() => {
   const aiExcelUrl =
     import.meta.env.VITE_AIEXCEL_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/aiexcel/start')}?next=%2F`
+  const yibiaoSsoUrl =
+    import.meta.env.VITE_YIBIAO_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/yibiao/start')}?next=%2F`
   const qrcodeUrl = origins.qrcode
   const apiBaseUrl = origins.api
   const makeUrl = (origin: string, baseUrl = apiBaseUrl, includeApiKey = false) => {
@@ -329,6 +332,7 @@ const quickAppItems = computed(() => {
     { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: 'edit' as const },
     { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: 'terminal' as const },
     { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: 'calculator' as const },
+    { label: t('nav.yibiaoBidMonitor'), href: yibiaoSsoUrl, includeApiKey: false, sso: true, icon: 'search' as const },
     { label: t('nav.artQr'), href: makeUrl(qrcodeUrl), includeApiKey: true, sso: false, icon: 'grid' as const },
   ]
 })

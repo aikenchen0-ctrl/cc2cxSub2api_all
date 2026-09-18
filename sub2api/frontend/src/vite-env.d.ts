@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_LINK?: string
   readonly VITE_AICUT_LINK?: string
   readonly VITE_AIEXCEL_LINK?: string
+  readonly VITE_YIBIAO_LINK?: string
   readonly VITE_CANVAS_LINK?: string
   readonly VITE_JU_LINK?: string
   readonly VITE_LIVART_LINK?: string
@@ -21,6 +22,7 @@ interface ImportMetaEnv {
   readonly VITE_PPT_SSO_URL?: string
   readonly VITE_AICUT_SSO_URL?: string
   readonly VITE_AIEXCEL_SSO_URL?: string
+  readonly VITE_YIBIAO_SSO_URL?: string
   readonly VITE_WS_BASE_URL?: string
   readonly BASE_URL: string
 }

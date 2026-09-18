@@ -176,6 +176,7 @@ export default {
     aiCut: 'AI Editor',
     screen2code: 'Screenshot to Code',
     aiExcel: 'AI Spreadsheet',
+    yibiaoBidMonitor: 'Yibiao Bid Monitor',
     artQr: 'Art QR',
     dashboard: 'Dashboard',
     announcements: 'Announcements',
