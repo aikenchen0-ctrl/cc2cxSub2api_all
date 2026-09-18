@@ -45,6 +45,7 @@ import { getAiDiagnosticsRoot } from './document/paths';
 import { createProjectTenderSourceService } from './response-deviation/tenderSource';
 import { createResponseDeviationStore } from './response-deviation/store';
 import { responseDeviationRoutes } from './routes/response-deviation';
+import { ssoIdentityRoutes } from './routes/sso-identities';
 import { BidMonitorClient } from './monitor/client';
 import { createMonitorStore } from './monitor/store';
 import { MonitorService } from './monitor/service';
@@ -204,6 +205,7 @@ await app.register(
       await adminApp.register(userRoutes, { prefix: '/api' });
       await adminApp.register(promptAdminRoutes, { prefix: '/api' });
       await adminApp.register(aiDiagnosticRoutes, { prefix: '/api' });
+      await adminApp.register(ssoIdentityRoutes, { prefix: '/api' });
     });
 
     // 项目作用域：technical-plan/export/tasks（标书生成基础设施，默认开放）。

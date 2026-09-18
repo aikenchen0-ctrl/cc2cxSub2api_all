@@ -44,6 +44,16 @@ SUB2API_SSO_AUTO_PROVISION=false
 
 `SUB2API_SSO_SECRET` 必须和 Sub2API 一致且至少 32 个字符；`SUB2API_SSO_AUTO_PROVISION=false` 时，管理员需要先为外部主体建立身份映射。
 
+管理员登录 OpenBidKit 的“用户管理”，在“身份映射”区块绑定 Sub2API 主体和本地 active 用户。对应管理接口为：
+
+```text
+GET    /api/sso/identities
+POST   /api/sso/identities
+DELETE /api/sso/identities/:subject
+```
+
+这些接口只注册在管理员路由组中，provider 固定为 `sub2api`。同一主体不能绑定到多个本地用户。
+
 ### Python BidMonitor
 
 在运行 Python 服务的进程环境中配置：
@@ -154,7 +164,7 @@ base64url(JSON payload).base64url(HMAC-SHA256(payload, SUB2API_SSO_SECRET))
 
 ### 4.3 载体仓库启动接口
 
-载体仓库的 Sub2API 后端应增加与现有兄弟应用一致的登录启动接口，例如：
+载体仓库已增加与现有兄弟应用一致的登录启动接口：
 
 ```text
 GET /api/v1/auth/integrations/yibiao/start?next=/

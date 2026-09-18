@@ -14,6 +14,12 @@ import {
   type UserUpdatePatch,
 } from '../../../shared/api/users';
 import { useAuth } from '../../../shared/api/auth';
+import {
+  bindSsoIdentity,
+  fetchSsoIdentities,
+  removeSsoIdentity,
+  type SsoIdentity,
+} from '../../../shared/api/sso-identities';
 import { useToast } from '../../../shared/ui';
 import { ASSIGNABLE_MODULES, GRANTABLE_MODULE_IDS } from '../../../shared/permissions';
 
@@ -48,15 +54,28 @@ function UserManagementPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>('all');
   const [editing, setEditing] = useState<SystemUser | null>(null);
+  const [bindingSso, setBindingSso] = useState(false);
 
   const activeTab = TABS.find((t) => t.key === tab)!;
   const { data, isLoading } = useQuery({
     queryKey: ['users', tab],
     queryFn: () => fetchUsers(activeTab.status),
   });
+  const allUsersQuery = useQuery({
+    queryKey: ['users', 'all-for-sso'],
+    queryFn: () => fetchUsers(),
+  });
+  const ssoIdentitiesQuery = useQuery({
+    queryKey: ['sso-identities'],
+    queryFn: fetchSsoIdentities,
+  });
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ['users'] });
+  };
+
+  const invalidateSso = async () => {
+    await qc.invalidateQueries({ queryKey: ['sso-identities'] });
   };
 
   const wrap = async (label: string, fn: () => Promise<unknown>) => {
@@ -74,6 +93,18 @@ function UserManagementPage() {
   const handleDelete = async (u: SystemUser) => {
     if (!window.confirm(`确认删除账号「${u.displayName || u.phone || u.username}」？此操作不可撤销。`)) return;
     await wrap('删除', () => deleteUser(u.id));
+  };
+
+  const handleRemoveSso = async (identity: SsoIdentity) => {
+    if (!window.confirm(`确认解除主体「${identity.subject}」的绑定？`)) return;
+    try {
+      await removeSsoIdentity(identity.subject);
+      await invalidateSso();
+      showToast('身份映射已解除', 'success');
+    } catch (err) {
+      const anyErr = err as { response?: { data?: { error?: string } } };
+      showToast(`解除失败：${anyErr.response?.data?.error || (err instanceof Error ? err.message : String(err))}`, 'error');
+    }
   };
 
   return (
@@ -175,6 +206,35 @@ function UserManagementPage() {
             })}
           </tbody>
         </table>
+
+        <section className="user-mgmt-sso-section">
+          <div className="user-mgmt-sso-head">
+            <div>
+              <span className="section-kicker">Sub2API SSO</span>
+              <h3>身份映射</h3>
+              <p>将 Sub2API 用户主体绑定到本地账号，完成后即可使用单点登录。</p>
+            </div>
+            <button type="button" className="primary-action" onClick={() => setBindingSso(true)}>绑定主体</button>
+          </div>
+          <table className="user-mgmt-table user-mgmt-sso-table">
+            <thead>
+              <tr><th>外部主体</th><th>本地账号</th><th>主体信息</th><th>绑定时间</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              {ssoIdentitiesQuery.isLoading && <tr><td colSpan={5} className="user-mgmt-empty">加载中…</td></tr>}
+              {!ssoIdentitiesQuery.isLoading && !ssoIdentitiesQuery.data?.length && <tr><td colSpan={5} className="user-mgmt-empty">暂无身份映射</td></tr>}
+              {ssoIdentitiesQuery.data?.map((identity) => (
+                <tr key={identity.id}>
+                  <td><code className="user-mgmt-subject">{identity.subject}</code></td>
+                  <td>{identity.user?.displayName || identity.user?.username || `用户 #${identity.userId}`}</td>
+                  <td className="user-mgmt-perm">{identity.email || identity.displayName || '—'}</td>
+                  <td>{formatDate(identity.createdAt)}</td>
+                  <td><button type="button" className="text-button is-danger" onClick={() => void handleRemoveSso(identity)}>解除</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       </div>
 
       <EditUserModal
@@ -187,7 +247,98 @@ function UserManagementPage() {
         }}
         onError={(msg) => showToast(msg, 'error')}
       />
+      <SsoIdentityModal
+        open={bindingSso}
+        users={(allUsersQuery.data?.users ?? []).filter((item) => item.status === 'active')}
+        busy={ssoIdentitiesQuery.isFetching}
+        onClose={() => setBindingSso(false)}
+        onSaved={async () => {
+          await invalidateSso();
+          setBindingSso(false);
+          showToast('身份映射已保存', 'success');
+        }}
+        onError={(msg) => showToast(msg, 'error')}
+      />
     </div>
+  );
+}
+
+interface SsoIdentityModalProps {
+  open: boolean;
+  users: SystemUser[];
+  busy: boolean;
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+  onError: (message: string) => void;
+}
+
+function SsoIdentityModal({ open, users, busy, onClose, onSaved, onError }: SsoIdentityModalProps) {
+  return (
+    <Dialog.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !busy) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="content-regenerate-modal" />
+        {open ? <SsoIdentityForm users={users} onClose={onClose} onSaved={onSaved} onError={onError} /> : null}
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function SsoIdentityForm({ users, onClose, onSaved, onError }: Omit<SsoIdentityModalProps, 'open' | 'busy'>) {
+  const [userId, setUserId] = useState(users[0] ? String(users[0].id) : '');
+  const [subject, setSubject] = useState('');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!userId || !subject.trim()) {
+      onError('请选择本地账号并填写外部主体');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await bindSsoIdentity({
+        userId: Number(userId),
+        subject: subject.trim(),
+        email: email.trim() || undefined,
+        displayName: displayName.trim() || undefined,
+      });
+      await onSaved();
+    } catch (err) {
+      const anyErr = err as { response?: { data?: { error?: string } } };
+      onError(`保存失败：${anyErr.response?.data?.error || (err instanceof Error ? err.message : String(err))}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog.Content className="edit-user-dialog">
+      <Dialog.Title>绑定 Sub2API 主体</Dialog.Title>
+      <Dialog.Description className="sr-only">把 Sub2API 外部主体绑定到一个正常状态的本地用户。</Dialog.Description>
+      <p className="edit-user-dialog-sub">绑定后，该主体可以通过 SSO 进入招标监控。</p>
+      <div className="edit-user-dialog-body">
+        <label className="user-mgmt-field">本地账号
+          <select value={userId} onChange={(event) => setUserId(event.target.value)}>
+            <option value="">请选择正常状态账号</option>
+            {users.map((user) => <option key={user.id} value={user.id}>{user.displayName || user.username}（{user.username}）</option>)}
+          </select>
+        </label>
+        <label className="user-mgmt-field">Sub2API 主体
+          <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="例如 42 或 external-user-id" autoComplete="off" />
+        </label>
+        <label className="user-mgmt-field">邮箱（可选）
+          <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="off" />
+        </label>
+        <label className="user-mgmt-field">显示名称（可选）
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="off" />
+        </label>
+      </div>
+      <div className="user-mgmt-dialog-actions">
+        <button type="button" className="secondary-action" onClick={onClose} disabled={submitting}>取消</button>
+        <button type="button" className="primary-action" onClick={() => void submit()} disabled={submitting}>{submitting ? '保存中…' : '绑定'}</button>
+      </div>
+    </Dialog.Content>
   );
 }
 
