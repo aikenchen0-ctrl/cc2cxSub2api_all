@@ -1,0 +1,84 @@
+import json
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+from service.manager import MonitorManager
+
+
+class FakeStorage:
+    def get_all(self):
+        return []
+
+
+class FakeCore:
+    def __init__(self, user_id, config, data_dir, log_callback):
+        self.user_id = user_id
+        self.config = config
+        self.data_dir = Path(data_dir)
+        self.storage = FakeStorage()
+        self.log_callback = log_callback
+
+    def run_once(self, stop_event=None):
+        self.log_callback("run-complete")
+        return {"new_count": 1, "failed_sites": [], "total_crawlers": 0}
+
+
+class ManagerTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.created = []
+
+        def factory(user_id, config, data_dir, log_callback):
+            self.created.append((user_id, Path(data_dir)))
+            return FakeCore(user_id, config, data_dir, log_callback)
+
+        self.manager = MonitorManager(self.root, core_factory=factory)
+
+    def tearDown(self):
+        self.manager.close()
+
+    def test_user_states_are_isolated(self):
+        self.manager.update_config("1", {"keywords": ["alpha"]})
+        self.manager.update_config("2", {"keywords": ["beta"]})
+
+        first = self.manager.status("1")
+        second = self.manager.status("2")
+        self.assertNotEqual(first["data_dir"], second["data_dir"])
+        self.assertEqual(first["user_id"], "1")
+        self.assertEqual(second["user_id"], "2")
+
+    def test_run_once_finishes_and_keeps_result(self):
+        self.assertTrue(self.manager.run_once("1"))
+        self.assertTrue(self.manager.wait_for_idle("1", timeout=2))
+        status = self.manager.status("1")
+        self.assertFalse(status["current_task_running"])
+        self.assertEqual(status["last_result"]["new_count"], 1)
+        self.assertEqual(self.created[0][0], "1")
+
+    def test_start_and_stop_update_lifecycle(self):
+        self.assertTrue(self.manager.start("1"))
+        self.assertTrue(self.manager.wait_for_idle("1", timeout=2))
+        self.assertTrue(self.manager.status("1")["is_running"])
+        self.assertTrue(self.manager.stop("1"))
+        self.assertFalse(self.manager.status("1")["is_running"])
+
+    def test_sensitive_config_is_not_written(self):
+        self.manager.update_config(
+            "1",
+            {
+                "keywords": ["alpha"],
+                "ai_config": {"api_key": "secret-value", "model": "test-model"},
+                "email_config": {"password": "mail-secret"},
+            },
+        )
+        config_file = self.root / "1" / "monitor.json"
+        saved = json.loads(config_file.read_text(encoding="utf-8"))
+        self.assertNotIn("secret-value", config_file.read_text(encoding="utf-8"))
+        self.assertNotIn("mail-secret", config_file.read_text(encoding="utf-8"))
+        self.assertEqual(saved["ai_config"]["model"], "test-model")
+
+
+if __name__ == "__main__":
+    unittest.main()
