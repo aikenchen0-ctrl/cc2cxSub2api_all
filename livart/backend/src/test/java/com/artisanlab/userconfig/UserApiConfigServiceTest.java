@@ -1,5 +1,6 @@
 package com.artisanlab.userconfig;
 
+import com.artisanlab.common.ApiException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -7,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -19,13 +21,7 @@ class UserApiConfigServiceTest {
         UUID userId = UUID.randomUUID();
         UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
         when(mapper.findByUserId(userId)).thenReturn(entity(userId, "https://api.example/v1", "sk-secret"));
-        UserApiConfigService service = new UserApiConfigService(
-                mapper,
-                "",
-                "",
-                "gpt-image-2",
-                "gpt-5.4-mini"
-        );
+        UserApiConfigService service = service(mapper, "", "");
 
         UserApiConfigDtos.Response response = service.getConfig(userId);
         UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
@@ -42,13 +38,7 @@ class UserApiConfigServiceTest {
         UserApiConfigEntity existingEntity = entity(userId, "https://api.example/v1", "sk-existing");
         when(mapper.findByUserId(userId)).thenReturn(existingEntity);
         when(mapper.findByUserId(any(UUID.class))).thenReturn(existingEntity);
-        UserApiConfigService service = new UserApiConfigService(
-                mapper,
-                "",
-                "",
-                "gpt-image-2",
-                "gpt-5.4-mini"
-        );
+        UserApiConfigService service = service(mapper, "", "");
 
         UserApiConfigDtos.Response response = service.saveConfig(
                 userId,
@@ -68,35 +58,90 @@ class UserApiConfigServiceTest {
     }
 
     @Test
-    void missingUserConfigIsNotReplacedByServerDefault() {
+    void getConfigReportsReadyWhenOnlyServerDefaultSub2ApiCredentialsExist() {
+        UUID userId = UUID.randomUUID();
+        UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
+        when(mapper.findByUserId(userId)).thenReturn(null);
+        UserApiConfigService service = service(mapper, "https://api.example/v1", "sk-default");
+
+        UserApiConfigDtos.Response response = service.getConfig(userId);
+        assertThatCode(() -> service.getRequiredConfig(userId)).doesNotThrowAnyException();
+        UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
+
+        assertThat(response).isNotNull();
+        assertThat(response.serverDefault()).isTrue();
+        assertThat(response.hasApiKey()).isTrue();
+        assertThat(response.apiKey()).isEmpty();
+        assertThat(response.baseUrl()).isEqualTo("https://api.example/v1");
+        assertThat(resolvedConfig.apiKey()).isEqualTo("sk-default");
+        assertThat(resolvedConfig.serverDefault()).isTrue();
+    }
+
+    @Test
+    void juStyleRelaySuperKeySatisfiesRequiredConfigWithoutUserForm() {
         UUID userId = UUID.randomUUID();
         UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
         when(mapper.findByUserId(userId)).thenReturn(null);
         UserApiConfigService service = new UserApiConfigService(
                 mapper,
-                "https://api.example/v1",
-                "sk-default",
+                "",
+                "",
                 "gpt-image-2",
-                "gpt-5.4-mini"
+                "gpt-5.4-mini",
+                "http://sub2api:8080/v1",
+                "sk-super-held-on-server"
         );
+
+        assertThatCode(() -> service.getRequiredConfig(userId)).doesNotThrowAnyException();
+        UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
+
+        assertThat(resolvedConfig.baseUrl()).isEqualTo("http://sub2api:8080/v1");
+        assertThat(resolvedConfig.apiKey()).isEqualTo("sk-super-held-on-server");
+        assertThat(resolvedConfig.serverDefault()).isTrue();
+        assertThat(service.getConfig(userId).apiKey()).isEmpty();
+    }
+
+    @Test
+    void livartDefaultCredentialsTakePrecedenceOverRelay() {
+        UUID userId = UUID.randomUUID();
+        UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
+        when(mapper.findByUserId(userId)).thenReturn(null);
+        UserApiConfigService service = new UserApiConfigService(
+                mapper,
+                "https://livart-default.example/v1",
+                "sk-livart-default",
+                "gpt-image-2",
+                "gpt-5.4-mini",
+                "http://sub2api:8080/v1",
+                "sk-relay"
+        );
+
+        UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
+
+        assertThat(resolvedConfig.baseUrl()).isEqualTo("https://livart-default.example/v1");
+        assertThat(resolvedConfig.apiKey()).isEqualTo("sk-livart-default");
+    }
+
+    @Test
+    void missingUserConfigWithoutServerDefaultStillRequiresPersonalConfig() {
+        UUID userId = UUID.randomUUID();
+        UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
+        when(mapper.findByUserId(userId)).thenReturn(null);
+        UserApiConfigService service = service(mapper, "", "");
 
         UserApiConfigDtos.Response response = service.getConfig(userId);
 
         assertThat(response).isNull();
         assertThatThrownBy(() -> service.getRequiredConfig(userId))
-                .hasMessageContaining("请先配置自己的中转站 Base URL、API Key、生图模型和对话模型");
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("请先配置自己的中转站 Base URL、API Key、生图模型和对话模型")
+                .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("USER_API_CONFIG_REQUIRED"));
     }
 
     @Test
     void exposesServerDefaultConfigForInternalServices() {
         UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
-        UserApiConfigService service = new UserApiConfigService(
-                mapper,
-                "https://api.example/v1",
-                "sk-default",
-                "gpt-image-2",
-                "gpt-5.4-mini"
-        );
+        UserApiConfigService service = service(mapper, "https://api.example/v1", "sk-default");
 
         UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredServerDefaultConfig();
 
@@ -118,7 +163,9 @@ class UserApiConfigServiceTest {
                 "",
                 "",
                 "gpt-image-2",
-                "gpt-5.5"
+                "gpt-5.5",
+                "",
+                ""
         );
 
         UserApiConfigDtos.Response response = service.getConfig(userId);
@@ -126,6 +173,18 @@ class UserApiConfigServiceTest {
 
         assertThat(response.chatModel()).isEqualTo("gpt-5.4-mini");
         assertThat(resolvedConfig.chatModel()).isEqualTo("gpt-5.4-mini");
+    }
+
+    private static UserApiConfigService service(UserApiConfigMapper mapper, String baseUrl, String apiKey) {
+        return new UserApiConfigService(
+                mapper,
+                baseUrl,
+                apiKey,
+                "gpt-image-2",
+                "gpt-5.4-mini",
+                "",
+                ""
+        );
     }
 
     private static UserApiConfigEntity entity(UUID userId, String baseUrl, String apiKey) {

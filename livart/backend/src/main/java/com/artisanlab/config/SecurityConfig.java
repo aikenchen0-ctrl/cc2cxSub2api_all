@@ -87,6 +87,7 @@ public class SecurityConfig {
                                 "/api/health",
                                 "/api/auth/register",
                                 "/api/auth/login",
+                                "/api/auth/sso/callback",
                                 "/api/assets/*/content",
                                 "/api/assets/*/preview",
                                 "/api/assets/*/thumbnail",

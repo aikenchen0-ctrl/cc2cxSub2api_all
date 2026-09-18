@@ -1,5 +1,3 @@
-import os
-
 from fastapi import Request
 from sqlalchemy import func, select
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -28,22 +26,6 @@ class UserConfigEnvUpdateMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-class Sub2APIConfigMiddleware(BaseHTTPMiddleware):
-    """Apply per-tab Sub2API compatibility settings to the current request."""
-
-    async def dispatch(self, request: Request, call_next):
-        api_key = (request.headers.get("x-sub2api-api-key") or "").strip()
-        base_url = (request.headers.get("x-sub2api-base-url") or "").strip().rstrip("/")
-        if api_key and base_url:
-            os.environ["LLM"] = "custom"
-            os.environ["CUSTOM_LLM_API_KEY"] = api_key
-            os.environ["CUSTOM_LLM_URL"] = base_url + "/v1"
-            os.environ["CUSTOM_MODEL"] = (
-                request.headers.get("x-sub2api-model") or "gpt-4o-mini"
-            ).strip()
-        return await call_next(request)
-
-
 class SessionAuthMiddleware(BaseHTTPMiddleware):
     _PUBLIC_AUTH_PATHS = {
         "/api/v1/auth/status",
@@ -51,6 +33,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/setup",
         "/api/v1/auth/login",
         "/api/v1/auth/logout",
+        "/api/v1/auth/sso/callback",
     }
     _PUBLIC_AUTH_PREFIXES: tuple[str, ...] = ()
     _PUBLIC_APP_DATA_PREFIXES = (

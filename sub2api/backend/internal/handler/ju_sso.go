@@ -20,6 +20,7 @@ import (
 )
 
 type juSSOTicket struct {
+	Audience    string `json:"aud,omitempty"`
 	Subject     string `json:"sub"`
 	Email       string `json:"email,omitempty"`
 	Username    string `json:"username,omitempty"`

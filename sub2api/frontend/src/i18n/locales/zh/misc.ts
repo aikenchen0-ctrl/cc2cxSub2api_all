@@ -21,6 +21,7 @@ export default {
   version: {
     currentVersion: '当前版本',
     latestVersion: '最新版本',
+    checking: '正在检查更新...',
     upToDate: '已是最新版本',
     updateAvailable: '有新版本可用！',
     releaseNotes: '更新日志',

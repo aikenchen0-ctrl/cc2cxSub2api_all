@@ -5,6 +5,7 @@ from services.provider_settings import (
     merge_provider_settings,
     migrate_provider_settings_from_file,
     sanitize_provider_settings,
+    with_sub2api_defaults,
 )
 from utils.user_config_store import read_user_config_file, update_user_config_file
 
@@ -24,6 +25,41 @@ class ProviderSettingsSession:
 
     async def refresh(self, _row):
         return None
+
+
+def test_sub2api_bootstrap_preserves_existing_provider(monkeypatch):
+    monkeypatch.setenv("SUB2API_API_KEY", "server-only-key")
+    original = {"LLM": "openai", "OPENAI_MODEL": "existing-model"}
+    assert with_sub2api_defaults(original) == original
+
+
+def test_sub2api_bootstrap_requires_key(monkeypatch):
+    monkeypatch.delenv("SUB2API_API_KEY", raising=False)
+    assert with_sub2api_defaults({}) == {}
+
+
+def test_sub2api_bootstrap_normalizes_url_and_preserves_options(monkeypatch):
+    monkeypatch.setenv("SUB2API_API_KEY", "server-only-key")
+    monkeypatch.setenv("SUB2API_MODEL", "test-model")
+    for base in ("http://relay:8080", "http://relay:8080/", "http://relay:8080/v1/"):
+        monkeypatch.setenv("SUB2API_BASE_URL", base)
+        config = with_sub2api_defaults({"DISABLE_IMAGE_GENERATION": False})
+        assert config["CUSTOM_LLM_URL"] == "http://relay:8080/v1"
+        assert config["CUSTOM_LLM_API_KEY"] == "server-only-key"
+        assert config["CUSTOM_MODEL"] == "test-model"
+        assert config["DISABLE_IMAGE_GENERATION"] is False
+
+
+def test_sub2api_defaults_persist_and_do_not_reset_on_restart(monkeypatch, tmp_path):
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("SUB2API_API_KEY", "server-only-key")
+    monkeypatch.setenv("SUB2API_BASE_URL", "http://relay:8080/v1")
+    session = ProviderSettingsSession()
+    config = asyncio.run(migrate_provider_settings_from_file(session))
+    assert config["LLM"] == "custom"
+    assert read_user_config_file(str(tmp_path / "userConfig.json")) == config
+    monkeypatch.setenv("SUB2API_API_KEY", "changed-env-key")
+    assert asyncio.run(migrate_provider_settings_from_file(session)) == config
 
 
 def test_user_table_has_username_and_no_email_column():

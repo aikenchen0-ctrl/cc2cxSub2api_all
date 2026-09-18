@@ -21,16 +21,8 @@ function isAbsoluteHttpUrl(path: string): boolean {
 }
 
 function getSub2APIHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const apiKey = params.get("apiKey") || params.get("apikey");
-  const baseUrl = params.get("baseUrl") || params.get("baseurl");
-  if (!apiKey || !baseUrl) return {};
-  return {
-    "X-Sub2API-API-Key": apiKey,
-    "X-Sub2API-Base-URL": baseUrl,
-    "X-Sub2API-Model": params.get("model") || "gpt-4o-mini",
-  };
+  // Provider settings are managed server-side, never accepted from a URL.
+  return {};
 }
 
 export function getSub2APIHeadersForRuntime(): Record<string, string> {

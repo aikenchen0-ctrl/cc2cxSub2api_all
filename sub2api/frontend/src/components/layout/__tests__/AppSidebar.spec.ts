@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
+import zhCommon from '@/i18n/locales/zh/common'
+
 const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppSidebar.vue')
 const componentSource = readFileSync(componentPath, 'utf8')
 const stylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../style.css')
@@ -60,6 +62,32 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch).not.toBeNull()
     expect(sidebarHeaderBlockMatch?.[0]).not.toContain('@apply overflow-hidden;')
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
+  })
+})
+
+describe('AppSidebar SuperKey quick apps', () => {
+  it('passes the local Sub2API gateway on port 18080 into canvas, ppt and qrcode', () => {
+    expect(componentSource).toContain("http://localhost:18080")
+    expect(componentSource).not.toContain("http://localhost:18082")
+    expect(componentSource).toContain("http://localhost:3522")
+    expect(componentSource).toMatch(/hash = new URLSearchParams\(\{ baseUrl, apiKey: superApiKey\.value \}\)/)
+  })
+})
+
+describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
+  it('lists 智能剧场 and 超级改图 as ju-style SSO quick apps without an API key in the URL', () => {
+    expect(zhCommon.nav.smartShortDrama).toBe('智能剧场')
+    expect(zhCommon.nav.superCanvas).toBe('超级改图')
+    expect(zhCommon.nav.superCanvas).not.toBe('超级画布')
+    expect(componentSource).toContain("t('nav.smartShortDrama')")
+    expect(componentSource).toContain("t('nav.superCanvas')")
+    expect(componentSource).toContain("/auth/integrations/ju/start")
+    expect(componentSource).toContain("/auth/integrations/livart/start")
+    expect(componentSource).toMatch(/label: t\('nav\.smartShortDrama'\),\s*href: shortDramaUrl,\s*includeApiKey: false,\s*sso: true/)
+    expect(componentSource).toMatch(/label: t\('nav\.superCanvas'\),\s*href: superCanvasUrl,\s*includeApiKey: false,\s*sso: true/)
+    expect(componentSource).not.toMatch(/label: t\('nav\.smartShortDrama'\),\s*href: shortDramaUrl,\s*includeApiKey: true/)
+    expect(componentSource).not.toMatch(/label: t\('nav\.superCanvas'\),\s*href: superCanvasUrl,\s*includeApiKey: true/)
+    expect(componentSource).not.toContain('超级画布')
   })
 })
 

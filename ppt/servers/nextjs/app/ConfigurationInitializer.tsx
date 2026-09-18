@@ -61,20 +61,6 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
   );
   const router = useRouter();
 
-  const getSub2APIQueryConfig = (): LLMConfig | null => {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const apiKey = params.get('apiKey') || params.get('apikey');
-    const baseUrl = params.get('baseUrl') || params.get('baseurl');
-    if (!apiKey || !baseUrl) return null;
-    return {
-      LLM: 'custom',
-      CUSTOM_LLM_URL: `${baseUrl.replace(/\/$/, '')}/v1`,
-      CUSTOM_LLM_API_KEY: apiKey,
-      CUSTOM_MODEL: params.get('model') || 'gpt-4o-mini',
-      IMAGE_PROVIDER: 'gpt-image-1.5',
-    };
-  };
 
   // Fetch user config state
   useEffect(() => {
@@ -93,13 +79,11 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
       return;
     }
 
-    if (getSub2APIQueryConfig()) return;
-
     let cancelled = false;
     let selectedProvider: string | undefined;
     const revalidateProviderConfiguration = async () => {
       try {
-        const configResponse = await fetch('/api/user-config', {
+        const configResponse = await fetch('/api/runtime-config', {
           cache: 'no-store',
         });
         if (!configResponse.ok) {
@@ -107,11 +91,12 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           throw new Error(`user-config returned ${configResponse.status}`);
         }
 
-        const config = normalizeLLMConfig(await configResponse.json());
+        const runtime = await configResponse.json();
+        const config = normalizeLLMConfig(runtime.config || {});
         selectedProvider = config.LLM;
         dispatch(setLLMConfig(config));
 
-        if (!hasValidLLMConfig(config)) {
+        if (!runtime.configured) {
           if (!cancelled) {
             notify.warning(
               "Provider setup required",
@@ -209,18 +194,6 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
 
     setIsLoading(true);
 
-    const sub2apiConfig = getSub2APIQueryConfig();
-    if (sub2apiConfig) {
-      dispatch(setCanChangeKeys(false));
-      dispatch(setLLMConfig(normalizeLLMConfig(sub2apiConfig)));
-      if (route === '/') {
-        router.push('/upload');
-        setLoadingToFalseAfterNavigatingTo('/upload');
-      } else {
-        setIsLoading(false);
-      }
-      return;
-    }
 
     try {
       await assertBackendReachable();

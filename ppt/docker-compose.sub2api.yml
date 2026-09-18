@@ -1,0 +1,9 @@
+# Run with: docker compose -f docker-compose.yml -f docker-compose.sub2api.yml up -d --no-deps production
+services:
+  production:
+    image: ppt:sub2api-integration
+    env_file:
+      - .env.sub2api
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

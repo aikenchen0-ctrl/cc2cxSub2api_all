@@ -16,7 +16,7 @@ services:
       - "1455:1455"
     volumes:
       - ./app_data:/app_data
-      - ./servers/fastapi/templates:/app/servers/fastapi/templates:ro
+      # Local templates are not ABI-compatible with ghcr.io/presenton/presenton:latest.
     environment:
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HTTP_HOST_PORT:-8341}

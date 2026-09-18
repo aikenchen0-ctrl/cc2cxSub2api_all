@@ -1,5 +1,7 @@
 import logging
+import os
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,14 +111,14 @@ async def migrate_provider_settings_from_file(session: AsyncSession) -> dict[str
         legacy_config = read_user_config_file(path) if path else {}
         row = ProviderSettings(
             id=PROVIDER_SETTINGS_ID,
-            config=sanitize_provider_settings(legacy_config),
+            config=with_sub2api_defaults(sanitize_provider_settings(legacy_config)),
         )
         session.add(row)
         await session.commit()
         await session.refresh(row)
         logger.info("Migrated provider settings from userConfig.json into the database.")
     else:
-        sanitized = sanitize_provider_settings(dict(row.config or {}))
+        sanitized = with_sub2api_defaults(sanitize_provider_settings(dict(row.config or {})))
         if sanitized != row.config:
             row.config = sanitized
             row.updated_at = get_current_utc_datetime()
@@ -125,6 +127,28 @@ async def migrate_provider_settings_from_file(session: AsyncSession) -> dict[str
     config = dict(row.config or {})
     _mirror_to_legacy_file(config)
     return config
+
+
+def with_sub2api_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """Bootstrap only an unconfigured instance; never replace admin settings."""
+    api_key = os.getenv("SUB2API_API_KEY", "").strip()
+    if config.get("LLM") or not api_key:
+        return config
+    raw_url = os.getenv("SUB2API_BASE_URL", "http://host.docker.internal:18080").strip()
+    parsed = urlsplit(raw_url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError("Invalid SUB2API_BASE_URL")
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/v1"):
+        path += "/v1"
+    return {
+        **config,
+        "LLM": "custom",
+        "CUSTOM_LLM_URL": urlunsplit((parsed.scheme, parsed.netloc, path, "", "")),
+        "CUSTOM_LLM_API_KEY": api_key,
+        "CUSTOM_MODEL": os.getenv("SUB2API_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
+        "DISABLE_IMAGE_GENERATION": config.get("DISABLE_IMAGE_GENERATION", True),
+    }
 
 
 async def get_provider_settings(session: AsyncSession) -> dict[str, Any]:

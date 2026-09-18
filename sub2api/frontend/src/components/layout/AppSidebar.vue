@@ -46,7 +46,7 @@
           class="sidebar-link mb-1"
           :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
           :title="sidebarCollapsed ? item.label : undefined"
-          @click.prevent="openQuickApp(item.href, item.includeApiKey !== false, item.sso === true)"
+          @click="handleQuickAppClick($event, item)"
         >
           <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
         </a>
@@ -284,12 +284,21 @@ const quickAppItems = computed(() => {
     import.meta.env.DEV ||
     ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(window.location.hostname.toLowerCase())
   const canvasUrl = isLocalHost ? 'http://localhost:3522' : 'https://canvas.cc2.cx'
+  const canvasSsoUrl =
+    import.meta.env.VITE_CANVAS_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/canvas/start')}?next=%2F`
   const shortDramaUrl =
     import.meta.env.VITE_SHORT_DRAMA_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/ju/start')}?next=%2Fprojects`
-  const pptUrl = isLocalHost ? 'http://localhost:8341' : 'http://ppt.cc2.cx'
+  const superCanvasUrl =
+    import.meta.env.VITE_SUPER_CANVAS_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/livart/start')}?next=%2F`
+  const pptSsoUrl = `${buildApiUrl('/auth/integrations/ppt/start')}?next=%2Fupload`
+  const aiExcelDefaultUrl = new URL(window.location.origin)
+  aiExcelDefaultUrl.port = '4173'
+  const aiExcelUrl = import.meta.env.VITE_AIEXCEL_URL?.trim() || aiExcelDefaultUrl.toString()
   const qrcodeUrl = isLocalHost ? 'http://localhost:5221' : 'http://qrcode.cc2.cx'
-  const apiBaseUrl = isLocalHost ? 'http://localhost:18082' : 'https://api.cc2.cx'
+  const apiBaseUrl = isLocalHost ? 'http://localhost:18080' : 'https://api.cc2.cx'
   const makeUrl = (origin: string, baseUrl = apiBaseUrl, includeApiKey = false) => {
     const url = new URL(origin)
     url.searchParams.set('baseUrl', baseUrl)
@@ -300,19 +309,36 @@ const quickAppItems = computed(() => {
     return url.toString()
   }
   return [
-    { label: t('nav.infiniteCanvas'), href: makeUrl(canvasUrl), includeApiKey: true, sso: false },
+    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl || makeUrl(canvasUrl), includeApiKey: !canvasSsoUrl, sso: Boolean(canvasSsoUrl) },
     { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true },
-    { label: t('nav.eternalPpt'), href: makeUrl(pptUrl), includeApiKey: true, sso: false },
+    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true },
+    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true },
+    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: false },
     { label: t('nav.artQr'), href: makeUrl(qrcodeUrl), includeApiKey: true, sso: false },
   ]
 })
+
+function handleQuickAppClick(event: MouseEvent, item: { href: string; includeApiKey: boolean; sso: boolean }) {
+  if (!item.includeApiKey && !item.sso) return
+  event.preventDefault()
+  void openQuickApp(item.href, item.includeApiKey, item.sso)
+}
 
 async function openQuickApp(url: string, includeApiKey = true, useSSO = false) {
   if (useSSO) {
     try {
       await openJuSso(url, getAuthToken())
-    } catch {
-      window.alert(t('nav.quickAppsSsoUnavailable'))
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : ''
+      if (raw.includes('blocked')) {
+        window.alert(t('nav.quickAppsSsoPopupBlocked'))
+      } else if (raw.includes('authenticated')) {
+        window.alert(t('nav.quickAppsSsoNeedLogin'))
+      } else if (/not configured|unavailable/i.test(raw)) {
+        window.alert(t('nav.quickAppsSsoNotConfigured'))
+      } else {
+        window.alert(t('nav.quickAppsSsoUnavailable'))
+      }
     }
     return
   }
@@ -326,7 +352,7 @@ async function openQuickApp(url: string, includeApiKey = true, useSSO = false) {
     }
     const baseUrl =
       target.searchParams.get('baseUrl') ||
-      (target.hostname === 'localhost' ? 'http://localhost:18082' : 'https://api.cc2.cx')
+      (target.hostname === 'localhost' ? 'http://localhost:18080' : 'https://api.cc2.cx')
     target.searchParams.delete('baseUrl')
     target.searchParams.delete('apiKey')
     target.hash = new URLSearchParams({ baseUrl, apiKey: key }).toString()

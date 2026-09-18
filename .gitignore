@@ -40,3 +40,5 @@ sub2api-local-http.new
 **/sub2api-local-http.new
 sub2api-postgres18-*.dump
 **/sub2api-postgres18-*.dump
+sub2api/deploy/migration-backups/**/*.tar
+sub2api/deploy/migration-backups/**/*.sql

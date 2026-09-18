@@ -107,10 +107,12 @@ run_mode: "standard"
 cors:
   # Allowed origins list. Leave empty to disable cross-origin requests.
   # 允许的来源列表。留空则禁用跨域请求。
-  allowed_origins: []
+  # Use ["*"] so browser clients such as canvas on another origin can call /v1.
+  allowed_origins:
+    - "*"
   # Allow credentials (cookies/authorization headers). Cannot be used with "*".
   # 允许携带凭证（cookies/授权头）。不能与 "*" 通配符同时使用。
-  allow_credentials: true
+  allow_credentials: false
 
 # =============================================================================
 # Security Configuration

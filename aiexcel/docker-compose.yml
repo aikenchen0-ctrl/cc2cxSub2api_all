@@ -1,0 +1,8 @@
+services:
+  aiexcel:
+    image: aiexcel:local
+    build: .
+    container_name: aiexcel
+    restart: unless-stopped
+    ports:
+      - "${AIEXCEL_BIND_HOST:-0.0.0.0}:${AIEXCEL_PORT:-4173}:80"

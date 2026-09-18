@@ -317,6 +317,9 @@ func TestCompleteSub2APISSORetainsIdentityAndRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if first == nil || first.Session == "" || first.User.ID == "" {
+		t.Fatal("SSO ticket completion did not issue a ju session")
+	}
 	second, err := svc.CompleteSub2APISSO(payload)
 	if err != nil || first.User.ID != second.User.ID {
 		t.Fatalf("SSO identity was not reused: %v", err)

@@ -1,5 +1,6 @@
 import uvicorn
 import argparse
+from copy import deepcopy
 from api.main import app
 
 if __name__ == "__main__":
@@ -19,11 +20,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     reload = args.reload == "true"
     host = "127.0.0.1"
+    log_config = deepcopy(uvicorn.config.LOGGING_CONFIG)
+    log_config["filters"] = {"sso_ticket": {"()": "utils.sso_logging.SSOTicketLogFilter"}}
+    log_config["handlers"]["access"]["filters"] = ["sso_ticket"]
 
     uvicorn.run(
         "api.main:app",
         host=host,
         port=args.port,
         log_level=args.log_level,
+        log_config=log_config,
         reload=reload,
     )

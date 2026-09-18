@@ -32,11 +32,13 @@ public class UserApiConfigService {
             @Value("${artisan.ai.default-base-url:}") String defaultBaseUrl,
             @Value("${artisan.ai.default-api-key:}") String defaultApiKey,
             @Value("${artisan.ai.default-image-model:gpt-image-2}") String defaultImageModel,
-            @Value("${artisan.ai.default-chat-model:gpt-5.4-mini}") String defaultChatModel
+            @Value("${artisan.ai.default-chat-model:gpt-5.4-mini}") String defaultChatModel,
+            @Value("${SUB2API_RELAY_BASE_URL:}") String relayBaseUrl,
+            @Value("${SUB2API_RELAY_API_KEY:}") String relayApiKey
     ) {
         this.mapper = mapper;
-        this.defaultBaseUrl = defaultBaseUrl == null ? "" : defaultBaseUrl;
-        this.defaultApiKey = defaultApiKey == null ? "" : defaultApiKey;
+        this.defaultBaseUrl = firstNonBlank(defaultBaseUrl, relayBaseUrl);
+        this.defaultApiKey = firstNonBlank(defaultApiKey, relayApiKey);
         this.defaultImageModel = defaultImageModel == null ? "" : defaultImageModel;
         this.defaultChatModel = normalizeChatModel(defaultChatModel);
     }
@@ -44,20 +46,28 @@ public class UserApiConfigService {
     @Transactional(readOnly = true)
     public UserApiConfigDtos.Response getConfig(UUID userId) {
         UserApiConfigEntity entity = mapper.findByUserId(userId);
-        return entity == null ? null : toResponse(entity);
+        if (entity != null) {
+            return toResponse(entity);
+        }
+        UserApiConfigDtos.ResolvedConfig serverDefault = getServerDefaultResolvedConfig();
+        return serverDefault == null ? null : toServerDefaultResponse(serverDefault);
     }
 
     @Transactional(readOnly = true)
     public UserApiConfigDtos.ResolvedConfig getRequiredConfig(UUID userId) {
         UserApiConfigEntity entity = mapper.findByUserId(userId);
-        if (entity == null) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "USER_API_CONFIG_REQUIRED",
-                    "请先配置自己的中转站 Base URL、API Key、生图模型和对话模型"
-            );
+        if (entity != null) {
+            return toResolvedConfig(entity);
         }
-        return toResolvedConfig(entity);
+        UserApiConfigDtos.ResolvedConfig serverDefault = getServerDefaultResolvedConfig();
+        if (serverDefault != null) {
+            return serverDefault;
+        }
+        throw new ApiException(
+                HttpStatus.BAD_REQUEST,
+                "USER_API_CONFIG_REQUIRED",
+                "请先配置自己的中转站 Base URL、API Key、生图模型和对话模型"
+        );
     }
 
     @Transactional(readOnly = true)
@@ -93,6 +103,20 @@ public class UserApiConfigService {
         mapper.upsert(entity);
 
         return toResponse(mapper.findByUserId(userId));
+    }
+
+    private UserApiConfigDtos.Response toServerDefaultResponse(UserApiConfigDtos.ResolvedConfig config) {
+        return new UserApiConfigDtos.Response(
+                config.baseUrl(),
+                UserApiConfigDtos.MASKED_API_KEY,
+                config.model(),
+                config.chatModel(),
+                config.textToImageUrl(),
+                config.imageToImageUrl(),
+                null,
+                true,
+                true
+        );
     }
 
     private UserApiConfigDtos.Response toResponse(UserApiConfigEntity entity) {
@@ -193,5 +217,13 @@ public class UserApiConfigService {
 
     private boolean hasPlainApiKey(String apiKey) {
         return apiKey != null && !apiKey.isBlank() && !isMaskedApiKey(apiKey);
+    }
+
+    static String firstNonBlank(String primary, String fallback) {
+        String value = primary == null ? "" : primary.trim();
+        if (!value.isBlank()) {
+            return value;
+        }
+        return fallback == null ? "" : fallback.trim();
     }
 }
