@@ -147,11 +147,11 @@ class MonitorManager:
         if not isinstance(runtime_config, dict):
             state.runtime_config = {}
             return
-        allowed = {"ai_config", "email_config", "sms_config", "voice_config", "contacts"}
+        allowed = {"notify_method", "email", "phone", "ai_config", "email_config", "sms_config", "voice_config", "contacts"}
         state.runtime_config = {
             key: copy.deepcopy(value)
             for key, value in runtime_config.items()
-            if key in allowed and isinstance(value, (dict, list))
+            if key in allowed and isinstance(value, (dict, list, str))
         }
 
     def update_config(self, user_id: int | str, config: dict[str, Any]) -> dict[str, Any]:

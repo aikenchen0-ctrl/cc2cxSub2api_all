@@ -87,12 +87,30 @@ class ManagerTests(unittest.TestCase):
                 "base_url": "https://model.example.test/chat/completions",
                 "model": "runtime-model",
             },
+            "email": "user@example.test",
+            "phone": "13800000000",
+            "notify_method": "both",
+            "email_config": {
+                "smtp_server": "smtp.example.test",
+                "sender": "sender@example.test",
+                "password": "smtp-secret",
+                "receiver": "user@example.test",
+            },
+            "sms_config": {
+                "provider": "aliyun",
+                "access_key_id": "access-id",
+                "access_key_secret": "sms-secret",
+            },
         }
         self.assertTrue(self.manager.run_once("1", runtime))
         self.assertTrue(self.manager.wait_for_idle("1", timeout=2))
         self.assertEqual(self.created[0][0], "1")
         core_config = self.manager._states["1"].core.config
         self.assertEqual(core_config["ai_config"]["api_key"], "runtime-secret")
+        self.assertEqual(core_config["email"], "user@example.test")
+        self.assertEqual(core_config["phone"], "13800000000")
+        self.assertEqual(core_config["email_config"]["password"], "smtp-secret")
+        self.assertEqual(core_config["sms_config"]["access_key_secret"], "sms-secret")
         config_file = self.root / "1" / "monitor.json"
         if config_file.exists():
             self.assertNotIn("runtime-secret", config_file.read_text(encoding="utf-8"))
