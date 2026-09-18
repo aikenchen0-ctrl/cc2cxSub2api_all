@@ -13,6 +13,7 @@ services:
       - "${AICUT_HOST_PORT:-5199}:5199"
     environment:
       SUB2API_BASE: ${SUB2API_BASE:-http://sub2api:8080}
+      LINK: ${LINK:-}
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
       OPENCHATCUT_SSO_CALLBACK_URL: ${OPENCHATCUT_SSO_CALLBACK_URL:-http://localhost:5199/api/auth/sso/callback}
       OCC_SESSION_SECRET: ${OCC_SESSION_SECRET:?OCC_SESSION_SECRET is required}

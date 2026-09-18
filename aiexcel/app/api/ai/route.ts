@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
     activeRequests.add(activeUserSub);
     const body = await request.json();
     const key = process.env.SUB2API_RELAY_API_KEY?.trim();
-    const baseUrl = (process.env.SUB2API_RELAY_BASE_URL || "http://localhost:18080/v1").replace(/\/$/, "");
+    const configuredBaseUrl = (process.env.SUB2API_RELAY_BASE_URL || process.env.LINK || "http://localhost:18080").replace(/\/$/, "");
+    const baseUrl = configuredBaseUrl.endsWith("/v1") ? configuredBaseUrl : `${configuredBaseUrl}/v1`;
     if (!key) return NextResponse.json({ error: "服务端尚未配置 SUB2API_RELAY_API_KEY" }, { status: 503 });
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",

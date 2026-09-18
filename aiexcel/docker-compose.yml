@@ -6,7 +6,8 @@ services:
     restart: unless-stopped
     environment:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
-      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-}
+      LINK: ${LINK:-}
       SUB2API_RELAY_API_KEY: ${SUB2API_RELAY_API_KEY:-}
       SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-deepseek-chat}
     ports:

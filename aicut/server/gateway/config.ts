@@ -5,7 +5,7 @@ export function gatewayEnabled(): boolean {
 }
 
 export function sub2apiBase(): string {
-  return (process.env.SUB2API_BASE ?? '').trim().replace(/\/+$/, '');
+  return (process.env.SUB2API_BASE || process.env.LINK || '').trim().replace(/\/+$/, '');
 }
 
 export function sessionSecret(): string {

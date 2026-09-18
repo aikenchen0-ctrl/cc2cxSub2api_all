@@ -41,7 +41,7 @@ func (h *AuthHandler) PPTSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("PPT_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:8341/api/v1/auth/sso/callback"
+		callback = projectLink("ppt", "http://localhost:8341") + "/api/v1/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
 	if err != nil || !validPPTCallback(parsed) {

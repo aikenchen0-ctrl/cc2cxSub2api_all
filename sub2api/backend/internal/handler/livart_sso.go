@@ -45,7 +45,7 @@ func (h *AuthHandler) LivartSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("LIVART_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:8080/api/auth/sso/callback"
+		callback = projectLink("livart", "http://localhost:8080") + "/api/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {

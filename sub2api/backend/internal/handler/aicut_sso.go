@@ -48,7 +48,7 @@ func (h *AuthHandler) AicutSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("OPENCHATCUT_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:5199/api/auth/sso/callback"
+		callback = projectLink("aicut", "http://localhost:5199") + "/api/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
 	if err != nil || !validAicutCallback(parsed) {

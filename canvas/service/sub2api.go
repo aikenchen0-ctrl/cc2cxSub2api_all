@@ -97,6 +97,12 @@ func EnsureSub2APIRelayChannel() error {
 func configuredSub2APIChannel() (model.ModelChannel, error) {
 	channel := model.ModelChannel{ID: sub2APIRelayChannelID, Protocol: "openai", Name: "Sub2API", Weight: 1, Timeout: 600}
 	baseURL := strings.TrimSpace(os.Getenv("SUB2API_RELAY_BASE_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("LINK"))
+	}
+	if baseURL != "" && !strings.Contains(baseURL, "://") {
+		baseURL = "http://" + baseURL
+	}
 	key := strings.TrimSpace(os.Getenv("SUB2API_RELAY_API_KEY"))
 	if baseURL == "" && key == "" {
 		return channel, nil

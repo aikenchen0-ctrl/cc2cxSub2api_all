@@ -45,7 +45,7 @@ func (h *AuthHandler) AIExcelSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("AIEXCEL_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:4173/api/auth/sso/callback"
+		callback = projectLink("aiexcel", "http://localhost:4173") + "/api/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
 	if err != nil || !validAIExcelCallback(parsed) {

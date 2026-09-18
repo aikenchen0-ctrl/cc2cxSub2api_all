@@ -26,17 +26,17 @@ import (
 )
 
 type juSSOTicket struct {
-	Issuer      string `json:"iss,omitempty"`
-	Audience    string `json:"aud,omitempty"`
-	Subject     string `json:"sub"`
-	Email       string `json:"email,omitempty"`
-	Username    string `json:"username,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	AvatarURL   string `json:"avatarUrl,omitempty"`
-	IssuedAt    int64  `json:"iat"`
-	ExpiresAt   int64  `json:"exp"`
-	Nonce       string `json:"jti"`
-	Next        string `json:"next,omitempty"`
+	Issuer             string `json:"iss,omitempty"`
+	Audience           string `json:"aud,omitempty"`
+	Subject            string `json:"sub"`
+	Email              string `json:"email,omitempty"`
+	Username           string `json:"username,omitempty"`
+	DisplayName        string `json:"displayName,omitempty"`
+	AvatarURL          string `json:"avatarUrl,omitempty"`
+	IssuedAt           int64  `json:"iat"`
+	ExpiresAt          int64  `json:"exp"`
+	Nonce              string `json:"jti"`
+	Next               string `json:"next,omitempty"`
 	RelayKeyCiphertext string `json:"rk,omitempty"`
 }
 
@@ -86,6 +86,11 @@ func (h *AuthHandler) JuSSOStart(c *gin.Context) {
 		return
 	}
 	callback := strings.TrimSpace(os.Getenv("JU_SSO_CALLBACK_URL"))
+	if callback == "" {
+		if link := projectLink("ju", ""); link != "" {
+			callback = link + "/api/auth/sso/callback"
+		}
+	}
 	parsed, err := parseJuCallback(callback)
 	if err != nil {
 		response.Error(c, http.StatusServiceUnavailable, "JU_SSO_CALLBACK_URL is invalid")

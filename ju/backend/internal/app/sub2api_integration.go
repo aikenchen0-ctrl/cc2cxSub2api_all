@@ -32,6 +32,12 @@ type sub2APIRelayModel struct {
 // is therefore compatible with CANVAS_AUTO_MIGRATE=false.
 func (s *Service) EnsureSub2APIRelayChannel() error {
 	baseURL := strings.TrimSpace(os.Getenv("SUB2API_RELAY_BASE_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("LINK"))
+	}
+	if baseURL != "" && !strings.Contains(baseURL, "://") {
+		baseURL = "http://" + baseURL
+	}
 	apiKey := strings.TrimSpace(os.Getenv("SUB2API_RELAY_API_KEY"))
 	if baseURL == "" && apiKey == "" {
 		return s.disableSub2APIRelayChannel()

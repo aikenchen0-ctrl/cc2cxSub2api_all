@@ -21,8 +21,8 @@ export function getQuickAppOrigins(hostname = window.location.hostname, dev = im
   const configuredApi = normalizeLink(envUrl('VITE_LINK') || envUrl('VITE_PUBLIC_API_URL'))
   return {
     isLocal,
-    canvas: envUrl('VITE_CANVAS_URL') || (isLocal ? 'http://localhost:3522' : 'https://canvas.cc2.cx'),
-    qrcode: envUrl('VITE_QRCODE_URL') || (isLocal ? 'http://localhost:5221' : 'https://qrcode.cc2.cx'),
+    canvas: normalizeLink(envUrl('VITE_CANVAS_LINK') || envUrl('VITE_CANVAS_URL')) || (isLocal ? 'http://localhost:3522' : 'https://canvas.cc2.cx'),
+    qrcode: normalizeLink(envUrl('VITE_QRCODE_LINK') || envUrl('VITE_QRCODE_URL')) || (isLocal ? 'http://localhost:5221' : 'https://qrcode.cc2.cx'),
     api: configuredApi || (isLocal ? 'http://localhost:18080' : 'https://api.cc2.cx'),
   }
 }

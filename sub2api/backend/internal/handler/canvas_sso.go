@@ -48,7 +48,7 @@ func (h *AuthHandler) CanvasSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("CANVAS_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:3522/api/auth/sso/callback"
+		callback = projectLink("canvas", "http://localhost:3522") + "/api/auth/sso/callback"
 	}
 	parsed, err := url.Parse(callback)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.ForceQuery {

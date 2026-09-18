@@ -134,7 +134,9 @@ def with_sub2api_defaults(config: dict[str, Any]) -> dict[str, Any]:
     api_key = os.getenv("SUB2API_API_KEY", "").strip()
     if config.get("LLM") or not api_key:
         return config
-    raw_url = os.getenv("SUB2API_BASE_URL", "http://host.docker.internal:18080").strip()
+    raw_url = (os.getenv("SUB2API_BASE_URL") or os.getenv("LINK") or "http://host.docker.internal:18080").strip()
+    if "://" not in raw_url:
+        raw_url = "http://" + raw_url
     parsed = urlsplit(raw_url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("Invalid SUB2API_BASE_URL")

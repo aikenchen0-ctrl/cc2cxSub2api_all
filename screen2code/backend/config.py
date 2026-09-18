@@ -39,7 +39,9 @@ IS_PROD = os.environ.get("IS_PROD", False)
 # Hosted deployments can require the sub2api-issued local session. Local
 # development remains usable with provider keys when this is disabled.
 SCREEN2CODE_AUTH_REQUIRED = os.environ.get("SCREEN2CODE_AUTH_REQUIRED", "").strip().lower() in {"1", "true", "yes", "on"}
-SUB2API_RELAY_BASE_URL = os.environ.get("SUB2API_RELAY_BASE_URL", "").strip() or None
+SUB2API_RELAY_BASE_URL = (os.environ.get("SUB2API_RELAY_BASE_URL") or os.environ.get("LINK", "")).strip() or None
+if SUB2API_RELAY_BASE_URL and "://" not in SUB2API_RELAY_BASE_URL:
+    SUB2API_RELAY_BASE_URL = "http://" + SUB2API_RELAY_BASE_URL
 SCREEN2CODE_ALLOWED_ORIGINS = tuple(
     origin.strip().rstrip("/")
     for origin in os.environ.get("SCREEN2CODE_ALLOWED_ORIGINS", "").split(",")

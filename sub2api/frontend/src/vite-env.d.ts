@@ -6,6 +6,14 @@ interface ImportMetaEnv {
   readonly VITE_QRCODE_URL?: string
   readonly VITE_PUBLIC_API_URL?: string
   readonly VITE_LINK?: string
+  readonly VITE_AICUT_LINK?: string
+  readonly VITE_AIEXCEL_LINK?: string
+  readonly VITE_CANVAS_LINK?: string
+  readonly VITE_JU_LINK?: string
+  readonly VITE_LIVART_LINK?: string
+  readonly VITE_PPT_LINK?: string
+  readonly VITE_QRCODE_LINK?: string
+  readonly VITE_SCREEN2CODE_LINK?: string
   readonly VITE_CANVAS_SSO_URL?: string
   readonly VITE_SHORT_DRAMA_SSO_URL?: string
   readonly VITE_SUPER_CANVAS_SSO_URL?: string

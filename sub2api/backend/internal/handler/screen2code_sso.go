@@ -54,7 +54,9 @@ func revokeScreen2CodeSessions(ctx context.Context, userID int64) error {
 		return fmt.Errorf("Screen2Code logout delivery failed")
 	}
 	defer resp.Body.Close()
-	var result struct{ Revoked bool `json:"revoked"` }
+	var result struct {
+		Revoked bool `json:"revoked"`
+	}
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result) != nil || !result.Revoked {
 		return fmt.Errorf("Screen2Code logout was not acknowledged")
 	}
@@ -95,7 +97,7 @@ func (h *AuthHandler) Screen2CodeSSOStart(c *gin.Context) {
 	}
 	callback := strings.TrimSpace(os.Getenv("SCREEN2CODE_SSO_CALLBACK_URL"))
 	if callback == "" {
-		callback = "http://localhost:5173/api/auth/sso/callback"
+		callback = projectLink("screen2code", "http://localhost:5173") + "/api/auth/sso/callback"
 	}
 	parsed, err := parseScreen2CodeCallback(callback)
 	if err != nil {
