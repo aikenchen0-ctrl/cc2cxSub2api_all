@@ -21,7 +21,7 @@ export const APP_CONFIG = {
   corsOrigin: readText(process.env.QR_CORS_ORIGIN),
   includeDebugPipeline: readBoolean(process.env.QR_INCLUDE_DEBUG_PIPELINE, process.env.NODE_ENV !== "production"),
   maxImages: 6,
-  apiBaseUrl: readText(process.env.QR_API_BASE_URL, "http://localhost:18080"),
+  apiBaseUrl: readText(process.env.QR_API_BASE_URL || process.env.LINK, "http://localhost:18080"),
   apiKey: readText(process.env.QR_API_KEY),
   model: "image2",
   imageEditEndpoint: "/v1/images/edits",

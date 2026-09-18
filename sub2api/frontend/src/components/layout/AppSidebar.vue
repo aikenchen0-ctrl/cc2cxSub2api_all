@@ -228,6 +228,7 @@ import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { getAuthToken } from '@/api/auth'
 import { buildApiUrl } from '@/api/url'
+import { getQuickAppOrigins } from '@/utils/quickAppLinks'
 import { keysAPI } from '@/api/keys'
 import { openJuSso } from '@/utils/juSso'
 
@@ -287,10 +288,7 @@ const homePath = '/'
 const superApiKey = ref('')
 
 const quickAppItems = computed(() => {
-  const isLocalHost =
-    import.meta.env.DEV ||
-    ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(window.location.hostname.toLowerCase())
-  const canvasUrl = isLocalHost ? 'http://localhost:3522' : 'https://canvas.cc2.cx'
+  const origins = getQuickAppOrigins()
   const canvasSsoUrl =
     import.meta.env.VITE_CANVAS_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/canvas/start')}?next=%2F`
@@ -300,14 +298,20 @@ const quickAppItems = computed(() => {
   const superCanvasUrl =
     import.meta.env.VITE_SUPER_CANVAS_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/livart/start')}?next=%2F`
-  const pptSsoUrl = `${buildApiUrl('/auth/integrations/ppt/start')}?next=%2Fupload`
-  const aiCutSsoUrl = `${buildApiUrl('/auth/integrations/aicut/start')}?next=%2F`
+  const pptSsoUrl =
+    import.meta.env.VITE_PPT_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/ppt/start')}?next=%2Fupload`
+  const aiCutSsoUrl =
+    import.meta.env.VITE_AICUT_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/aicut/start')}?next=%2F`
   const screen2codeSsoUrl =
     import.meta.env.VITE_SCREEN2CODE_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/screen2code/start')}?next=%2F`
-  const aiExcelUrl = `${buildApiUrl('/auth/integrations/aiexcel/start')}?next=%2F`
-  const qrcodeUrl = isLocalHost ? 'http://localhost:5221' : 'http://qrcode.cc2.cx'
-  const apiBaseUrl = isLocalHost ? 'http://localhost:18080' : 'https://api.cc2.cx'
+  const aiExcelUrl =
+    import.meta.env.VITE_AIEXCEL_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/aiexcel/start')}?next=%2F`
+  const qrcodeUrl = origins.qrcode
+  const apiBaseUrl = origins.api
   const makeUrl = (origin: string, baseUrl = apiBaseUrl, includeApiKey = false) => {
     const url = new URL(origin)
     url.searchParams.set('baseUrl', baseUrl)
@@ -318,7 +322,7 @@ const quickAppItems = computed(() => {
     return url.toString()
   }
   return [
-    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl || makeUrl(canvasUrl), includeApiKey: !canvasSsoUrl, sso: Boolean(canvasSsoUrl), icon: 'grid' as const },
+    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl || makeUrl(origins.canvas), includeApiKey: !canvasSsoUrl, sso: Boolean(canvasSsoUrl), icon: 'grid' as const },
     { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: 'play' as const },
     { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: 'sparkles' as const },
     { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: 'document' as const },
@@ -353,9 +357,10 @@ async function openQuickApp(url: string, includeApiKey = true, useSSO = false) {
     }
     return
   }
+  const origins = getQuickAppOrigins()
   const target = new URL(url)
   const isCanvasTarget =
-    target.hostname === 'canvas.cc2.cx' || (target.hostname === 'localhost' && target.port === '3522')
+    target.origin === new URL(origins.canvas).origin
   const setBootstrapKey = (key: string) => {
     if (!isCanvasTarget) {
       target.searchParams.set('apiKey', key)
@@ -363,7 +368,7 @@ async function openQuickApp(url: string, includeApiKey = true, useSSO = false) {
     }
     const baseUrl =
       target.searchParams.get('baseUrl') ||
-      (target.hostname === 'localhost' ? 'http://localhost:18080' : 'https://api.cc2.cx')
+      origins.api
     target.searchParams.delete('baseUrl')
     target.searchParams.delete('apiKey')
     target.hash = new URLSearchParams({ baseUrl, apiKey: key }).toString()

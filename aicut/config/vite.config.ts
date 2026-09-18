@@ -161,7 +161,11 @@ export default defineConfig(({ mode }) => {
     // public/ = user runtime only (media/uploads). Product static files live in assets/
     // and are served/copied by productAssetsPlugin (URLs unchanged: /fonts, /thumbnails, …).
     publicDir: 'public',
-    plugins: [serveOrtWasmLoader(), react(), productAssetsPlugin(), excludeUserMediaFromBuild(), ...serverPlugins()],
+    // The Docker deployment runs Vite as a long-lived server instead of a
+    // browser development session. Fast Refresh injects $RefreshReg$ hooks,
+    // but this custom HTML/product-assets pipeline does not inject the refresh
+    // runtime; disabling it prevents a blank root at first paint.
+    plugins: [serveOrtWasmLoader(), react({ fastRefresh: false }), productAssetsPlugin(), excludeUserMediaFromBuild(), ...serverPlugins()],
     server: {
       host: '127.0.0.1',
       port: 5199,

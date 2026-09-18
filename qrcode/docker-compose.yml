@@ -12,5 +12,6 @@ services:
       NODE_ENV: production
       PORT: 5221
       QR_CORS_ORIGIN: ${QR_CORS_ORIGIN:-http://localhost:5221}
-      QR_API_BASE_URL: ${QR_API_BASE_URL:-http://localhost:18080}
+      QR_API_BASE_URL: ${QR_API_BASE_URL:-}
+      LINK: ${LINK:-}
       QR_API_KEY: ${QR_API_KEY:-}

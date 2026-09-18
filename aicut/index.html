@@ -9,6 +9,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- The Docker image serves Vite without an HMR client. Some transformed
+         React modules still contain Fast Refresh registration hooks; keep them
+         harmless so a missing dev runtime cannot leave the root blank. -->
+    <script>
+      globalThis.$RefreshReg$ = globalThis.$RefreshReg$ || (() => {});
+      globalThis.$RefreshSig$ = globalThis.$RefreshSig$ || (() => (type) => type);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
