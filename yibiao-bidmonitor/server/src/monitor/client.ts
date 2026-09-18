@@ -2,6 +2,7 @@ import type {
   MonitorClientOptions,
   MonitorConfig,
   MonitorResults,
+  MonitorRuntimeConfig,
   MonitorStatus,
 } from './types';
 import { normalizeMonitorUserId, sanitizeMonitorConfig } from './scope';
@@ -89,16 +90,22 @@ export class BidMonitorClient {
     return this.request<MonitorStatus>(this.path(userId, 'status'));
   }
 
-  async start(userId: unknown): Promise<{ accepted: boolean }> {
-    return this.request(this.path(userId, 'start'), { method: 'POST' });
+  async start(userId: unknown, runtimeConfig?: MonitorRuntimeConfig): Promise<{ accepted: boolean }> {
+    return this.request(this.path(userId, 'start'), {
+      method: 'POST',
+      body: runtimeConfig ? JSON.stringify({ runtime_config: runtimeConfig }) : undefined,
+    });
   }
 
   async stop(userId: unknown): Promise<{ accepted: boolean }> {
     return this.request(this.path(userId, 'stop'), { method: 'POST' });
   }
 
-  async runOnce(userId: unknown): Promise<{ accepted: boolean }> {
-    return this.request(this.path(userId, 'run-once'), { method: 'POST' });
+  async runOnce(userId: unknown, runtimeConfig?: MonitorRuntimeConfig): Promise<{ accepted: boolean }> {
+    return this.request(this.path(userId, 'run-once'), {
+      method: 'POST',
+      body: runtimeConfig ? JSON.stringify({ runtime_config: runtimeConfig }) : undefined,
+    });
   }
 
   async updateConfig(userId: unknown, config: MonitorConfig): Promise<{ config: MonitorConfig }> {

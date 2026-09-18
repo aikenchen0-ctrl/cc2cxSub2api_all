@@ -47,9 +47,11 @@ def create_app(manager: MonitorManager | Any | None = None, service_token: str |
             raise user_error(exc) from exc
 
     @app.post("/internal/users/{user_id}/start", dependencies=[Depends(require_service_token)])
-    async def start(user_id: str) -> dict[str, bool]:
+    async def start(user_id: str, body: dict[str, Any] | None = None) -> dict[str, bool]:
         try:
-            return {"accepted": bool(monitor_manager.start(user_id))}
+            runtime_config = body.get("runtime_config") if isinstance(body, dict) else None
+            accepted = monitor_manager.start(user_id, runtime_config) if runtime_config is not None else monitor_manager.start(user_id)
+            return {"accepted": bool(accepted)}
         except Exception as exc:
             raise user_error(exc) from exc
 
@@ -61,9 +63,11 @@ def create_app(manager: MonitorManager | Any | None = None, service_token: str |
             raise user_error(exc) from exc
 
     @app.post("/internal/users/{user_id}/run-once", dependencies=[Depends(require_service_token)])
-    async def run_once(user_id: str) -> dict[str, bool]:
+    async def run_once(user_id: str, body: dict[str, Any] | None = None) -> dict[str, bool]:
         try:
-            return {"accepted": bool(monitor_manager.run_once(user_id))}
+            runtime_config = body.get("runtime_config") if isinstance(body, dict) else None
+            accepted = monitor_manager.run_once(user_id, runtime_config) if runtime_config is not None else monitor_manager.run_once(user_id)
+            return {"accepted": bool(accepted)}
         except Exception as exc:
             raise user_error(exc) from exc
 

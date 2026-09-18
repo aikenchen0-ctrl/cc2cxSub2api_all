@@ -9,16 +9,16 @@ function createFakes() {
       calls.push({ name: 'status', args: [userId] });
       return { user_id: String(userId), is_running: false, current_task_running: false };
     },
-    start: async (userId: unknown) => {
-      calls.push({ name: 'start', args: [userId] });
+    start: async (userId: unknown, runtime: unknown) => {
+      calls.push({ name: 'start', args: [userId, runtime] });
       return { accepted: true };
     },
     stop: async (userId: unknown) => {
       calls.push({ name: 'stop', args: [userId] });
       return { accepted: true };
     },
-    runOnce: async (userId: unknown) => {
-      calls.push({ name: 'runOnce', args: [userId] });
+    runOnce: async (userId: unknown, runtime: unknown) => {
+      calls.push({ name: 'runOnce', args: [userId, runtime] });
       return { accepted: true };
     },
     updateConfig: async (userId: unknown, config: any) => {
@@ -74,6 +74,24 @@ describe('MonitorService', () => {
     await service.stop(7);
     await service.runOnce(7);
     assert.deepEqual(calls.slice(0, 4).map((call) => call.args[0]), [7, 7, 7, 7]);
+  });
+
+  it('injects server-side runtime AI configuration only when starting a run', async () => {
+    const { client, store, calls } = createFakes();
+    const service = new MonitorService(client, store, () => ({
+      ai_config: {
+        enable: true,
+        api_key: 'server-secret',
+        base_url: 'https://model.example.test/chat/completions',
+        model: 'model-a',
+      },
+    }));
+    await service.start(7);
+    await service.runOnce(7);
+    const startCall = calls.find((call) => call.name === 'start');
+    const runCall = calls.find((call) => call.name === 'runOnce');
+    assert.equal((startCall?.args[1] as any).ai_config.api_key, 'server-secret');
+    assert.equal((runCall?.args[1] as any).ai_config.model, 'model-a');
   });
 
   it('imports result fingerprints into the user scoped store', async () => {

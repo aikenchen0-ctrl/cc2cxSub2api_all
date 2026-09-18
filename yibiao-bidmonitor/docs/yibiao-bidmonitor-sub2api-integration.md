@@ -67,6 +67,8 @@ BID_MONITOR_DATA_ROOT=/var/lib/yibiao-bidmonitor/users
 
 通知渠道凭据和模型服务凭据不放进浏览器请求。当前 Python 服务支持来源项目的通知适配器；生产接入时应由服务端密钥配置或受控内部代理提供凭据。
 
+管理员在 OpenBidKit 设置中配置的文本模型 API Key、Base URL 和模型名，会在用户点击“启动”或“运行一次”时由 Fastify 通过内部令牌临时注入 Python 进程。运行时配置只存在于该进程内存，不写入 `monitor.json`、状态响应或日志；用户配置接口只保存非敏感监控规则。
+
 ## 3. 启动顺序
 
 ### 开发环境

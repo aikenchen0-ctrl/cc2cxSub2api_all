@@ -33,3 +33,17 @@ export interface MonitorClientOptions {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
+
+export interface MonitorRuntimeConfig {
+  ai_config?: {
+    enable?: boolean;
+    api_key?: string;
+    base_url?: string;
+    model?: string;
+    prompt?: string;
+  };
+  email_config?: Record<string, unknown>;
+  sms_config?: Record<string, unknown>;
+  voice_config?: Record<string, unknown>;
+  contacts?: Array<Record<string, unknown>>;
+}

@@ -70,7 +70,22 @@ const monitorClient = new BidMonitorClient({
   timeoutMs: Number(process.env.BID_MONITOR_TIMEOUT_MS) || 10000,
 });
 const monitorStore = createMonitorStore(prisma as any);
-const monitorService = new MonitorService(monitorClient, monitorStore);
+const monitorService = new MonitorService(monitorClient, monitorStore, () => {
+  const ai = getLiveAgentAiConfig();
+  if (!ai) return {};
+  const baseUrl = String(ai.base_url || '').trim().replace(/\/+$/, '');
+  const completionUrl = /\/chat\/completions$/i.test(baseUrl)
+    ? baseUrl
+    : `${baseUrl}/chat/completions`;
+  return {
+    ai_config: {
+      enable: Boolean(ai.api_key && ai.model_name && baseUrl),
+      api_key: ai.api_key,
+      base_url: completionUrl,
+      model: ai.model_name,
+    },
+  };
+});
 const aiDiagnostics = createAiDiagnosticsService({
   prisma,
   storage: createAiDiagnosticStorage(getAiDiagnosticsRoot()),

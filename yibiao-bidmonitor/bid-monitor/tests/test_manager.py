@@ -79,6 +79,25 @@ class ManagerTests(unittest.TestCase):
         self.assertNotIn("mail-secret", config_file.read_text(encoding="utf-8"))
         self.assertEqual(saved["ai_config"]["model"], "test-model")
 
+    def test_runtime_credentials_reach_core_but_never_persist(self):
+        runtime = {
+            "ai_config": {
+                "enable": True,
+                "api_key": "runtime-secret",
+                "base_url": "https://model.example.test/chat/completions",
+                "model": "runtime-model",
+            },
+        }
+        self.assertTrue(self.manager.run_once("1", runtime))
+        self.assertTrue(self.manager.wait_for_idle("1", timeout=2))
+        self.assertEqual(self.created[0][0], "1")
+        core_config = self.manager._states["1"].core.config
+        self.assertEqual(core_config["ai_config"]["api_key"], "runtime-secret")
+        config_file = self.root / "1" / "monitor.json"
+        if config_file.exists():
+            self.assertNotIn("runtime-secret", config_file.read_text(encoding="utf-8"))
+        self.assertNotIn("runtime-secret", str(self.manager.status("1")))
+
 
 if __name__ == "__main__":
     unittest.main()

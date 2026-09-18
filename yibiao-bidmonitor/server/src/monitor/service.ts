@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import type { MonitorClientError } from './client';
 import { sanitizeMonitorConfig } from './scope';
-import type { MonitorConfig, MonitorResults, MonitorStatus } from './types';
+import type { MonitorConfig, MonitorResults, MonitorRuntimeConfig, MonitorStatus } from './types';
 import type { MonitorStore } from './store';
 
 export interface MonitorClientLike {
   status(userId: number): Promise<MonitorStatus>;
-  start(userId: number): Promise<{ accepted: boolean }>;
+  start(userId: number, runtimeConfig?: MonitorRuntimeConfig): Promise<{ accepted: boolean }>;
   stop(userId: number): Promise<{ accepted: boolean }>;
-  runOnce(userId: number): Promise<{ accepted: boolean }>;
+  runOnce(userId: number, runtimeConfig?: MonitorRuntimeConfig): Promise<{ accepted: boolean }>;
   updateConfig(userId: number, config: MonitorConfig): Promise<{ config: MonitorConfig }>;
   results(userId: number, limit: number, offset: number): Promise<MonitorResults>;
   logs(userId: number, limit: number): Promise<{ logs: string[] }>;
@@ -27,17 +27,23 @@ function fingerprintForUrl(url: string): string {
 }
 
 export class MonitorService {
+  private readonly loadRuntimeConfig?: (userId: number) => MonitorRuntimeConfig | Promise<MonitorRuntimeConfig>;
+
   constructor(
     private readonly client: MonitorClientLike,
     private readonly store: MonitorStoreLike,
-  ) {}
+    loadRuntimeConfig?: (userId: number) => MonitorRuntimeConfig | Promise<MonitorRuntimeConfig>,
+  ) {
+    this.loadRuntimeConfig = loadRuntimeConfig;
+  }
 
   status(userId: number): Promise<MonitorStatus> {
     return this.client.status(userIdNumber(userId));
   }
 
   start(userId: number): Promise<{ accepted: boolean }> {
-    return this.client.start(userIdNumber(userId));
+    const normalizedUserId = userIdNumber(userId);
+    return Promise.resolve(this.runtimeConfig(normalizedUserId)).then((runtime) => this.client.start(normalizedUserId, runtime));
   }
 
   stop(userId: number): Promise<{ accepted: boolean }> {
@@ -45,7 +51,14 @@ export class MonitorService {
   }
 
   runOnce(userId: number): Promise<{ accepted: boolean }> {
-    return this.client.runOnce(userIdNumber(userId));
+    const normalizedUserId = userIdNumber(userId);
+    return Promise.resolve(this.runtimeConfig(normalizedUserId)).then((runtime) => this.client.runOnce(normalizedUserId, runtime));
+  }
+
+  private async runtimeConfig(userId: number): Promise<MonitorRuntimeConfig | undefined> {
+    if (!this.loadRuntimeConfig) return undefined;
+    const runtime = await this.loadRuntimeConfig(userId);
+    return runtime && typeof runtime === 'object' ? runtime : undefined;
   }
 
   async getConfig(userId: number): Promise<Record<string, unknown>> {

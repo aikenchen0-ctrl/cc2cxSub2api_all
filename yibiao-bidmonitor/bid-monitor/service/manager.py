@@ -59,6 +59,7 @@ class _UserState:
     user_id: str
     data_dir: Path
     config: dict[str, Any]
+    runtime_config: dict[str, Any] = field(default_factory=dict)
     logs: deque[str] = field(default_factory=lambda: deque(maxlen=300))
     is_running: bool = False
     current_task_running: bool = False
@@ -141,6 +142,18 @@ class MonitorManager:
             encoding="utf-8",
         )
 
+    def _set_runtime_config(self, state: _UserState, runtime_config: dict[str, Any] | None) -> None:
+        """只在进程内保存 Fastify 注入的运行时凭据，禁止进入用户配置文件。"""
+        if not isinstance(runtime_config, dict):
+            state.runtime_config = {}
+            return
+        allowed = {"ai_config", "email_config", "sms_config", "voice_config", "contacts"}
+        state.runtime_config = {
+            key: copy.deepcopy(value)
+            for key, value in runtime_config.items()
+            if key in allowed and isinstance(value, (dict, list))
+        }
+
     def update_config(self, user_id: int | str, config: dict[str, Any]) -> dict[str, Any]:
         """更新当前用户配置并返回已脱敏配置。"""
         if not isinstance(config, dict):
@@ -157,6 +170,8 @@ class MonitorManager:
 
     def _build_core(self, state: _UserState) -> Any:
         config = copy.deepcopy(state.config)
+        for key, value in state.runtime_config.items():
+            config[key] = copy.deepcopy(value)
         core = self.core_factory(state.user_id, config, state.data_dir, lambda msg: self._append_log(state, msg))
         state.core = core
         return core
@@ -181,6 +196,7 @@ class MonitorManager:
             with self._lock:
                 state.current_task_running = False
                 state.future = None
+                state.runtime_config = {}
 
     def _run_loop(self, state: _UserState) -> None:
         try:
@@ -196,14 +212,16 @@ class MonitorManager:
                 state.current_task_running = False
                 state.is_running = False
                 state.future = None
+                state.runtime_config = {}
 
-    def start(self, user_id: int | str) -> bool:
+    def start(self, user_id: int | str, runtime_config: dict[str, Any] | None = None) -> bool:
         """启动当前用户的立即运行加周期任务。"""
         state = self._state(user_id)
         with self._lock:
             if state.is_running or state.current_task_running:
                 return False
             state.stop_event = Event()
+            self._set_runtime_config(state, runtime_config)
             state.is_running = True
             state.future = self._executor.submit(self._run_loop, state)
             return True
@@ -217,13 +235,14 @@ class MonitorManager:
             state.is_running = False
             return was_active
 
-    def run_once(self, user_id: int | str) -> bool:
+    def run_once(self, user_id: int | str, runtime_config: dict[str, Any] | None = None) -> bool:
         """提交一次后台运行，避免与周期任务并发。"""
         state = self._state(user_id)
         with self._lock:
             if state.is_running or state.current_task_running:
                 return False
             state.stop_event = Event()
+            self._set_runtime_config(state, runtime_config)
             state.current_task_running = True
             state.future = self._executor.submit(self._run_once_task, state)
             return True
