@@ -4,7 +4,7 @@ import { MonitorService, monitorErrorStatus, type MonitorClientLike } from './se
 import type { MonitorStoreLike } from './service';
 import type { MonitorConfig } from './types';
 
-type MonitorRouteService = Pick<MonitorService, 'status' | 'start' | 'stop' | 'runOnce' | 'getConfig' | 'updateConfig' | 'results' | 'logs' | 'clearHistory'>;
+type MonitorRouteService = Pick<MonitorService, 'status' | 'start' | 'stop' | 'runOnce' | 'getConfig' | 'updateConfig' | 'getContacts' | 'updateContacts' | 'results' | 'logs' | 'clearHistory'>;
 
 interface MonitorRoutesOptions extends FastifyPluginOptions {
   service?: MonitorRouteService;
@@ -77,6 +77,27 @@ export async function monitorRoutes(app: FastifyInstance, opts: MonitorRoutesOpt
         return;
       }
       return await service.updateConfig(getUserId(req), body as MonitorConfig);
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.get('/monitor/contacts', async (req, reply) => {
+    try {
+      return { contacts: await service.getContacts(getUserId(req)) };
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.put('/monitor/contacts', async (req, reply) => {
+    try {
+      const body = (req as BodyRequest).body as { contacts?: unknown };
+      if (!Array.isArray(body?.contacts)) {
+        reply.code(400).send({ error: 'contacts must be an array' });
+        return;
+      }
+      return await service.updateContacts(getUserId(req), body.contacts as Array<Record<string, unknown>>);
     } catch (error) {
       sendMonitorError(reply, error);
     }

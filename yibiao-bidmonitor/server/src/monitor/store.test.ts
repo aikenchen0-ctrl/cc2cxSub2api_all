@@ -43,6 +43,20 @@ function createPrismaDouble() {
         return { count: 1 };
       },
     },
+    monitorContact: {
+      findMany: async (args: any) => {
+        calls.push({ model: 'contact', method: 'findMany', args });
+        return [];
+      },
+      deleteMany: async (args: any) => {
+        calls.push({ model: 'contact', method: 'deleteMany', args });
+        return { count: 1 };
+      },
+      createMany: async (args: any) => {
+        calls.push({ model: 'contact', method: 'createMany', args });
+        return { count: args.data.length };
+      },
+    },
   };
   return { prisma, calls };
 }

@@ -42,6 +42,21 @@ SUB2API_SSO_AUTO_PROVISION=false
 
 `BID_MONITOR_SERVICE_TOKEN` 必须和 Python 服务完全一致，长度至少 32 个随机字符。真实值只能放在部署环境或密钥管理器中，不能写入 Git、浏览器、日志或页面配置。
 
+通知目标由用户在监控页面维护；渠道凭据只放在 Fastify 环境变量中：
+
+```dotenv
+BID_MONITOR_EMAIL_SMTP_SERVER=
+BID_MONITOR_EMAIL_SMTP_PORT=465
+BID_MONITOR_EMAIL_SENDER=
+BID_MONITOR_EMAIL_PASSWORD=
+BID_MONITOR_EMAIL_USE_SSL=true
+BID_MONITOR_SMS_PROVIDER=aliyun
+BID_MONITOR_SMS_ACCESS_KEY_ID=
+BID_MONITOR_SMS_ACCESS_KEY_SECRET=
+BID_MONITOR_SMS_SIGN_NAME=
+BID_MONITOR_SMS_TEMPLATE_CODE=
+```
+
 `SUB2API_SSO_SECRET` 必须和 Sub2API 一致且至少 32 个字符；`SUB2API_SSO_AUTO_PROVISION=false` 时，管理员需要先为外部主体建立身份映射。
 
 管理员登录 OpenBidKit 的“用户管理”，在“身份映射”区块绑定 Sub2API 主体和本地 active 用户。对应管理接口为：

@@ -15,7 +15,7 @@ export interface MonitorClientLike {
   clearHistory(userId: number): Promise<{ success: boolean }>;
 }
 
-export interface MonitorStoreLike extends Pick<MonitorStore, 'getProfile' | 'updateProfile' | 'saveBids' | 'listLogs' | 'clearHistory'> {}
+export interface MonitorStoreLike extends Pick<MonitorStore, 'getProfile' | 'updateProfile' | 'saveBids' | 'listLogs' | 'listContacts' | 'replaceContacts' | 'clearHistory'> {}
 
 function userIdNumber(userId: number): number {
   if (!Number.isSafeInteger(userId) || userId <= 0) throw new Error('user id must be a positive integer');
@@ -64,6 +64,15 @@ export class MonitorService {
   async getConfig(userId: number): Promise<Record<string, unknown>> {
     const profile = await this.store.getProfile(userIdNumber(userId));
     return (profile?.config && typeof profile.config === 'object' ? profile.config : {}) as Record<string, unknown>;
+  }
+
+  async getContacts(userId: number): Promise<any[]> {
+    return this.store.listContacts(userIdNumber(userId));
+  }
+
+  async updateContacts(userId: number, contacts: Array<Record<string, unknown>>): Promise<{ success: boolean }> {
+    await this.store.replaceContacts(userIdNumber(userId), contacts);
+    return { success: true };
   }
 
   async updateConfig(userId: number, config: MonitorConfig): Promise<{ config: MonitorConfig }> {

@@ -70,14 +70,51 @@ const monitorClient = new BidMonitorClient({
   timeoutMs: Number(process.env.BID_MONITOR_TIMEOUT_MS) || 10000,
 });
 const monitorStore = createMonitorStore(prisma as any);
-const monitorService = new MonitorService(monitorClient, monitorStore, () => {
+const monitorService = new MonitorService(monitorClient, monitorStore, async (userId) => {
   const ai = getLiveAgentAiConfig();
-  if (!ai) return {};
+  const contacts = await monitorStore.listContacts(userId);
+  const email = contacts.find((item: any) => item.channel === 'email')?.target || '';
+  const phone = contacts.find((item: any) => item.channel === 'sms')?.target || '';
+  const runtime: Record<string, unknown> = {
+    notify_method: email && phone ? 'both' : email ? 'email' : phone ? 'sms' : 'none',
+    email,
+    phone,
+    contacts,
+  };
+  const smtpServer = process.env.BID_MONITOR_EMAIL_SMTP_SERVER?.trim() || '';
+  const smtpSender = process.env.BID_MONITOR_EMAIL_SENDER?.trim() || '';
+  const smtpPassword = process.env.BID_MONITOR_EMAIL_PASSWORD || '';
+  if (email && smtpServer && smtpSender && smtpPassword) {
+    runtime.email_config = {
+      smtp_server: smtpServer,
+      smtp_port: Number(process.env.BID_MONITOR_EMAIL_SMTP_PORT) || 465,
+      sender: smtpSender,
+      password: smtpPassword,
+      receiver: email,
+      use_ssl: process.env.BID_MONITOR_EMAIL_USE_SSL !== 'false',
+    };
+  }
+  const smsProvider = process.env.BID_MONITOR_SMS_PROVIDER?.trim() || '';
+  const smsAccessKeyId = process.env.BID_MONITOR_SMS_ACCESS_KEY_ID?.trim() || '';
+  const smsAccessKeySecret = process.env.BID_MONITOR_SMS_ACCESS_KEY_SECRET || '';
+  const smsSignName = process.env.BID_MONITOR_SMS_SIGN_NAME?.trim() || '';
+  const smsTemplateCode = process.env.BID_MONITOR_SMS_TEMPLATE_CODE?.trim() || '';
+  if (phone && smsProvider && smsAccessKeyId && smsAccessKeySecret && smsSignName && smsTemplateCode) {
+    runtime.sms_config = {
+      provider: smsProvider,
+      access_key_id: smsAccessKeyId,
+      access_key_secret: smsAccessKeySecret,
+      sign_name: smsSignName,
+      template_code: smsTemplateCode,
+    };
+  }
+  if (!ai) return runtime;
   const baseUrl = String(ai.base_url || '').trim().replace(/\/+$/, '');
   const completionUrl = /\/chat\/completions$/i.test(baseUrl)
     ? baseUrl
     : `${baseUrl}/chat/completions`;
   return {
+    ...runtime,
     ai_config: {
       enable: Boolean(ai.api_key && ai.model_name && baseUrl),
       api_key: ai.api_key,

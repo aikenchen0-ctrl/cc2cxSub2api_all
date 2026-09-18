@@ -29,6 +29,8 @@
 .bid-monitor-table a:hover { text-decoration: underline; }
 .bid-monitor-empty { color: var(--yb-text-muted); padding: 28px 8px; text-align: center; }
 .bid-monitor-logs { margin-top: 18px; }
+.bid-monitor-notifications { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--yb-border); }
+.bid-monitor-note { margin: 0; color: var(--yb-text-muted); font-size: 12px; line-height: 1.5; }
 .bid-monitor-logs pre { max-height: 260px; overflow: auto; margin: 0; padding: 14px; background: var(--yb-bg); border: 1px solid var(--yb-border); color: var(--yb-text-muted); font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
 @media (max-width: 900px) { .bid-monitor-head { align-items: flex-start; flex-direction: column; } .bid-monitor-actions { justify-content: flex-start; } .bid-monitor-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .bid-monitor-shell { padding: 22px 16px 32px; } .bid-monitor-status { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bid-monitor-inline-fields { grid-template-columns: 1fr; } }

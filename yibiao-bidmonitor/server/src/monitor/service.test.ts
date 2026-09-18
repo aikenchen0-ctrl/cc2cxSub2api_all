@@ -58,6 +58,13 @@ function createFakes() {
     },
     listBids: async () => [],
     listLogs: async () => [],
+    listContacts: async (userId: number) => {
+      calls.push({ name: 'listContacts', args: [userId] });
+      return [{ channel: 'email', target: 'user@example.test', enabled: true }];
+    },
+    replaceContacts: async (userId: number, contacts: unknown[]) => {
+      calls.push({ name: 'replaceContacts', args: [userId, contacts] });
+    },
     clearHistory: async (userId: number) => {
       calls.push({ name: 'storeClearHistory', args: [userId] });
     },
@@ -119,5 +126,14 @@ describe('MonitorService', () => {
     const service = new MonitorService(client, store);
     await service.clearHistory(7);
     assert.deepEqual(calls.map((call) => call.args[0]), [7, 7]);
+  });
+
+  it('isolates contact reads and writes by authenticated user', async () => {
+    const { client, store, calls } = createFakes();
+    const service = new MonitorService(client, store);
+    await service.getContacts(7);
+    await service.updateContacts(7, [{ channel: 'email', target: 'user@example.test' }]);
+    assert.equal(calls.find((call) => call.name === 'listContacts')?.args[0], 7);
+    assert.equal(calls.find((call) => call.name === 'replaceContacts')?.args[0], 7);
   });
 });

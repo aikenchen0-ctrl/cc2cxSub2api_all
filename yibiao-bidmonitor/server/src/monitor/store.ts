@@ -23,6 +23,11 @@ interface MonitorPrismaLike {
     findMany(args: unknown): Promise<any[]>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
+  monitorContact: {
+    findMany(args: unknown): Promise<any[]>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+    createMany(args: unknown): Promise<{ count: number }>;
+  };
   monitorNotification?: { deleteMany(args: unknown): Promise<{ count: number }> };
   monitorRun?: { deleteMany(args: unknown): Promise<{ count: number }> };
 }
@@ -99,6 +104,29 @@ export function createMonitorStore(prisma: MonitorPrismaLike) {
     });
   }
 
+  async function listContacts(userId: number): Promise<any[]> {
+    return prisma.monitorContact.findMany({
+      where: { userId, enabled: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, channel: true, target: true, enabled: true, config: true },
+    });
+  }
+
+  async function replaceContacts(userId: number, contacts: Array<Record<string, unknown>>): Promise<void> {
+    const allowedChannels = new Set(['email', 'sms', 'wechat', 'voice']);
+    const rows = contacts
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        channel: String(item.channel || '').trim().toLowerCase(),
+        target: String(item.target || '').trim().slice(0, 512),
+        enabled: item.enabled !== false,
+      }))
+      .filter((item) => allowedChannels.has(item.channel) && item.target.length > 0)
+      .slice(0, 20);
+    await prisma.monitorContact.deleteMany({ where: { userId } });
+    if (rows.length) await prisma.monitorContact.createMany({ data: rows.map((row) => ({ userId, ...row })) });
+  }
+
   async function clearHistory(userId: number): Promise<void> {
     await prisma.monitorBid.deleteMany({ where: { userId } });
     await prisma.monitorLog.deleteMany({ where: { userId } });
@@ -106,7 +134,7 @@ export function createMonitorStore(prisma: MonitorPrismaLike) {
     await prisma.monitorRun?.deleteMany({ where: { userId } });
   }
 
-  return { getProfile, updateProfile, saveBids, listBids, listLogs, clearHistory };
+  return { getProfile, updateProfile, saveBids, listBids, listLogs, listContacts, replaceContacts, clearHistory };
 }
 
 export type MonitorStore = ReturnType<typeof createMonitorStore>;

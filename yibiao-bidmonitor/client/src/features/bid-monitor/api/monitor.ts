@@ -36,6 +36,13 @@ export interface MonitorResults {
   items: MonitorResultItem[];
 }
 
+export interface MonitorContact {
+  id?: number;
+  channel: 'email' | 'sms' | 'wechat' | 'voice' | string;
+  target: string;
+  enabled: boolean;
+}
+
 const monitorKey = ['bid-monitor'];
 
 export function useMonitorStatus() {
@@ -66,6 +73,13 @@ export function useMonitorLogs() {
     queryKey: [...monitorKey, 'logs'],
     queryFn: async () => (await http.get<{ logs: string[] }>('/monitor/logs', { params: { limit: 100 } })).data.logs,
     refetchInterval: 5000,
+  });
+}
+
+export function useMonitorContacts() {
+  return useQuery({
+    queryKey: [...monitorKey, 'contacts'],
+    queryFn: async () => (await http.get<{ contacts: MonitorContact[] }>('/monitor/contacts')).data.contacts,
   });
 }
 
@@ -101,6 +115,14 @@ export function useMonitorSaveConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (config: MonitorConfig) => (await http.put<{ config: MonitorConfig }>('/monitor/config', config)).data,
+    onSuccess: () => invalidateMonitor(qc),
+  });
+}
+
+export function useMonitorSaveContacts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contacts: MonitorContact[]) => (await http.put<{ success: boolean }>('/monitor/contacts', { contacts })).data,
     onSuccess: () => invalidateMonitor(qc),
   });
 }

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   useMonitorClearHistory,
   useMonitorConfig,
+  useMonitorContacts,
   useMonitorLogs,
   useMonitorResults,
   useMonitorRunOnce,
   useMonitorSaveConfig,
+  useMonitorSaveContacts,
   useMonitorStart,
   useMonitorStatus,
   useMonitorStop,
@@ -45,18 +47,22 @@ function BidMonitorPage() {
   const status = useMonitorStatus();
   const configQuery = useMonitorConfig();
   const config = configQuery.data;
+  const contactsQuery = useMonitorContacts();
   const results = useMonitorResults();
   const logs = useMonitorLogs();
   const start = useMonitorStart();
   const stop = useMonitorStop();
   const runOnce = useMonitorRunOnce();
   const saveConfig = useMonitorSaveConfig();
+  const saveContacts = useMonitorSaveContacts();
   const clearHistory = useMonitorClearHistory();
   const [keywords, setKeywords] = useState('');
   const [excluded, setExcluded] = useState('');
   const [required, setRequired] = useState('');
   const [interval, setInterval] = useState('30');
   const [selenium, setSelenium] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [notificationPhone, setNotificationPhone] = useState('');
 
   useEffect(() => {
     if (!config) return;
@@ -66,6 +72,12 @@ function BidMonitorPage() {
     setInterval(String(config.interval_minutes ?? 30));
     setSelenium(Boolean(config.crawler?.use_selenium));
   }, [config]);
+
+  useEffect(() => {
+    const contacts = contactsQuery.data ?? [];
+    setNotificationEmail(contacts.find((item) => item.channel === 'email')?.target ?? '');
+    setNotificationPhone(contacts.find((item) => item.channel === 'sms')?.target ?? '');
+  }, [contactsQuery.data]);
 
   const currentStatus = status.data;
   const busy = start.isPending || stop.isPending || runOnce.isPending;
@@ -91,6 +103,13 @@ function BidMonitorPage() {
   };
 
   const save = () => void runAction(() => saveConfig.mutateAsync(savedConfig), 'Configuration saved');
+  const saveNotificationTargets = () => void runAction(
+    () => saveContacts.mutateAsync([
+      ...(notificationEmail.trim() ? [{ channel: 'email', target: notificationEmail.trim(), enabled: true }] : []),
+      ...(notificationPhone.trim() ? [{ channel: 'sms', target: notificationPhone.trim(), enabled: true }] : []),
+    ]),
+    'Notification targets saved',
+  );
   const clear = () => {
     if (!window.confirm('Clear all stored monitor history?')) return;
     void runAction(() => clearHistory.mutateAsync(), 'History cleared');
@@ -132,6 +151,12 @@ function BidMonitorPage() {
             <div className="bid-monitor-inline-fields">
               <label className="bid-monitor-field"><span>Interval (minutes)</span><input type="number" min="1" max="1440" value={interval} onChange={(event) => setInterval(event.target.value)} /></label>
               <label className="bid-monitor-toggle"><input type="checkbox" checked={selenium} onChange={(event) => setSelenium(event.target.checked)} /><span>Use browser mode</span></label>
+            </div>
+            <div className="bid-monitor-notifications">
+              <div className="bid-monitor-section-head"><div><span className="section-kicker">Notify</span><h3>Notification targets</h3></div><button type="button" className="text-action" onClick={saveNotificationTargets} disabled={saveContacts.isPending}>Save</button></div>
+              <label className="bid-monitor-field"><span>Email address</span><input type="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} placeholder="Optional" /></label>
+              <label className="bid-monitor-field"><span>Phone number</span><input type="tel" value={notificationPhone} onChange={(event) => setNotificationPhone(event.target.value)} placeholder="Optional" /></label>
+              <p className="bid-monitor-note">Channel credentials are managed by the server.</p>
             </div>
           </section>
 

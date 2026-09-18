@@ -35,6 +35,9 @@ export interface MonitorClientOptions {
 }
 
 export interface MonitorRuntimeConfig {
+  notify_method?: string;
+  email?: string;
+  phone?: string;
   ai_config?: {
     enable?: boolean;
     api_key?: string;
