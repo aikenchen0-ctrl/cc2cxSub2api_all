@@ -6,6 +6,7 @@ import { toast } from "react-hot-toast";
 import { DesignSystemSelectorProps } from "../../settings/DesignSystemSelector";
 import { Stack } from "../../../lib/stacks";
 import ScreenshotToCodeControls from "../ScreenshotToCodeControls";
+import { useI18n } from "../../../i18n";
 
 interface Props {
   screenshotOneApiKey: string | null;
@@ -31,6 +32,7 @@ function UrlTab({
   setStack,
   designSystem,
 }: Props) {
+  const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
   const [textPrompt, setTextPrompt] = useState("");
@@ -42,27 +44,27 @@ function UrlTab({
 
     if (!screenshotOneApiKey) {
       toast.error(
-        "Please add a ScreenshotOne API key in Settings. You can also upload screenshots directly in the Upload tab.",
+        t("screenshotKeyRequired"),
         { duration: 6000 },
       );
       return;
     }
 
     if (!trimmedReferenceUrl) {
-      toast.error("Please enter a URL");
+      toast.error(t("enterUrl"));
       return;
     }
 
     if (trimmedReferenceUrl.toLowerCase().startsWith("file://")) {
       toast.error(
-        "file:// URLs can't be screenshot. If you're trying to import a local file, please use the Import tab.",
+        t("fileUrlUnsupported"),
       );
       return;
     }
 
     if (isFigmaUrl(trimmedReferenceUrl)) {
       toast.error(
-        "Direct Figma import is not supported. Take a screenshot of your design or export the artboards as images, then use the Upload tab.",
+        t("figmaUnsupported"),
         { duration: 6000 },
       );
       return;
@@ -94,7 +96,7 @@ function UrlTab({
       );
     } catch (error) {
       console.error(error);
-      toast.error("Failed to capture screenshot. Check console for details.");
+      toast.error(t("captureFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -118,10 +120,10 @@ function UrlTab({
           </span>
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">
-              Screenshot from URL
+              {t("screenshotFromUrl")}
             </h3>
             <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-zinc-400">
-              Enter a public webpage and we’ll capture it before generating code.
+              {t("urlCaptureHelpShort")}
             </p>
           </div>
         </div>
@@ -131,7 +133,7 @@ function UrlTab({
             htmlFor="reference-url"
             className="block text-xs font-medium text-gray-600 dark:text-zinc-300"
           >
-            Website URL
+            {t("websiteUrl")}
           </label>
           <Input
             id="reference-url"
@@ -152,12 +154,11 @@ function UrlTab({
           />
           {isFigmaUrl(referenceUrl) ? (
             <p className="text-xs leading-5 text-amber-600 dark:text-amber-400">
-              Direct Figma import isn’t supported. Export your artboards as
-              images and use the Upload tab instead.
+              {t("directFigmaUnsupported")}
             </p>
           ) : (
             <p className="text-[11px] text-gray-400 dark:text-zinc-500">
-              Requires a ScreenshotOne API key in Settings.
+              {t("requiresScreenshotKey")}
             </p>
           )}
         </div>
@@ -175,8 +176,8 @@ function UrlTab({
         isAssetExtractionEnabled={isAssetExtractionEnabled}
         onAssetExtractionChange={setIsAssetExtractionEnabled}
         onGenerate={takeScreenshot}
-        actionLabel="Capture & Generate"
-        loadingActionLabel="Capturing…"
+        actionLabel={t("captureGenerate")}
+        loadingActionLabel={t("capturing")}
         isActionLoading={isLoading}
         actionTestId="url-capture"
       />

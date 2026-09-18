@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { useI18n } from "../../i18n";
 
 interface Props {
   designSystems: DesignSystem[];
@@ -39,6 +40,7 @@ function DesignSystemsManager({
   updateDesignSystem,
   deleteDesignSystem,
 }: Props) {
+  const { t } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(
     initialEditingId ?? null
   );
@@ -91,10 +93,10 @@ function DesignSystemsManager({
         content: NEW_DESIGN_SYSTEM_CONTENT,
       });
       setEditingId(created.id);
-      toast.success("Design system created.");
+      toast.success(t("designCreated"));
     } catch (error) {
       console.error("Failed to create design system", error);
-      toast.error("Could not create design system.");
+      toast.error(t("designCreateFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -107,7 +109,7 @@ function DesignSystemsManager({
 
     const name = draftName.trim();
     if (!name) {
-      toast.error("Design system name is required.");
+      toast.error(t("designSystemNameRequired"));
       return;
     }
 
@@ -117,10 +119,10 @@ function DesignSystemsManager({
         name,
         content: draftContent,
       });
-      toast.success("Design system saved.");
+      toast.success(t("designSaved"));
     } catch (error) {
       console.error("Failed to save design system", error);
-      toast.error("Could not save design system.");
+      toast.error(t("designSaveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -149,10 +151,10 @@ function DesignSystemsManager({
         (item) => item.id !== editingDesignSystem.id
       );
       setEditingId(next?.id ?? null);
-      toast.success("Design system deleted.");
+      toast.success(t("designDeleted"));
     } catch (error) {
       console.error("Failed to delete design system", error);
-      toast.error("Could not delete design system.");
+      toast.error(t("designDeleteFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +172,7 @@ function DesignSystemsManager({
             className="flex-1"
             data-testid="manage-design-system-select"
           >
-            <SelectValue placeholder="No design systems yet" />
+            <SelectValue placeholder={t("noDesignSystems")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -179,7 +181,7 @@ function DesignSystemsManager({
                   {designSystem.name}
                   {selectedDesignSystemId === designSystem.id && (
                     <span className="ml-2 text-xs text-violet-600 dark:text-violet-400">
-                      Default
+                      {t("current")}
                     </span>
                   )}
                 </SelectItem>
@@ -193,7 +195,7 @@ function DesignSystemsManager({
           onClick={handleCreate}
           disabled={isSaving}
         >
-          + New
+          {t("newProject")}
         </Button>
       </div>
 
@@ -204,19 +206,19 @@ function DesignSystemsManager({
               htmlFor="design-system-name"
               className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-zinc-300"
             >
-              Name
+              {t("designSystemName")}
             </label>
             <div className="flex items-center gap-2">
               <Input
                 id="design-system-name"
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
-                placeholder="e.g. Marketing site"
+                placeholder={t("designSystemNamePlaceholder")}
                 data-testid="design-system-name"
               />
               {isDefault && (
                 <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                  Default
+                  {t("current")}
                 </span>
               )}
             </div>
@@ -227,13 +229,13 @@ function DesignSystemsManager({
               htmlFor="design-system-content"
               className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-zinc-300"
             >
-              Instructions
+              {t("designSystemContent")}
             </label>
             <Textarea
               id="design-system-content"
               value={draftContent}
               onChange={(event) => setDraftContent(event.target.value)}
-              placeholder="Fill in details about colors, fonts, components, and layout preferences..."
+              placeholder={t("designSystemContentPlaceholder")}
               className="min-h-[240px] font-mono text-xs"
               data-testid="design-system-content"
             />
@@ -248,7 +250,7 @@ function DesignSystemsManager({
               disabled={isSaving}
               className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
             >
-              Delete
+              {t("commonDelete")}
             </Button>
             <div className="flex items-center gap-2">
               <Button
@@ -262,7 +264,7 @@ function DesignSystemsManager({
                 }
                 disabled={isSaving}
               >
-                {isDefault ? "Remove as default" : "Set as default"}
+                {isDefault ? t("removeDefault") : t("setDefault")}
               </Button>
               <Button
                 type="button"
@@ -270,15 +272,14 @@ function DesignSystemsManager({
                 onClick={handleSave}
                 disabled={isSaving || !isDirty}
               >
-                {isDirty ? "Save changes" : "Saved"}
+                {isDirty ? t("saveChanges") : t("saved")}
               </Button>
             </div>
           </div>
         </div>
       ) : (
         <div className="rounded-md border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500 dark:border-zinc-700 dark:text-zinc-400">
-          No design systems yet. Click <span className="font-medium">+ New</span>{" "}
-          to create one.
+          {t("noDesignSystems")}. <span className="font-medium">{t("newProject")}</span>
         </div>
       )}
     </div>

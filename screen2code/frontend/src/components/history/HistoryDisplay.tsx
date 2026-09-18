@@ -2,6 +2,7 @@ import { renderHistory, RenderedHistoryItem } from "./utils";
 import { useProjectStore } from "../../store/project-store";
 import { BsChevronDown, BsChevronRight } from "react-icons/bs";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useI18n } from "../../i18n";
 
 function MediaThumbnail({
   item,
@@ -108,6 +109,7 @@ function ExpandedMedia({
 }
 
 export default function HistoryDisplay() {
+  const { t } = useI18n();
   const { commits, head, setHead } = useProjectStore();
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
   const [autoPlayHash, setAutoPlayHash] = useState<string | null>(null);
@@ -189,7 +191,7 @@ export default function HistoryDisplay() {
                   </span>
                   {item.parentVersion !== null && (
                     <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                      from v{item.parentVersion}
+                      {t("version")} {item.parentVersion}
                     </span>
                   )}
                 </div>
@@ -240,7 +242,7 @@ export default function HistoryDisplay() {
                 )}
                 {item.selectedElementTag && (
                   <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">
-                    Target: <code className="font-mono text-[10px] bg-violet-100 dark:bg-violet-900/30 px-1 py-0.5 rounded">&lt;{item.selectedElementTag}&gt;</code>
+                    {t("selectElement")}: <code className="font-mono text-[10px] bg-violet-100 dark:bg-violet-900/30 px-1 py-0.5 rounded">&lt;{item.selectedElementTag}&gt;</code>
                   </p>
                 )}
                 <ExpandedMedia

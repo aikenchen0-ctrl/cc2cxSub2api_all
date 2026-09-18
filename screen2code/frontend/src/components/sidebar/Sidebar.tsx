@@ -23,6 +23,7 @@ import { CodeGenerationModel } from "../../lib/models";
 import DesignSystemSelector, {
   DesignSystemSelectorProps,
 } from "../settings/DesignSystemSelector";
+import { useI18n } from "../../i18n";
 
 interface SidebarProps {
   doUpdate: (instruction: string) => void;
@@ -81,6 +82,7 @@ function Sidebar({
   onOpenVersions,
   designSystem,
 }: SidebarProps) {
+  const { t } = useI18n();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const middlePaneRef = useRef<HTMLDivElement>(null);
   const [isErrorExpanded, setIsErrorExpanded] = useState(false);
@@ -312,13 +314,13 @@ function Sidebar({
                 onClick={onOpenVersions}
                 className="rounded-lg border border-violet-400 dark:border-violet-600 px-3 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
               >
-                All versions
+                  {t("allVersions")}
               </button>
               <button
                 onClick={() => latestCommitHash && setHead(latestCommitHash)}
                 className="rounded-lg bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400 px-3 py-1.5 text-xs font-semibold text-white dark:text-violet-950 transition-colors"
               >
-                Back to latest
+                {t("backToLatest")}
               </button>
             </div>
           </div>
@@ -399,7 +401,7 @@ function Sidebar({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                 <WorkingPulse />
-                <span>Working...</span>
+                <span>{t("working")}</span>
               </div>
               <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
                 Time so far {elapsedSeconds ? `${elapsedSeconds}s` : "--"}
@@ -442,7 +444,7 @@ function Sidebar({
               className="regenerate-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <LuRefreshCw className="w-3.5 h-3.5" />
-              Retry
+              {t("retry")}
             </button>
           </div>
         )}
@@ -454,7 +456,7 @@ function Sidebar({
               onClick={cancelCodeGeneration}
               className="w-full dark:text-white dark:bg-gray-700"
             >
-              Cancel All Generations
+              {t("cancelAll")}
             </Button>
           </div>
         )}
@@ -478,15 +480,15 @@ function Sidebar({
                       onClick={() => setIsErrorExpanded(!isErrorExpanded)}
                       className="text-red-600 dark:text-red-400 text-xs underline mt-1 hover:text-red-800 dark:hover:text-red-300"
                     >
-                      {isErrorExpanded ? "Show less" : "Show more"}
+                      {isErrorExpanded ? t("showLess") : t("showMore")}
                     </button>
                   )}
                 </div>
               )}
               <div>
                 {canRegenerate
-                  ? "Click Retry to run this version's request again."
-                  : "Switch to another option above to make updates."}
+                  ? t("retryRequest")
+                  : t("switchOption")}
               </div>
             </div>
           </div>
@@ -525,13 +527,13 @@ function Sidebar({
                     <div className="flex items-center gap-2 min-w-0">
                       <LuMousePointerClick className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                       <span className="text-sm text-violet-700 dark:text-violet-300 truncate">
-                        Selected: <code className="font-mono text-xs bg-violet-100 dark:bg-violet-800/50 px-1.5 py-0.5 rounded">&lt;{selectedElement.tagName.toLowerCase()}&gt;</code>
+                    {t("selectElement")}: <code className="font-mono text-xs bg-violet-100 dark:bg-violet-800/50 px-1.5 py-0.5 rounded">&lt;{selectedElement.tagName.toLowerCase()}&gt;</code>
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedElement(null)}
                       className="shrink-0 ml-3 p-0.5 text-violet-400 hover:text-violet-700 dark:hover:text-violet-200 transition-colors"
-                      title="Clear selection"
+                      title={t("clearSelection")}
                     >
                       <LuX className="w-3.5 h-3.5" />
                     </button>
@@ -540,7 +542,7 @@ function Sidebar({
                   <div className="flex items-center justify-between rounded-xl border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 px-3 py-2">
                     <div className="flex items-center gap-2">
                       <LuMousePointerClick className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 shrink-0" />
-                      <span className="text-sm font-medium text-violet-700 dark:text-violet-300">Click an element to edit it</span>
+                      <span className="text-sm font-medium text-violet-700 dark:text-violet-300">{t("selectElement")}</span>
                     </div>
                     <button
                       onClick={toggleInSelectAndEditMode}
@@ -593,7 +595,7 @@ function Sidebar({
                         ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
                         : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                     }`}
-                    title={inSelectAndEditMode ? "Exit selection mode" : "Select an element in the preview to target your edit"}
+                    title={t("selectElement")}
                   >
                     <LuMousePointerClick className="w-[18px] h-[18px]" />
                   </button>
@@ -607,7 +609,7 @@ function Sidebar({
                       ? "bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400"
                       : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-zinc-700 dark:text-zinc-500"
                   }`}
-                  title="Send"
+                  title={t("send")}
                 >
                   <LuArrowUp className="w-[18px] h-[18px]" strokeWidth={2.5} />
                 </button>
@@ -615,7 +617,7 @@ function Sidebar({
 
               {isDragging && (
                 <div className="absolute inset-0 bg-blue-50/90 dark:bg-gray-800/90 border-2 border-dashed border-blue-400 dark:border-blue-600 rounded-xl flex items-center justify-center pointer-events-none z-10">
-                  <p className="text-blue-600 dark:text-blue-400 font-medium">Drop images here</p>
+                  <p className="text-blue-600 dark:text-blue-400 font-medium">{t("dropImages")}</p>
                 </div>
               )}
             </div>

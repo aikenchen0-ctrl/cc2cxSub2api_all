@@ -7,6 +7,7 @@ import ScreenRecorder from "../../recording/ScreenRecorder";
 import { DesignSystemSelectorProps } from "../../settings/DesignSystemSelector";
 import { Stack } from "../../../lib/stacks";
 import ScreenshotToCodeControls from "../ScreenshotToCodeControls";
+import { useI18n } from "../../../i18n";
 
 function fileToDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,7 @@ interface Props {
 }
 
 function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
+  const { t } = useI18n();
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [uploadedDataUrls, setUploadedDataUrls] = useState<string[]>([]);
   const [uploadedInputMode, setUploadedInputMode] = useState<
@@ -320,18 +322,18 @@ function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
             </div>
             <div className="text-center">
               <p className="text-gray-700 dark:text-zinc-200 font-medium">
-                Drop up to {MAX_FILES} screenshots or a single video
+                {t("uploadHint")}
               </p>
             </div>
             <p className="text-xs text-gray-400 dark:text-zinc-500 mt-2">
-              Supports PNG, JPG, MP4, MOV, WebM (max 20MB each, 30s video)
+              PNG、JPG、MP4、MOV、WebM（每个最大 20MB，视频最长 30 秒）
             </p>
             <button
               type="button"
               onClick={open}
               className="text-sm text-gray-600 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200 underline"
             >
-              Browse files
+              浏览文件
             </button>
           </div>
         </div>
@@ -350,7 +352,7 @@ function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
                 <button
                   onClick={handleClear}
                   className="absolute top-2 right-2 bg-white dark:bg-zinc-800 rounded-full p-1.5 shadow-md hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
-                  aria-label="Remove video"
+                  aria-label={t("removeVideo")}
                 >
                   <Cross2Icon className="h-4 w-4 text-gray-600 dark:text-zinc-300" />
                 </button>
@@ -365,13 +367,13 @@ function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
               >
                 <input {...getInputProps()} />
                 <div className="flex items-center justify-between text-xs uppercase tracking-wide text-gray-400 dark:text-zinc-500">
-                  <span>{`Uploaded Screenshots (${files.length}/${MAX_FILES})`}</span>
+                  <span>{`${t("uploadedScreenshots")} (${files.length}/${MAX_FILES})`}</span>
                   <button
                     type="button"
                     onClick={handleClear}
                     className="text-xs text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200"
                   >
-                    Clear all
+                    清空全部
                   </button>
                 </div>
                 <div className="mt-1 text-[11px] text-gray-400 dark:text-zinc-500">
@@ -436,17 +438,17 @@ function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
                         ? "border-gray-200 dark:border-zinc-700 text-gray-300 dark:text-zinc-600 cursor-not-allowed"
                         : "border-gray-300 dark:border-zinc-600 text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:border-gray-400 dark:hover:border-zinc-500"
                     }`}
-                    aria-label="Add more screenshots"
+                    aria-label={t("addMoreScreenshots")}
                   >
                     <ImageIcon className="h-5 w-5" />
                   </button>
                 </div>
                 <div className="mt-2 text-xs text-gray-400 dark:text-zinc-500">
-                  Drag and drop to add more screenshots
+                  拖放以添加更多截图
                 </div>
                 {isDragActive && (
                   <div className="absolute inset-0 bg-blue-50/80 dark:bg-blue-950/80 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-lg flex items-center justify-center pointer-events-none">
-                    <p className="text-blue-600 dark:text-blue-400 font-medium">Drop to add</p>
+                    <p className="text-blue-600 dark:text-blue-400 font-medium">{t("dropToAdd")}</p>
                   </div>
                 )}
               </div>
@@ -474,7 +476,7 @@ function UploadTab({ doCreate, stack, setStack, designSystem }: Props) {
           {screenRecorderState === ScreenRecorderState.INITIAL && (
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400">
               <div className="h-px w-12 bg-gray-300 dark:bg-zinc-600" />
-              <span>or</span>
+              <span>{t("or")}</span>
               <div className="h-px w-12 bg-gray-300 dark:bg-zinc-600" />
             </div>
           )}

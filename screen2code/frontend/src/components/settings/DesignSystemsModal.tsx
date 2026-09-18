@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import DesignSystemsManager from "./DesignSystemsManager";
+import { useI18n } from "../../i18n";
 
 interface Props {
   open: boolean;
@@ -37,14 +38,14 @@ function DesignSystemsModal({
   updateDesignSystem,
   deleteDesignSystem,
 }: Props) {
+  const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Design Systems</DialogTitle>
+          <DialogTitle>{t("designSystems")}</DialogTitle>
           <DialogDescription>
-            Define color, typography, and layout rules applied to every
-            generation.
+            {t("designSystemContentPlaceholder")}
           </DialogDescription>
         </DialogHeader>
         <DesignSystemsManager
