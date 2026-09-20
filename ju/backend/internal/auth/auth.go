@@ -21,7 +21,7 @@ import (
 const SessionCookieName = "open_ai_canvas_session"
 
 const (
-	sessionMaxAge    = 30 * 24 * time.Hour
+	sessionMaxAge    = 3 * 24 * time.Hour
 	ssoSessionMaxAge = 3 * 24 * time.Hour
 )
 

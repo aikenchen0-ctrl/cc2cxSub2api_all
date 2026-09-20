@@ -2,20 +2,18 @@
 
 ## 现有门户直连入口
 
-保留 Sub2API 门户的“无限画布”入口：新版同时接收 fragment 中的 baseUrl/apiKey 和旧查询参数。fragment 优先；导入前清除 URL 中的凭据，并将配置写入实际的本地渠道列表，不只更新旧的顶层字段。同地址渠道更新密钥，其他渠道保留。
-
-此模式的 API Key 仍保存在用户浏览器中。未登录时由浏览器直连网关，需要网关允许该站点跨域；登录后部分任务使用 Canvas 后端代理。不要把管理员共享 SuperKey 作为普通公开链接发送。
+Sub2API 门户的“无限画布”入口统一使用 `GET /api/v1/auth/integrations/canvas/start`。浏览器只建立 Canvas 自己的 HttpOnly Session，不保存 Sub2API JWT、用户 API Key 或 SuperKey。
 
 ## 后端 Relay
 
-在 .env 中同时设置 SUB2API_RELAY_BASE_URL 和 SUB2API_RELAY_API_KEY。地址只能是 HTTP(S) 根地址或 /v1，不能使用 /api/v1。首次配置自动建立 sub2api-relay 渠道；后续启动同步密钥和模型；两项都清空后停用并删除该渠道存储的密钥。
+在服务端设置 `SUB2API_RELAY_BASE_URL` 和 `SUB2API_APP_CREDENTIAL`。地址只能是 HTTP(S) 根地址或 `/v1`，不能使用 `/api/v1`。`SUB2API_APP_CREDENTIAL` 仅用于卫星服务端调用 Sub2API，用户身份通过 `X-Sub2API-On-Behalf-Of` 传递；不得用 SuperKey 或共享 API Key 代替。
 
 - SUB2API_RELAY_MODELS：文本模型，默认 gpt-5.5。
 - SUB2API_RELAY_IMAGE_MODELS：管理员验证过的图片模型，默认不启用。
 - SUB2API_RELAY_VIDEO_MODELS：管理员验证过的视频模型，默认不启用。
 - 模型列表使用英文逗号分隔，填写网关公开模型 ID，不填写内部上游模型名。
 - 未配置普通用户云端权限时首次启用该权限；已有明确的允许/禁止配置保持不变。管理员可在后台调整。
-- Relay 使用现有 Canvas 云端渠道与算力点机制。默认未配置模型价格时 Canvas 不额外扣点；Sub2API 消耗记在共享 Key 的拥有者账户，不是自动记在每位 SSO 用户账户。
+- Relay 使用现有 Canvas 云端渠道与算力点机制。Sub2API 消耗按当前 SSO 用户记录计费，并由服务端 SuperKey 在启用分组范围内选取上游。
 - 网关请求跳过 Canvas 按模型名推断厂商原生协议的二次转换。重定向不跟随，避免把服务端 Key 发往其他地址。
 - 密钥保存在后端私有设置中，公开设置和管理员设置响应均不返回密钥。数据库仍需按含密钥数据保护。
 

@@ -13,7 +13,7 @@ test("buildQrEditPayload should create a fixed gpt-image request body", () => {
     negativePrompt: "NEGATIVE"
   });
 
-  assert.equal(payload.model, "image2");
+  assert.equal(payload.model, "gpt-image-2");
   assert.equal(payload.size, "1024x1024");
   assert.equal(payload.image.length, 2);
   assert.equal(payload.image[0], "data:image/png;base64,AAA");

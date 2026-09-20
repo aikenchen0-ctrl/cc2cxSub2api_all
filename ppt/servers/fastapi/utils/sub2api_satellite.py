@@ -37,17 +37,39 @@ async def load_subject_for_user(session: AsyncSession, user_id: UUID) -> str:
 
 
 def satellite_configured() -> bool:
-    return bool(os.getenv("SUB2API_APP_CREDENTIAL", "").strip() and openai_base_url())
+    return bool(
+        (os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+         or os.getenv("SUB2API_SSO_SECRET", "").strip())
+        and openai_base_url()
+    )
+
+
+def satellite_managed() -> bool:
+    return bool(
+        os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+        or os.getenv("SUB2API_SSO_SECRET", "").strip()
+    )
 
 
 def openai_base_url() -> str:
-    raw = (
-        os.getenv("CUSTOM_LLM_URL")
-        or os.getenv("LINK")
-        or os.getenv("SUB2API_BASE_URL")
-        or os.getenv("SUB2API_RELAY_BASE_URL")
-        or ""
-    ).strip()
+    # A managed satellite must always terminate at Sub2API.  Do not let a
+    # persisted CUSTOM_LLM_URL redirect the app credential to an arbitrary
+    # external endpoint; CUSTOM_LLM_URL is only a local/unmanaged override.
+    if satellite_managed():
+        raw = (
+            os.getenv("SUB2API_RELAY_BASE_URL")
+            or os.getenv("LINK")
+            or os.getenv("SUB2API_BASE_URL")
+            or ""
+        ).strip()
+    else:
+        raw = (
+            os.getenv("CUSTOM_LLM_URL")
+            or os.getenv("LINK")
+            or os.getenv("SUB2API_BASE_URL")
+            or os.getenv("SUB2API_RELAY_BASE_URL")
+            or ""
+        ).strip()
     if raw and "://" not in raw:
         raw = "http://" + raw
     raw = raw.rstrip("/")
@@ -58,10 +80,13 @@ def openai_base_url() -> str:
     return raw + "/v1"
 
 
-def satellite_headers() -> dict[str, str]:
+def satellite_headers(*, required: bool = False) -> dict[str, str]:
     subject = get_current_sub2api_subject()
     credential = os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
     if not subject or not credential:
+        if required or satellite_managed():
+            if required:
+                raise RuntimeError("Sub2API satellite credential and session subject are required")
         return {}
     return {
         "Authorization": f"Bearer {credential}",
@@ -79,8 +104,10 @@ def _is_sub2api_request(url: httpx.URL) -> bool:
 
 
 def _apply_satellite_headers(request: httpx.Request) -> None:
-    headers = satellite_headers()
-    if not headers or not _is_sub2api_request(request.url):
+    if not _is_sub2api_request(request.url):
+        return
+    headers = satellite_headers(required=satellite_configured())
+    if not headers:
         return
     for key, value in headers.items():
         request.headers[key] = value

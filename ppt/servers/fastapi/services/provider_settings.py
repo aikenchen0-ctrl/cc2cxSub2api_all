@@ -131,7 +131,11 @@ async def migrate_provider_settings_from_file(session: AsyncSession) -> dict[str
 
 def with_sub2api_defaults(config: dict[str, Any]) -> dict[str, Any]:
     """Bootstrap only an unconfigured instance; never replace admin settings."""
-    api_key = os.getenv("SUB2API_API_KEY", "").strip()
+    api_key = os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+    # Keep the old variable only for isolated, unauthenticated local fixtures.
+    # A configured SSO deployment must never fall back to a shared key.
+    if not api_key and not os.getenv("SUB2API_SSO_SECRET", "").strip():
+        api_key = os.getenv("SUB2API_API_KEY", "").strip()
     if config.get("LLM") or not api_key:
         return config
     raw_url = (os.getenv("SUB2API_BASE_URL") or os.getenv("LINK") or "http://host.docker.internal:18080").strip()

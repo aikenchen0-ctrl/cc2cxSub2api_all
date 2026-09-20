@@ -1,18 +1,5 @@
 import { sub2apiBase } from './config.ts';
 
-export interface Sub2ApiLoginResult {
-  accessToken: string;
-  refreshToken: string;
-  userId: string;
-  email: string;
-}
-
-export interface Sub2ApiUserKey {
-  id: string;
-  name: string;
-  key?: string;
-}
-
 interface JsonObject {
   [key: string]: unknown;
 }
@@ -60,138 +47,21 @@ async function sub2apiFetch(path: string, init: RequestInit): Promise<{ status: 
   return { status: response.status, body: await readJson(response) };
 }
 
-function unwrapData(body: unknown): JsonObject | null {
-  const root = asRecord(body);
-  if (!root) return null;
-  return asRecord(root.data) ?? asRecord(root.result) ?? root;
-}
-
-export async function registerWithPassword(
-  email: string,
-  password: string,
-  name?: string,
-): Promise<Sub2ApiLoginResult> {
-  const payload: Record<string, string> = { email, password };
-  if (name) payload.name = name;
-  const { status, body } = await sub2apiFetch('/api/v1/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  if (status === 409) throw new Error('该邮箱已注册');
-  if (status === 400) throw new Error('注册信息不合法');
-  if (status >= 400) throw new Error(`Sub2API 注册失败（HTTP ${status}）`);
-  const data = unwrapData(body);
-  const user = asRecord(data?.user) ?? asRecord(data?.account) ?? data;
-  const accessToken = pickString(data, 'access_token', 'accessToken', 'token');
-  const refreshToken = pickString(data, 'refresh_token', 'refreshToken');
-  const userId = pickString(user, 'id', 'user_id', 'userId') || pickString(data, 'id', 'user_id', 'userId');
-  const userEmail = pickString(user, 'email') || email;
-  if (accessToken && userId) {
-    return { accessToken, refreshToken, userId, email: userEmail };
-  }
-  return loginWithPassword(email, password);
-}
-
-export async function loginWithPassword(email: string, password: string): Promise<Sub2ApiLoginResult> {
-  const { status, body } = await sub2apiFetch('/api/v1/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  if (status === 401 || status === 403) throw new Error('邮箱或密码错误');
-  if (status >= 400) throw new Error(`Sub2API 登录失败（HTTP ${status}）`);
-  const data = unwrapData(body);
-  const user = asRecord(data?.user) ?? asRecord(data?.account) ?? data;
-  const accessToken = pickString(data, 'access_token', 'accessToken', 'token');
-  const refreshToken = pickString(data, 'refresh_token', 'refreshToken');
-  const userId = pickString(user, 'id', 'user_id', 'userId') || pickString(data, 'id', 'user_id', 'userId');
-  const userEmail = pickString(user, 'email') || email;
-  if (!accessToken || !userId) throw new Error('Sub2API 登录响应缺少 access_token 或用户 id');
-  return { accessToken, refreshToken, userId, email: userEmail };
-}
-
-export async function fetchMe(accessToken: string): Promise<{ userId: string; email: string }> {
-  const { status, body } = await sub2apiFetch('/api/v1/auth/me', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (status >= 400) throw new Error(`Sub2API /auth/me 失败（HTTP ${status}）`);
-  const data = unwrapData(body);
-  const user = asRecord(data?.user) ?? data;
-  const userId = pickString(user, 'id', 'user_id', 'userId');
-  const email = pickString(user, 'email');
-  if (!userId) throw new Error('Sub2API /auth/me 缺少用户 id');
-  return { userId, email };
-}
-
-export async function refreshAccessToken(refreshToken: string): Promise<Sub2ApiLoginResult> {
-  const { status, body } = await sub2apiFetch('/api/v1/auth/refresh', {
-    method: 'POST',
-    body: JSON.stringify({ refresh_token: refreshToken, refreshToken }),
-  });
-  if (status >= 400) throw new Error('登录已过期，请重新登录');
-  const data = unwrapData(body);
-  const user = asRecord(data?.user) ?? data;
-  const accessToken = pickString(data, 'access_token', 'accessToken', 'token');
-  const nextRefresh = pickString(data, 'refresh_token', 'refreshToken') || refreshToken;
-  const userId = pickString(user, 'id', 'user_id', 'userId') || pickString(data, 'id');
-  const email = pickString(user, 'email');
-  if (!accessToken || !userId) throw new Error('Sub2API 刷新会话失败');
-  return { accessToken, refreshToken: nextRefresh, userId, email };
-}
-
-export async function listKeys(accessToken: string): Promise<Sub2ApiUserKey[]> {
-  const { status, body } = await sub2apiFetch('/api/v1/keys', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (status === 404) return [];
-  if (status >= 400) throw new Error(`Sub2API 列出 Key 失败（HTTP ${status}）`);
-  const root = asRecord(body);
-  const list = Array.isArray(body)
-    ? body
-    : Array.isArray(root?.data)
-      ? root.data
-      : Array.isArray(asRecord(root?.data)?.items)
-        ? (asRecord(root?.data)?.items as unknown[])
-        : Array.isArray(root?.items)
-          ? root.items
-          : [];
-  return list.flatMap((item) => {
-    const record = asRecord(item);
-    const id = pickString(record, 'id', 'key_id');
-    const name = pickString(record, 'name', 'title', 'remark');
-    const key = pickString(record, 'key', 'api_key', 'token');
-    return id ? [{ id, name, key: key || undefined }] : [];
-  });
-}
-
-export async function createUserKey(accessToken: string, name: string): Promise<string> {
-  const { status, body } = await sub2apiFetch('/api/v1/keys', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ name }),
-  });
-  if (status >= 400) throw new Error(`Sub2API 签发 Key 失败（HTTP ${status}）`);
-  const data = unwrapData(body);
-  const key = pickString(data, 'key', 'api_key', 'token', 'secret');
-  if (!key) throw new Error('Sub2API 签发 Key 时没有返回明文 sk');
-  return key;
-}
-
-export async function listModels(userApiKeyOrUserId: string): Promise<string[]> {
+export async function listModels(subject: string): Promise<string[]> {
   const credential = (process.env.SUB2API_APP_CREDENTIAL ?? '').trim();
-  const headers: Record<string, string> = credential
-    ? {
-        Authorization: `Bearer ${credential}`,
-        'X-Sub2API-On-Behalf-Of': userApiKeyOrUserId,
-        'X-Sub2API-Satellite': 'aicut',
-      }
-    : { Authorization: `Bearer ${userApiKeyOrUserId}` };
+  const userId = subject.trim();
+  if (!credential) throw new Error('Sub2API satellite credential is unavailable');
+  if (!userId) throw new Error('当前会话未提供 Sub2API 用户身份');
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${credential}`,
+    'X-Sub2API-On-Behalf-Of': userId,
+    'X-Sub2API-Satellite': 'aicut',
+  };
   const { status, body } = await sub2apiFetch('/v1/models', {
     method: 'GET',
     headers,
   });
-  if (status >= 400) throw new Error(`Sub2API /v1/models 失败（HTTP ${status}）`);
+  if (status >= 400) throw new Error(`Sub2API /v1/models failed (HTTP ${status})`);
   const root = asRecord(body);
   const list = Array.isArray(root?.data) ? root.data : [];
   return list.flatMap((item) => {

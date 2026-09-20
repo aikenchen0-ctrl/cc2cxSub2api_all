@@ -1,11 +1,13 @@
 package com.artisanlab.ai;
 
+import com.artisanlab.asset.AssetDtos;
 import com.artisanlab.asset.AssetService;
 import com.artisanlab.common.ApiException;
 import com.artisanlab.userconfig.UserApiConfigDtos;
 import com.artisanlab.userconfig.UserApiConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -364,7 +366,7 @@ public class AiProxyService {
         try {
             ImageProxyResult result = executeImageRequest(job.label(), targetUrl, apiKey, accept, contentType, body);
             if (result.statusCode() >= 200 && result.statusCode() <= 299) {
-                job.markCompleted(result);
+                job.markCompleted(localizeGeneratedImageResult(job.userId(), result));
                 publishImageJob(job);
                 publishQueuedImageJobs();
                 return;
@@ -1174,16 +1176,7 @@ public class AiProxyService {
                 .timeout(timeout)
                 .header(HttpHeaders.ACCEPT, accept == null || accept.isBlank() ? "application/json" : accept)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body));
-        String credential = System.getenv("SUB2API_APP_CREDENTIAL");
-        String onBehalf = apiKey != null && apiKey.chars().allMatch(Character::isDigit) ? apiKey : "";
-        if (credential != null && !credential.isBlank() && !onBehalf.isBlank()) {
-            builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + credential.trim());
-            builder.header("X-Sub2API-On-Behalf-Of", onBehalf);
-            builder.header("X-Sub2API-Satellite", "livart");
-        } else {
-            builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
-        }
-
+        Sub2ApiSatelliteHeaders.apply(builder, apiKey);
         if (contentType != null && !contentType.isBlank()) {
             builder.header(HttpHeaders.CONTENT_TYPE, contentType);
         }
@@ -1413,6 +1406,130 @@ public class AiProxyService {
                 upstreamCode == null ? "" : upstreamCode,
                 upstreamType == null ? "" : upstreamType
         ).toLowerCase(Locale.ROOT);
+    }
+
+    private ImageProxyResult localizeGeneratedImageResult(UUID userId, ImageProxyResult result) {
+        if (result.body() == null || result.body().length == 0) {
+            return result;
+        }
+        String normalizedContentType = result.contentType() == null ? "" : result.contentType().toLowerCase(Locale.ROOT);
+        if (!normalizedContentType.contains("json")) {
+            return result;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(result.body());
+            if (!(root instanceof ObjectNode objectRoot)) {
+                return result;
+            }
+            boolean changed = localizeGeneratedImageArray(userId, objectRoot, "data")
+                    | localizeGeneratedImageArray(userId, objectRoot, "images");
+            if (!changed) {
+                return result;
+            }
+            return new ImageProxyResult(
+                    result.statusCode(),
+                    objectMapper.writeValueAsBytes(objectRoot),
+                    result.contentType(),
+                    result.attempts(),
+                    result.requestId()
+            );
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            log.warn("[image-job] localize generated image failed userId={} error={}", userId, safeMessage(exception));
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_IMPORT_FAILED", "生成图片保存失败");
+        }
+    }
+
+    private boolean localizeGeneratedImageArray(UUID userId, ObjectNode root, String field) {
+        JsonNode node = root.get(field);
+        if (!(node instanceof ArrayNode array) || array.isEmpty()) {
+            return false;
+        }
+        boolean changed = false;
+        for (JsonNode item : array) {
+            if (item instanceof ObjectNode objectItem && localizeGeneratedImageItem(userId, objectItem)) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private boolean localizeGeneratedImageItem(UUID userId, ObjectNode item) {
+        String existingUrl = jsonText(item, "url");
+        if (isLocalAssetUrl(existingUrl)) {
+            if (item.has("b64_json")) {
+                item.remove("b64_json");
+                return true;
+            }
+            return false;
+        }
+
+        String b64 = jsonText(item, "b64_json");
+        if (!b64.isBlank()) {
+            DecodedGeneratedImage decoded = decodeGeneratedImagePayload(b64, jsonText(item, "mime_type"));
+            AssetDtos.AssetResponse asset = assetService.uploadBytes(
+                    userId,
+                    null,
+                    "generated-image" + extensionForMime(decoded.mimeType()),
+                    decoded.mimeType(),
+                    decoded.bytes()
+            );
+            item.put("url", asset.urlPath());
+            item.remove("b64_json");
+            return true;
+        }
+
+        if (!existingUrl.isBlank()) {
+            AssetDtos.AssetResponse asset = assetService.importFromUrl(userId, null, existingUrl);
+            item.put("url", asset.urlPath());
+            item.remove("b64_json");
+            return true;
+        }
+        return false;
+    }
+
+    private DecodedGeneratedImage decodeGeneratedImagePayload(String raw, String mimeHint) {
+        String payload = raw.trim();
+        String mimeType = mimeHint == null || mimeHint.isBlank() ? "image/png" : mimeHint.trim().toLowerCase(Locale.ROOT);
+        if (payload.startsWith("data:image/")) {
+            int comma = payload.indexOf(',');
+            if (comma < 0) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_IMPORT_FAILED", "生成图片保存失败");
+            }
+            String header = payload.substring("data:".length(), comma);
+            payload = payload.substring(comma + 1);
+            String headerMime = header.split(";")[0].trim().toLowerCase(Locale.ROOT);
+            if (!headerMime.isBlank()) {
+                mimeType = headerMime;
+            }
+        }
+        try {
+            return new DecodedGeneratedImage(Base64.getDecoder().decode(payload), mimeType);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_IMPORT_FAILED", "生成图片保存失败");
+        }
+    }
+
+    private boolean isLocalAssetUrl(String url) {
+        return url != null && url.matches("(?s).*/api/assets/[0-9a-fA-F-]{36}(?:/(?:content|preview|thumbnail|view/[0-9]+))?(?:[?#].*)?");
+    }
+
+    private String jsonText(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? "" : value.asText("").trim();
+    }
+
+    private String extensionForMime(String mimeType) {
+        return switch (mimeType) {
+            case "image/jpeg", "image/jpg" -> ".jpg";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> ".png";
+        };
+    }
+
+    private record DecodedGeneratedImage(byte[] bytes, String mimeType) {
     }
 
     private Object parseResponsePayload(byte[] body, String contentType) {

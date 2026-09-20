@@ -1,6 +1,6 @@
 import { APP_CONFIG } from "./config.js";
-import { buildSquareQrPlatePreview } from "./mask-processor.js";
-import { satelliteHeaders } from "./sso.js";
+import { buildSquareQrPlatePreview, trimQrWhiteBorder } from "./mask-processor.js";
+import { qrcodeRequestHeaders } from "./sso.js";
 import sharp from "sharp";
 
 function sleep(ms) {
@@ -19,16 +19,14 @@ class GenerationSubmitError extends Error {
   }
 }
 
-async function fetchTaskResult({ taskId, fetchImpl, apiBaseUrl, userId }) {
+async function fetchTaskResult({ taskId, fetchImpl, apiBaseUrl, userId, apiKey }) {
   for (let attempt = 1; attempt <= APP_CONFIG.taskPollMaxAttempts; attempt += 1) {
     let response;
 
     try {
       response = await fetchImpl(`${apiBaseUrl}${APP_CONFIG.taskEndpointTemplate.replace("{taskId}", taskId)}`, {
         method: "GET",
-        headers: {
-          ...satelliteHeaders(userId)
-        }
+        headers: qrcodeRequestHeaders(userId, apiKey)
       });
     } catch (error) {
       const causeCode = error?.cause?.code ? ` ${error.cause.code}` : "";
@@ -137,6 +135,19 @@ function appendPngFile(formData, name, buffer, filename) {
   formData.append(name, blob, filename);
 }
 
+function buildImageEditUrl(apiBaseUrl) {
+  const base = String(apiBaseUrl || "").trim().replace(/\/+$/, "");
+  const endpoint = String(APP_CONFIG.imageEditEndpoint || "").trim();
+
+  // Callers may provide either the public host (http://sub2api:8080) or the
+  // OpenAI-compatible base (http://sub2api:8080/v1). Keep the endpoint
+  // exactly once in both cases.
+  if (base.endsWith("/v1") && endpoint.startsWith("/v1/")) {
+    return `${base}${endpoint.slice(3)}`;
+  }
+  return `${base}${endpoint}`;
+}
+
 async function submitImageEditOnce({
   fetchImpl,
   submitUrl,
@@ -145,7 +156,8 @@ async function submitImageEditOnce({
   positivePrompt,
   negativePrompt,
   pipeline,
-  userId
+  userId,
+  apiKey
 }) {
   const formData = new FormData();
   formData.append("model", APP_CONFIG.model);
@@ -169,9 +181,7 @@ async function submitImageEditOnce({
   try {
     response = await fetchImpl(submitUrl, {
       method: "POST",
-      headers: {
-        ...satelliteHeaders(userId)
-      },
+      headers: qrcodeRequestHeaders(userId, apiKey),
       body: formData
     });
   } catch (error) {
@@ -249,9 +259,13 @@ export async function generateQrArtwork({
   negativePrompt = APP_CONFIG.defaultNegativePrompt,
   fetchImpl = fetch,
   apiBaseUrl = APP_CONFIG.apiBaseUrl,
-  userId = ""
+  userId = "",
+  apiKey = ""
 }) {
-  const normalizedImageBuffer = await normalizeInputImage(imageBuffer);
+  const trimmedInput = templateImage?.buffer
+    ? null
+    : await trimQrWhiteBorder(imageBuffer, qrTrim);
+  const normalizedImageBuffer = await normalizeInputImage(trimmedInput?.buffer || imageBuffer);
   const normalizedReferenceImages = await Promise.all(
     referenceImages
       .slice(0, APP_CONFIG.maxReferenceImages)
@@ -268,7 +282,8 @@ export async function generateQrArtwork({
       "步骤 5：只调用一次 image2 edits，最多等待 3 分钟。"
     ],
     templateUsed: false,
-    referenceImageCount: normalizedReferenceImages.length
+    referenceImageCount: normalizedReferenceImages.length,
+    ...(trimmedInput ? { qrTrim: trimmedInput.info } : {})
   };
 
   if (templateImage?.buffer) {
@@ -312,7 +327,7 @@ export async function generateQrArtwork({
     }
   }).png().toBuffer();
 
-  const submitUrl = `${apiBaseUrl}${APP_CONFIG.imageEditEndpoint}`;
+  const submitUrl = buildImageEditUrl(apiBaseUrl);
   const basePipeline = {
     ...pipeline,
     editMaskBuffer: undefined,
@@ -331,7 +346,8 @@ export async function generateQrArtwork({
     positivePrompt,
     negativePrompt,
     pipeline: basePipeline,
-    userId
+    userId,
+    apiKey
   });
 
   return {

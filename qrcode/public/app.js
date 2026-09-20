@@ -105,12 +105,12 @@ const FIXED_PROMPT_TEXT = [
 const FIXED_PIPELINE_TEXT = [
   "固定链路：",
   "1. 前端先上传普通二维码，再点击“艺术化二维码”。",
-  "2. 服务端先按当前框选区域裁掉二维码周围白边，再调用艺术二维码 API。",
+  "2. 服务端先按当前框选区域裁掉二维码周围白边，再通过 Sub2API 会话中继调用图像模型。",
   "3. 固定遮罩参数：x 默认 250, y 默认 270, size 默认 950x950，可页面调节；二维码不按模板等比缩放。",
   "4. 如果空白盘模板像素尺寸不足，服务端只放大模板到可容纳固定框；再把 950x950 二维码粘贴进去。",
-  "5. “艺术化二维码”固定调用 MewXAI 开放 API：qr_image + model=67（青花瓷）。",
+  "5. “艺术化二维码”固定通过 Sub2API /v1/images/edits 调用公开模型 gpt-image-2。",
   "6. 实际提交给接口的上下文图就是服务端本地处理后的盘中二维码图。",
-  "7. 点击生成时先秒出上下文图，再调用 image2 edits 生成最终图片。",
+  "7. 点击生成时先秒出上下文图，再调用 gpt-image-2 edits 生成最终图片。",
   "8. 本区域是写死说明，不再依赖接口返回。"
 ].join("\n");
 
@@ -1344,7 +1344,7 @@ stylizeButton.addEventListener("click", async () => {
   stylizeButton.disabled = true;
   stylizeButton.setAttribute("aria-busy", "true");
   setStylizeProgress(12, "正在上传二维码");
-  setStatus("正在调用艺术二维码 API，期间不能重复点击艺术化。", "working");
+  setStatus("正在通过 Sub2API 会话调用图像模型，期间不能重复点击艺术化。", "working");
 
   const formData = new FormData();
   formData.append("qrImage", file);
@@ -1382,7 +1382,7 @@ stylizeButton.addEventListener("click", async () => {
     );
     initCropCanvas(workingQrFile, "artistic");
     setStatus(
-      `艺术化二维码已生成。任务 ${data.task?.imgUuid || "-"}，输入指纹 ${data.input?.qrImageSha256 || "-"}，耗时 ${Math.round(Number(data.task?.duration || 0))} 秒。当前裁剪区已切到艺术化二维码。`,
+      `艺术化二维码已生成（Sub2API 会话中继）。当前裁剪区已切到艺术化二维码。`,
       "success"
     );
     setStylizeProgress(100, "艺术化完成");

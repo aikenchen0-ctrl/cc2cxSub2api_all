@@ -69,13 +69,17 @@ const isDataImageUrl = (value: unknown): value is string => {
 
 export const getAssetIdFromImageUrl = (value: unknown) => {
   if (typeof value !== 'string') return '';
-  const match = value.match(/\/api\/assets\/([^/]+)\/(?:content|preview|thumbnail|view\/\d+)(?:[?#].*)?$/);
+  const match = value.match(/\/api\/assets\/([^/?#]+)(?:\/(?:content|preview|thumbnail|view\/\d+))?(?:[?#].*)?$/);
   if (!match) return '';
   try {
     return decodeURIComponent(match[1]);
   } catch {
     return match[1];
   }
+};
+
+const isHttpOrBlobImageUrl = (value: unknown): value is string => {
+  return typeof value === 'string' && /^(https?:|blob:)/i.test(value.trim());
 };
 
 export const getCanvasItemAssetId = (item: CanvasItem) => {
@@ -113,8 +117,7 @@ const getExtensionFromMime = (mimeType: string) => {
   }
 };
 
-const uploadDataImage = async (dataUrl: string, filenameSeed: string) => {
-  const blob = await fetch(dataUrl).then(response => response.blob());
+const uploadImageBlob = async (blob: Blob, filenameSeed: string) => {
   const filename = `${filenameSeed}${getExtensionFromMime(blob.type || 'image/png')}`;
   const file = new File([blob], filename, { type: blob.type || 'image/png' });
   const formData = new FormData();
@@ -133,6 +136,32 @@ const uploadDataImage = async (dataUrl: string, filenameSeed: string) => {
   return unwrapApiResponse<AssetResponse>(response);
 };
 
+const uploadDataImage = async (dataUrl: string, filenameSeed: string) => {
+  const blob = await fetch(dataUrl).then(response => response.blob());
+  return uploadImageBlob(blob, filenameSeed);
+};
+
+const importRemoteImage = async (url: string, filenameSeed: string) => {
+  if (url.startsWith('blob:')) {
+    const blob = await fetch(url).then(response => response.blob());
+    return uploadImageBlob(blob, filenameSeed);
+  }
+
+  const response = await fetch('/api/assets/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders()
+    },
+    body: JSON.stringify({
+      url,
+      canvasId: currentCanvasId || undefined
+    })
+  });
+  return unwrapApiResponse<AssetResponse>(response);
+};
+
 const persistRawImageValue = async (value: string | undefined, filenameSeed: string) => {
   if (!isDataImageUrl(value)) return value;
   return (await uploadDataImage(value, filenameSeed)).urlPath;
@@ -140,12 +169,22 @@ const persistRawImageValue = async (value: string | undefined, filenameSeed: str
 
 const persistCanvasImageValue = async (item: CanvasItem): Promise<PersistedCanvasImageValue> => {
   if (!isDataImageUrl(item.content)) {
-    const assetId = getCanvasItemAssetId(item) || undefined;
+    const existingAssetId = getCanvasItemAssetId(item) || undefined;
+    if (existingAssetId || !isHttpOrBlobImageUrl(item.content)) {
+      return {
+        content: item.content,
+        assetId: existingAssetId,
+        previewContent: item.previewContent || getAssetVariantUrl(existingAssetId, 'preview'),
+        thumbnailContent: item.thumbnailContent || getAssetVariantUrl(existingAssetId, 'thumbnail')
+      };
+    }
+
+    const asset = await importRemoteImage(item.content, `${item.id}-content`);
     return {
-      content: item.content,
-      assetId,
-      previewContent: item.previewContent || getAssetVariantUrl(assetId, 'preview'),
-      thumbnailContent: item.thumbnailContent || getAssetVariantUrl(assetId, 'thumbnail')
+      content: asset.urlPath,
+      assetId: asset.id,
+      previewContent: asset.previewUrlPath || asset.urlPath,
+      thumbnailContent: asset.thumbnailUrlPath || asset.previewUrlPath || asset.urlPath
     };
   }
 
@@ -171,7 +210,7 @@ export const ensureCanvasImageAsset = async (item: CanvasItem) => {
     };
   }
 
-  if (!isDataImageUrl(item.content)) {
+  if (!isDataImageUrl(item.content) && !isHttpOrBlobImageUrl(item.content)) {
     throw new Error('图片缺少可用的资源 ID，无法提交编辑');
   }
 

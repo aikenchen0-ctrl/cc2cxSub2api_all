@@ -2035,6 +2035,7 @@ func (r *accountRepository) ListSchedulableByPlatform(ctx context.Context, platf
 			dbaccount.PlatformEQ(platform),
 			dbaccount.StatusEQ(service.StatusActive),
 			dbaccount.SchedulableEQ(true),
+			activeAccountGroupMembershipPredicate(),
 			tempUnschedulablePredicate(),
 			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
@@ -2069,6 +2070,7 @@ func (r *accountRepository) ListSchedulableByPlatforms(ctx context.Context, plat
 			dbaccount.PlatformIn(platforms...),
 			dbaccount.StatusEQ(service.StatusActive),
 			dbaccount.SchedulableEQ(true),
+			activeAccountGroupMembershipPredicate(),
 			tempUnschedulablePredicate(),
 			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
@@ -2080,6 +2082,22 @@ func (r *accountRepository) ListSchedulableByPlatforms(ctx context.Context, plat
 		return nil, err
 	}
 	return r.accountsToService(ctx, accounts)
+}
+
+// activeAccountGroupMembershipPredicate keeps ungrouped accounts available and
+// excludes accounts whose every group is disabled or soft-deleted. This is
+// especially important for satellite Super Key requests, which intentionally
+// query the complete account pool instead of a single API-key group.
+func activeAccountGroupMembershipPredicate() dbpredicate.Account {
+	return dbaccount.Or(
+		dbaccount.Not(dbaccount.HasAccountGroups()),
+		dbaccount.HasAccountGroupsWith(
+			dbaccountgroup.HasGroupWith(
+				dbgroup.StatusEQ(service.StatusActive),
+				dbgroup.DeletedAtIsNil(),
+			),
+		),
+	)
 }
 
 func (r *accountRepository) ListSchedulableUngroupedByPlatform(ctx context.Context, platform string) ([]service.Account, error) {

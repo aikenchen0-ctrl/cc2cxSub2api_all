@@ -87,7 +87,7 @@ export function llmProxyPlugin(): Plugin {
         if (gatewayEnabled()) {
           const tenant = currentTenant();
           const credential = (process.env.SUB2API_APP_CREDENTIAL ?? '').trim();
-          if (!tenant?.userId || (!credential && !tenant.userApiKey)) {
+          if (!tenant?.userId || !credential) {
             res.writeHead(401, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ error: { message: 'Sub2API tenant credential is unavailable' } }));
             return;

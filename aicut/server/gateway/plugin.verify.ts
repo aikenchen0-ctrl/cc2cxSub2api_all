@@ -59,7 +59,7 @@ assert.throws(
   () => r2UploadObjectKey('clip.mp4'),
   /logged-in tenant/,
 );
-runWithTenant({ userId: 'user/../../etc', email: 'a@b.c', userApiKey: 'sk-test' }, () => {
+runWithTenant({ userId: 'user/../../etc', email: 'a@b.c' }, () => {
   const key = r2UploadObjectKey('clip.mp4');
   assert.match(key, /^uploads\/tenants\/user_+etc\/clip\.mp4$/);
   assert.doesNotMatch(key, /[.][.]/);
@@ -92,7 +92,7 @@ process.env.OCC_API_RATE_MAX = '2';
 process.env.OCC_API_RATE_WINDOW_MS = '60000';
 resetApiRateLimitForTests();
 const fakeReq = { socket: { remoteAddress: '10.1.2.3' }, headers: {} } as IncomingMessage;
-runWithTenant({ userId: 'u1', email: 'a@b.c', userApiKey: 'sk' }, () => {
+runWithTenant({ userId: 'u1', email: 'a@b.c' }, () => {
   assert.equal(consumeApiAttempt(fakeReq), true);
   assert.equal(consumeApiAttempt(fakeReq), true);
   assert.equal(consumeApiAttempt(fakeReq), false, 'third API call is rate-limited');
@@ -108,7 +108,7 @@ assert.equal(headers['X-Frame-Options'], 'DENY');
 
 process.env.OCC_TENANT_UPLOAD_QUOTA_BYTES = '100';
 resetUploadQuotaForTests();
-const quotaTenant = { userId: 'quota-user', email: 'a@b.c', userApiKey: 'sk' };
+const quotaTenant = { userId: 'quota-user', email: 'a@b.c' };
 await runWithTenant(quotaTenant, () => assertTenantUploadQuota(40));
 await runWithTenant(quotaTenant, () => recordTenantUpload(40));
 await runWithTenant(quotaTenant, () => assertTenantUploadQuota(60));

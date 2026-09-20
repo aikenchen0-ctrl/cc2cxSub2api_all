@@ -93,7 +93,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
             if (bootstrapConfig.current) window.history.replaceState(null, "", bootstrapConfig.current.cleanUrl);
         }
         if (!bootstrapConfig.current || !publicSettings) return;
-        const { baseUrl, apiKey } = bootstrapConfig.current;
+        const { baseUrl } = bootstrapConfig.current;
         bootstrapConfig.current = null;
         handledConfigParams.current = true;
         if (!publicSettings.modelChannel.allowCustomChannel) {
@@ -105,7 +105,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
             const channels = normalizeLocalChannels(state.config);
             const normalizeUrl = (value: string) => value.trim().replace(/\/+$/, "");
             const existing = baseUrl ? channels.find((item) => normalizeUrl(item.baseUrl) === normalizeUrl(baseUrl)) : channels[0];
-            const channel = { ...(existing || { id: crypto.randomUUID(), name: "Sub2API", protocol: "openai" as const, models: [] }), baseUrl: baseUrl || existing?.baseUrl || state.config.baseUrl, apiKey: apiKey || existing?.apiKey || "" };
+            const channel = { ...(existing || { id: crypto.randomUUID(), name: "Sub2API", protocol: "openai" as const, models: [] }), baseUrl: baseUrl || existing?.baseUrl || state.config.baseUrl, apiKey: "" };
             const localChannels = existing ? channels.map((item) => item.id === existing.id ? channel : item) : [...channels, channel];
             return { config: { ...state.config, channelMode: "local", baseUrl: channel.baseUrl, apiKey: channel.apiKey, localChannels, activeChannelId: channel.id, imageChannelId: channel.id, videoChannelId: channel.id, textChannelId: channel.id, audioChannelId: channel.id } };
         });

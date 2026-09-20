@@ -2,22 +2,21 @@
 
 ## 目标
 
-- Sub2API 负责账号、登录、模型权限、余额和 Relay Key。
+- Sub2API 负责账号、登录、模型权限、余额和服务端 SuperKey。
 - aicut 负责本地会话、租户隔离、项目/媒体归属和任务状态。
-- 浏览器只持有 aicut 的 HttpOnly 会话 Cookie，不接触 Sub2API JWT 或 Relay Key。
-- 长任务统一进入任务层，避免同一个 Relay Key 被无限并发调用。
+- 浏览器只持有 aicut 的 HttpOnly 会话 Cookie，不接触 Sub2API JWT、SuperKey 或用户 API Key。
+- 长任务统一进入任务层，避免同一用户的请求被无限并发调用。
 
 ## SSO 链路
 
 1. 用户在 Sub2API 登录后点击「AI剪辑」。
 2. `GET /api/v1/auth/integrations/aicut/start` 校验 Sub2API 会话。
-3. Sub2API 为该用户获取或创建 Relay Key。
-4. Sub2API 生成两分钟有效的 HMAC-SHA256 票据：`iss/aud/sub/email/iat/exp/jti/next/rk`。
-5. `rk` 是使用 `SUB2API_SSO_SECRET` 通过 AES-256-GCM 加密的 Relay Key；浏览器只能看到密文。
+3. Sub2API 在服务端解析该用户的 SuperKey。
+4. Sub2API 生成两分钟有效的 HMAC-SHA256 票据：`iss/aud/sub/email/iat/exp/jti/next`。
 6. 浏览器跳转到 `OPENCHATCUT_SSO_CALLBACK_URL`。
 7. aicut 校验签名、issuer、audience、时间窗和一次性 `jti`，解密 `rk`。
-8. aicut 将 Relay Key 加密保存到当前用户的租户凭据，并签发自己的 `occ_session` Cookie。
-9. 后续模型请求由 aicut 服务端携带该用户 Relay Key 转发到 Sub2API `/v1`。
+8. aicut 将 `sub` 保存到当前用户映射，并签发自己的 `occ_session` Cookie。
+9. 后续模型请求由 aicut 服务端携带应用凭据和 `X-Sub2API-On-Behalf-Of` 转发到 Sub2API `/v1`。
 
 共享密钥必须只配置在两个服务端：
 
@@ -66,7 +65,7 @@ aicut:export
 
 ## API Key 调用点与 MQ 边界
 
-网关模式下，LLM 请求由 `server/plugins/llm-proxy.ts` 统一携带当前租户的 Sub2API Relay Key 转发到 `/v1`；它需要保持流式同步，只增加用户级并发闸门、RPM/TPM 和 429 退避。
+网关模式下，LLM 请求由 `server/plugins/llm-proxy.ts` 统一携带 `SUB2API_APP_CREDENTIAL`、`X-Sub2API-On-Behalf-Of` 和 `X-Sub2API-Satellite` 转发到 `/v1`；它需要保持流式同步，只增加用户级并发闸门、RPM/TPM 和 429 退避。
 
 其余 Provider Key 的实际调用分散在以下插件：
 
@@ -81,7 +80,7 @@ aicut:export
 
 单实例低并发时，现有进程内 `TaskLimiter` 可以先运行；多实例、多个用户共享额度、需要重启恢复任务时，Redis 队列就属于必需基础设施。数据库保存任务最终状态和用量账本，Redis 只保存排队/租约/并发状态。
 
-Worker 执行任务时依次取得：全局并发许可、供应商并发许可、用户并发许可和 RPM/TPM 许可，然后读取用户 Relay Key 调用 Sub2API。任务必须使用 `(user_id, idempotency_key)` 去重，429/502/503 使用指数退避，401/403/额度不足不自动重试。
+Worker 执行任务时依次取得：全局并发许可、供应商并发许可、用户并发许可和 RPM/TPM 许可，然后读取当前用户 subject，使用应用凭据调用 Sub2API。任务必须使用 `(user_id, idempotency_key)` 去重，429/502/503 使用指数退避，401/403/额度不足不自动重试。
 
 当前 aicut 的导出和转写已经有进程内 `TaskLimiter`；迁移到多实例时应把许可和队列状态移到 Redis，数据库保留任务最终状态，Redis 不作为唯一事实来源。
 

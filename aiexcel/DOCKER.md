@@ -6,8 +6,9 @@ http://localhost:4173. The container restarts automatically with Docker.
 This deploys the server edition. Workbooks are still processed in the browser,
 but SSO callbacks and AI requests are handled by the server. Configure
 `SUB2API_SSO_SECRET`, `SUB2API_RELAY_BASE_URL`, and
-`SUB2API_RELAY_API_KEY` in the container environment. The browser never stores
-or receives the relay API key.
+`SUB2API_APP_CREDENTIAL` in the container environment. Every AI request uses
+the current SSO session's user identity; do not configure a relay/SuperKey
+fallback. The browser never stores or receives any gateway credential.
 
 `AIEXCEL_PORT` (default `4173`) and `AIEXCEL_BIND_HOST` (default `0.0.0.0`)
 configure the published endpoint.

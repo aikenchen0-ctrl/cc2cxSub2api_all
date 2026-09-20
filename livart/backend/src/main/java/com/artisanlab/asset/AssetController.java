@@ -40,6 +40,13 @@ public class AssetController {
         return ApiResponse.ok(assetService.upload(authContext.requireUserId(), canvasId, file));
     }
 
+    @PostMapping("/import")
+    public ApiResponse<AssetDtos.AssetResponse> importFromUrl(@RequestBody AssetDtos.AssetImportRequest request) {
+        String url = request == null ? "" : request.url();
+        UUID canvasId = request == null ? null : request.canvasId();
+        return ApiResponse.ok(assetService.importFromUrl(authContext.requireUserId(), canvasId, url));
+    }
+
     @PostMapping("/{id}/rotate")
     public ApiResponse<AssetDtos.AssetResponse> rotate(
             @PathVariable UUID id,

@@ -5,6 +5,7 @@ export type AIExcelUser = { sub: string; email?: string; username?: string; disp
 const replayed = new Map<string, number>();
 export const HANDOFF_COOKIE = "aiexcel_sso_handoff";
 export const SESSION_COOKIE = "aiexcel_session";
+export const SESSION_TTL_SECONDS = 3 * 86400;
 
 function secret() {
   const value = process.env.SUB2API_SSO_SECRET?.trim();
@@ -68,7 +69,7 @@ export function readHandoff(raw: string) {
   const value = unpack<{ user: AIExcelUser; exp: number }>(raw);
   return value && value.exp > Math.floor(Date.now() / 1000) && value.user?.sub ? value.user : null;
 }
-export function createSession(user: AIExcelUser) { return pack({ user, exp: Math.floor(Date.now() / 1000) + 7 * 86400 }); }
+export function createSession(user: AIExcelUser) { return pack({ user, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS }); }
 export function readSession(raw: string) {
   const value = unpack<{ user: AIExcelUser; exp: number }>(raw);
   return value && value.exp > Math.floor(Date.now() / 1000) && value.user?.sub ? value.user : null;

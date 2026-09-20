@@ -43,17 +43,19 @@ def create_provider_session(
     )
 
     if model in OPENAI_MODELS:
-        if not openai_api_key:
-            raise Exception("OpenAI API key is missing.")
-
         headers = {}
         credential = os.environ.get("SUB2API_APP_CREDENTIAL", "").strip()
         subject = satellite_on_behalf_of.get().strip()
+        managed = bool(credential or os.environ.get("SUB2API_SSO_SECRET", "").strip())
         api_key = openai_api_key
-        if credential and subject:
+        if managed and (not credential or not subject):
+            raise Exception("Sub2API satellite credential and session subject are required.")
+        if credential:
             headers["X-Sub2API-On-Behalf-Of"] = subject
             headers["X-Sub2API-Satellite"] = "screen2code"
             api_key = credential
+        if not api_key:
+            raise Exception("OpenAI API key is missing.")
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=openai_base_url,

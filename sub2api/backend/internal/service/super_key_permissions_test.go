@@ -20,6 +20,26 @@ func TestSuperKeyCannotUseInactiveGroup(t *testing.T) {
 	}
 }
 
+func TestSuperKeyCanScheduleAccountRequiresAnActiveGroup(t *testing.T) {
+	if !superKeyCanScheduleAccount(&Account{ID: 1}) {
+		t.Fatal("ungrouped accounts should remain available")
+	}
+	if superKeyCanScheduleAccount(&Account{
+		ID:       2,
+		GroupIDs: []int64{20},
+		Groups:   []*Group{{ID: 20, Status: StatusDisabled}},
+	}) {
+		t.Fatal("accounts attached only to inactive groups must be rejected")
+	}
+	if !superKeyCanScheduleAccount(&Account{
+		ID:       3,
+		GroupIDs: []int64{21, 22},
+		Groups:   []*Group{{ID: 21, Status: StatusDisabled}, {ID: 22, Status: StatusActive}},
+	}) {
+		t.Fatal("an active group should keep a multi-group account available")
+	}
+}
+
 func TestMediaModerationSkippedOnlyForSuperKey(t *testing.T) {
 	super := &APIKey{Key: SuperAPIKeyPrefix + "test", Name: SuperAPIKeyName}
 	ordinary := &APIKey{Key: "sk-ordinary", Name: "ordinary"}

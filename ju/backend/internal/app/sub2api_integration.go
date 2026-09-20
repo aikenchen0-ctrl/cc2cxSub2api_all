@@ -58,13 +58,22 @@ func (s *Service) EnsureSub2APIRelayChannel() error {
 	}
 	apiKey := strings.TrimSpace(os.Getenv("SUB2API_RELAY_API_KEY"))
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-	if baseURL == "" && apiKey == "" && credential == "" {
+	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
+	if baseURL == "" && apiKey == "" && credential == "" && !managed {
 		return s.disableSub2APIRelayChannel()
 	}
 	if baseURL == "" {
 		return errors.New("SUB2API_RELAY_BASE_URL or LINK must be configured")
 	}
-	if apiKey == "" {
+	if productionRelayRuntime() && credential == "" && apiKey != "" {
+		return errors.New("SUB2API_APP_CREDENTIAL must be configured in production; static relay keys are disabled")
+	}
+	if managed && credential == "" {
+		return errors.New("SUB2API_APP_CREDENTIAL must be configured for managed relay")
+	}
+	if credential != "" {
+		// Ignore a legacy static key whenever the managed satellite credential
+		// is present; production traffic must use the app credential.
 		apiKey = credential
 	}
 	if apiKey == "" {
@@ -168,6 +177,11 @@ func (s *Service) EnsureSub2APIRelayChannel() error {
 		}
 	}
 	return nil
+}
+
+func productionRelayRuntime() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release")
 }
 
 // disableSub2APIRelayChannel removes the server-side secret and disables the

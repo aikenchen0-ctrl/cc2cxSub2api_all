@@ -3,7 +3,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface TenantContext {
   userId: string;
   email: string;
-  userApiKey: string;
 }
 
 const tenantStore = new AsyncLocalStorage<TenantContext>();

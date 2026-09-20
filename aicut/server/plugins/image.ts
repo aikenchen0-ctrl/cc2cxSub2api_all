@@ -27,6 +27,7 @@ import {
   satelliteOrigin,
   satelliteReady,
 } from '../gateway/satellite.ts';
+import { gatewayEnabled } from '../gateway/config.ts';
 // Proxy-aware fetch: attaches the configured outbound proxy (keystore
 // PROXY_URL or HTTPS_PROXY/HTTP_PROXY env) via undici dispatcher.
 type FetchInit = Parameters<typeof fetch>[1] & { dispatcher?: unknown };
@@ -374,6 +375,10 @@ export function imageGenerationPlugin(options: ImagePluginOptions): Plugin {
     configureServer(server) {
       server.middlewares.use('/generate/image', async (req, res) => {
         if (req.method !== 'POST') { sendJson(res, 405, { error: 'method not allowed — use POST' }); return; }
+        if (gatewayEnabled() && (!satelliteHeaders() || !satelliteReady())) {
+          sendJson(res, 503, { error: 'Sub2API satellite credential or session is unavailable' });
+          return;
+        }
         try {
           const input = validateImageRequest(await readJson(req));
           const {

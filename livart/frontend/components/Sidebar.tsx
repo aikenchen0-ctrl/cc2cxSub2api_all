@@ -306,10 +306,13 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     panY: number;
   } | null>(null);
 
-  const completedImageItems = useMemo(
-    () => imageItems.filter(item => item.type === 'image' && item.status === 'completed' && hasUsableImageSource(item)),
-    [imageItems]
-  );
+  const completedImageItems = useMemo(() => {
+    const completed = imageItems.filter(item => item.type === 'image' && item.status === 'completed' && hasUsableImageSource(item));
+    if (contextImage && hasUsableImageSource(contextImage) && !completed.some(item => item.id === contextImage.id)) {
+      return [...completed, contextImage];
+    }
+    return completed;
+  }, [contextImage, imageItems]);
   const imageItemsById = useMemo(
     () => new Map(imageItems.map(item => [item.id, item])),
     [imageItems]
@@ -840,6 +843,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     setInputValue(nextValue);
 
     if (!contextImage) return;
+    if (nextValue.includes(`@${contextImage.id}`)) return;
 
     const mentionedImages = resolveMentionedImageReferences(nextValue, completedImageItems);
     if (!mentionedImages.some(item => item.id === contextImage.id)) {
@@ -858,13 +862,20 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     const prompt = inputValue.trim();
     if (!prompt) return;
 
+    const mentionedImages = resolveMentionedImageReferences(prompt, completedImageItems);
+    const contextImageIds = Array.from(new Set([
+      ...(contextImage ? [contextImage.id] : []),
+      ...mentionedImages.map(item => item.id)
+    ]));
     const accepted = await onSendMessage(
       prompt,
       selectedAspectRatio,
       selectedImageResolution,
       ENABLE_EXTERNAL_SKILLS && !isMobileLayout ? selectedExternalSkillId || undefined : undefined,
       {
-        enablePromptOptimization: isPromptOptimizationEnabled
+        enablePromptOptimization: isPromptOptimizationEnabled,
+        contextImageId: contextImage?.id,
+        contextImageIds: contextImageIds.length > 0 ? contextImageIds : undefined
       }
     );
     if (accepted === false) {

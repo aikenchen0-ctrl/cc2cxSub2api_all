@@ -14,6 +14,13 @@ def test_openai_base_url_prefixes_link(monkeypatch):
     assert openai_base_url() == "http://localhost:18080/v1"
 
 
+def test_managed_openai_base_url_ignores_custom_endpoint(monkeypatch):
+    monkeypatch.setenv("CUSTOM_LLM_URL", "https://external.example/v1")
+    monkeypatch.setenv("SUB2API_APP_CREDENTIAL", "sat-secret")
+    monkeypatch.setenv("SUB2API_RELAY_BASE_URL", "http://sub2api:8080/v1")
+    assert openai_base_url() == "http://sub2api:8080/v1"
+
+
 def test_satellite_headers_require_subject_and_credential(monkeypatch):
     monkeypatch.setenv("SUB2API_APP_CREDENTIAL", "sat-secret")
     monkeypatch.setenv("LINK", "localhost:18080")

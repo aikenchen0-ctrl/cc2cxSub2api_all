@@ -162,19 +162,27 @@ const formatWeeklyCleanupCountdown = (remainingMs: number) => {
 const formatWeeklyCleanupTime = (timestamp: number) => WEEKLY_CLEANUP_LABEL_FORMATTER.format(timestamp);
 
 const collectAgentPlanCandidateImages = (text: string, contextImages: Array<CanvasItem | null | undefined>, items: CanvasItem[]) => {
-  const completedImages = items.filter(item => item.type === 'image' && item.status === 'completed' && hasUsableImageSource(item));
+  const usableImages = items.filter(item => item.type === 'image' && hasUsableImageSource(item));
+  const completedImages = usableImages.filter(item => item.status === 'completed');
   const candidates: CanvasItem[] = [];
   const seenIds = new Set<string>();
+  const imagesById = new Map(usableImages.map(item => [item.id, item]));
 
   const pushCandidate = (candidate: CanvasItem | null | undefined) => {
-    if (!candidate || seenIds.has(candidate.id)) return;
+    if (!candidate || !hasUsableImageSource(candidate) || seenIds.has(candidate.id)) return;
     seenIds.add(candidate.id);
     candidates.push(candidate);
   };
 
   contextImages.forEach(contextImage => {
-    pushCandidate(contextImage ? completedImages.find(item => item.id === contextImage.id) : null);
+    if (!contextImage) return;
+    pushCandidate(imagesById.get(contextImage.id) || contextImage);
   });
+
+  for (const match of text.matchAll(/@([^\s@，。,.!?！？:：；;]+)/g)) {
+    pushCandidate(imagesById.get(match[1]) || items.find(item => item.id === match[1]));
+  }
+
   resolveMentionedImageReferences(text, completedImages).forEach(pushCandidate);
   return candidates.slice(0, 12);
 };
@@ -2382,21 +2390,22 @@ function App() {
 
     try {
       syncAgentPlanMessage(buildAgentDraftPlan({ aspectRatio }), '我先识别你的意图，再决定下一步。');
+      let latestItems = itemsRef.current;
       const optionContextImages = (options.contextImageIds || [])
-        .map(imageId => items.find(item => item.id === imageId && item.type === 'image') || null)
+        .map(imageId => latestItems.find(item => item.id === imageId && item.type === 'image') || null)
         .filter((item): item is CanvasItem => Boolean(item));
       const optionContextImage = options.contextImageId
-        ? items.find(item => item.id === options.contextImageId && item.type === 'image') || null
+        ? latestItems.find(item => item.id === options.contextImageId && item.type === 'image') || null
         : optionContextImages[0] || null;
       let freshContextImage = optionContextImage || (contextImage
-        ? items.find(item => item.id === contextImage.id && item.type === 'image') || contextImage
+        ? latestItems.find(item => item.id === contextImage.id && item.type === 'image') || contextImage
         : null);
       const contextImagesForPlan = optionContextImages.length > 0
         ? optionContextImages
         : freshContextImage
         ? [freshContextImage]
         : [];
-      const planCandidateImages = collectAgentPlanCandidateImages(text, contextImagesForPlan, items);
+      const planCandidateImages = collectAgentPlanCandidateImages(text, contextImagesForPlan, latestItems);
       const requestedEditMode = options.forcedToolId === 'tool.product.poster'
         ? 'product-poster'
         : selectedImageEditMode && freshContextImage && selectedImageEditMode.imageId === freshContextImage.id
@@ -2527,7 +2536,7 @@ function App() {
 
       editBaseImage = initialPlan.taskType === 'image-edit'
         ? persistedPlanCandidateImages.find(item => item.id === initialPlan.baseImageId)
-        || items.find(item => item.id === initialPlan.baseImageId && item.type === 'image')
+        || latestItems.find(item => item.id === initialPlan.baseImageId && item.type === 'image')
         || null
         : null;
       const plannerMode = initialPlan.mode;
@@ -2572,7 +2581,7 @@ function App() {
       const canvasCenterX = visibleCanvasRect.x + visibleCanvasRect.width / 2;
       const canvasCenterY = visibleCanvasRect.y + visibleCanvasRect.height / 2;
 
-      const latestItems = itemsRef.current;
+      latestItems = itemsRef.current;
       let virtualItems = [...latestItems, ...persistedPlanCandidateImages.filter(candidate => !latestItems.some(item => item.id === candidate.id))];
       const maxZIndex = Math.max(60, ...latestItems.map(item => item.zIndex || 0));
       const placeholderItems = agentRun.jobs.map((job, index) => {

@@ -124,7 +124,7 @@ export function buildCanvasAgentContext(input: BuildCanvasAgentContextInput): Ca
             imageSize: input.config.size,
             videoQuality: input.config.vquality,
             videoSize: input.config.videoSize,
-            imageCount: input.config.canvasImageCount || input.config.count,
+            imageCount: "1",
             videoSeconds: input.config.videoSeconds,
             videoGenerateAudio: input.config.videoGenerateAudio,
             videoSupportsAudio: supportsVideoAudioGeneration(videoModel, channelProtocolForConfig({ ...input.config, model: videoModel, videoModel })),

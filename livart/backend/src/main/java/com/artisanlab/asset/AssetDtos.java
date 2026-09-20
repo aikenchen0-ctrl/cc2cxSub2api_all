@@ -10,6 +10,9 @@ public final class AssetDtos {
     public record AssetRotationRequest(String direction, Integer quarterTurns) {
     }
 
+    public record AssetImportRequest(String url, UUID canvasId) {
+    }
+
     public record AssetResponse(
             UUID id,
             UUID canvasId,

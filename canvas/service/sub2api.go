@@ -34,13 +34,28 @@ func ApplySub2APIHeaders(header http.Header, apiKey string) {
 
 func ApplySub2APIHeadersForUser(header http.Header, onBehalfOf, apiKey string) {
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-	if strings.TrimSpace(onBehalfOf) != "" && credential != "" {
+	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
+	if managed || productionRelayRuntime() {
+		// Once the managed satellite credential is configured, every relay call
+		// must be bound to the current SSO session. Never fall back to a stored
+		// relay/SuperKey when the session subject is missing.
+		if credential == "" || strings.TrimSpace(onBehalfOf) == "" {
+			header.Del("Authorization")
+			header.Del("X-Sub2API-On-Behalf-Of")
+			header.Del("X-Sub2API-Satellite")
+			return
+		}
 		header.Set("Authorization", "Bearer "+credential)
 		header.Set("X-Sub2API-On-Behalf-Of", strings.TrimSpace(onBehalfOf))
 		header.Set("X-Sub2API-Satellite", "canvas")
 		return
 	}
 	header.Set("Authorization", "Bearer "+apiKey)
+}
+
+func productionRelayRuntime() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release")
 }
 
 func OverlayUserSub2APIKey(channel model.ModelChannel, userID string) model.ModelChannel {
@@ -135,20 +150,29 @@ func configuredSub2APIChannel() (model.ModelChannel, error) {
 	}
 	key := strings.TrimSpace(os.Getenv("SUB2API_RELAY_API_KEY"))
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-	if baseURL == "" && key == "" && credential == "" {
+	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
+	if baseURL == "" && key == "" && credential == "" && !managed {
 		return channel, nil
 	}
 	if baseURL == "" {
 		return channel, errors.New("SUB2API_RELAY_BASE_URL or LINK must be configured")
 	}
-	if key == "" {
+	if productionRelayRuntime() && credential == "" && key != "" {
+		return channel, errors.New("SUB2API_APP_CREDENTIAL must be configured in production; static relay keys are disabled")
+	}
+	if managed && credential == "" {
+		return channel, errors.New("SUB2API_APP_CREDENTIAL must be configured for managed relay")
+	}
+	if credential != "" {
+		// The application credential is the only production relay credential.
+		// Ignore any legacy static key that may still be present in the host env.
 		key = credential
 	}
 	if key == "" {
 		return channel, errors.New("SUB2API_APP_CREDENTIAL or SUB2API_RELAY_API_KEY must be configured")
 	}
 	if strings.IndexFunc(key, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
-		return channel, errors.New("SUB2API_RELAY_API_KEY contains whitespace or control characters")
+		return channel, errors.New("Sub2API relay credential contains whitespace or control characters")
 	}
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.RawPath != "" {

@@ -456,15 +456,25 @@ def _get_llm_config(*, use_openai_responses_api: bool = False) -> ClientConfig:
                 api_key="ollama",
             )
         case LLMProvider.CUSTOM:
-            from utils.sub2api_satellite import get_current_sub2api_subject, openai_base_url
-            base_url = get_custom_llm_url_env() or openai_base_url()
+            from utils.sub2api_satellite import (
+                get_current_sub2api_subject,
+                openai_base_url,
+                satellite_managed,
+            )
+            # Managed PPT traffic is bound to Sub2API.  Ignore a stale or
+            # user-supplied custom URL in that mode so the app credential can
+            # never be sent to an unrelated endpoint.
+            base_url = openai_base_url() if satellite_managed() else (get_custom_llm_url_env() or openai_base_url())
             if not base_url:
                 raise HTTPException(
                     status_code=400,
                     detail="Custom LLM URL is not set",
                 )
             credential = (os.getenv("SUB2API_APP_CREDENTIAL") or "").strip()
+            managed = bool(credential or (os.getenv("SUB2API_SSO_SECRET") or "").strip())
             api_key = get_custom_llm_api_key_env() or "null"
+            if managed and not credential and not is_disable_auth_enabled():
+                raise HTTPException(status_code=503, detail="Sub2API satellite credential is unavailable")
             if credential and not is_disable_auth_enabled():
                 if not get_current_sub2api_subject():
                     raise HTTPException(status_code=401, detail="请先通过 Sub2API 登录")

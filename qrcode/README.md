@@ -1,5 +1,7 @@
 # 墨莲生成二维码 - QR Code Art Studio
 
+模型请求必须由当前 HttpOnly Session 对应的用户身份发起；服务端调用 Sub2API 时仅使用应用凭据和三个卫星请求头，不得回退到共享 API Key 或 SuperKey。
+
 一个强大的二维码艺术化处理系统，支持将普通二维码或URL转换为精美的艺术化二维码。
 
 ## ✨ 主要功能
@@ -158,6 +160,9 @@ Content-Type: multipart/form-data
 
 qrImage: <file>
 ```
+
+该接口使用 Sub2API SSO 建立的 `qrcode_session`。二维码服务端会以当前用户身份
+通过 Sub2API `/v1/images/edits` 调用 `gpt-image-2`；浏览器不需要也不会携带用户 API Key。
 
 ### 生成最终二维码
 ```http

@@ -28,7 +28,7 @@ func DraftCreativeWorkflow(ctx context.Context, request WorkflowAgentDraftReques
 	if err != nil {
 		return WorkflowAgentDraftResponse{}, err
 	}
-	forceRelay := user.Role != model.UserRoleAdmin && Sub2APIRelayEnabled()
+	forceRelay := Sub2APIRelayEnabled()
 	if !forceRelay && request.ChannelMode != "local" && !UserCanUseRemoteModelChannel(user) {
 		return WorkflowAgentDraftResponse{}, safeMessageError{message: "当前账号未开放云端渠道"}
 	}

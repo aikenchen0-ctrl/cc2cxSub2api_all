@@ -92,7 +92,10 @@ func sameAccountRetryAllowed(failoverErr *service.UpstreamFailoverError, retryCo
 	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
 		return false
 	}
-	if preferImmediateAccountSwitch(failoverErr) {
+	// An OAuth 429 carries an explicit retry delay and deadline.  That signal
+	// opts the request into same-account retry even though a bare 429 normally
+	// prefers switching accounts immediately.
+	if preferImmediateAccountSwitch(failoverErr) && failoverErr.SameAccountRetryDelay <= 0 {
 		return false
 	}
 	if !sameAccountRetryDeadlineAllows(failoverErr) {

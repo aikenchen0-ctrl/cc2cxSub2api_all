@@ -58,8 +58,8 @@ SSO 解决“用户是谁”和“是否已经登录”，不解决跨应用的�
 - 通过 `/api/v1/auth/integrations/canvas/start`（实际路由以前缀配置为准）校验门户 JWT；
 - 查询统一用户资料；
 - 生成 Canvas 专用的短期一次性票据；
-- 不向浏览器转发 sub2api JWT、后台 API Key 或 Relay Key；
-- 通过 `SUB2API_RELAY_*` 配置向 Canvas 提供服务端模型中转，费用归配置的 API Key 所属账号。
+- 不向浏览器转发 sub2api JWT、后台 API Key 或 SuperKey；
+- 通过 `SUB2API_RELAY_BASE_URL` 和 `SUB2API_APP_CREDENTIAL` 配置服务端模型中转，并以当前 Session 的 subject 绑定每次请求。
 
 `canvas` 是独立业务应用：
 
@@ -146,13 +146,13 @@ SSO 登录完成后，每个应用独立维护：
 - 审计日志；
 - 用户数据、项目和文件的隔离。
 
-sub2api 的统一账号、Canvas 的本地账号和 Relay API Key 是三种不同对象：
+sub2api 的统一账号、Canvas 的本地账号和卫星应用凭据是三种不同对象：
 
 1. 统一账号证明用户身份。
 2. Canvas 本地账号承载画布和素材所有权。
-3. Relay API Key 决定模型网关调用者和计费归属。
+3. 应用凭据标识 Canvas 卫星；`X-Sub2API-On-Behalf-Of` 决定当前用户和计费归属。
 
-除非另有明确的服务端授权协议，Canvas 用户不会因为 SSO 自动获得 sub2api 管理员权限、渠道管理权限、余额或 API Key。服务端 Relay Key 不应下发到浏览器，也不应由用户输入覆盖。
+除非另有明确的服务端授权协议，Canvas 用户不会因为 SSO 自动获得 sub2api 管理员权限、渠道管理权限、余额或 API Key。应用凭据和 SuperKey 不应下发到浏览器，也不应由用户输入覆盖。
 
 ## 7. 通用接入清单
 
@@ -190,7 +190,7 @@ CANVAS_SSO_CALLBACK_URL=https://canvas.example.com/api/auth/sso/callback
 # canvas
 SUB2API_SSO_SECRET=<same-random-secret-at-least-32-chars>
 SUB2API_RELAY_BASE_URL=https://api.example.com/v1
-SUB2API_RELAY_API_KEY=<server-side-key>
+SUB2API_APP_CREDENTIAL=<server-side-app-credential>
 ```
 
 回调地址、端口和反向代理协议必须按实际部署填写。开发、测试和生产不得复用密钥或用户数据卷。
@@ -203,7 +203,7 @@ SUB2API_RELAY_API_KEY=<server-side-key>
 - 两个 sub2api 用户在 Canvas 的项目、素材、任务和会话完全隔离。
 - 刷新、重新打开和服务重启后的行为符合本地会话策略。
 - 全局登出后，各应用本地会话按约定失效。
-- Canvas 的模型请求只通过服务端 Relay，客户端无法读取 Relay Key，计费归属可追溯。
+- Canvas 的模型请求只通过服务端 Relay，客户端无法读取应用凭据或 SuperKey，计费归属可追溯到当前 subject。
 - 日志、监控、Referer 和错误消息中不出现敏感凭据。
 
 ## 10. 演进建议

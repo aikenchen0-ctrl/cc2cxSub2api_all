@@ -53,7 +53,7 @@ test("generateQrArtwork should expose endpoint and root cause when fetch fails",
   );
 });
 
-test("generateQrArtwork should submit image2 edit task and return edited image", async () => {
+test("generateQrArtwork should submit gpt-image-2 edit task and return edited image", async () => {
   const imageBuffer = await createTestImageBuffer();
   const templateBuffer = await createTemplateBuffer();
   const referenceBuffer = await createTestImageBuffer();
@@ -79,7 +79,7 @@ test("generateQrArtwork should submit image2 edit task and return edited image",
           "Bearer test-api-key"
         );
         assert.ok(options.body instanceof FormData);
-        assert.equal(options.body.get("model"), "image2");
+        assert.equal(options.body.get("model"), "gpt-image-2");
         assert.equal(options.body.get("prompt"), "POSITIVE");
         assert.equal(options.body.get("negative_prompt"), "NEGATIVE");
         assert.ok(options.body.get("image") instanceof Blob);

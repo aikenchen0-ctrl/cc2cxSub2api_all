@@ -32,6 +32,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -51,17 +55,24 @@ public class AssetService {
     private static final float MODEL_INPUT_JPEG_QUALITY = 0.86f;
     private static final String WEBP_FORMAT = "webp";
     private static final String WEBP_CONTENT_TYPE = "image/webp";
+    private static final Duration IMAGE_IMPORT_TIMEOUT = Duration.ofSeconds(60);
+    private static final int IMAGE_IMPORT_MAX_BYTES = 32 * 1024 * 1024;
 
     private final AssetMapper assetMapper;
     private final CanvasMapper canvasMapper;
     private final ArtisanProperties properties;
     private final MinioClient minioClient;
+    private final HttpClient httpClient;
 
     public AssetService(AssetMapper assetMapper, CanvasMapper canvasMapper, ArtisanProperties properties) {
         this.assetMapper = assetMapper;
         this.canvasMapper = canvasMapper;
         this.properties = properties;
         this.minioClient = createMinioClient(properties.minio().endpoint(), properties.minio().accessKey(), properties.minio().secretKey());
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
     }
 
     @PostConstruct
@@ -155,6 +166,157 @@ public class AssetService {
         assetMapper.insertAsset(entity);
 
         return toResponse(assetMapper.findById(assetId));
+    }
+
+    @Transactional
+    public AssetDtos.AssetResponse importFromUrl(UUID userId, UUID canvasId, String rawUrl) {
+        String url = rawUrl == null ? "" : rawUrl.trim();
+        if (url.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_URL_REQUIRED", "图片地址不能为空");
+        }
+
+        UUID existingAssetId = parseAssetIdFromUrl(url);
+        if (existingAssetId != null) {
+            AssetEntity existing = assetMapper.findById(existingAssetId);
+            if (existing == null || existing.getUserId() == null || !existing.getUserId().equals(userId)) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "ASSET_NOT_FOUND", "图片资源不存在");
+            }
+            return toResponse(existing);
+        }
+
+        if (url.startsWith("data:image/")) {
+            DecodedDataUrl decoded = decodeDataUrl(url);
+            return uploadBytes(userId, canvasId, "imported" + extensionFor("imported", decoded.mimeType()), decoded.mimeType(), decoded.bytes());
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_URL_INVALID", "图片地址无效");
+        }
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_URL_UNSUPPORTED", "只支持 http/https 图片地址");
+        }
+
+        HttpResponse<byte[]> response = downloadImageBytes(uri);
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_DOWNLOAD_FAILED", "下载生成图片失败");
+        }
+        byte[] body = response.body() == null ? new byte[0] : response.body();
+        if (body.length == 0) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_DOWNLOAD_FAILED", "下载生成图片失败");
+        }
+        if (body.length > IMAGE_IMPORT_MAX_BYTES) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_TOO_LARGE", "生成图片过大，无法保存");
+        }
+
+        String contentType = response.headers().firstValue(org.springframework.http.HttpHeaders.CONTENT_TYPE).orElse("");
+        if (contentType.contains(";")) {
+            contentType = contentType.substring(0, contentType.indexOf(';')).trim();
+        }
+        String filename = filenameFromUri(uri);
+        return uploadBytes(userId, canvasId, filename, contentType, body);
+    }
+
+    private HttpResponse<byte[]> downloadImageBytes(URI uri) {
+        List<URI> candidates = new ArrayList<>();
+        candidates.add(uri);
+        URI dockerHostUri = rewriteLocalhostForDocker(uri);
+        if (dockerHostUri != null) {
+            candidates.add(dockerHostUri);
+        }
+
+        InterruptedException interrupted = null;
+        HttpResponse<byte[]> lastResponse = null;
+        for (URI candidate : candidates) {
+            HttpRequest request = HttpRequest.newBuilder(candidate)
+                    .timeout(IMAGE_IMPORT_TIMEOUT)
+                    .header("Accept", "image/*,application/octet-stream;q=0.9,*/*;q=0.8")
+                    .GET()
+                    .build();
+            try {
+                HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    return response;
+                }
+                lastResponse = response;
+            } catch (InterruptedException exception) {
+                interrupted = exception;
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception ignored) {
+            }
+        }
+        if (interrupted != null) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_DOWNLOAD_FAILED", "下载生成图片被中断");
+        }
+        if (lastResponse != null) {
+            return lastResponse;
+        }
+        throw new ApiException(HttpStatus.BAD_GATEWAY, "ASSET_DOWNLOAD_FAILED", "下载生成图片失败");
+    }
+
+    private URI rewriteLocalhostForDocker(URI uri) {
+        String host = uri.getHost();
+        if (host == null || (!"localhost".equalsIgnoreCase(host) && !"127.0.0.1".equals(host))) {
+            return null;
+        }
+        try {
+            return new URI(uri.getScheme(), uri.getUserInfo(), "host.docker.internal", uri.getPort(), uri.getPath(), uri.getQuery(), uri.getFragment());
+        } catch (URISyntaxException exception) {
+            return null;
+        }
+    }
+
+    private UUID parseAssetIdFromUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/api/assets/([0-9a-fA-F-]{36})(?:/(?:content|preview|thumbnail|view/[0-9]+))?(?:[?#].*)?$")
+                .matcher(url.trim());
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(matcher.group(1));
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private DecodedDataUrl decodeDataUrl(String dataUrl) {
+        int comma = dataUrl.indexOf(',');
+        if (comma < 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_URL_INVALID", "图片地址无效");
+        }
+        String header = dataUrl.substring("data:".length(), comma);
+        String payload = dataUrl.substring(comma + 1);
+        String mimeType = "image/png";
+        String[] parts = header.split(";");
+        if (parts.length > 0 && !parts[0].isBlank()) {
+            mimeType = parts[0].trim().toLowerCase(Locale.ROOT);
+        }
+        try {
+            byte[] bytes = java.util.Base64.getDecoder().decode(payload);
+            return new DecodedDataUrl(bytes, mimeType);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ASSET_URL_INVALID", "图片地址无效");
+        }
+    }
+
+    private String filenameFromUri(URI uri) {
+        String path = uri.getPath();
+        if (path == null || path.isBlank()) {
+            return "generated-image.png";
+        }
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        return name.isBlank() ? "generated-image.png" : name;
+    }
+
+    private record DecodedDataUrl(byte[] bytes, String mimeType) {
     }
 
     private static MinioClient createMinioClient(String endpoint, String accessKey, String secretKey) {

@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "qrcode_session";
+const SESSION_TTL_SECONDS = 3 * 86400;
 const consumed = new Map();
-const userKeys = new Map();
 
 function secret() {
   return String(process.env.SUB2API_SSO_SECRET || "").trim();
@@ -77,9 +77,9 @@ export function verifyQrcodeSSOTicket(raw, now = Math.floor(Date.now() / 1000)) 
 }
 
 export function createSessionCookie(userId) {
-  const token = pack({ sub: userId, exp: Math.floor(Date.now() / 1000) + 7 * 86400 }, sessionSecret());
+  const token = pack({ sub: userId, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS }, sessionSecret());
   const secure = process.env.QR_SECURE_COOKIE === "1" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 86400}${secure}`;
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}${secure}`;
 }
 
 export function readSessionUserId(request) {
@@ -90,14 +90,6 @@ export function readSessionUserId(request) {
   const payload = unpack(raw, sessionSecret());
   if (!payload || payload.exp <= Math.floor(Date.now() / 1000) || !payload.sub) return "";
   return String(payload.sub);
-}
-
-export function storeUserRelayKey(userId, relayKey) {
-  userKeys.set(String(userId), relayKey);
-}
-
-export function userRelayKey(userId) {
-  return userKeys.get(String(userId)) || "";
 }
 
 export function satelliteHeaders(userId) {
@@ -113,12 +105,37 @@ export function satelliteHeaders(userId) {
   };
 }
 
+export function qrcodeRequestHeaders(userId, fallbackApiKey = "") {
+  const credential = String(process.env.SUB2API_APP_CREDENTIAL || "").trim();
+  const managed = Boolean(credential || String(process.env.SUB2API_SSO_SECRET || "").trim());
+  const headers = satelliteHeaders(userId);
+  if (managed) {
+    if (!headers.Authorization || !headers["X-Sub2API-On-Behalf-Of"]) {
+      throw new Error("Sub2API satellite credential and session user are required");
+    }
+    return headers;
+  }
+  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+    throw new Error("QRCode Sub2API satellite is not configured");
+  }
+  const apiKey = String(fallbackApiKey || "").trim();
+  if (apiKey) return { Authorization: `Bearer ${apiKey}` };
+  // Unmanaged local test/development mode may intentionally exercise the
+  // request pipeline without an upstream credential. Managed deployments are
+  // rejected above when SSO is configured but the session headers are absent.
+  return {};
+}
+
 export function ssoConfigured() {
   return secret().length >= 32;
 }
 
 export function requireQrcodeUser(request, response) {
   if (!ssoConfigured()) {
+    if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+      response.status(503).json({ error: "QRCode SSO is not configured" });
+      return null;
+    }
     return "local";
   }
   try {

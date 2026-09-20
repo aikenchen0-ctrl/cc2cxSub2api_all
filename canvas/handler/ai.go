@@ -23,7 +23,7 @@ func selectAIRequestChannel(user model.AuthUser, modelName string, channelID str
 	// Ordinary users always use the server-managed Sub2API relay when it is
 	// configured. This keeps provider credentials and billing ownership out of
 	// the browser and makes all user model calls follow one policy.
-	if user.Role != model.UserRoleAdmin && service.Sub2APIRelayEnabled() {
+	if service.Sub2APIRelayEnabled() {
 		channel, err := service.SelectSub2APIRelayChannelForModel(modelName)
 		if err != nil {
 			return channel, "", err

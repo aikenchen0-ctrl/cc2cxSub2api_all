@@ -39,12 +39,18 @@ WORKDIR /app/servers/nextjs
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Optional offline fallback for deployments whose build network cannot reach
+# Google Fonts. The normal build keeps this unset and downloads the configured
+# fonts; the deployment command can pass the mock path when needed.
+ARG NEXT_FONT_GOOGLE_MOCKED_RESPONSES=
+ENV NEXT_FONT_GOOGLE_MOCKED_RESPONSES=${NEXT_FONT_GOOGLE_MOCKED_RESPONSES}
+
 COPY servers/nextjs/package.json servers/nextjs/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
 COPY servers/nextjs /app/servers/nextjs
-RUN npm run build \
+RUN npm run build -- --webpack \
     && rm -rf .next-build/cache
 
 

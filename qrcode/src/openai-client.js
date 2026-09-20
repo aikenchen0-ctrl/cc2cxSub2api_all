@@ -1,14 +1,19 @@
+import { qrcodeRequestHeaders } from "./sso.js";
+
 export async function callResponsesApi({
   endpoint,
   apiKey,
   payload,
+  userId = "",
+  headers: requestHeaders = null,
   fetchImpl = fetch
 }) {
+  const headers = requestHeaders || qrcodeRequestHeaders(userId, apiKey);
   const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
+      ...headers
     },
     body: JSON.stringify(payload)
   });

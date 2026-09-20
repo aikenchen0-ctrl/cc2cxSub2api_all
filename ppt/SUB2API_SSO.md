@@ -26,15 +26,14 @@ for localhost development; production deployments must use HTTPS).
 ```dotenv
 SUB2API_SSO_SECRET=<same-shared-secret>
 SUB2API_BASE_URL=http://host.docker.internal:18080
-SUB2API_API_KEY=<relay-service-api-key>
-SUB2API_MODEL=gpt-5.4-mini
+SUB2API_APP_CREDENTIAL=<server-only-app-credential>
+SUB2API_MODEL=gpt-5.5
 ```
 
-The relay key must have a funded, available route for the chosen model.
-It is a shared instance provider: generation is billed to this service key,
-not each user's portal key. A dedicated restricted key is recommended.
-Never place API keys in the callback URL. The old query/header key override
-has been removed because it changed settings for unrelated users.
+PPT sends the application credential together with the current SSO subject and
+satellite name on every `/v1` request. Sub2API resolves the user's SuperKey
+server-side and bills that user. Never place an API key or SuperKey in the
+callback URL, browser storage, or user-editable configuration.
 
 Defaults are imported into the provider-settings database only when no LLM
 provider has been selected. Existing administrator settings always win.

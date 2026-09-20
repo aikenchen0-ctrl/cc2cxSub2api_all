@@ -847,11 +847,15 @@ class ImageGenerationService:
     async def generate_image_openai_compatible(
         self, prompt: str, output_directory: str
     ) -> str:
-        from utils.sub2api_satellite import get_current_sub2api_subject, openai_base_url, satellite_headers
+        from utils.sub2api_satellite import get_current_sub2api_subject, openai_base_url, satellite_headers, satellite_managed
 
-        base_url = get_openai_compat_image_base_url_env() or openai_base_url()
+        # In managed mode image calls use the same Sub2API gateway as text
+        # calls; a custom image URL must not receive the app credential.
+        base_url = openai_base_url() if satellite_managed() else (get_openai_compat_image_base_url_env() or openai_base_url())
         credential = (os.getenv("SUB2API_APP_CREDENTIAL") or "").strip()
         api_key = get_openai_compat_image_api_key_env()
+        if satellite_managed() and not credential:
+            raise ValueError("Sub2API satellite credential is unavailable")
         if credential and get_current_sub2api_subject():
             api_key = credential
         elif credential:
@@ -871,7 +875,7 @@ class ImageGenerationService:
         client = AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
-            default_headers=satellite_headers() or None,
+            default_headers=satellite_headers(required=satellite_managed()) or None,
         )
 
         response = await client.images.generate(
@@ -901,7 +905,7 @@ class ImageGenerationService:
                     and image_origin.netloc == parsed.netloc
                 )
             ):
-                headers.update(satellite_headers() or {"Authorization": f"Bearer {api_key}"})
+                headers.update(satellite_headers(required=satellite_managed()) or {"Authorization": f"Bearer {api_key}"})
             async with aiohttp.ClientSession(trust_env=True) as session:
                 dl_resp = await session.get(
                     image_url,

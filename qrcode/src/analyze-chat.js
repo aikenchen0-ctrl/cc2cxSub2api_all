@@ -6,10 +6,13 @@ import { callResponsesApi } from "./openai-client.js";
 
 export async function analyzeChatLog({
   chatLog,
+  userId = "",
+  apiKey = "",
   callModel = async (payload) =>
     callResponsesApi({
       endpoint: APP_CONFIG.apiBaseUrl,
-      apiKey: APP_CONFIG.apiKey,
+      apiKey: apiKey || APP_CONFIG.apiKey,
+      userId,
       payload
     })
 }) {

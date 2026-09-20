@@ -9,7 +9,7 @@ from utils.user_config_store import read_user_config_file, update_user_config_fi
 
 
 SESSION_COOKIE_NAME = "presenton_session"
-SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
+SESSION_TTL_SECONDS = 60 * 60 * 24 * 3
 AUTH_CONFIG_FIELDS = ("AUTH_USERNAME", "AUTH_PASSWORD_HASH", "AUTH_SECRET_KEY")
 
 

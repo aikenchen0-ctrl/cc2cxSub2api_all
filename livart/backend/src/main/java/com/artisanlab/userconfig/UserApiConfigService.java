@@ -40,12 +40,12 @@ public class UserApiConfigService {
             @Value("${artisan.ai.default-image-model:gpt-image-2}") String defaultImageModel,
             @Value("${artisan.ai.default-chat-model:gpt-5.5}") String defaultChatModel,
             @Value("${SUB2API_RELAY_BASE_URL:}") String relayBaseUrl,
-            @Value("${SUB2API_RELAY_API_KEY:}") String relayApiKey
+            @Value("${SUB2API_APP_CREDENTIAL:}") String appCredential
     ) {
         this.mapper = mapper;
         this.identityMapper = identityMapper;
         this.defaultBaseUrl = withScheme(firstNonBlank(defaultBaseUrl, relayBaseUrl));
-        this.defaultApiKey = firstNonBlank(defaultApiKey, relayApiKey);
+        this.defaultApiKey = firstNonBlank(defaultApiKey, appCredential);
         this.defaultImageModel = defaultImageModel == null ? "" : defaultImageModel;
         this.defaultChatModel = normalizeChatModel(defaultChatModel);
     }

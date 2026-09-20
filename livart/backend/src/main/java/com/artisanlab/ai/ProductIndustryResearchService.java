@@ -74,11 +74,12 @@ public class ProductIndustryResearchService {
         try {
             listener.onStarted(safeLength(normalizedProductInfo, 180));
             String requestBody = objectMapper.writeValueAsString(buildRequestBody(config, normalizedProductInfo));
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(resolveResponsesUrl(config.baseUrl())))
                     .timeout(timeout.plusSeconds(5))
-                    .header("Authorization", "Bearer " + config.apiKey())
-                    .header("Content-Type", "application/json")
+                    .header("Content-Type", "application/json");
+            Sub2ApiSatelliteHeaders.apply(requestBuilder, config.apiKey());
+            HttpRequest request = requestBuilder
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                     .build();
 

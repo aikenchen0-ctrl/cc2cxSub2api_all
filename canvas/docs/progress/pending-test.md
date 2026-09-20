@@ -5,6 +5,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- 画布默认只生成 1 张图；只有在节点图像设置里手动改成多张后，才会按该数量生成。新建配置节点默认 count 为 1，不再读取全局旧的默认张数。
 - 当前部署已统一为 canvas-app（canvas:workspace），由 sub2api/deploy/docker-compose.override.yml 从当前 canvas 目录构建，唯一端口为 3522。原 3522、3523、3524 及停止的预览备份容器已清理；旧镜像保留用于回退。
 - 沿用 canvas_integrated_data 数据卷；三个预览数据副本及旧 3522 容器文件系统备份位于 sub2api/deploy/migration-backups/canvas-cleanup-20260918-132513。原 3522 丢失的数据目录未恢复。
 - 当前源码镜像构建成功；Dockerfile 复用 Go 构建阶段的 CA 证书，避免 Debian 软件源 502 导致失败。3522 健康接口、设置数据库查询和画布/视频/登录页面通过；门户健康通过，回调已改为 3522，密钥一致。真实账号 SSO 和真实模型生成仍待验收。以下涉及 3523/3524 的记录为历史验证结果，不代表当前部署。

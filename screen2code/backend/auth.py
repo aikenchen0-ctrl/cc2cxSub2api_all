@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 SESSION_COOKIE = "screen2code_session"
 SECURE_SESSION_COOKIE = "__Host-screen2code_session"
 CSRF_COOKIE = "screen2code_csrf"
-SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
+SESSION_TTL_SECONDS = 3 * 24 * 60 * 60
 TICKET_TTL_SKEW_SECONDS = 10
 
 

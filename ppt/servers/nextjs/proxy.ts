@@ -59,7 +59,7 @@ type AuthStatus = {
 };
 
 const SESSION_COOKIE_NAME = "presenton_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 3;
 
 async function getAuthStatus(request: NextRequest): Promise<AuthStatus> {
   const cookieHeader = request.headers.get("cookie");

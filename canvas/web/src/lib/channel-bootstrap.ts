@@ -11,7 +11,6 @@ export function readChannelBootstrap(href: string) {
         return "";
     };
     const baseUrl = value(["baseUrl", "baseurl"]);
-    const apiKey = value(["apiKey", "apikey"]);
     if (![fragment, url.searchParams].some((params) => parameterNames.some((name) => params.has(name)))) return null;
     const hasFragmentConfig = parameterNames.some((name) => fragment.has(name));
     for (const name of parameterNames) {
@@ -19,5 +18,7 @@ export function readChannelBootstrap(href: string) {
         fragment.delete(name);
     }
     if (hasFragmentConfig) url.hash = fragment.toString();
-    return { baseUrl, apiKey, cleanUrl: url.pathname + url.search + url.hash };
+    // API keys used to be passed through the URL. Keep scrubbing those legacy
+    // parameters, but never expose or return them to the application.
+    return { baseUrl, cleanUrl: url.pathname + url.search + url.hash };
 }

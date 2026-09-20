@@ -371,6 +371,14 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(model.trim()) && (config.channelMode === "remote" || Boolean(channel?.baseUrl.trim() && channel?.apiKey.trim()));
 }
 
+function withoutLocalCredentials(config: AiConfig): AiConfig {
+    return {
+        ...config,
+        apiKey: "",
+        localChannels: config.localChannels.map((channel) => ({ ...channel, apiKey: "" })),
+    };
+}
+
 export const useConfigStore = create<ConfigStore>()(
     persist(
         (set, get) => ({
@@ -380,12 +388,13 @@ export const useConfigStore = create<ConfigStore>()(
             isConfigOpen: false,
             shouldPromptContinue: false,
             updateConfig: (key, value) =>
-                set((state) => ({
-                    config: {
+                set((state) => {
+                    const next = {
                         ...state.config,
                         [key]: value,
-                    },
-                })),
+                    };
+                    return { config: next.channelMode === "remote" ? withoutLocalCredentials(next) : next };
+                }),
             loadPublicSettings: async () => {
                 if (get().isPublicSettingsLoading) return;
                 set({ isPublicSettingsLoading: true });
@@ -402,14 +411,14 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
-            partialize: (state) => ({ config: state.config }),
+            partialize: (state) => ({ config: state.config.channelMode === "remote" ? withoutLocalCredentials(state.config) : state.config }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
                 const config = { ...defaultConfig, ...persistedConfig };
                 const localChannels = normalizeLocalChannels(config);
                 const localModels = normalizeModelList(localChannels.flatMap((channel) => channel.models));
-                return {
+                const mergedConfig = {
                     ...current,
                     config: {
                         ...config,
@@ -453,13 +462,16 @@ export const useConfigStore = create<ConfigStore>()(
                         videoGenerateAudio: config.videoGenerateAudio || defaultConfig.videoGenerateAudio,
                         videoWatermark: config.videoWatermark || "false",
                         videoCharacterOrientation: config.videoCharacterOrientation === "image" ? "image" : "video",
-                        canvasImageCount: config.canvasImageCount || "1",
+                        canvasImageCount: String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.canvasImageCount)) || 1)))),
                         imageModels: filterChannelModelsByCapability(localChannels, "image"),
                         videoModels: filterChannelModelsByCapability(localChannels, "video"),
                         textModels: filterChannelModelsByCapability(localChannels, "text"),
                         audioModels: filterChannelModelsByCapability(localChannels, "audio"),
                     },
                 };
+                return mergedConfig.config.channelMode === "remote"
+                    ? { ...mergedConfig, config: withoutLocalCredentials(mergedConfig.config) }
+                    : mergedConfig;
             },
         },
     ),

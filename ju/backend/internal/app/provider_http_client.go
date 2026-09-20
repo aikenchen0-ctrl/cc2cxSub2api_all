@@ -34,7 +34,9 @@ func postGeminiJSON(ctx context.Context, config providerConfig, path string, bod
 	if err != nil {
 		return err
 	}
-	req.Header.Set("x-goog-api-key", config.APIKey)
+	if !applySub2APISatelliteAuth(req, config) {
+		req.Header.Set("x-goog-api-key", config.APIKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	ApplyOutboundHeaders(req, config.Headers)
 	return doJSON(req, target)
@@ -45,7 +47,9 @@ func getGeminiJSON(ctx context.Context, config providerConfig, path string, targ
 	if err != nil {
 		return err
 	}
-	req.Header.Set("x-goog-api-key", config.APIKey)
+	if !applySub2APISatelliteAuth(req, config) {
+		req.Header.Set("x-goog-api-key", config.APIKey)
+	}
 	ApplyOutboundHeaders(req, config.Headers)
 	return doJSON(req, target)
 }
@@ -55,7 +59,9 @@ func getGeminiBinary(ctx context.Context, config providerConfig, rawURL string) 
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("x-goog-api-key", config.APIKey)
+	if !applySub2APISatelliteAuth(req, config) {
+		req.Header.Set("x-goog-api-key", config.APIKey)
+	}
 	ApplyOutboundHeaders(req, config.Headers)
 	return doBinary(req)
 }
@@ -101,17 +107,35 @@ func applySub2APISatelliteAuth(req *http.Request, config providerConfig) bool {
 		return false
 	}
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-	if credential == "" || req == nil {
+	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
+	if req == nil {
 		return false
 	}
 	onBehalf := ""
 	if metadata, ok := req.Context().Value(providerAnalyticsKey{}).(providerAnalyticsContext); ok && metadata.Service != nil {
 		onBehalf = metadata.Service.Sub2APIOnBehalfOf(metadata.UserID)
 	}
-	if onBehalf == "" {
+	if !managed {
+		if productionRelayRuntime() {
+			// A production satellite must never send a stored relay/SuperKey.
+			req.Header.Del("Authorization")
+			req.Header.Del("x-api-key")
+			req.Header.Del("x-goog-api-key")
+			return true
+		}
 		return false
 	}
+	if credential == "" || onBehalf == "" {
+		// A configured satellite credential is never allowed to fall back to a
+		// stored relay key without the current SSO subject.
+		req.Header.Del("Authorization")
+		req.Header.Del("x-api-key")
+		req.Header.Del("x-goog-api-key")
+		return true
+	}
 	req.Header.Set("Authorization", "Bearer "+credential)
+	req.Header.Del("x-api-key")
+	req.Header.Del("x-goog-api-key")
 	req.Header.Set("X-Sub2API-On-Behalf-Of", onBehalf)
 	req.Header.Set("X-Sub2API-Satellite", "ju")
 	return true

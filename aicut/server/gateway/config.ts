@@ -19,12 +19,8 @@ export function sessionSecret(): string {
   throw new Error('OCC_SESSION_SECRET is required when SUB2API_BASE is set');
 }
 
-export function occKeyNamePrefix(): string {
-  return (process.env.OCC_SUB2API_KEY_NAME ?? 'occ').trim() || 'occ';
-}
-
 export const SESSION_COOKIE = 'occ_session';
-export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** Sub2API self-serve sign-up. Off unless explicitly enabled. */
 export function openRegisterEnabled(): boolean {

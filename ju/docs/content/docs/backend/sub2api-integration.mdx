@@ -45,7 +45,7 @@ JU_SSO_CALLBACK_URL=https://ju.example.com/api/auth/sso/callback
 ```dotenv
 SUB2API_SSO_SECRET=<与Sub2API相同的密钥>
 SUB2API_RELAY_BASE_URL=http://sub2api:8080/v1
-SUB2API_RELAY_API_KEY=<管理员共享账户的SuperKey>
+SUB2API_APP_CREDENTIAL=<服务端卫星应用凭据>
 SUB2API_RELAY_MODELS=gpt-5.5
 SUB2API_RELAY_IMAGE_MODELS=
 SUB2API_RELAY_VIDEO_MODELS=
@@ -57,7 +57,7 @@ CANVAS_REGISTRATION_ENABLED=false
 CANVAS_CORS_ORIGINS=https://ju.example.com
 ```
 
-文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。图片、视频留空不启用该能力；不要从文本模型列表推断视频能力，也不要将音频工作流误填为视频。模型可见不代表上游已开通，必须用共享 Key 的实际权限和响应验证。
+文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。图片、视频留空不启用该能力；不要从文本模型列表推断视频能力，也不要将音频工作流误填为视频。模型可见不代表上游已开通，必须用 Sub2API 管理员配置的上游权限和响应验证。每次请求仍由当前 Session subject 绑定到 Sub2API 用户，应用凭据和 SuperKey 不进入浏览器。
 
 当前视频协议为 `sub2api-video-v1`，仅开放已经核实的合同：
 

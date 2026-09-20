@@ -49,7 +49,6 @@ type Sub2APISSOPayload struct {
 	ExpiresAt   int64  `json:"exp"`
 	Nonce       string `json:"jti"`
 	Next        string `json:"next,omitempty"`
-	RelayKey    string `json:"rk,omitempty"`
 }
 
 var (

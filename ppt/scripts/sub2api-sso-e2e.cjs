@@ -25,7 +25,7 @@ function ticket(sub) {
  docker(['network','create',id]); networkCreated=true;
  const db=run('db',['--network-alias','db','-e','POSTGRES_PASSWORD='+password,'-e','POSTGRES_DB=sub2api','postgres:18-alpine']);
  run('redis',['--network-alias','redis','redis:8-alpine']);
- const ppt=run('ppt',['-p','127.0.0.1::80','-e','SUB2API_SSO_SECRET='+secret,'-e','AUTH_USERNAME=administrator','-e','AUTH_PASSWORD='+password,'-e','SUB2API_API_KEY=test-server-only-key','-e','SUB2API_BASE_URL=http://host.docker.internal:18080','-e','SUB2API_MODEL=gpt-5.4-mini','-e','DISABLE_ANONYMOUS_TRACKING=true','ppt:sub2api-integration']);
+ const ppt=run('ppt',['-p','127.0.0.1::80','-e','SUB2API_SSO_SECRET='+secret,'-e','AUTH_USERNAME=administrator','-e','AUTH_PASSWORD='+password,'-e','SUB2API_APP_CREDENTIAL=test-app-credential','-e','SUB2API_BASE_URL=http://host.docker.internal:18080','-e','SUB2API_MODEL=gpt-5.5','-e','DISABLE_ANONYMOUS_TRACKING=true','ppt:sub2api-integration']);
  const pptBase=baseFor(ppt,80);
  await ready(pptBase+'/api/v1/auth/status');
  const portal=run('portal',['-p','127.0.0.1::8080','-e','AUTO_SETUP=true','-e','DATABASE_HOST=db','-e','DATABASE_USER=postgres','-e','DATABASE_PASSWORD='+password,'-e','DATABASE_DBNAME=sub2api','-e','DATABASE_SSLMODE=disable','-e','REDIS_HOST=redis','-e','REDIS_MIN_IDLE_CONNS=1','-e','REDIS_POOL_SIZE=10','-e','ADMIN_EMAIL=portal-test@example.invalid','-e','ADMIN_PASSWORD='+password,'-e','JWT_SECRET='+randomBytes(32).toString('hex'),'-e','SUB2API_SSO_SECRET='+secret,'-e','PPT_SSO_CALLBACK_URL='+pptBase+'/api/v1/auth/sso/callback','-e','SERVER_HOST=0.0.0.0','-e','SERVER_PORT=8080','-e','SERVER_MODE=release','sub2api:ppt-integration']);

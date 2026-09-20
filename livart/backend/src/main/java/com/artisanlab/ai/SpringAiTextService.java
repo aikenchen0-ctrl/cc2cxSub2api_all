@@ -38,15 +38,15 @@ public class SpringAiTextService {
 
         try {
             String credential = System.getenv("SUB2API_APP_CREDENTIAL");
-            String onBehalf = config.apiKey() != null && config.apiKey().chars().allMatch(Character::isDigit) ? config.apiKey() : "";
-            String apiKey = credential != null && !credential.isBlank() && !onBehalf.isBlank() ? credential.trim() : config.apiKey();
+            String onBehalf = config.apiKey() == null ? "" : config.apiKey();
+            String apiKey = credential != null && !credential.isBlank() ? credential.trim() : config.apiKey();
             OpenAiApi openAiApi = OpenAiApi.builder()
                     .baseUrl(resolveChatBaseUrl(config.baseUrl()))
                     .apiKey(apiKey)
                     .completionsPath(resolveCompletionsPath(config.baseUrl()))
                     .embeddingsPath(resolveEmbeddingsPath(config.baseUrl()))
                     .restClientBuilder(buildRestClientBuilder(timeout, onBehalf))
-                    .webClientBuilder(WebClient.builder())
+                    .webClientBuilder(buildWebClientBuilder(onBehalf))
                     .build();
 
             OpenAiApi.ChatCompletionRequest request = new OpenAiApi.ChatCompletionRequest(
@@ -222,10 +222,14 @@ public class SpringAiTextService {
         RestClient.Builder builder = RestClient.builder()
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.ACCEPT, "application/json");
-        if (onBehalf != null && !onBehalf.isBlank()) {
-            builder.defaultHeader("X-Sub2API-On-Behalf-Of", onBehalf);
-            builder.defaultHeader("X-Sub2API-Satellite", "livart");
-        }
+        Sub2ApiSatelliteHeaders.applyIdentityHeaders(builder::defaultHeader, onBehalf);
+        return builder;
+    }
+
+    private WebClient.Builder buildWebClientBuilder(String onBehalf) {
+        WebClient.Builder builder = WebClient.builder()
+                .defaultHeader(HttpHeaders.ACCEPT, "text/event-stream, application/json");
+        Sub2ApiSatelliteHeaders.applyIdentityHeaders(builder::defaultHeader, onBehalf);
         return builder;
     }
 

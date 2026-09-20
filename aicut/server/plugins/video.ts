@@ -25,6 +25,7 @@ import {
   satelliteV1Base,
   satelliteVideoModel,
 } from '../gateway/satellite.ts';
+import { gatewayEnabled } from '../gateway/config.ts';
 import { currentTenant } from '../gateway/tenant-context.ts';
 import { hailuoRequestBody } from './minimax-video.ts';
 import { generateOfoxVideo } from './ofox-video-provider.ts';
@@ -469,6 +470,11 @@ export function videoGenerationPlugin(options: VideoOptions): Plugin {
     configureServer(server) {
       server.middlewares.use('/generate/video', async (req, res) => {
         if (req.method !== 'POST') { sendJson(res, 405, { error: 'method not allowed — use POST' }); return; }
+        const satelliteUser = currentTenant()?.userId;
+        if (gatewayEnabled() && (!satelliteHeadersForUser(satelliteUser) || !satelliteV1Base())) {
+          sendJson(res, 503, { error: 'Sub2API satellite credential or session is unavailable' });
+          return;
+        }
         try {
           const raw = await readJson(req);
           const input = validate(await materializeVideoReferences(raw));
@@ -485,7 +491,7 @@ export function videoGenerationPlugin(options: VideoOptions): Plugin {
               registerProviderTask,
               undefined,
               [],
-              currentTenant()?.userId,
+              satelliteUser,
             ),
             {
               operationId: raw.operationId,

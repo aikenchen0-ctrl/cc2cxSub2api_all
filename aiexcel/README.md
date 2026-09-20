@@ -96,8 +96,8 @@ http://localhost:3000
 ```env
 SUB2API_SSO_SECRET=与 Sub2API 相同的至少 32 位密钥
 SUB2API_RELAY_BASE_URL=http://localhost:18080/v1
-SUB2API_RELAY_API_KEY=Sub2API 中的服务端 API Key
-SUB2API_RELAY_MODEL=deepseek-chat
+SUB2API_APP_CREDENTIAL=Sub2API 为卫星签发的应用凭据
+SUB2API_RELAY_MODEL=gpt-5.5
 AIEXCEL_SSO_CALLBACK_URL=http://localhost:4173/api/auth/sso/callback
 ```
 

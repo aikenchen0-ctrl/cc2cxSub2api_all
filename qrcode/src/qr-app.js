@@ -5,7 +5,6 @@ import { randomUUID } from "crypto";
 
 import { generateQrArtwork } from "./qr-generator.js";
 import { buildSquareQrPlatePreview } from "./mask-processor.js";
-import { stylizeQrImage } from "./art-qr.js";
 import { urlToQrImage, isValidUrl } from "./url-to-qr.js";
 import { APP_CONFIG } from "./config.js";
 import {
@@ -139,6 +138,15 @@ function buildGenerateErrorPayload(error, { includeDebugPipeline = true } = {}) 
     error: error instanceof Error ? error.message : "生成失败",
     pipeline: includeDebugPipeline ? pipeline : slimGeneratePipeline(pipeline)
   };
+}
+
+function upstreamStatusFromGenerationError(error) {
+  const attempts = error?.pipeline?.submitAttempts;
+  const status = Number(
+    error?.pipeline?.selectedSubmitAttempt?.httpStatus
+      || (Array.isArray(attempts) ? attempts[attempts.length - 1]?.httpStatus : 0)
+  );
+  return Number.isInteger(status) && status >= 400 && status <= 599 ? status : 0;
 }
 
 function cleanupGenerateJobs(generateJobs, now = Date.now()) {
@@ -510,7 +518,10 @@ async function readWechatJson(response, fallbackMessage) {
 
 export function createQrApp({
   generate = generateQrArtwork,
-  stylize = stylizeQrImage,
+  // Keep an injection point for tests and local extensions. The production
+  // path intentionally uses the same Sub2API image relay as /api/generate;
+  // it must not call the retired third-party art-QR API.
+  stylize = null,
   wechatFetch = fetch,
   corsOrigin = APP_CONFIG.corsOrigin,
   generateConcurrency = APP_CONFIG.generateConcurrency,
@@ -795,6 +806,9 @@ export function createQrApp({
   app.post("/api/stylize-qr", upload.fields([
     { name: "qrImage", maxCount: 1 }
   ]), async (request, response) => {
+    const userId = requireQrcodeUser(request, response);
+    if (!userId) return;
+
     try {
       const qrFile = request.files?.qrImage?.[0];
       if (!qrFile) {
@@ -802,20 +816,45 @@ export function createQrApp({
         return;
       }
 
-      const result = await stylize({
-        imageBuffer: qrFile.buffer,
-        qrTrim: parseQrTrimOptions(request.body)
-      });
+      const qrTrim = parseQrTrimOptions(request.body);
+      const result = stylize
+        ? await stylize({
+            imageBuffer: qrFile.buffer,
+            mimeType: qrFile.mimetype || "image/png",
+            qrTrim,
+            userId,
+            ...resolveSessionAiConfig(userId)
+          })
+        : await withGenerateTimeout(generate({
+            imageBuffer: qrFile.buffer,
+            mimeType: qrFile.mimetype || "image/png",
+            qrTrim,
+            // The artistic-QR button is the no-template variant of the
+            // public qrcode capability. The generator submits gpt-image-2
+            // to Sub2API /v1/images/edits with the session user identity.
+            userId,
+            ...resolveSessionAiConfig(userId)
+          }));
+
+      const imageDataUrl = result?.imageDataUrl || (
+        result?.imageBuffer
+          ? `data:${result.mimeType || "image/png"};base64,${result.imageBuffer.toString("base64")}`
+          : ""
+      );
+      if (!imageDataUrl) {
+        throw new Error("艺术化二维码接口服务未返回图片");
+      }
 
       response.json({
-        imageDataUrl: `data:${result.mimeType};base64,${result.imageBuffer.toString("base64")}`,
-        mimeType: result.mimeType,
+        imageDataUrl,
+        mimeType: result.mimeType || "image/png",
         filename: `artistic-${Date.now()}.png`,
         task: result.task,
-        input: result.input
+        input: result.input,
+        revisedPrompt: result.revisedPrompt
       });
     } catch (error) {
-      response.status(500).json({
+      response.status(upstreamStatusFromGenerationError(error) || 500).json({
         error: error instanceof Error ? error.message : "艺术化二维码失败"
       });
     }

@@ -47,7 +47,7 @@ artisan:
     directory: ${LIVART_EXTERNAL_SKILLS_DIR:}
   ai:
     default-base-url: ${LIVART_DEFAULT_API_BASE_URL:${SUB2API_RELAY_BASE_URL:${LINK:}}}
-    default-api-key: ${LIVART_DEFAULT_API_KEY:${SUB2API_RELAY_API_KEY:${SUB2API_APP_CREDENTIAL:}}}
+    default-api-key: ${LIVART_DEFAULT_API_KEY:${SUB2API_APP_CREDENTIAL:}}
     default-image-model: ${LIVART_DEFAULT_IMAGE_MODEL:gpt-image-2}
     default-chat-model: ${LIVART_DEFAULT_CHAT_MODEL:gpt-5.5}
     default-image-size-enabled: ${LIVART_DEFAULT_IMAGE_SIZE_ENABLED:true}
