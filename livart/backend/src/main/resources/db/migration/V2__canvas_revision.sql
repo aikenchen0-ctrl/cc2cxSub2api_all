@@ -1,5 +1,0 @@
-ALTER TABLE artisan_canvases
-    ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
-
-ALTER TABLE artisan_canvas_snapshots
-    ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;

@@ -1,8 +1,0 @@
-node_modules
-dist
-desktop-dist
-.git
-.env
-.env.local
-public/media/uploads
-*.log
