@@ -1,0 +1,42 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Paifa\.workbuddy\binaries\python\envs\default\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Paifa\WorkBuddy\2026-09-17-14-28-06\ai-hunter-root\backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+tests/test_email/test_sender.py::test_send_email_smtp_success FAILED     [100%]
+
+================================== FAILURES ===================================
+________________________ test_send_email_smtp_success _________________________
+
+    @pytest.mark.asyncio
+    async def test_send_email_smtp_success():
+        account = {
+            "provider_type": "smtp",
+            "from_name": "B2Binsights",
+            "from_email": "sales@example.com",
+            "reply_to": "sales@example.com",
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 587,
+            "smtp_username": "sales@example.com",
+            "smtp_secret_encrypted": "secret",
+            "use_tls": 1,
+        }
+        smtp = MagicMock()
+        smtp.__enter__.return_value = smtp
+        smtp.__exit__.return_value = False
+        with (
+            patch("emailing.email_sender.get_settings", return_value=_live_smtp_settings()),
+            patch("emailing.email_sender.smtplib.SMTP", return_value=smtp),
+        ):
+            result = await send_email(account, to_email="buyer@example.com", subject="Hi", body_text="Hello")
+>       assert result["ok"] is True
+E       assert False is True
+
+tests\test_email\test_sender.py:49: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_email/test_sender.py::test_send_email_smtp_success - assert False is True
+============================== 1 failed in 0.23s ==============================

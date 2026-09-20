@@ -35,6 +35,14 @@
 /dist/**
 **/dist/**
 
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+*.db
+*.sqlite
+*.sqlite3
+
 # Local deployment artifacts and database backups
 sub2api-local-http.new
 **/sub2api-local-http.new

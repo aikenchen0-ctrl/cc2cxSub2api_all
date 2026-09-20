@@ -1,0 +1,15 @@
+{
+  "name": "ai-outreach-engine",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:server": "bun run --cwd server dev",
+    "dev:web": "bun run --cwd web dev",
+    "build": "bun run --cwd web build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "db:reset": "rm -f server/data/outreach.db && bun run --cwd server migrate"
+  }
+}
