@@ -1,0 +1,159 @@
+---
+title: Sub2API 免配置接入
+description: SSO、后端共享 Super Key 与 Docker 部署边界
+---
+
+# Sub2API 免配置接入
+
+## 目标与边界
+
+用户已经登录 Sub2API 后，点击左侧「智能剧场」，通过三天内有效的一次性 HMAC 票据建立影策会话，进入 `/projects`。用户不填写渠道地址、API Key 或模型配置。SSO 仅解决用户身份，模型调用使用管理员预置的后端共享 Super Key。
+
+共享 Key 的调用统一记到 **Key 拥有者** 的 Sub2API 账户，不等于按每个 SSO 用户的 Sub2API 余额计费。影策内的用户、项目、任务、资源仍按用户隔离。管理员应设置共享账户额度、并发、上游分组和可用模型；不要将 Super Key 交给浏览器或放入跳转 URL。
+
+本次 SSO 加固使用数据库版本 11：新增一次性票据摘要、短期交换和撤销记录，并为本地会话记录 SSO subject 与签发时间。既有数据库保持 `CANVAS_AUTO_MIGRATE=false`，部署前备份并显式执行 `go run ./cmd/migrate-schema up` 和 `go run ./cmd/migrate-schema verify`，连接参数沿用实际部署配置。不要将旧文档中的“无需结构升级”用于本版本。
+
+## 登录与撤销协议
+
+两端需同时升级：签发方固定 `iss=sub2api`、`aud=ju`，接收方拒绝缺失或不匹配的声明，不兼容旧的无 audience 票据。签名为 `base64url(JSON).base64url(HMAC-SHA256(encodedPayload, secret))`；登录票据最长三天，允许签发时间最多提前 30 秒。
+
+1. Sub2API 校验 JWT、用户启用状态，返回 Ju 固定回调地址与一次性票据。
+2. Ju 校验签名、字段和时效，在数据库原子插入 jti 的 SHA-256 摘要；重启及多副本共用数据库时仍防重放，数据库故障拒绝登录。
+3. 回调创建三天交换记录，设置 `ju_sso_handoff` HttpOnly、SameSite=Strict Cookie，重定向到无票据的 `/auth/sso`。
+4. 前端同源 POST `/api/auth/sso/exchange`，携带 `X-Ju-SSO: 1`。服务端校验 Origin、Sec-Fetch-Site，删除 Cookie 并原子消费交换记录，再建立 Ju 自己的 HttpOnly 会话。生产 Cookie 为 Secure。
+5. 页面整体跳转到安全的 `next`，重新初始化用户缓存。最终地址无票据、JWT 或 Key；失败只返回固定提示。
+
+身份始终按 `sub2api + sub` 唯一映射。邮箱不用于合并账户；首次创建普通用户，重复或并发登录复用唯一身份。昵称保留本地修改，外部用户名与头像更新为展示资料；本地禁用用户不得登录。管理端删除账号采用现有禁用策略，保留身份与数据归属，避免下次 SSO 重新建号绕过禁用。
+
+普通 Ju 登出只撤销当前本地会话。全局登出使用 Sub2API 已有的 `POST /api/v1/auth/revoke-all-sessions`：服务端向注册回调同域的 `/api/auth/sso/logout` POST 独立 `aud=ju:logout` 票据，Ju 持久化撤销时间并撤销映射账号会话，再由 Sub2API 撤销门户会话。旧登录票据、尚未交换的 Cookie 和并发建立的旧会话都受撤销时间约束。撤销通知最长 60 秒有效，禁止跳转，5 秒超时；Ju 未确认时接口返回 502，调用方应重试，不能宣称全局登出成功。普通门户 `/auth/logout` 仍是门户本地登出。
+
+回调、交换、撤销均限流；审计只记录事件、结果及本地用户 ID。Nginx 不记录查询字符串或 Referer；上层网关同样必须脱敏。过期票据和交换记录在下一次写入时清理，撤销记录保留以阻止旧凭据恢复。后台 Relay Key、计费和模型权限保持独立，不随 SSO 传递。
+
+## 管理员一次性配置
+
+Sub2API 服务端配置：
+
+```dotenv
+SUB2API_SSO_SECRET=<两端相同的至少32字符随机密钥>
+JU_SSO_CALLBACK_URL=https://ju.example.com/api/auth/sso/callback
+```
+
+回调地址必须显式配置为 HTTPS，路径精确为 `/api/auth/sso/callback`，不能包含用户名、密码、查询或片段。仅 localhost、127.0.0.1、::1 允许开发 HTTP。缺失或非法配置返回 503。签发、回调、交换和撤销接口均设置 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`。Sub2API 后端还须能访问 Ju 注册域名，以发送撤销通知。
+
+影策后端配置：
+
+```dotenv
+SUB2API_SSO_SECRET=<与Sub2API相同的密钥>
+SUB2API_RELAY_BASE_URL=http://sub2api:8080/v1
+SUB2API_RELAY_API_KEY=<管理员共享账户的SuperKey>
+SUB2API_RELAY_MODELS=gpt-5.5
+SUB2API_RELAY_IMAGE_MODELS=
+SUB2API_RELAY_VIDEO_MODELS=
+SUB2API_RELAY_ALLOW_LOCAL=false
+CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS=sub2api
+CANVAS_ALLOW_PRIVATE_UPSTREAMS=false
+CANVAS_AUTO_MIGRATE=false
+CANVAS_REGISTRATION_ENABLED=false
+CANVAS_CORS_ORIGINS=https://ju.example.com
+```
+
+文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。图片、视频留空不启用该能力；不要从文本模型列表推断视频能力，也不要将音频工作流误填为视频。模型可见不代表上游已开通，必须用共享 Key 的实际权限和响应验证。
+
+当前视频协议为 `sub2api-video-v1`，仅开放已经核实的合同：
+
+| 模型 | 参考输入 | 时长 | 输出规格 |
+| --- | --- | --- | --- |
+| `minimax_h3_b99_001` | 无 | 1–15 秒 | 736p，16:9 或 9:16 |
+| `minimax_h3_b99_002` | 首帧、尾帧各一张 | 1–15 秒 | 同上 |
+| `minimax_h3_b99_003_12s` | 1–9 张图片 | 1–12 秒 | 同上 |
+
+文生视频支持 Sub2API 已定义的 `minimax/minimax-h3/minimax_h3` 别名。视频模型 ID 必须使用表中小写形式；未列出的模型（包括尚未补齐映射的音视频混合工作流）会在启动校验中明确拒绝。默认 5 秒竖屏；目前网关方形映射不完整，因此不公开 1:1。图片使用已有 `openai-image` 插件，并要求运营者确认该模型支持此协议。
+
+本方案发布系统渠道目录，部署的功能配置应保持 `frontendModelsEnabled=false`（默认值）。如果已启用独立的前台逻辑模型目录，应由管理员先将其切回系统渠道模式，或另行建立现有逻辑模型和路由；接入过程不会悄悄更改该运营设置。新建模型采用影策本地零价，让新 SSO 用户不必充值第二套钱包；重启保留管理员后来设置的价格和禁用价格状态，上游仍按共享 Key 实际计费。
+
+网关模型调用路径是 `/v1`，不是 Sub2API 管理 API 的 `/api/v1`。SSO 创建接口仍是 Sub2API 的 `/api/v1/auth/integrations/ju/start`；影策回调是 `/api/auth/sso/callback`。
+
+管理员在后端为普通用户提供系统渠道。视频走现有生成任务，由后端提交、保存上游任务 ID、轮询并存储生成资源；浏览器只读影策任务和资源。避免把视频接入改成浏览器直连上游或将大文件塞入通用 JSON 代理。上游要拉取的参考素材必须有其可访问的受控 URL，本机地址与浏览器 `blob:` 地址不适合云端拉取。
+
+视频创建成功后强制保存上游任务 ID。状态查询或下载发生超时、429、5xx 等暂时错误时，后台继续查询原 ID，不自动重新 POST；自动恢复最多持续 24 小时，之后保留原 ID 供人工查询。下载只使用相同网关的鉴权 `/content`，不直接消费上游返回的临时外链，并校验非空视频响应。素材仍受现有生成文件大小和用户存储配额限制。存在未完成任务时不要切换共享 Key、所属分组或网关地址；Sub2API 的任务所有权绑定依赖原 Key。网关没有取消接口，取消影策任务不保证撤销上游费用。
+
+提交前通过现有 `tasks.poll_stage` 条件更新记录提交状态。如果进程在上游接受请求后、保存任务 ID 前退出，恢复时会停止自动重发，并提示人工核对，不承诺自动完成这类结果不确定的任务。这个保守策略避免重复付费，但也可能暂停已记录提交状态、实际尚未发出的请求。正常轮询和人工恢复都校验响应 ID，审计日志不能覆盖已经接受的任务 ID。
+
+## Docker 网络
+
+Sub2API 和影策可由独立 Compose 管理。只将影策 backend 加入现有 Sub2API 网络，不公开影策 backend、数据库或 Redis 端口。查询现有网络名称后设置 `SUB2API_DOCKER_NETWORK`，再叠加接入配置：
+
+接入叠加文件同时提供内部 `sso-redis`，AOF 持久化使用 `appendfsync always`。所有影策实例必须使用同一个 `REDIS_URL`，使三天票据在跨副本及正常重启后仍只消费一次；不要让生产 SSO 依赖进程内临时防重放缓存。已有可靠 Redis 可通过 `REDIS_URL` 指向它，但仍应配置持久化，不要将 Redis 端口暴露公网。
+
+```bash
+docker inspect sub2api --format '{{json .NetworkSettings.Networks}}'
+docker compose -p ju -f docker-compose.local.yml -f docker-compose.sub2api.yml config --quiet
+docker compose -p ju -f docker-compose.local.yml -f docker-compose.sub2api.yml up -d --build
+```
+
+PostgreSQL 生产部署改用 `docker-compose.deploy.yml`，本地源码构建再叠加 `docker-compose.build.yml`，最后叠加 `docker-compose.sub2api.yml`。已有数据库先备份并执行只读的结构校验。全新空数据库需要运营者明确初始化现有基线结构，这属于首次部署，不应对已有数据库隐式执行。
+
+Sub2API 自身每次启动都会检查并执行其内嵌迁移，影策的 `CANVAS_AUTO_MIGRATE=false` 不能控制它。只启用已有 SSO 功能时，应固定经过核验的现有 Sub2API 镜像，核对迁移记录和数据库结构摘要；不要为了更新侧栏而把其他未审定的后端改动同时部署。前端可独立构建、由本机 Nginx 同源代理现有后端进行联调。
+
+独立前端应保留相对 API 基址 `/api/v1`，由该前端的 Nginx 代理；同源请求不需要跨域预检。不要为了通过人工 OPTIONS 探测而放宽整个 Sub2API 的 CORS。联调入口与原站点端口不同，浏览器 localStorage 登录态不会共享，需先在联调入口登录 Sub2API；随后影策仍应免二次登录。正式入口保持用户原有 Origin，避免因更换端口引入额外登录。
+
+`sub2api` 必须是共享网络中的真实 DNS 别名。若改用其他主机，应同步调整 `SUB2API_RELAY_BASE_URL` 和精确的 `CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS`；不得用“允许全部私网”代替网络配置。生产用 HTTPS 公网访问两个站点，SSO 回调不能填写 Docker 内部地址。
+
+## Nginx 与跨域
+
+推荐浏览器始终通过影策 Nginx 同源访问 `/api`。SSO 是顶层页面跳转，不要求放开任意跨域。Nginx 将 API 和 OPTIONS 转发至 backend，保留公开 Host 的端口，由后端按 `CANVAS_CORS_ORIGINS` 返回唯一一套 CORS 响应头。
+
+白名单填写实际页面 Origin，包含协议及非默认端口，不含路径；多个 Origin 用逗号分隔。不要配置 `*`，不要在 Nginx 额外反射任意 Origin，也不要吞掉不受信任来源的 403。跨站直接携带 Cookie 还受浏览器 SameSite 策略约束，优先同源代理而不是放宽 Cookie。现有文本 SSE 专用代理保持禁缓冲，普通 API 和资源不套用全局禁缓冲。
+
+## 验收清单
+
+以下历史部署与人工记录仅描述旧版结果，不证明本次版本 11 已部署。新版本需重新执行双端签发、交换、跨用户隔离、全局撤销和生产代理检查。
+
+### 本次本地验证
+
+- Ju `go test ./internal/auth ./internal/database ./internal/handler -count=1`：认证、数据库迁移、HTTP 回调与交换、Cookie 属性、重放、跨站、用户禁用、本地登出及全局撤销通过。
+- Ju `go test ./internal/repository -run TestSSOTicket -count=1`：关闭并重开数据库后的重放拒绝、八个并发消费者仅一次成功、过期记录清理通过。
+- Ju `go test ./internal/app -run 'TestEmptyModelCatalog|TestSub2API|TestDirectResourceURLChecksOwnership' -count=1`：Relay 目录脱敏、能力配置、模拟视频任务与资源归属通过。空模型目录会保留空数组，SSO 不依赖管理员先配置 Relay。
+- Sub2API `go test -tags unit ./internal/handler -run 'TestJuSSO|TestSafeJu|TestAuthHandlerRevokeAll' -count=1`：签发、禁用账号、回调地址、声明及撤销通知通过。
+- Ju `bun run build`：类型检查与生产构建通过；保留既有大 chunk 提示。
+- 隔离 SQLite 部署配合真实 Chromium：验证同源 Cookie 交换、最终项目页、刷新、桌面/手机视口、一次性 Cookie 清除、重放拒绝及撤销通知后的会话失效。开发 Vite 代理保留浏览器 Host，保证与生产同源校验一致。
+
+扩展运行既有 `TestCreationRunOwnershipCASAndFence` 时，其 Windows 临时 SQLite 文件未关闭导致清理失败；本次新增的 HTTP 双用户项目、资源、任务隔离测试已通过。未调用付费模型，也未替换真实部署或运行本次 PostgreSQL 集群验收。
+
+### 可重复的接收端冒烟
+
+`scripts/sub2api-receiver-smoke.mjs` 使用 Node.js 22+，从环境读取隔离部署的 `SUB2API_SMOKE_BASE_URL` 和 `SUB2API_SSO_SECRET`，运行命令为 `node scripts/sub2api-receiver-smoke.mjs`。密钥应从受保护的部署配置注入，不要填写在命令参数、聊天或提交文件中。
+
+脚本在现有表内创建测试用户、项目和一个仓库内 MP4 素材，只适合隔离测试数据库，不请求付费上游。它覆盖 SSO 回调、HttpOnly 会话、同一身份复用、重复票据拒绝、过期时间限制、外站跳转限制、免配置模型目录、项目/资源用户隔离，以及持久化 MP4 的 206 Range 读取。Nginx 与后端日志还需另查，确保未记录票据查询参数。
+
+隔离 Docker 已通过上述接收端检查、受信/非受信 Origin 检查和数据库结构校验。共享 Super Key 已通过真实模型目录查询、`gpt-5.5` 文本生成和 `minimax_h3_b99_001` 的 5 秒视频生成验证；视频完成创建、轮询、鉴权下载、资源持久化和 206 Range 读取。图片生成及其余两个视频工作流尚未实际调用，模型目录可见不代表生成已通过。worker 重启恢复目前只有模拟上游回归覆盖，未进行真实任务故障注入。
+
+### 真实生成冒烟
+
+`scripts/sub2api-generation-smoke.mjs` 使用相同的隔离部署地址和 SSO secret，另要求显式设置 `SUB2API_SMOKE_PAID=1`。它通过影策系统渠道创建一条短文本和一条 5 秒 B99 文生视频，实际消耗共享账户的上游额度，浏览器或脚本不接收 Super Key。视频完成后检查持久资源和 206 Range 响应。
+
+任务 ID 及测试用户 scope 保存到 Git 忽略的 `.local/sub2api-generation-smoke.json`，不保存票据或密钥。重复运行会读取已有任务，不重复生成。只查看脱敏状态使用 `node scripts/sub2api-generation-smoke.mjs --status`，不需设置付费开关。提交结果不确定时脚本会停止，不能通过删除检查点自动重发；必须先核对任务记录及上游状态。此脚本使用测试票据验证接收端，不替代真实 Sub2API JWT 签发和侧栏点击验收。
+
+首次真实视频测试在提交上游前发现默认参数序列化失败：默认布尔值和数值与 worker 的字符串配置合同不一致。已统一默认值序列化并增加图片/视频回归测试，保留用户显式参数；修复后的真实视频任务成功，没有重发已被上游接受的任务。
+
+经用户授权，已将 SSO 两项配置写入 Git 忽略的 `sub2api/deploy/.env`，并固定原镜像 `sha256:7c6d2e84ed421a22a258ff5a3ac810b5caeb74a6ff3b79df0add628a37edf618`，通过 Compose 的 `--no-deps --no-build --pull never` 重建 Sub2API 应用容器。当前服务健康，SSO secret 与影策一致，回调为 `http://127.0.0.1:3517/api/auth/sso/callback`；密钥不写入文档或浏览器。
+
+本次重建前后 PostgreSQL 结构摘要均为 `108bf9147ee895e126d05549ff8111e23ed67104efea81b659170ed7c8be0217`，迁移记录均为 285 条，未改变数据库结构。此次只给原镜像补充配置，源码中的签发端 `no-store`、严格回调校验及缺失配置失败关闭补强仍未进入运行镜像。
+
+用户已按真实侧栏点击流程手工测试，确认进入影策工作台 `/projects`，随后在该浏览器会话中按免配置创作验收步骤确认分镜、脚本和视频生成均成功。因此「侧栏进入工作台、使用预置模型完成创作」主流程记为人工验收通过。浏览器自动化此前因无法可靠识别当前 URL 而停止，本项依据用户反馈，不是自动化结果；不据此推断所有模型、视频参考输入工作流和异常场景均已通过。此前真实文本、视频后端冒烟作为独立验证记录保留。
+
+### 端到端验收
+
+- [x] 用户手工点击 Sub2API「智能剧场」后确认进入影策工作台 `/projects`。
+- [x] 用户按验收步骤确认在上述真实 SSO 浏览器会话中直接使用预置模型完成生成，无需填写渠道地址或 Key。
+- [x] 用户确认分镜、脚本和视频生成均测试成功。
+- [ ] 过期、签名错误和重复使用的 SSO 票据被拒绝，跳转路径不能指向外站。
+- [ ] 新用户能看到管理员启用的默认文本、图片和视频模型，未启用能力不展示为可用。
+- [x] 隔离 Docker 中实际文本生成成功；实际文生视频创建、轮询、资源保存和 HTTP 206 Range 读取成功，浏览器播放器交互仍待验收。
+- [ ] 视频等待期间重启 worker 后沿用原上游任务 ID，不重复付费提交。
+- [ ] 两个 SSO 用户无法读取彼此的任务、项目和资源。
+- [ ] 浏览器 URL、响应、持久化配置和日志没有 Super Key；任务正文不保存上游密钥。
+- [ ] 受信 Origin 的 OPTIONS/业务请求有正确凭据响应头，陌生 Origin 被拒绝。
+- [x] 本次隔离影策部署及原镜像 Sub2API 配置重建前后，数据库结构摘要一致；只新增或更新现有表中的记录。
+
+健康检查和配置解析只证明进程入口与部署语法可用，不能替代上述登录、计费和生成验收。没有真实上游额度或模型权限时应明确标为未验证，不将模拟响应当成实际生成成功。

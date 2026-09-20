@@ -1,0 +1,37 @@
+# Overlay for an existing Sub2API deployment. Keep databases on the default network.
+services:
+  backend:
+    environment:
+      CANVAS_AUTO_MIGRATE: "false"
+      CANVAS_ALLOW_PRIVATE_UPSTREAMS: "false"
+      CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS: ${CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS:-sub2api}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
+      LINK: ${LINK:-}
+      REDIS_URL: ${REDIS_URL:-redis://sso-redis:6379/0}
+    depends_on:
+      sso-redis:
+        condition: service_healthy
+    networks:
+      - default
+      - sub2api
+
+  sso-redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
+    volumes:
+      - sso-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+networks:
+  sub2api:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}
+
+volumes:
+  sso-redis-data:

@@ -1,0 +1,5 @@
+FROM ppt-production:latest
+RUN /usr/local/bin/python -m pip install --no-cache-dir --target /opt/test-deps pytest==9.1.1 pytest-asyncio==1.4.0
+ENV PYTHONPATH=/opt/test-deps
+WORKDIR /app/servers/fastapi
+ENTRYPOINT ["/opt/venv/bin/python", "-m", "pytest"]

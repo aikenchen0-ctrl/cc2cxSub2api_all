@@ -1,0 +1,118 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { describe, expect, it } from 'vitest'
+
+import zhCommon from '@/i18n/locales/zh/common'
+
+const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppSidebar.vue')
+const componentSource = readFileSync(componentPath, 'utf8')
+const stylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../style.css')
+const styleSource = readFileSync(stylePath, 'utf8')
+
+describe('AppSidebar custom SVG styles', () => {
+  it('does not override uploaded SVG fill or stroke colors', () => {
+    expect(componentSource).toContain('.sidebar-svg-icon {')
+    expect(componentSource).toContain('color: currentColor;')
+    expect(componentSource).toContain('display: block;')
+    expect(componentSource).not.toContain('stroke: currentColor;')
+    expect(componentSource).not.toContain('fill: none;')
+  })
+})
+
+describe('AppSidebar scroll position persistence', () => {
+  it('binds a template ref to the sidebar nav element', () => {
+    expect(componentSource).toContain('ref="sidebarNavRef"')
+    expect(componentSource).toContain('sidebar-nav')
+  })
+
+  it('declares sidebarNavRef in script setup', () => {
+    expect(componentSource).toContain("const sidebarNavRef = ref<HTMLElement | null>(null)")
+  })
+
+  it('saves scroll position on beforeUnmount', () => {
+    expect(componentSource).toContain('onBeforeUnmount')
+    expect(componentSource).toContain('appStore.sidebarScrollTop')
+    expect(componentSource).toContain('sidebarNavRef.value.scrollTop')
+  })
+
+  it('restores scroll position on mount', () => {
+    expect(componentSource).toContain('onMounted')
+    expect(componentSource).toContain('appStore.sidebarScrollTop')
+    expect(componentSource).toContain('nextTick')
+  })
+})
+
+describe('AppSidebar collapsible groups', () => {
+  it('lets the user collapse a group even while a child route is active', () => {
+    // The expand state must come from the user's override first, falling back
+    // to the active-route heuristic only when the user has not clicked yet.
+    expect(componentSource).toContain('const groupExpandOverrides = ref<Map<string, boolean>>(new Map())')
+    expect(componentSource).not.toContain('expandedGroups.value.has(item.path) || isGroupActive(item)')
+  })
+})
+
+describe('AppSidebar header styles', () => {
+  it('does not clip the version badge dropdown', () => {
+    const sidebarHeaderBlockMatch = styleSource.match(/\.sidebar-header\s*\{[\s\S]*?\n {2}\}/)
+    const sidebarBrandBlockMatch = componentSource.match(/\.sidebar-brand\s*\{[\s\S]*?\n\}/)
+
+    expect(sidebarHeaderBlockMatch).not.toBeNull()
+    expect(sidebarBrandBlockMatch).not.toBeNull()
+    expect(sidebarHeaderBlockMatch?.[0]).not.toContain('@apply overflow-hidden;')
+    expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
+  })
+})
+
+describe('AppSidebar SuperKey quick apps', () => {
+  it('opens every companion app through SSO and never puts an API key in the URL', () => {
+    expect(componentSource).toContain("/auth/integrations/qrcode/start")
+    expect(componentSource).not.toContain('apiKey: superApiKey')
+    expect(componentSource).not.toContain('keysAPI')
+    expect(componentSource).toMatch(/label: t\('nav\.artQr'\),\s*href: qrcodeSsoUrl,\s*includeApiKey: false,\s*sso: true/)
+  })
+})
+
+describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
+  it('lists 智能剧场 and 超级改图 as ju-style SSO quick apps without an API key in the URL', () => {
+    expect(zhCommon.nav.smartShortDrama).toBe('智能剧场')
+    expect(zhCommon.nav.superCanvas).toBe('超级改图')
+    expect(zhCommon.nav.superCanvas).not.toBe('超级画布')
+    expect(componentSource).toContain("t('nav.smartShortDrama')")
+    expect(componentSource).toContain("t('nav.superCanvas')")
+    expect(componentSource).toContain("/auth/integrations/ju/start")
+    expect(componentSource).toContain("/auth/integrations/livart/start")
+    expect(componentSource).toMatch(/label: t\('nav\.smartShortDrama'\),\s*href: shortDramaUrl,\s*includeApiKey: false,\s*sso: true/)
+    expect(componentSource).toMatch(/label: t\('nav\.superCanvas'\),\s*href: superCanvasUrl,\s*includeApiKey: false,\s*sso: true/)
+    expect(componentSource).not.toMatch(/label: t\('nav\.smartShortDrama'\),\s*href: shortDramaUrl,\s*includeApiKey: true/)
+    expect(componentSource).not.toMatch(/label: t\('nav\.superCanvas'\),\s*href: superCanvasUrl,\s*includeApiKey: true/)
+    expect(componentSource).not.toContain('超级画布')
+  })
+})
+
+describe('AppSidebar AI剪辑 SSO entry', () => {
+  it('opens aicut through authenticated SSO without exposing an API key', () => {
+    expect(zhCommon.nav.aiCut).toBe('AI剪辑')
+    expect(componentSource).toContain("/auth/integrations/aicut/start")
+    expect(componentSource).toMatch(/label: t\('nav\.aiCut'\),\s*href: aiCutSsoUrl,\s*includeApiKey: false,\s*sso: true/)
+  })
+})
+
+describe('AppSidebar subscription feature flag', () => {
+  it('gates the My Subscriptions entry behind the subscription public-settings flag', () => {
+    expect(componentSource).toContain('const flagSubscription = makeSidebarFlag(FeatureFlags.subscription)')
+    expect(componentSource).toMatch(/path: '\/subscriptions'[^\n]*featureFlag: flagSubscription/)
+  })
+
+  it('also hides the admin Subscription Management entry on recharge-only sites', () => {
+    expect(componentSource).toMatch(/path: '\/admin\/subscriptions'[^\n]*featureFlag: flagSubscription/)
+  })
+
+  it('derives the purchase entry label from the site billing mode', () => {
+    expect(componentSource).toContain("import { resolveSiteBillingMode } from '@/utils/siteBillingMode'")
+    expect(componentSource).toMatch(/case 'recharge_only':\s*return t\('nav\.recharge'\)/)
+    expect(componentSource).toMatch(/case 'subscription_only':\s*return t\('nav\.subscribe'\)/)
+    expect(componentSource).toMatch(/path: '\/purchase'[^\n]*label: purchaseNavLabel\.value/)
+  })
+})

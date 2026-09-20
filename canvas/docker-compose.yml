@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ghcr.io/tigerowo/infinite-canvas:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: always
+    container_name: infinite-canvas
+    env_file:
+      - .env
+    environment:
+      LINK: ${LINK:-}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-${LINK:-}}
+      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-gpt-5.5}
+      SUB2API_RELAY_IMAGE_MODELS: ${SUB2API_RELAY_IMAGE_MODELS:-gpt-image-2,grok-imagine-image-1.5}
+      SUB2API_RELAY_VIDEO_MODELS: ${SUB2API_RELAY_VIDEO_MODELS:-grok-imagine-video-1.5,seedance-2.0,kling-v3}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

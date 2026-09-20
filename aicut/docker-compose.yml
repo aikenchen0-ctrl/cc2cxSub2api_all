@@ -1,0 +1,36 @@
+services:
+  aicut:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aicut:workspace
+    container_name: aicut
+    restart: unless-stopped
+    command: ["./node_modules/.bin/vite", "--config", "config/vite.config.ts", "--host", "0.0.0.0"]
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${AICUT_HOST_PORT:-5199}:5199"
+    environment:
+      SUB2API_BASE: ${SUB2API_BASE:-${LINK:-http://sub2api:8080}}
+      LINK: ${LINK:-}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      OPENCHATCUT_SSO_CALLBACK_URL: ${OPENCHATCUT_SSO_CALLBACK_URL:-http://localhost:5199/api/auth/sso/callback}
+      OCC_SESSION_SECRET: ${OCC_SESSION_SECRET:?OCC_SESSION_SECRET is required}
+      OCC_SECURE_COOKIE: ${OCC_SECURE_COOKIE:-0}
+      OCC_OPEN_REGISTER: ${OCC_OPEN_REGISTER:-0}
+      OCC_PUBLIC_MCP: ${OCC_PUBLIC_MCP:-0}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
+    volumes:
+      - aicut_data:/root/.openchatcut
+    networks:
+      - sub2api-network
+
+volumes:
+  aicut_data:
+    name: aicut_data
+
+networks:
+  sub2api-network:
+    external: true
+    name: deploy_sub2api-network

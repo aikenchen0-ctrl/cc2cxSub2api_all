@@ -1,0 +1,24 @@
+services:
+  aiexcel:
+    image: aiexcel:local
+    build: .
+    container_name: aiexcel
+    restart: unless-stopped
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-${LINK:-}}
+      LINK: ${LINK:-}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-5.5}
+    ports:
+      - "${AIEXCEL_BIND_HOST:-0.0.0.0}:${AIEXCEL_PORT:-4173}:80"
+    networks:
+      - aiexcel_default
+      - sub2api-network
+
+networks:
+  aiexcel_default:
+    driver: bridge
+  sub2api-network:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}
