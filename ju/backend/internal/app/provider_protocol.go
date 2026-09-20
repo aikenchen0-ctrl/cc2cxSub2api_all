@@ -561,10 +561,16 @@ func safeProtocolFilename(value string) string {
 }
 
 func applyProtocolAuth(req *http.Request, config providerConfig, auth protocol.ManifestAuth) error {
+	// Declarative manifests must not be able to replace the managed relay
+	// credential with a custom bearer/query/header scheme.  The host owns the
+	// three satellite headers for this channel and applies them uniformly to
+	// create, poll, and download requests.
+	if strings.EqualFold(strings.TrimSpace(config.ChannelID), sub2APIRelayChannelID) {
+		return applyProviderAuth(req, config)
+	}
 	typeName := strings.ToLower(strings.TrimSpace(auth.Type))
 	if typeName == "" {
-		applyProviderAuth(req, config)
-		return nil
+		return applyProviderAuth(req, config)
 	}
 	credential := protocolCredentialField(config, auth.Field)
 	switch typeName {

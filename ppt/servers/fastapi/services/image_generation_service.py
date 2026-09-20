@@ -153,6 +153,16 @@ class ImageGenerationService:
     async def generate_image_openai(
         self, prompt: str, output_directory: str, model: str, quality: str
     ) -> str:
+        # In hosted mode even the legacy DALL-E/GPT-image selectors must use
+        # the server-side Sub2API relay.  Never let AsyncOpenAI read a browser
+        # or container provider key directly when the satellite is managed.
+        from utils.sub2api_satellite import satellite_managed
+
+        if satellite_managed():
+            # Use the configured Sub2API image model instead of forwarding a
+            # legacy provider name such as dall-e-3 to the relay.
+            return await self.generate_image_openai_compatible(prompt, output_directory)
+
         client = AsyncOpenAI()
         result = await client.images.generate(
             model=model,
@@ -273,6 +283,12 @@ class ImageGenerationService:
         self, prompt: str, output_directory: str, model: str
     ) -> str:
         """Base method for Google image generation models."""
+        from utils.sub2api_satellite import satellite_managed
+
+        if satellite_managed():
+            # Hosted PPT never calls Google's SDK with a container/browser key;
+            # the configured Sub2API image model is the sole provider path.
+            return await self.generate_image_openai_compatible(prompt, output_directory)
         client = genai.Client()
         response = await asyncio.to_thread(
             client.models.generate_content,

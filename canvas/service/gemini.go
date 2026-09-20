@@ -33,8 +33,13 @@ func BuildGeminiChannelURL(channel model.ModelChannel, path string) string {
 	return baseURL + path
 }
 
-func SetModelChannelAuthHeader(request *http.Request, channel model.ModelChannel) {
-	modelProtocolForChannel(channel).setAuth(request, channel)
+func SetModelChannelAuthHeader(request *http.Request, channel model.ModelChannel) error {
+	// The managed relay always uses the app credential + three satellite
+	// headers, regardless of the protocol label stored on the channel.
+	if IsSub2APIChannel(channel) {
+		return ApplySub2APIHeadersForUser(request.Header, channel.OnBehalfOf, channel.APIKey)
+	}
+	return modelProtocolForChannel(channel).setAuth(request, channel)
 }
 
 func StripGeminiModelField(body []byte, contentType string) ([]byte, error) {

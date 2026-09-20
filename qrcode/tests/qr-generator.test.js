@@ -53,6 +53,87 @@ test("generateQrArtwork should expose endpoint and root cause when fetch fails",
   );
 });
 
+test("generateQrArtwork artistic mode should send a centered full QR canvas", async () => {
+  const imageBuffer = await sharp({
+    create: {
+      width: 320,
+      height: 320,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 }
+    }
+  })
+    .composite([
+      {
+        input: Buffer.from('<svg width="320" height="320"><rect x="80" y="80" width="160" height="160" fill="black"/></svg>')
+      }
+    ])
+    .png()
+    .toBuffer();
+  const responseBuffer = await sharp({
+    create: {
+      width: 64,
+      height: 64,
+      channels: 3,
+      background: { r: 28, g: 116, b: 132 }
+    }
+  }).png().toBuffer();
+  let submittedImage;
+  let submittedMask;
+  let submittedPrompt;
+  let submittedInputFidelity;
+
+  const result = await generateQrArtwork({
+    imageBuffer,
+    mimeType: "image/png",
+    artisticQr: true,
+    apiKey: "test-api-key",
+    fetchImpl: async (url, options = {}) => {
+      if (!url.includes("/v1/images/edits")) {
+        throw new Error(`unexpected url: ${url}`);
+      }
+
+      submittedImage = Buffer.from(await options.body.get("image").arrayBuffer());
+      submittedMask = Buffer.from(await options.body.get("mask").arrayBuffer());
+      submittedPrompt = options.body.get("prompt");
+      submittedInputFidelity = options.body.get("input_fidelity");
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          data: [{ b64_json: responseBuffer.toString("base64") }]
+        })
+      };
+    }
+  });
+
+  const imageMeta = await sharp(submittedImage).metadata();
+  const maskMeta = await sharp(submittedMask).metadata();
+  assert.deepEqual(
+    { width: imageMeta.width, height: imageMeta.height },
+    { width: 1024, height: 1024 }
+  );
+  assert.deepEqual(
+    { width: maskMeta.width, height: maskMeta.height },
+    { width: 1024, height: 1024 }
+  );
+  assert.match(submittedPrompt, /entire square QR image/i);
+  assert.doesNotMatch(submittedPrompt, /embedded inside another image/i);
+  assert.equal(submittedInputFidelity, "high");
+  assert.equal(result.pipeline.artisticQr, true);
+  assert.equal(result.pipeline.uploadContextMode, "artistic-qr-canvas");
+  assert.equal(result.pipeline.editMode, "artistic-qr-edits");
+
+  const outputBuffer = Buffer.from(result.imageDataUrl.split(",")[1], "base64");
+  const { data: outputPixels, info: outputInfo } = await sharp(outputBuffer)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const corner = outputPixels.slice(0, outputInfo.channels);
+  const centerOffset = ((outputInfo.height / 2) * outputInfo.width + outputInfo.width / 2) * outputInfo.channels;
+  const center = outputPixels.slice(centerOffset, centerOffset + outputInfo.channels);
+  assert.ok(corner[0] > 240 && corner[1] > 240 && corner[2] > 240);
+  assert.ok(center[0] < 100 && center[2] > 30);
+});
+
 test("generateQrArtwork should submit gpt-image-2 edit task and return edited image", async () => {
   const imageBuffer = await createTestImageBuffer();
   const templateBuffer = await createTemplateBuffer();

@@ -57,6 +57,15 @@ def test_identity_is_reused_for_same_issuer_and_subject(monkeypatch, tmp_path):
     assert second.display_name == "Second"
 
 
+def test_legacy_relay_key_claim_is_rejected(monkeypatch):
+    secret = "s" * 32
+    monkeypatch.setenv("SUB2API_SSO_SECRET", secret)
+    with pytest.raises(HTTPException) as exc_info:
+        auth.verify_ticket(_ticket(secret, rk="legacy-secret"))
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid SSO payload"
+
+
 @pytest.mark.parametrize("value", ["/", "/editor?tab=code", "//evil.example", "https://evil.example", r"/a\\b"])
 def test_safe_next_rejects_external_targets(value):
     result = auth._safe_next(value)

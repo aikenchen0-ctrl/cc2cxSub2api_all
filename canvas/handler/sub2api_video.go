@@ -41,7 +41,10 @@ func serveSub2APIVideoContent(w http.ResponseWriter, r *http.Request, id string)
 		FailWithStatus(w, 502, "视频内容请求失败")
 		return true
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		FailWithStatus(w, http.StatusServiceUnavailable, "AI relay 身份尚未准备好")
+		return true
+	}
 	response, err := service.HTTPClientForChannel(channel).Do(request)
 	if err != nil {
 		FailWithStatus(w, 502, "视频内容下载失败")

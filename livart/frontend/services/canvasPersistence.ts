@@ -215,6 +215,9 @@ export const ensureCanvasImageAsset = async (item: CanvasItem) => {
   }
 
   const imageContent = await persistCanvasImageValue(item);
+  if (!imageContent.assetId) {
+    throw new Error('图片缺少可用的资源 ID，无法提交编辑');
+  }
   return {
     ...item,
     content: imageContent.content,

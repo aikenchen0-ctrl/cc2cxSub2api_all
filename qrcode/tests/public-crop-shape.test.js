@@ -28,6 +28,10 @@ test("front end should use the requested default mask placement", async () => {
   assert.match(js, /DEFAULT_MASK_X = 250/);
   assert.match(js, /DEFAULT_MASK_Y = 270/);
   assert.match(js, /DEFAULT_MASK_SIZE = 950/);
+  assert.match(js, /DEFAULT_PRESET_MASK_X = 575/);
+  assert.match(js, /DEFAULT_PRESET_MASK_Y = 670/);
+  assert.match(js, /maskPlacementPreset = "blank"/);
+  assert.match(js, /formData\.append\("templatePreset", "blank"\)/);
 });
 
 test("crop canvas should preserve source image aspect while mapping crop coordinates", async () => {

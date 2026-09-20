@@ -8,7 +8,7 @@ test("front end should expose batch count input with default 3", async () => {
 
   assert.match(html, /id="generateCount"[^>]*type="number"[^>]*value="3"/);
   assert.match(html, /id="batchResultGrid"/);
-  assert.match(html, /app\.js\?v=20260522-wechat-loading-feedback/);
+  assert.match(html, /app\.js\?v=20260920-artistic-qr-fix/);
   assert.match(js, /const generateCountInput = document\.querySelector\("#generateCount"\)/);
   assert.match(js, /function getGenerateCount\(\)/);
   assert.match(js, /DEFAULT_GENERATE_COUNT = 3/);

@@ -34,7 +34,11 @@ func postGeminiJSON(ctx context.Context, config providerConfig, path string, bod
 	if err != nil {
 		return err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return err
+	}
+	if !managedRelay {
 		req.Header.Set("x-goog-api-key", config.APIKey)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -47,7 +51,11 @@ func getGeminiJSON(ctx context.Context, config providerConfig, path string, targ
 	if err != nil {
 		return err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return err
+	}
+	if !managedRelay {
 		req.Header.Set("x-goog-api-key", config.APIKey)
 	}
 	ApplyOutboundHeaders(req, config.Headers)
@@ -59,7 +67,11 @@ func getGeminiBinary(ctx context.Context, config providerConfig, rawURL string) 
 	if err != nil {
 		return nil, "", err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return nil, "", err
+	}
+	if !managedRelay {
 		req.Header.Set("x-goog-api-key", config.APIKey)
 	}
 	ApplyOutboundHeaders(req, config.Headers)
@@ -79,7 +91,9 @@ func postStreamingBinary(ctx context.Context, config providerConfig, path string
 	if err != nil {
 		return nil, "", err
 	}
-	applyProviderAuth(req, config)
+	if err := applyProviderAuth(req, config); err != nil {
+		return nil, "", err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	ApplyOutboundHeaders(req, config.Headers)
@@ -95,66 +109,62 @@ func postJSON(ctx context.Context, config providerConfig, path string, body inte
 	if err != nil {
 		return err
 	}
-	applyProviderAuth(req, config)
+	if err := applyProviderAuth(req, config); err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	ApplyOutboundHeaders(req, config.Headers)
 	return doJSON(req, target)
 }
 
-func applySub2APISatelliteAuth(req *http.Request, config providerConfig) bool {
+func applySub2APISatelliteAuth(req *http.Request, config providerConfig) (bool, error) {
 	channelID := strings.TrimSpace(config.ChannelID)
 	if !strings.EqualFold(channelID, sub2APIRelayChannelID) {
-		return false
+		return false, nil
 	}
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
 	if req == nil {
-		return false
+		return true, errors.New("Sub2API relay request is nil")
 	}
 	onBehalf := ""
 	if metadata, ok := req.Context().Value(providerAnalyticsKey{}).(providerAnalyticsContext); ok && metadata.Service != nil {
 		onBehalf = metadata.Service.Sub2APIOnBehalfOf(metadata.UserID)
 	}
-	if !managed {
-		if productionRelayRuntime() {
-			// A production satellite must never send a stored relay/SuperKey.
-			req.Header.Del("Authorization")
-			req.Header.Del("x-api-key")
-			req.Header.Del("x-goog-api-key")
-			return true
-		}
-		return false
-	}
 	if credential == "" || onBehalf == "" {
-		// A configured satellite credential is never allowed to fall back to a
-		// stored relay key without the current SSO subject.
+		// A relay request is never allowed to fall back to a stored channel key
+		// (which could be a SuperKey) without the current SSO subject.
 		req.Header.Del("Authorization")
 		req.Header.Del("x-api-key")
 		req.Header.Del("x-goog-api-key")
-		return true
+		return true, errors.New("Sub2API relay credential or current session subject is unavailable")
 	}
 	req.Header.Set("Authorization", "Bearer "+credential)
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Set("X-Sub2API-On-Behalf-Of", onBehalf)
 	req.Header.Set("X-Sub2API-Satellite", "ju")
-	return true
+	return true, nil
 }
 
-func applyProviderAuth(req *http.Request, config providerConfig) {
-	if applySub2APISatelliteAuth(req, config) {
-		return
+func applyProviderAuth(req *http.Request, config providerConfig) error {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return err
+	}
+	if managedRelay {
+		return nil
 	}
 	if config.APIFormat == "claude" {
 		req.Header.Set("x-api-key", config.APIKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
-		return
+		return nil
 	}
 	if config.APIFormat == "gemini" {
 		req.Header.Set("x-goog-api-key", config.APIKey)
-		return
+		return nil
 	}
 	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+	return nil
 }
 
 func postForm(ctx context.Context, config providerConfig, path string, contentType string, body io.Reader, target interface{}) error {
@@ -162,7 +172,11 @@ func postForm(ctx context.Context, config providerConfig, path string, contentTy
 	if err != nil {
 		return err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return err
+	}
+	if !managedRelay {
 		req.Header.Set("Authorization", "Bearer "+config.APIKey)
 	}
 	req.Header.Set("Content-Type", contentType)
@@ -175,7 +189,11 @@ func getJSON(ctx context.Context, config providerConfig, path string, target int
 	if err != nil {
 		return err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return err
+	}
+	if !managedRelay {
 		req.Header.Set("Authorization", "Bearer "+config.APIKey)
 	}
 	ApplyOutboundHeaders(req, config.Headers)
@@ -191,7 +209,11 @@ func postBinary(ctx context.Context, config providerConfig, path string, body in
 	if err != nil {
 		return nil, "", err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return nil, "", err
+	}
+	if !managedRelay {
 		req.Header.Set("Authorization", "Bearer "+config.APIKey)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -204,7 +226,11 @@ func getBinary(ctx context.Context, config providerConfig, path string) ([]byte,
 	if err != nil {
 		return nil, "", err
 	}
-	if !applySub2APISatelliteAuth(req, config) {
+	managedRelay, err := applySub2APISatelliteAuth(req, config)
+	if err != nil {
+		return nil, "", err
+	}
+	if !managedRelay {
 		req.Header.Set("Authorization", "Bearer "+config.APIKey)
 	}
 	ApplyOutboundHeaders(req, config.Headers)
@@ -225,7 +251,9 @@ func getProviderExternalBinary(ctx context.Context, config providerConfig, rawUR
 		return nil, "", err
 	}
 	if sameProviderOrigin(config.BaseURL, rawURL) {
-		applyProviderAuth(req, config)
+		if err := applyProviderAuth(req, config); err != nil {
+			return nil, "", err
+		}
 		ApplyOutboundHeaders(req, config.Headers)
 	}
 	return doBinary(req)

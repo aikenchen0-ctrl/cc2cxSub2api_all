@@ -1540,7 +1540,9 @@ func uploadAPIMartImageBytes(channel model.ModelChannel, data []byte, filename s
 	if err != nil {
 		return "", err
 	}
-	service.ApplySub2APIHeadersForUser(request.Header, channel.OnBehalfOf, channel.APIKey)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 
 	response, err := service.HTTPClientForChannel(channel).Do(request)

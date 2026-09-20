@@ -12,11 +12,11 @@ import (
 
 func newSub2APIIntegrationTestService(t *testing.T) (*Service, *gorm.DB) {
 	t.Helper()
-	for _, name := range []string{"SUB2API_RELAY_BASE_URL", "SUB2API_RELAY_API_KEY", "SUB2API_RELAY_MODEL", "SUB2API_RELAY_MODELS", "SUB2API_RELAY_IMAGE_MODELS", "SUB2API_RELAY_VIDEO_MODELS", "SUB2API_RELAY_ALLOW_LOCAL"} {
+	for _, name := range []string{"SUB2API_RELAY_BASE_URL", "SUB2API_APP_CREDENTIAL", "SUB2API_RELAY_MODEL", "SUB2API_RELAY_MODELS", "SUB2API_RELAY_IMAGE_MODELS", "SUB2API_RELAY_VIDEO_MODELS", "SUB2API_RELAY_ALLOW_LOCAL"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("SUB2API_RELAY_BASE_URL", "http://sub2api:8080/v1")
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-super-test-only")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-test-credential")
 	svc, db := newChannelModelTestService(t)
 	svc.dataDir = t.TempDir()
 	return svc, db
@@ -104,11 +104,11 @@ func TestSub2APIBootstrapCapabilitiesAndSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.APIKey == "sk-super-test-only" || !strings.HasPrefix(stored.APIKey, encryptedSettingPrefix) {
+	if stored.APIKey == "satellite-test-credential" || !strings.HasPrefix(stored.APIKey, encryptedSettingPrefix) {
 		t.Fatal("system channel key was not encrypted at rest")
 	}
 	resolved, err := svc.SystemChannel(sub2APIRelayChannelID)
-	if err != nil || resolved.APIKey != "sk-super-test-only" {
+	if err != nil || resolved.APIKey != "satellite-test-credential" {
 		t.Fatalf("server-side key cannot be recovered: %v", err)
 	}
 	public, err := svc.PublicSystemChannels()
@@ -191,7 +191,7 @@ func TestSub2APIBootstrapDisableAndRestore(t *testing.T) {
 		t.Fatalf("removed model was not disabled: %v", err)
 	}
 	t.Setenv("SUB2API_RELAY_BASE_URL", "")
-	t.Setenv("SUB2API_RELAY_API_KEY", "")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "")
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestSub2APIBootstrapDisableAndRestore(t *testing.T) {
 		t.Fatalf("disabled channel retains secret or is enabled: %v", err)
 	}
 	t.Setenv("SUB2API_RELAY_BASE_URL", "http://sub2api:8080/v1")
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-super-rotated-test")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-rotated-credential")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "gpt-image-1")
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestSub2APIBootstrapDisableAndRestore(t *testing.T) {
 		t.Fatalf("restoration duplicated model/tier: %#v, err = %v", restored, err)
 	}
 	channel, err = svc.SystemChannel(sub2APIRelayChannelID)
-	if err != nil || channel.APIKey != "sk-super-rotated-test" {
+	if err != nil || channel.APIKey != "satellite-rotated-credential" {
 		t.Fatalf("rotated key unavailable: %v", err)
 	}
 }
@@ -218,7 +218,7 @@ func TestSub2APIBootstrapDisableAndRestore(t *testing.T) {
 func TestSub2APIBootstrapRejectsInvalidConfigBeforeWriting(t *testing.T) {
 	for _, test := range []struct{ name, env, value string }{
 		{"gateway", "SUB2API_RELAY_BASE_URL", "http://sub2api:8080/api/v1"},
-		{"missing key", "SUB2API_RELAY_API_KEY", ""},
+		{"missing app credential", "SUB2API_APP_CREDENTIAL", ""},
 		{"ambiguous capability", "SUB2API_RELAY_IMAGE_MODELS", "models/gpt-5.5"},
 		{"empty normalized name", "SUB2API_RELAY_MODELS", "models/"},
 		{"name too long", "SUB2API_RELAY_MODELS", strings.Repeat("m", 121)},

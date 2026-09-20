@@ -38,7 +38,7 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 	config.Cfg = config.Config{StorageDriver: "sqlite", DatabaseDSN: t.TempDir() + "/test.db", JWTSecret: strings.Repeat("j", 32), AILogDir: t.TempDir()}
 	var polls, downloads atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer sk-video-fixture" {
+		if r.Header.Get("Authorization") != "Bearer satellite-video-credential" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "video-owner" || r.Header.Get("X-Sub2API-Satellite") != "canvas" {
 			t.Error("missing upstream credential")
 		}
 		switch {
@@ -82,7 +82,7 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 	}))
 	defer upstream.Close()
 	t.Setenv("SUB2API_RELAY_BASE_URL", upstream.URL)
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-video-fixture")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-video-credential")
 	t.Setenv("SUB2API_RELAY_MODELS", "")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "")
 	t.Setenv("SUB2API_RELAY_VIDEO_MODELS", "sora-2")

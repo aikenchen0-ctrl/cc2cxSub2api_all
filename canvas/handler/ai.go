@@ -135,7 +135,11 @@ func proxyAIGetRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		log.Printf("AI proxy auth failed: model=%s err=%v", modelName, err)
+		FailWithStatus(w, http.StatusServiceUnavailable, "AI relay 身份尚未准备好")
+		return
+	}
 	copyAIResponse(w, request, channel, aiLogContext{StartedAt: startedAt, Endpoint: path, Method: http.MethodGet, Model: modelName, Channel: channel, UserID: user.ID, UserDisplayName: firstNonEmpty(user.DisplayName, user.Username), RequestBody: summarizeQueryParams(r.URL.Query())}, nil)
 }
 
@@ -189,7 +193,11 @@ func proxyAIRequest(w http.ResponseWriter, r *http.Request, path string) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		log.Printf("AI proxy auth failed: model=%s err=%v", modelName, err)
+		FailWithStatus(w, http.StatusServiceUnavailable, "AI relay 身份尚未准备好")
+		return
+	}
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}

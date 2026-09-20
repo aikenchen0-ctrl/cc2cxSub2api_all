@@ -99,7 +99,14 @@ func proxyAIVideoTaskRequest(w http.ResponseWriter, r *http.Request) {
 		Fail(w, "AI 接口请求失败")
 		return
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		log.Printf("AI video auth failed: model=%s err=%v", modelName, err)
+		if credits > 0 {
+			refundVideoCredits(user.ID, modelName, credits, upstreamPath)
+		}
+		FailWithStatus(w, http.StatusServiceUnavailable, "AI relay 身份尚未准备好")
+		return
+	}
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
@@ -165,7 +172,7 @@ func proxyAIVideoTaskRequest(w http.ResponseWriter, r *http.Request) {
 		ChannelName:     channel.Name,
 		Source:          readVideoTaskSource(r),
 		SourceID:        readVideoTaskSourceID(r),
-		ClientTaskID:     readClientVideoTaskID(r),
+		ClientTaskID:    readClientVideoTaskID(r),
 		UpstreamTaskID:  parsed.UpstreamTaskID,
 		UpstreamVideoID: parsed.UpstreamVideoID,
 		Status:          parsed.Status,
@@ -253,7 +260,10 @@ func serveGeminiVideoTaskContent(w http.ResponseWriter, r *http.Request, id stri
 		Fail(w, "视频内容下载失败")
 		return true
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		FailWithStatus(w, http.StatusServiceUnavailable, "AI relay 身份尚未准备好")
+		return true
+	}
 	response, err := service.HTTPClientForChannel(channel).Do(request)
 	if err != nil {
 		Fail(w, "视频内容下载失败")
@@ -296,7 +306,9 @@ func pollVideoTaskFromUpstream(task model.VideoTask) (service.VideoTaskPollUpdat
 	if err != nil {
 		return service.VideoTaskPollUpdate{}, err
 	}
-	service.SetModelChannelAuthHeader(request, channel)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		return service.VideoTaskPollUpdate{}, err
+	}
 	startedAt := time.Now()
 	logContext := aiLogContext{
 		StartedAt:       startedAt,

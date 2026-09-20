@@ -20,7 +20,7 @@ const (
 
 type modelProtocolAdapter struct {
 	buildURL  func(model.ModelChannel, string) string
-	setAuth   func(*http.Request, model.ModelChannel)
+	setAuth   func(*http.Request, model.ModelChannel) error
 	models    func(model.ModelChannel) ([]string, error)
 	testModel func(model.ModelChannel, string) (string, error)
 }
@@ -36,8 +36,12 @@ var modelProtocolIDs = []string{ModelChannelProtocolOpenAI, ModelChannelProtocol
 func init() {
 	compatible := modelProtocolAdapter{
 		buildURL: buildOpenAIModelChannelURL,
-		setAuth: func(request *http.Request, channel model.ModelChannel) {
-			ApplySub2APIHeadersForUser(request.Header, channel.OnBehalfOf, channel.APIKey)
+		setAuth: func(request *http.Request, channel model.ModelChannel) error {
+			if IsSub2APIChannel(channel) {
+				return ApplySub2APIHeadersForUser(request.Header, channel.OnBehalfOf, channel.APIKey)
+			}
+			request.Header.Set("Authorization", "Bearer "+channel.APIKey)
+			return nil
 		},
 		models:    fetchOpenAIAdminChannelModels,
 		testModel: testOpenAIChannelModel,
@@ -48,8 +52,9 @@ func init() {
 	}
 	gemini := compatible
 	gemini.buildURL = BuildGeminiChannelURL
-	gemini.setAuth = func(request *http.Request, channel model.ModelChannel) {
+	gemini.setAuth = func(request *http.Request, channel model.ModelChannel) error {
 		request.Header.Set("x-goog-api-key", channel.APIKey)
+		return nil
 	}
 	gemini.models = fetchGeminiAdminChannelModels
 	gemini.testModel = testGeminiChannelModel
@@ -85,8 +90,9 @@ func init() {
 	autodl.buildURL = func(channel model.ModelChannel, path string) string {
 		return BuildAutoDLURL(channel.BaseURL, path)
 	}
-	autodl.setAuth = func(request *http.Request, channel model.ModelChannel) {
+	autodl.setAuth = func(request *http.Request, channel model.ModelChannel) error {
 		request.Header.Set("Authorization", channel.APIKey)
+		return nil
 	}
 	autodl.models = func(channel model.ModelChannel) ([]string, error) {
 		workflows, err := AutoDLWorkflows(channel.BaseURL)

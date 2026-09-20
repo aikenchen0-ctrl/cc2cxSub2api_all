@@ -50,7 +50,7 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 			_, _ = w.Write([]byte("video-fixture"))
 			return
 		}
-		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer sk-http-test" {
+		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer satellite-test-credential" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "http-user" || r.Header.Get("X-Sub2API-Satellite") != "canvas" {
 			t.Errorf("unexpected upstream request")
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -58,7 +58,7 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 	}))
 	defer upstream.Close()
 	t.Setenv("SUB2API_RELAY_BASE_URL", upstream.URL)
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-http-test")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-test-credential")
 	t.Setenv("SUB2API_RELAY_MODELS", "gpt-5.5")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "")
 	t.Setenv("SUB2API_RELAY_VIDEO_MODELS", "")
@@ -131,8 +131,10 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 		t.Fatalf("video download failed: %d %s", download.Code, download.Body.String())
 	}
 	callsBefore := upstreamCalls
- _,err = service.CreateVideoTask(service.VideoTaskCreateInput{UserID:"another-user",Model:"gpt-5.5",ChannelID:"sub2api-relay",ClientTaskID:"foreign-local",UpstreamTaskID:"foreign-provider",Status:"completed"})
- if err != nil { t.Fatal(err) }
+	_, err = service.CreateVideoTask(service.VideoTaskCreateInput{UserID: "another-user", Model: "gpt-5.5", ChannelID: "sub2api-relay", ClientTaskID: "foreign-local", UpstreamTaskID: "foreign-provider", Status: "completed"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	foreign := httptest.NewRecorder()
 	request = httptest.NewRequest("GET", "/api/v1/videos/foreign-provider/content?model=gpt-5.5", nil)
 	request.Header.Set("Authorization", "Bearer "+result.Data.Token)

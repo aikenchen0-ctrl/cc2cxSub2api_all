@@ -1,7 +1,56 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import sharp from "sharp";
 
 import { createQrApp } from "../src/qr-app.js";
+
+test("POST /api/preview-mask should center the bundled blank preset", async () => {
+  const app = createQrApp();
+  const server = app.listen(0);
+
+  try {
+    const qrImage = await sharp({
+      create: {
+        width: 32,
+        height: 32,
+        channels: 3,
+        background: { r: 0, g: 0, b: 0 }
+      }
+    }).png().toBuffer();
+    const templateImage = await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 }
+      }
+    }).png().toBuffer();
+    const form = new FormData();
+    form.append("qrImage", new Blob([qrImage], { type: "image/png" }), "qr.png");
+    form.append("templateImage", new Blob([templateImage], { type: "image/png" }), "blank.png");
+    form.append("templatePreset", "blank");
+
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/preview-mask`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(data.squareBox.left, 575);
+    assert.equal(data.squareBox.top, 670);
+    assert.equal(data.squareBox.width, 950);
+    assert.equal(data.squareBox.height, 950);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+});
 
 test("POST /api/generate should accept one qr image and return generated image data", async () => {
   let capturedArgs;
@@ -351,6 +400,45 @@ test("POST /api/stylize-qr should accept one normal qr image and return artified
     assert.equal(capturedArgs.qrTrim.y, 20);
     assert.equal(capturedArgs.qrTrim.width, 300);
     assert.equal(capturedArgs.qrTrim.height, 300);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+});
+
+test("POST /api/stylize-qr default path should use full artistic QR mode", async () => {
+  let capturedArgs;
+  const app = createQrApp({
+    generate: async (args) => {
+      capturedArgs = args;
+      return { imageDataUrl: "data:image/png;base64,ART" };
+    }
+  });
+  const server = app.listen(0);
+
+  try {
+    const form = new FormData();
+    form.append(
+      "qrImage",
+      new Blob([Buffer.from("fake-image")], { type: "image/png" }),
+      "normal.png"
+    );
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/stylize-qr`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(data.imageDataUrl, "data:image/png;base64,ART");
+    assert.equal(capturedArgs.artisticQr, true);
+    assert.match(capturedArgs.positivePrompt, /entire square QR image/i);
+    assert.match(capturedArgs.negativePrompt, /embedded inside another image/i);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => {

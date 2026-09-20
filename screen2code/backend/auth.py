@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, Request, Response
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 SESSION_COOKIE = "screen2code_session"
 SECURE_SESSION_COOKIE = "__Host-screen2code_session"
@@ -33,7 +32,6 @@ class Identity:
     username: str | None
     display_name: str | None
     avatar_url: str | None
-    relay_key_ciphertext: str | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -69,7 +67,6 @@ def _connect() -> sqlite3.Connection:
             avatar_url TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
-            relay_key_ciphertext TEXT,
             UNIQUE (issuer, subject)
         );
         CREATE TABLE IF NOT EXISTS consumed_tickets (
@@ -86,9 +83,6 @@ def _connect() -> sqlite3.Connection:
         );
         """
     )
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(identities)").fetchall()}
-    if "relay_key_ciphertext" not in columns:
-        conn.execute("ALTER TABLE identities ADD COLUMN relay_key_ciphertext TEXT")
     session_columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()}
     if "csrf_token_hash" not in session_columns:
         conn.execute("ALTER TABLE sessions ADD COLUMN csrf_token_hash TEXT")
@@ -98,22 +92,6 @@ def _connect() -> sqlite3.Connection:
 
 def _decode_part(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-
-
-def decrypt_relay_key(ciphertext: str | None) -> str | None:
-    if not ciphertext:
-        return None
-    secret = os.environ.get("SUB2API_SSO_SECRET", "").strip()
-    if len(secret) < 32:
-        return None
-    try:
-        raw = _decode_part(ciphertext)
-        if len(raw) < 12 + 16:
-            return None
-        key = hashlib.sha256(secret.encode()).digest()
-        return AESGCM(key).decrypt(raw[:12], raw[12:], None).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError, ValueError):
-        return None
 
 
 def verify_ticket(raw: str, expected_audience: str = "screen2code") -> dict[str, Any]:
@@ -129,6 +107,11 @@ def verify_ticket(raw: str, expected_audience: str = "screen2code") -> dict[str,
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError, TypeError, binascii.Error) as exc:
         raise HTTPException(status_code=400, detail="Invalid SSO ticket") from exc
     if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid SSO payload")
+    # SuperKey/relay-key material is never part of the satellite SSO
+    # assertion.  Reject legacy tickets that still try to carry `rk` instead
+    # of silently accepting an obsolete credential transport.
+    if "rk" in payload:
         raise HTTPException(status_code=400, detail="Invalid SSO payload")
     now = int(time.time())
     if payload.get("iss") != "sub2api" or payload.get("aud") != expected_audience:
@@ -175,20 +158,20 @@ def consume_ticket(payload: dict[str, Any]) -> Identity:
         ).fetchone()
         if row is None:
             conn.execute(
-                "INSERT INTO identities(issuer, subject, email, username, display_name, avatar_url, relay_key_ciphertext, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (payload["iss"], payload["sub"], payload.get("email"), payload.get("username"), payload.get("displayName"), payload.get("avatarUrl"), payload.get("rk"), now, now),
+                "INSERT INTO identities(issuer, subject, email, username, display_name, avatar_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (payload["iss"], payload["sub"], payload.get("email"), payload.get("username"), payload.get("displayName"), payload.get("avatarUrl"), now, now),
             )
             identity_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         else:
             identity_id = int(row["id"])
             conn.execute(
-                "UPDATE identities SET email = ?, username = ?, display_name = ?, avatar_url = ?, relay_key_ciphertext = COALESCE(?, relay_key_ciphertext), updated_at = ? WHERE id = ?",
-                (payload.get("email"), payload.get("username"), payload.get("displayName"), payload.get("avatarUrl"), payload.get("rk"), now, identity_id),
+                "UPDATE identities SET email = ?, username = ?, display_name = ?, avatar_url = ?, updated_at = ? WHERE id = ?",
+                (payload.get("email"), payload.get("username"), payload.get("displayName"), payload.get("avatarUrl"), now, identity_id),
             )
         conn.commit()
         identity = conn.execute("SELECT * FROM identities WHERE id = ?", (identity_id,)).fetchone()
         assert identity is not None
-        return Identity(identity_id, identity["subject"], identity["email"], identity["username"], identity["display_name"], identity["avatar_url"], identity["relay_key_ciphertext"])
+        return Identity(identity_id, identity["subject"], identity["email"], identity["username"], identity["display_name"], identity["avatar_url"])
     finally:
         conn.close()
 
@@ -226,7 +209,7 @@ def get_identity(request: Any) -> Identity | None:
         ).fetchone()
         if row is None:
             return None
-        return Identity(row["id"], row["subject"], row["email"], row["username"], row["display_name"], row["avatar_url"], row["relay_key_ciphertext"])
+        return Identity(row["id"], row["subject"], row["email"], row["username"], row["display_name"], row["avatar_url"])
     finally:
         conn.close()
 

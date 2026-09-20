@@ -253,7 +253,9 @@ func pollAPIMartImageTask(request *http.Request, channel model.ModelChannel, tas
 		if err != nil {
 			return nil, err.Error()
 		}
-		service.ApplySub2APIHeadersForUser(pollRequest.Header, channel.OnBehalfOf, channel.APIKey)
+		if err := service.SetModelChannelAuthHeader(pollRequest, channel); err != nil {
+			return nil, err.Error()
+		}
 		response, err := service.HTTPClientForChannel(channel).Do(pollRequest)
 		if err != nil {
 			return nil, err.Error()

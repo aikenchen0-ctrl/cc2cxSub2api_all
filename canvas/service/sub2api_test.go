@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
@@ -16,6 +18,26 @@ import (
 	"github.com/tigerowo/infinite-canvas/model"
 	"github.com/tigerowo/infinite-canvas/repository"
 )
+
+func TestSub2APIHeadersRequireSessionSubject(t *testing.T) {
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-credential")
+	t.Setenv("SUB2API_SSO_SECRET", strings.Repeat("s", 32))
+	channel := model.ModelChannel{ID: sub2APIRelayChannelID, Protocol: "openai", APIKey: "legacy-key"}
+	request := httptest.NewRequest(http.MethodPost, "https://relay.invalid/v1/chat/completions", nil)
+	if err := SetModelChannelAuthHeader(request, channel); err == nil {
+		t.Fatal("managed relay accepted a request without the current session subject")
+	}
+	if request.Header.Get("Authorization") != "" || request.Header.Get("X-Sub2API-On-Behalf-Of") != "" {
+		t.Fatalf("missing-subject request retained credentials: %v", request.Header)
+	}
+	channel.OnBehalfOf = "42"
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		t.Fatal(err)
+	}
+	if request.Header.Get("Authorization") != "Bearer satellite-credential" || request.Header.Get("X-Sub2API-On-Behalf-Of") != "42" || request.Header.Get("X-Sub2API-Satellite") != "canvas" {
+		t.Fatalf("managed relay headers = %v", request.Header)
+	}
+}
 
 func TestSub2APIIntegration(t *testing.T) {
 	const marker = "CANVAS_SUB2API_TEST_CHILD"
@@ -36,7 +58,7 @@ func TestSub2APIIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SUB2API_RELAY_BASE_URL", "http://sub2api:8080")
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-test-not-real")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-test-credential")
 	t.Setenv("SUB2API_RELAY_MODELS", "gpt-5.5,gpt-5.5")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "grok-imagine-image")
 	t.Setenv("SUB2API_RELAY_VIDEO_MODELS", "")
@@ -62,13 +84,13 @@ func TestSub2APIIntegration(t *testing.T) {
 	if len(settings.Private.Channels) != 1 {
 		t.Fatal("bootstrap is not idempotent")
 	}
-	t.Setenv("SUB2API_RELAY_API_KEY", "sk-rotated-test")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-rotated-credential")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "")
 	if err := EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
 	channel, err = SelectModelChannel("gpt-5.5")
-	if err != nil || channel.APIKey != "sk-rotated-test" {
+	if err != nil || channel.APIKey != "satellite-rotated-credential" {
 		t.Fatal("key rotation failed")
 	}
 	if _, err := SelectModelChannel("grok-imagine-image"); err == nil {
@@ -81,7 +103,7 @@ func TestSub2APIIntegration(t *testing.T) {
 		}
 	}
 	t.Setenv("SUB2API_RELAY_BASE_URL", "")
-	t.Setenv("SUB2API_RELAY_API_KEY", "")
+	t.Setenv("SUB2API_APP_CREDENTIAL", "")
 	if err := EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}

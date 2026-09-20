@@ -74,6 +74,12 @@ const DEFAULT_GENERATE_COUNT = 3;
 const DEFAULT_MASK_X = 250;
 const DEFAULT_MASK_Y = 270;
 const DEFAULT_MASK_SIZE = 950;
+// The bundled blank.jpg has a central square QR placeholder. The legacy
+// defaults remain available for user-supplied templates; only the preset is
+// switched to these centered coordinates.
+const DEFAULT_PRESET_MASK_X = 575;
+const DEFAULT_PRESET_MASK_Y = 670;
+const DEFAULT_PRESET_MASK_SIZE = 950;
 let generatedImageDataUrl = null;
 let generatedImageBytes = 0;
 let generatedResults = [];
@@ -83,9 +89,16 @@ let stylizeProgressTimer = null;
 let wechatOperationProgressTimer = null;
 let wechatOperationProgressHideTimer = null;
 let defaultTemplateFile = null;
+let maskPlacementPreset = "legacy";
 
 function getTemplateFile() {
   return templateInput.files?.[0] || defaultTemplateFile;
+}
+
+function setMaskPlacementInputs({ x, y, size }) {
+  if (maskXInput) maskXInput.value = String(x);
+  if (maskYInput) maskYInput.value = String(y);
+  if (maskSizeInput) maskSizeInput.value = String(size);
 }
 
 positivePromptInput.value =
@@ -106,8 +119,8 @@ const FIXED_PIPELINE_TEXT = [
   "固定链路：",
   "1. 前端先上传普通二维码，再点击“艺术化二维码”。",
   "2. 服务端先按当前框选区域裁掉二维码周围白边，再通过 Sub2API 会话中继调用图像模型。",
-  "3. 固定遮罩参数：x 默认 250, y 默认 270, size 默认 950x950，可页面调节；二维码不按模板等比缩放。",
-  "4. 如果空白盘模板像素尺寸不足，服务端只放大模板到可容纳固定框；再把 950x950 二维码粘贴进去。",
+  "3. 自定义模板沿用 x=250, y=270, size=950x950；内置空白青花瓷盘自动使用居中 x=575, y=670, size=950，可页面调节。",
+  "4. 如果模板像素尺寸不足，服务端只放大模板到可容纳当前固定框；再把二维码粘贴进去。",
   "5. “艺术化二维码”固定通过 Sub2API /v1/images/edits 调用公开模型 gpt-image-2。",
   "6. 实际提交给接口的上下文图就是服务端本地处理后的盘中二维码图。",
   "7. 点击生成时先秒出上下文图，再调用 gpt-image-2 edits 生成最终图片。",
@@ -1107,6 +1120,12 @@ function appendMaskPlacement(formData) {
   formData.append("maskShape", getMaskShape());
 }
 
+function appendTemplatePreset(formData) {
+  if (maskPlacementPreset === "blank") {
+    formData.append("templatePreset", "blank");
+  }
+}
+
 function appendQrTrimOptions(formData, { forceUseCurrentSelection: _forceUseCurrentSelection = false } = {}) {
   if (currentRect.width > 0 && currentRect.height > 0 && cropImage) {
     formData.append("qrTrimEnabled", "true");
@@ -1146,6 +1165,7 @@ async function previewMaskNow({ silent = false } = {}) {
   const formData = new FormData();
   formData.append("qrImage", file);
   formData.append("templateImage", templateFile);
+  appendTemplatePreset(formData);
   appendMaskPlacement(formData);
   appendQrTrimOptions(formData);
   referenceFiles.forEach((referenceFile) => {
@@ -1404,6 +1424,12 @@ templateInput.addEventListener("change", () => {
 
   if (!file) {
     if (defaultTemplateFile) {
+      setMaskPlacementInputs({
+        x: DEFAULT_PRESET_MASK_X,
+        y: DEFAULT_PRESET_MASK_Y,
+        size: DEFAULT_PRESET_MASK_SIZE
+      });
+      maskPlacementPreset = "blank";
       templatePreview.src = "./blank.jpg";
       templateEmpty.hidden = true;
       templatePresetCard?.classList.remove("is-custom");
@@ -1424,6 +1450,14 @@ templateInput.addEventListener("change", () => {
     return;
   }
 
+  if (maskPlacementPreset === "blank") {
+    setMaskPlacementInputs({
+      x: DEFAULT_MASK_X,
+      y: DEFAULT_MASK_Y,
+      size: DEFAULT_MASK_SIZE
+    });
+  }
+  maskPlacementPreset = "custom";
   templatePreview.src = URL.createObjectURL(file);
   templateEmpty.hidden = true;
   templatePresetCard?.classList.add("is-custom");
@@ -1433,12 +1467,27 @@ templateInput.addEventListener("change", () => {
 
 async function loadDefaultTemplate() {
   try {
+    // Do not replace a template the user selected while the preset was
+    // loading. This also keeps the preset coordinates from leaking into a
+    // custom template selection.
+    if (templateInput.files?.length) {
+      return;
+    }
+
     const response = await fetch("./blank.jpg");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
 
     const blob = await response.blob();
+
+    // The user may have selected a custom template while blank.jpg was
+    // loading. Re-check after the await so the asynchronous preset cannot
+    // overwrite that newer selection.
+    if (templateInput.files?.length) {
+      return;
+    }
+
     defaultTemplateFile = new File([blob], "blank-porcelain-plate.jpg", {
       type: blob.type || "image/jpeg"
     });
@@ -1451,10 +1500,17 @@ async function loadDefaultTemplate() {
       // getTemplateFile() keeps the preset usable when programmatic file assignment is unavailable.
     }
 
+    setMaskPlacementInputs({
+      x: DEFAULT_PRESET_MASK_X,
+      y: DEFAULT_PRESET_MASK_Y,
+      size: DEFAULT_PRESET_MASK_SIZE
+    });
+    maskPlacementPreset = "blank";
     templatePreview.src = "./blank.jpg";
     templateEmpty.hidden = true;
     templatePresetCard?.classList.add("is-selected");
     setStatus("默认空白青花瓷盘已就绪，请上传二维码开始制作。", "ready");
+    scheduleMaskPreview();
   } catch (error) {
     templatePresetCard?.classList.add("has-error");
     setStatus(`默认模板加载失败：${error.message}，请手动选择模板。`, "error");
@@ -1495,7 +1551,10 @@ referenceInput.addEventListener("change", () => {
 
 
 [maskXInput, maskYInput, maskSizeInput].forEach((input) => {
-  input?.addEventListener("input", scheduleMaskPreview);
+  input?.addEventListener("input", () => {
+    maskPlacementPreset = "custom";
+    scheduleMaskPreview();
+  });
 });
 
 maskShapeInputs.forEach((input) => {
@@ -1898,6 +1957,7 @@ generateButton.addEventListener("click", async () => {
         const formData = new FormData();
         formData.append("qrImage", file);
         appendMaskPlacement(formData);
+        appendTemplatePreset(formData);
         appendQrTrimOptions(formData);
         formData.append("templateImage", templateFile);
         referenceFiles.forEach((referenceFile) => {

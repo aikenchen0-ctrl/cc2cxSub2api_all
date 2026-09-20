@@ -505,7 +505,9 @@ func fetchOpenAIAdminChannelModels(channel model.ModelChannel) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	SetModelChannelAuthHeader(request, channel)
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		return nil, err
+	}
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {
 		return nil, safeMessageError{message: "读取模型失败：上游接口无响应或网络不可达"}
@@ -682,7 +684,9 @@ func testOpenAIChannelModel(channel model.ModelChannel, modelName string) (strin
 	if err != nil {
 		return "", err
 	}
-	ApplySub2APIHeaders(request.Header, channel.APIKey)
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {
@@ -719,7 +723,9 @@ func fetchGeminiAdminChannelModels(channel model.ModelChannel) ([]string, error)
 		if err != nil {
 			return nil, err
 		}
-		SetModelChannelAuthHeader(request, channel)
+		if err := SetModelChannelAuthHeader(request, channel); err != nil {
+			return nil, err
+		}
 		response, err := adminModelHTTPClient.Do(request)
 		if err != nil {
 			return nil, safeMessageError{message: "读取模型失败：上游接口无响应或网络不可达"}
@@ -778,7 +784,9 @@ func testGeminiChannelModel(channel model.ModelChannel, modelName string) (strin
 	if err != nil {
 		return "", err
 	}
-	SetModelChannelAuthHeader(request, channel)
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {
@@ -807,7 +815,9 @@ func testGLMTTSChannelModel(channel model.ModelChannel, modelName string) (strin
 	if err != nil {
 		return "", err
 	}
-	ApplySub2APIHeaders(request.Header, channel.APIKey)
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {
@@ -840,7 +850,9 @@ func testMiMoTTSChannelModel(channel model.ModelChannel, modelName string) (stri
 	if err != nil {
 		return "", err
 	}
-	ApplySub2APIHeaders(request.Header, channel.APIKey)
+	if err := SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := adminModelHTTPClient.Do(request)
 	if err != nil {

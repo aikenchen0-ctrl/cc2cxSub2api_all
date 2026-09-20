@@ -13,6 +13,11 @@ import {
   verifyQrcodeSSOTicket
 } from "./sso.js";
 
+const DEFAULT_PRESET_MASK_PLACEMENT = {
+  x: 575,
+  y: 670,
+  size: 950
+};
 
 
 
@@ -54,11 +59,12 @@ function parseMaskPlacement(body = {}) {
     return Number.isFinite(number) ? number : undefined;
   };
   const shape = body.maskShape === "circle" ? "circle" : "square";
+  const isBlankPreset = body.templatePreset === "blank";
 
   return {
-    x: parse(body.maskX),
-    y: parse(body.maskY),
-    size: parse(body.maskSize),
+    x: parse(body.maskX) ?? (isBlankPreset ? DEFAULT_PRESET_MASK_PLACEMENT.x : undefined),
+    y: parse(body.maskY) ?? (isBlankPreset ? DEFAULT_PRESET_MASK_PLACEMENT.y : undefined),
+    size: parse(body.maskSize) ?? (isBlankPreset ? DEFAULT_PRESET_MASK_PLACEMENT.size : undefined),
     shape
   };
 }
@@ -829,6 +835,9 @@ export function createQrApp({
             imageBuffer: qrFile.buffer,
             mimeType: qrFile.mimetype || "image/png",
             qrTrim,
+            artisticQr: true,
+            positivePrompt: APP_CONFIG.artQr.sub2apiPrompt,
+            negativePrompt: APP_CONFIG.artQr.sub2apiNegativePrompt,
             // The artistic-QR button is the no-template variant of the
             // public qrcode capability. The generator submits gpt-image-2
             // to Sub2API /v1/images/edits with the session user identity.

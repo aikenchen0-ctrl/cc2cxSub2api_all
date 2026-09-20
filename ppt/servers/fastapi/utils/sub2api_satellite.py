@@ -100,7 +100,12 @@ def _is_sub2api_request(url: httpx.URL) -> bool:
     if not raw:
         return False
     parsed = urlsplit(raw)
-    return bool(parsed.hostname) and url.host == parsed.hostname
+    return (
+        bool(parsed.hostname)
+        and url.scheme == parsed.scheme
+        and url.host == parsed.hostname
+        and url.port == parsed.port
+    )
 
 
 def _apply_satellite_headers(request: httpx.Request) -> None:

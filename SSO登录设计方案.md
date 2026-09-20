@@ -192,7 +192,7 @@ CANVAS_SSO_CALLBACK_URL=https://canvas.example.com/api/auth/sso/callback
 # canvas
 SUB2API_SSO_SECRET=<same-random-secret-at-least-32-chars>
 SUB2API_RELAY_BASE_URL=https://api.example.com/v1
-SUB2API_RELAY_API_KEY=<server-side-key>
+SUB2API_APP_CREDENTIAL=<server-side-satellite-credential>
 ```
 
 回调地址、端口和反向代理协议必须按实际部署填写。开发、测试和生产不得复用密钥或用户数据卷。

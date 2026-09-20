@@ -1064,30 +1064,29 @@ func proxySystemRequestPath(c *gin.Context, svc *service.Service, user *model.Us
 	}
 	service.ApplyOutboundHeaders(upstreamReq, channelHeaders)
 	service.ApplyDefaultOutboundHeaders(upstreamReq)
-	if protocol == model.ChannelInterfaceGeminiVeo || protocol == model.ChannelInterfaceGeminiImage {
+	if strings.EqualFold(channel.ID, "sub2api-relay") {
+		cred := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
+		onBehalf := svc.Sub2APIOnBehalfOf(user.ID)
+		if cred == "" {
+			refundSystemProxyBilling(svc, billingOrderID, "missing Sub2API satellite credential")
+			fail(c, http.StatusServiceUnavailable, errors.New("Sub2API satellite credential is unavailable"))
+			return
+		}
+		if onBehalf == "" {
+			refundSystemProxyBilling(svc, billingOrderID, "missing Sub2API user identity")
+			fail(c, http.StatusUnauthorized, errors.New("please sign in with Sub2API before using models"))
+			return
+		}
+		upstreamReq.Header.Set("Authorization", "Bearer "+cred)
+		upstreamReq.Header.Set("X-Sub2API-On-Behalf-Of", onBehalf)
+		upstreamReq.Header.Set("X-Sub2API-Satellite", "ju")
+	} else if protocol == model.ChannelInterfaceGeminiVeo || protocol == model.ChannelInterfaceGeminiImage {
 		upstreamReq.Header.Set("x-goog-api-key", channel.APIKey)
 	} else if protocol == model.ChannelInterfaceClaudeAPI {
 		upstreamReq.Header.Set("x-api-key", channel.APIKey)
 		upstreamReq.Header.Set("anthropic-version", "2023-06-01")
 	} else {
-		apiKey := channel.APIKey
-		if strings.EqualFold(channel.ID, "sub2api-relay") {
-			cred := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
-			onBehalf := svc.Sub2APIOnBehalfOf(user.ID)
-			if cred != "" && onBehalf != "" {
-				upstreamReq.Header.Set("Authorization", "Bearer "+cred)
-				upstreamReq.Header.Set("X-Sub2API-On-Behalf-Of", onBehalf)
-				upstreamReq.Header.Set("X-Sub2API-Satellite", "ju")
-			} else if cred != "" {
-				refundSystemProxyBilling(svc, billingOrderID, "缺少 Sub2API 用户身份")
-				fail(c, http.StatusUnauthorized, errors.New("请先通过 Sub2API 登录后再使用模型"))
-				return
-			} else {
-				upstreamReq.Header.Set("Authorization", "Bearer "+apiKey)
-			}
-		} else {
-			upstreamReq.Header.Set("Authorization", "Bearer "+apiKey)
-		}
+		upstreamReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
 	}
 
 	status := model.ApiCallStatusSucceeded

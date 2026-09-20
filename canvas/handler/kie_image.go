@@ -84,7 +84,9 @@ func uploadKIEReferenceFile(channel model.ModelChannel, header *multipart.FileHe
 	if err != nil {
 		return "", err
 	}
-	service.ApplySub2APIHeadersForUser(request.Header, channel.OnBehalfOf, channel.APIKey)
+	if err := service.SetModelChannelAuthHeader(request, channel); err != nil {
+		return "", err
+	}
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 
 	response, err := service.HTTPClientForChannel(channel).Do(request)
@@ -1059,7 +1061,9 @@ func pollKIEImageTask(request *http.Request, channel model.ModelChannel, taskID 
 		if err != nil {
 			return nil, err.Error(), ""
 		}
-		service.ApplySub2APIHeadersForUser(pollRequest.Header, channel.OnBehalfOf, channel.APIKey)
+		if err := service.SetModelChannelAuthHeader(pollRequest, channel); err != nil {
+			return nil, err.Error(), ""
+		}
 
 		response, err := service.HTTPClientForChannel(channel).Do(pollRequest)
 		if err != nil {

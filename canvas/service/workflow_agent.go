@@ -88,7 +88,10 @@ func DraftCreativeWorkflow(ctx context.Context, request WorkflowAgentDraftReques
 		refundCredits()
 		return WorkflowAgentDraftResponse{}, err
 	}
-	SetModelChannelAuthHeader(httpRequest, channel)
+	if err := SetModelChannelAuthHeader(httpRequest, channel); err != nil {
+		refundCredits()
+		return WorkflowAgentDraftResponse{}, err
+	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: time.Duration(maxInt(channel.Timeout, 600)) * time.Second}

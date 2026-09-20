@@ -107,7 +107,7 @@ JU_SSO_CALLBACK_URL=https://ju.cc2.cx/api/auth/sso/callback
 Super Key 只允许配置在影策后端环境变量：
 
 ```text
-SUB2API_RELAY_API_KEY=<通过部署环境注入，不写入仓库>
+SUB2API_APP_CREDENTIAL=<服务端卫星应用凭据，通过部署环境注入，不写入仓库>
 ```
 
 前端系统渠道只保存 `apiKey: "system"`，浏览器只携带影策 session cookie。严禁把 Super Key 放入 URL、query、hash、localStorage、IndexedDB、项目数据、任务正文、日志、截图、测试或提交记录。
@@ -133,7 +133,7 @@ GET  /api/sub2api-relay/videos/{id}
 GET  /api/sub2api-relay/videos/{id}/content
 ```
 
-影策后端使用 `SUB2API_RELAY_API_KEY` 转发到：
+影策后端使用 `SUB2API_APP_CREDENTIAL`、当前 Session 对应的用户 subject 和 `X-Sub2API-Satellite: ju` 转发到：
 
 ```text
 POST {SUB2API_RELAY_BASE_URL}/videos
@@ -244,7 +244,7 @@ failed, failure, cancelled
 ```text
 SUB2API_SSO_SECRET=<两端一致的随机密钥>
 SUB2API_RELAY_BASE_URL=http://sub2api:8080/api/v1
-SUB2API_RELAY_API_KEY=<仅部署环境注入>
+SUB2API_APP_CREDENTIAL=<仅部署环境注入>
 SUB2API_RELAY_MODELS=<英文模型 ID 列表>
 SUB2API_RELAY_VIDEO_MODELS=<英文视频模型 ID 列表>
 SUB2API_RELAY_ALLOW_LOCAL=false

@@ -233,7 +233,9 @@ func deleteProviderTask(ctx context.Context, config providerConfig, path string)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+	if err := applyProviderAuth(req, config); err != nil {
+		return err
+	}
 	ApplyOutboundHeaders(req, config.Headers)
 	data, _, err := doBinary(req)
 	if err != nil {

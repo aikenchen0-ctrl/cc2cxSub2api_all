@@ -49,7 +49,15 @@ export const APP_CONFIG = {
     submitMaxAttempts: readPositiveInteger(process.env.QR_ART_SUBMIT_MAX_ATTEMPTS, 3),
     submitRetryDelayMs: readPositiveInteger(process.env.QR_ART_SUBMIT_RETRY_DELAY_MS, 1500),
     pollIntervalMs: 3000,
-    pollMaxAttempts: 60
+    pollMaxAttempts: 60,
+    // The artistic-QR button is a full-image QR stylization step. Keep this
+    // prompt separate from the plate-extension prompt used by /api/generate;
+    // otherwise gpt-image-2 treats the QR as a small object to embed in a
+    // newly generated illustration.
+    sub2apiPrompt:
+      "Transform the supplied QR code into one complete artistic QR code. Render the entire square QR image, including every module and all three finder patterns, in a blue-and-white Chinese porcelain ink-painting style. Preserve the exact QR module layout and payload so it remains scannable. Output only the single square artistic QR code, tightly framed and centered, with no surrounding scene or separate artwork.",
+    sub2apiNegativePrompt:
+      "QR code embedded inside another image, QR code placed in a corner, plate, bowl, poster, product mockup, room, landscape, illustration around the QR, extra frame, border, ornaments outside the QR, large margins, text, letters, logo, watermark, signature, cropped QR, missing modules, moved finder patterns, duplicated QR codes, warped geometry, perspective, blur"
   },
   defaultPositivePrompt:
     "延展盘子空白处周围荷花纹理，严格锁定中心方形内全部像素与四角定位图形，不移动、不重绘、不改对比度；仅延展盘子空白处周围荷花纹理、色调与光影，让非定位区域边缘自然融合、无缝衔接不要有白边。把正方形的效果明显的边边角角也要融合到延展中融为一体。",

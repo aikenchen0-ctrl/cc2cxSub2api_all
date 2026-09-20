@@ -70,6 +70,117 @@ export async function normalizeInputImage(imageBuffer) {
     .toBuffer();
 }
 
+async function buildArtisticQrCanvas(imageBuffer, size = 1024, quietZoneRatio = 0) {
+  // Do not send the small 128px preview used by the collage path. A matching
+  // square canvas gives the image model the whole QR and keeps its placement
+  // stable instead of allowing it to become a tiny QR embedded in artwork.
+  const quietZone = Math.max(0, Math.min(0.25, Number(quietZoneRatio) || 0));
+  const inset = Math.round(size * quietZone);
+  const innerSize = Math.max(1, size - inset * 2);
+  const fitted = await sharp(imageBuffer)
+    .rotate()
+    .resize(innerSize, innerSize, {
+      fit: "contain",
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    })
+    .png()
+    .toBuffer();
+
+  if (inset === 0) {
+    return fitted;
+  }
+
+  return sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    }
+  })
+    .composite([{ input: fitted, left: inset, top: inset }])
+    .png()
+    .toBuffer();
+}
+
+async function buildTransparentMaskLike(imageBuffer) {
+  const metadata = await sharp(imageBuffer).metadata();
+  return sharp({
+    create: {
+      width: metadata.width || 1024,
+      height: metadata.height || 1024,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  }).png().toBuffer();
+}
+
+async function rebuildArtisticQrFromModules(sourceQrBuffer, generatedBuffer) {
+  const size = 1024;
+  // sourceQrBuffer is already the exact canvas submitted to the edit API;
+  // do not add a second quiet zone while rebuilding the module mask.
+  const sourceCanvas = await buildArtisticQrCanvas(sourceQrBuffer, size);
+  const generatedCanvas = await buildArtisticQrCanvas(generatedBuffer, size);
+  const { data, info } = await sharp(sourceCanvas)
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const alpha = Buffer.alloc(info.width * info.height);
+
+  // Keep the exact source QR module geometry. Anti-aliased dark pixels are
+  // included so the finder patterns and module edges remain scan-friendly.
+  for (let index = 0; index < alpha.length; index += 1) {
+    alpha[index] = data[index] < 245 ? 255 : 0;
+  }
+
+  const moduleMask = await sharp({
+    create: {
+      width: info.width,
+      height: info.height,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 }
+    }
+  })
+    .joinChannel(alpha, {
+      raw: { width: info.width, height: info.height, channels: 1 }
+    })
+    .png()
+    .toBuffer();
+
+  // Give every source module a dark porcelain-blue base. The generated
+  // texture is multiplied into it, so a pale/white model response cannot
+  // erase the QR contrast and make the final code unsensible.
+  const texturedCanvas = await sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 28, g: 96, b: 126, alpha: 1 }
+    }
+  })
+    .composite([{ input: generatedCanvas, blend: "multiply" }])
+    .png()
+    .toBuffer();
+
+  const artisticModules = await sharp(texturedCanvas)
+    .ensureAlpha()
+    .composite([{ input: moduleMask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+
+  return sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    }
+  })
+    .composite([{ input: artisticModules }])
+    .png()
+    .toBuffer();
+}
+
 export async function buildSingleContextImage(primaryImageBuffer, referenceBuffers) {
   if (referenceBuffers.length === 0) {
     return {
@@ -155,6 +266,7 @@ async function submitImageEditOnce({
   editMaskBuffer,
   positivePrompt,
   negativePrompt,
+  inputFidelity,
   pipeline,
   userId,
   apiKey
@@ -165,6 +277,9 @@ async function submitImageEditOnce({
   formData.append("prompt", positivePrompt || "");
   if (negativePrompt) {
     formData.append("negative_prompt", negativePrompt);
+  }
+  if (inputFidelity) {
+    formData.append("input_fidelity", inputFidelity);
   }
   appendPngFile(formData, "image", contextImageBuffer, "context.png");
   appendPngFile(formData, "mask", editMaskBuffer, "mask.png");
@@ -255,17 +370,25 @@ export async function generateQrArtwork({
   maskPlacement = {},
   qrTrim = {},
   referenceImages = [],
-  positivePrompt = APP_CONFIG.defaultPositivePrompt,
-  negativePrompt = APP_CONFIG.defaultNegativePrompt,
+  positivePrompt,
+  negativePrompt,
+  artisticQr = false,
   fetchImpl = fetch,
   apiBaseUrl = APP_CONFIG.apiBaseUrl,
   userId = "",
   apiKey = ""
 }) {
+  const isArtisticQr = Boolean(artisticQr && !templateImage?.buffer);
   const trimmedInput = templateImage?.buffer
     ? null
     : await trimQrWhiteBorder(imageBuffer, qrTrim);
-  const normalizedImageBuffer = await normalizeInputImage(trimmedInput?.buffer || imageBuffer);
+  const effectivePositivePrompt = positivePrompt
+    || (isArtisticQr ? APP_CONFIG.artQr.sub2apiPrompt : APP_CONFIG.defaultPositivePrompt);
+  const effectiveNegativePrompt = negativePrompt
+    || (isArtisticQr ? APP_CONFIG.artQr.sub2apiNegativePrompt : APP_CONFIG.defaultNegativePrompt);
+  const normalizedImageBuffer = isArtisticQr
+    ? await buildArtisticQrCanvas(trimmedInput?.buffer || imageBuffer, 1024, 0.08)
+    : await normalizeInputImage(trimmedInput?.buffer || imageBuffer);
   const normalizedReferenceImages = await Promise.all(
     referenceImages
       .slice(0, APP_CONFIG.maxReferenceImages)
@@ -282,6 +405,7 @@ export async function generateQrArtwork({
       "步骤 5：只调用一次 image2 edits，最多等待 3 分钟。"
     ],
     templateUsed: false,
+    artisticQr: isArtisticQr,
     referenceImageCount: normalizedReferenceImages.length,
     ...(trimmedInput ? { qrTrim: trimmedInput.info } : {})
   };
@@ -311,31 +435,32 @@ export async function generateQrArtwork({
     };
   }
 
-  const contextImage = templateImage?.buffer
+  const contextImage = isArtisticQr
+    ? {
+        uploadBuffer: primaryImageBuffer,
+        collagePreviewDataUrl: `data:image/png;base64,${primaryImageBuffer.toString("base64")}`
+      }
+    : templateImage?.buffer
     ? {
         uploadBuffer: primaryImageBuffer,
         collagePreviewDataUrl: `data:image/png;base64,${primaryImageBuffer.toString("base64")}`
       }
     : await buildSingleContextImage(primaryImageBuffer, normalizedReferenceImages);
 
-  const editMaskBuffer = pipeline.editMaskBuffer || await sharp({
-    create: {
-      width: 1024,
-      height: 1024,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    }
-  }).png().toBuffer();
+  const editMaskBuffer = pipeline.editMaskBuffer
+    || await buildTransparentMaskLike(contextImage.uploadBuffer);
 
   const submitUrl = buildImageEditUrl(apiBaseUrl);
   const basePipeline = {
     ...pipeline,
     editMaskBuffer: undefined,
     requestImageCount: 1,
-    uploadContextMode: templateImage?.buffer ? "single-mask-preview" : (normalizedReferenceImages.length > 0 ? "single-collage" : "single-primary"),
+    uploadContextMode: isArtisticQr
+      ? "artistic-qr-canvas"
+      : (templateImage?.buffer ? "single-mask-preview" : (normalizedReferenceImages.length > 0 ? "single-collage" : "single-primary")),
     collagePreviewDataUrl: contextImage.collagePreviewDataUrl,
-    positivePrompt,
-    negativePrompt
+    positivePrompt: effectivePositivePrompt,
+    negativePrompt: effectiveNegativePrompt
   };
 
   const editResult = await submitImageEditOnce({
@@ -343,21 +468,26 @@ export async function generateQrArtwork({
     submitUrl,
     contextImageBuffer: contextImage.uploadBuffer,
     editMaskBuffer,
-    positivePrompt,
-    negativePrompt,
+    positivePrompt: effectivePositivePrompt,
+    negativePrompt: effectiveNegativePrompt,
+    inputFidelity: isArtisticQr ? "high" : undefined,
     pipeline: basePipeline,
     userId,
     apiKey
   });
 
+  const outputBuffer = isArtisticQr
+    ? await rebuildArtisticQrFromModules(primaryImageBuffer, editResult.imageBuffer)
+    : editResult.imageBuffer;
+
   return {
-    imageDataUrl: `data:image/png;base64,${editResult.imageBuffer.toString("base64")}`,
+    imageDataUrl: `data:image/png;base64,${outputBuffer.toString("base64")}`,
     revisedPrompt: editResult.revisedPrompt,
     pipeline: {
       ...basePipeline,
       selectedSubmitAttempt: editResult.selectedAttempt,
       submitAttempts: editResult.attempts,
-      editMode: "image2-edits-mask"
+      editMode: isArtisticQr ? "artistic-qr-edits" : "image2-edits-mask"
     }
   };
 }

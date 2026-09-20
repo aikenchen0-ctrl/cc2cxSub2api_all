@@ -56,29 +56,21 @@ func (s *Service) EnsureSub2APIRelayChannel() error {
 	if baseURL != "" && !strings.Contains(baseURL, "://") {
 		baseURL = "http://" + baseURL
 	}
-	apiKey := strings.TrimSpace(os.Getenv("SUB2API_RELAY_API_KEY"))
 	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
 	managed := credential != "" || strings.TrimSpace(os.Getenv("SUB2API_SSO_SECRET")) != ""
-	if baseURL == "" && apiKey == "" && credential == "" && !managed {
+	if baseURL == "" && credential == "" && !managed {
 		return s.disableSub2APIRelayChannel()
 	}
 	if baseURL == "" {
 		return errors.New("SUB2API_RELAY_BASE_URL or LINK must be configured")
 	}
-	if productionRelayRuntime() && credential == "" && apiKey != "" {
-		return errors.New("SUB2API_APP_CREDENTIAL must be configured in production; static relay keys are disabled")
-	}
-	if managed && credential == "" {
+	if credential == "" {
+		// A relay channel is never allowed to hold or use a shared SuperKey.
+		// The only credential accepted by Sub2API is the server-side satellite
+		// application credential, paired with the current session subject.
 		return errors.New("SUB2API_APP_CREDENTIAL must be configured for managed relay")
 	}
-	if credential != "" {
-		// Ignore a legacy static key whenever the managed satellite credential
-		// is present; production traffic must use the app credential.
-		apiKey = credential
-	}
-	if apiKey == "" {
-		return errors.New("SUB2API_APP_CREDENTIAL or SUB2API_RELAY_API_KEY must be configured")
-	}
+	apiKey := credential
 	baseURL, err := normalizeSub2APIBaseURL(baseURL)
 	if err != nil {
 		return err
@@ -177,11 +169,6 @@ func (s *Service) EnsureSub2APIRelayChannel() error {
 		}
 	}
 	return nil
-}
-
-func productionRelayRuntime() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production") ||
-		strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release")
 }
 
 // disableSub2APIRelayChannel removes the server-side secret and disables the
