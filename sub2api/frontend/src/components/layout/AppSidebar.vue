@@ -50,10 +50,9 @@
         >
           <span
             class="quick-app-icon"
-            :class="`quick-app-icon-${item.icon}`"
             aria-hidden="true"
           >
-            <Icon :name="item.icon" size="sm" :stroke-width="2" />
+            <img :src="item.icon" :alt="item.label" class="h-full w-full rounded-[0.45rem] object-cover" />
           </span>
           <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
         </a>
@@ -220,7 +219,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
-import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
@@ -309,15 +307,19 @@ const quickAppItems = computed(() => {
   const qrcodeSsoUrl =
     import.meta.env.VITE_QRCODE_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/qrcode/start')}?next=%2F`
+  const yibiaoSsoUrl =
+    import.meta.env.VITE_YIBIAO_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/yibiao/start')}?next=%2F`
   return [
-    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl, includeApiKey: false, sso: true, icon: 'grid' as const },
-    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: 'play' as const },
-    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: 'sparkles' as const },
-    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: 'document' as const },
-    { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: 'edit' as const },
-    { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: 'terminal' as const },
-    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: 'calculator' as const },
-    { label: t('nav.artQr'), href: qrcodeSsoUrl, includeApiKey: false, sso: true, icon: 'grid' as const },
+    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.artQr'), href: qrcodeSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.yibiao'), href: yibiaoSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
   ]
 })
 

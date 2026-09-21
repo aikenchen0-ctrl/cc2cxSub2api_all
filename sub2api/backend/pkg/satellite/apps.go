@@ -27,6 +27,7 @@ func Apps() []App {
 		{Slug: "screen2code", Audience: "screen2code", DefaultOrigin: "http://localhost:5173", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "SCREEN2CODE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "aiexcel", Audience: "aiexcel", DefaultOrigin: "http://localhost:4173", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AIEXCEL_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "qrcode", Audience: "qrcode", DefaultOrigin: "http://localhost:5221", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "QRCODE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
+		{Slug: "yibiao", Audience: "yibiao", DefaultOrigin: "http://localhost:8080", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "YIBIAO_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 	}
 }
 

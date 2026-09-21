@@ -27,7 +27,7 @@ test("server-renders the current AI Excel landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>格知 .*AI Excel Copilot<\/title>/i);
+  assert.match(html, /<title>AI表格<\/title>/i);
   assert.match(html, /Excel/);
   assert.match(html, /选择文件/);
   assert.match(html, /原始文件不会上传/);

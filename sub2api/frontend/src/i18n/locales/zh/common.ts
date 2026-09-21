@@ -177,6 +177,7 @@ export default {
     screen2code: 'AI识屏转代码',
     aiExcel: 'AI表格',
     artQr: '艺术二维码',
+    yibiao: '自动招标',
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',

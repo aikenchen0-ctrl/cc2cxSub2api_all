@@ -135,33 +135,19 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
  * (Skin Discipline Guaranteed ≥4.5 vs.). Use this when replacing sparkles before wordmark. */
 export function BrandMark({ size = 16 }: { size?: number }) {
   return (
-    <img src="/openchatcut-icon.png" alt="" aria-hidden width={size} height={size} style={{ display: 'block' }} />
+    <img src="/project-icon.jpg" alt="AI剪辑" width={size} height={size} style={{ display: 'block', objectFit: 'cover', borderRadius: Math.max(2, Math.round(size * 0.2)) }} />
   );
 }
 
-/** cut000 word mark. */
+/** AI剪辑 word mark. */
 export function OpenChatCutWordmark({ width = 126 }: { width?: number }) {
   return (
-    <svg
-      aria-label="cut000"
+    <span
+      aria-label="AI剪辑"
       role="img"
-      width={width}
-      height={width / 3.2}
-      viewBox="0 0 280 88"
-      style={{ display: 'block', flexShrink: 0 }}
+      style={{ display: 'block', flexShrink: 0, width, fontFamily: 'Inter, Geist, system-ui, sans-serif', fontSize: Math.max(16, width / 5.2), fontWeight: 720, letterSpacing: '-0.04em', lineHeight: 1 }}
     >
-      <text
-        x="0"
-        y="64"
-        fill="currentColor"
-        fontFamily="Inter, Geist, system-ui, sans-serif"
-        fontSize="58"
-        fontWeight="720"
-        letterSpacing="-0.04em"
-        dominantBaseline="alphabetic"
-      >
-        cut000
-      </text>
-    </svg>
+      AI剪辑
+    </span>
   );
 }

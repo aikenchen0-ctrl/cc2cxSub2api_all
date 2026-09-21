@@ -79,7 +79,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
         width: 360, display: 'grid', gap: 12, padding: 28, borderRadius: 12,
         background: theme.panel, border: `0.5px solid ${theme.border}`,
       }}>
-        <div style={{ fontSize: 16, fontWeight: 500 }}>cut000</div>
+        <div style={{ fontSize: 16, fontWeight: 500 }}>AI剪辑</div>
         <div style={{ fontSize: 13, color: theme.textDim }}>
           {mode === 'register' ? '注册 Sub2API 账号后进入工程。' : '使用 Sub2API 账号登录后才能打开工程。'}
         </div>

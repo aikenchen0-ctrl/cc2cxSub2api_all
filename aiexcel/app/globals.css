@@ -57,3 +57,5 @@
   .trust-row{grid-column:1/3;justify-content:flex-start;margin-top:26px}
   .landing-footer{padding:8px}
 }
+
+.brand-mark img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}

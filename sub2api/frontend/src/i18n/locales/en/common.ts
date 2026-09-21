@@ -177,6 +177,7 @@ export default {
     screen2code: 'Screenshot to Code',
     aiExcel: 'AI Spreadsheet',
     artQr: 'Art QR',
+    yibiao: 'Auto Bidding',
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',

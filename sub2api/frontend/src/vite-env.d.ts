@@ -22,6 +22,7 @@ interface ImportMetaEnv {
   readonly VITE_AICUT_SSO_URL?: string
   readonly VITE_AIEXCEL_SSO_URL?: string
   readonly VITE_QRCODE_SSO_URL?: string
+  readonly VITE_YIBIAO_SSO_URL?: string
   readonly VITE_WS_BASE_URL?: string
   readonly BASE_URL: string
 }

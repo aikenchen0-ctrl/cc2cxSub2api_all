@@ -165,7 +165,7 @@ function makeBarChart(labels: string[], values: number[], title: string) {
   if (!ctx) return "";
   ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#172621"; ctx.font = "bold 28px sans-serif"; ctx.fillText(title, 48, 48);
-  ctx.fillStyle = "#718079"; ctx.font = "15px sans-serif"; ctx.fillText("由格知 AI Excel Copilot 本地生成", 48, 76);
+  ctx.fillStyle = "#718079"; ctx.font = "15px sans-serif"; ctx.fillText("由 AI表格 本地生成", 48, 76);
   const left = 76, top = 110, width = 990, height = 360;
   ctx.strokeStyle = "#DDE7E2"; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
@@ -769,7 +769,7 @@ export default function Home() {
   if (!workbook) return (
     <main className="landing">
       <header className="landing-nav">
-        <div className="brand"><span className="brand-mark"><FileSpreadsheet size={20}/></span><span>格知</span><em>AI Excel Copilot</em></div>
+        <div className="brand"><span className="brand-mark"><img src="/project-icon.jpg" alt="AI表格" /></span><span>AI表格</span></div>
         <div className="nav-actions"><span className="local-badge"><ShieldCheck size={15}/> 文件仅在本地处理</span><button className="icon-btn" onClick={() => setShowSettings(true)} aria-label="设置"><Settings size={19}/></button></div>
       </header>
       <section className="hero">
@@ -796,7 +796,7 @@ export default function Home() {
       <header className="topbar">
         <div className="top-left">
           <button className="icon-btn" onClick={() => { if (confirm("返回首页？未导出的修改将丢失。")) { setWorkbook(null); setSheets([]); setDeferredSource(null); } }}><ArrowLeft size={19}/></button>
-          <div className="brand compact"><span className="brand-mark"><FileSpreadsheet size={17}/></span><span>格知</span></div><span className="divider"/>
+          <div className="brand compact"><span className="brand-mark"><img src="/project-icon.jpg" alt="AI表格" /></span><span>AI表格</span></div><span className="divider"/>
           <div className="file-title"><strong>{fileName}</strong><small>{sheets.length} 个工作表 · 已在本地打开</small></div>
         </div>
         <div className="top-actions">
