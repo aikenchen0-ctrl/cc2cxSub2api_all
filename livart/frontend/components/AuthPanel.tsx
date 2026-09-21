@@ -42,7 +42,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticated }) => {
           <div className="flex min-w-0 items-center gap-3">
             <LivartLogo size={48} className="shrink-0 shadow-lg" />
             <div className="min-w-0">
-              <h1 className="text-2xl font-black tracking-tighter">livart</h1>
+              <h1 className="text-2xl font-black tracking-tighter">超级改图</h1>
               <p className="truncate text-xs font-bold text-gray-400">登录后永久保存你的画布历史</p>
             </div>
           </div>

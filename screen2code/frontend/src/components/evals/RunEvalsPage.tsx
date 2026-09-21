@@ -145,7 +145,7 @@ function RunEvalsPage() {
 
   useEffect(() => {
     return () => {
-      document.title = "Screenshot to Code";
+      document.title = "AI识屏转代码";
       if (faviconFlashIntervalRef.current !== null) {
         window.clearInterval(faviconFlashIntervalRef.current);
       }
@@ -166,7 +166,7 @@ function RunEvalsPage() {
       window.clearInterval(faviconFlashIntervalRef.current);
       faviconFlashIntervalRef.current = null;
     }
-    setFavicon("/favicon/main.png");
+    setFavicon("/project-icon.jpg");
     window.removeEventListener("visibilitychange", stopWhenTabIsVisible);
     window.removeEventListener("focus", stopWhenTabIsVisible);
   };
@@ -181,7 +181,7 @@ function RunEvalsPage() {
     stopFaviconFlash();
     let useAlertIcon = false;
     faviconFlashIntervalRef.current = window.setInterval(() => {
-      setFavicon(useAlertIcon ? "/favicon/coding.png" : "/favicon/main.png");
+      setFavicon(useAlertIcon ? "/favicon/coding.png" : "/project-icon.jpg");
       useAlertIcon = !useAlertIcon;
     }, 450);
     window.addEventListener("visibilitychange", stopWhenTabIsVisible);
@@ -191,16 +191,16 @@ function RunEvalsPage() {
   const runEvals = async (filesToRun?: string[]) => {
     const updateRunningTitle = (completed: number, total: number) => {
       if (total <= 0) {
-        document.title = "Running Evals...";
+        document.title = "AI识屏转代码 · 运行评测…";
         return;
       }
       const percent = Math.round((completed / total) * 100);
-      document.title = `(${percent}%) Running Evals...`;
+      document.title = `(${percent}%) AI识屏转代码 · 运行评测…`;
     };
 
     try {
       setIsRunning(true);
-      document.title = "Running Evals...";
+      document.title = "AI识屏转代码 · 运行评测…";
       setCompletedTasks(0);
       setTotalTasks(0);
       setCurrentModel("");
@@ -319,15 +319,15 @@ function RunEvalsPage() {
         }
       }
 
-      document.title = "✓ Evals Complete";
+      document.title = "✓ AI识屏转代码评测完成";
       flashFaviconOnComplete();
     } catch (error) {
       console.error("Error running evals:", error);
-      document.title = "❌ Eval Error";
+      document.title = "❌ AI识屏转代码评测失败";
       setStatusMessage("Evaluation run failed");
       flashFaviconOnComplete();
       setTimeout(() => {
-        document.title = "Screenshot to Code";
+        document.title = "AI识屏转代码";
       }, 5000);
     } finally {
       setIsRunning(false);

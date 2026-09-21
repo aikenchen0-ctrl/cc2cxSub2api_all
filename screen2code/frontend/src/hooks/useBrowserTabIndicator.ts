@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 
 const CODING_SETTINGS = {
-  title: "Coding...",
+  title: "AI识屏转代码 · 生成中…",
   favicon: "/favicon/coding.png",
 };
 const DEFAULT_SETTINGS = {
-  title: "Screenshot to Code",
-  favicon: "/favicon/main.png",
+  title: "AI识屏转代码",
+  favicon: "/project-icon.jpg",
 };
 
 const DEV_FAVICON_COLORS = {

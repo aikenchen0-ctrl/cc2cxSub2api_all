@@ -755,7 +755,7 @@ const clampZoom = (value: number) => Math.min(Math.max(value, MIN_ZOOM), MAX_ZOO
 const createWelcomeMessage = (): ChatMessage => ({
   id: 'welcome',
   role: 'assistant',
-  text: '你好！我是 livart 助手。请直接告诉我你想要生成的画面，或者右键图片添加到对话进行编辑。',
+  text: '你好！我是超级改图助手。请直接告诉我你想要生成的画面，或者右键图片添加到对话进行编辑。',
   timestamp: Date.now()
 });
 

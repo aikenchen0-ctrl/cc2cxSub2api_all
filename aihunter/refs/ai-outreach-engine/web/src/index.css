@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f7f8fc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f5fb;
+  --color-surface-3: #e9ecf5;
+  --color-ink: #0e1118;
+  --color-ink-soft: #3d4454;
+  --color-ink-faint: #6a7285;
+  --color-line: #e2e6f0;
+  --color-line-strong: #cdd3e1;
+  --color-accent: #2d27ff;
+  --color-accent-hover: #241fe0;
+  --color-accent-soft: #ecebff;
+  --color-accent-ink: #2d27ff;
+  --color-sky: #0369a1;
+  --color-sky-soft: #e0f2fe;
+  --color-teal: #0f766e;
+  --color-teal-soft: #ccfbf1;
+  --color-violet: #5b21b6;
+  --color-violet-soft: #ede9fe;
+  --color-good: #047857;
+  --color-good-soft: #d1fae5;
+  --color-warn: #b45309;
+  --color-warn-soft: #ffedd5;
+  --color-bad: #be123c;
+  --color-bad-soft: #ffe4e6;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --shadow-soft: 0 2px 16px rgb(14 17 24 / 0.05);
+  --shadow-lift: 0 10px 36px rgb(14 17 24 / 0.08);
+  --shadow-glow: 0 8px 28px rgb(45 39 255 / 0.2);
+  --radius-card: 1.25rem;
+  --radius-control: 0.875rem;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 0% 0%, rgb(45 39 255 / 0.06), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 100% 0%, rgb(3 105 161 / 0.05), transparent 45%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgb(45 39 255 / 0.16);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(14 17 24 / 0.16);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade {
+  animation: fade-in 0.35s ease both;
+}
+
+.live-dot {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}

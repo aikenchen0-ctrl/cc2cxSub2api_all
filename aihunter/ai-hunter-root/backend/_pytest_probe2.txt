@@ -1,0 +1,14 @@
+﻿C:\Users\Paifa\.workbuddy\binaries\python\envs\default\Scripts\python.exe
+activate
+activate.bat
+activate.fish
+Activate.ps1
+deactivate.bat
+httpx.exe
+idna.exe
+pip.exe
+pip3.13.exe
+pip3.exe
+playwright.exe
+python.exe
+pythonw.exe

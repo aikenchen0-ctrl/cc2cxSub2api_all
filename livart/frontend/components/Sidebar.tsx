@@ -1979,7 +1979,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
         <div className="hidden p-4 border-b border-gray-50 bg-gray-50/30 items-center gap-2 md:flex">
           <LivartLogo size={32} className="shrink-0" />
           <div>
-            <h2 className="font-black text-gray-800 tracking-tight">livart 对话</h2>
+            <h2 className="font-black text-gray-800 tracking-tight">超级改图对话</h2>
             <p className="text-[9px] text-gray-400 uppercase tracking-widest font-black">直接生成与编辑图像</p>
           </div>
         </div>

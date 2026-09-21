@@ -22,8 +22,8 @@ const OutlineStandardHeader = ({
           className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30"
         >
           <Image
-            src="/logo-with-bg.png"
-            alt=""
+            src="/project-icon.jpg"
+            alt="永恒PPT"
             width={32}
             height={33}
             className="h-[33px] w-[32px]"

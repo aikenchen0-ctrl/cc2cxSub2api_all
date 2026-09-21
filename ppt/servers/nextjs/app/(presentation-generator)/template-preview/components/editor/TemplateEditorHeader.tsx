@@ -82,8 +82,8 @@ export function TemplateEditorHeader({
       <div className="flex h-full min-w-0 flex-1 items-center gap-[12px] px-5 text-left sm:w-[347px] sm:flex-none sm:px-[24px]">
         <button onClick={onBack} aria-label="Dashboard" type="button">
           <img
-            src="/logo-with-bg.png"
-            alt="Presenton"
+            src="/project-icon.jpg"
+            alt="永恒PPT"
             className="h-10 w-10 cursor-pointer object-contain"
           />
         </button>

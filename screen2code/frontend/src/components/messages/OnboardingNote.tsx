@@ -2,7 +2,7 @@ export function OnboardingNote() {
   return (
     <div className="flex flex-col space-y-4 bg-green-700 p-2 rounded text-stone-200 text-sm">
       <span>
-        To use Screenshot to Code,{" "}
+        To use AI识屏转代码,{" "}
         <a
           className="inline underline hover:opacity-70"
           href="https://buy.stripe.com/8wM6sre70gBW1nqaEE"

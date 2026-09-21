@@ -117,8 +117,8 @@ function StudioTopBar({ activeStep }: { activeStep: StudioStep }) {
           aria-label="Dashboard"
         >
           <img
-            src="/logo-with-bg.png"
-            alt="Presenton"
+            src="/project-icon.jpg"
+            alt="永恒PPT"
             className="h-full w-full"
             draggable={false}
           />

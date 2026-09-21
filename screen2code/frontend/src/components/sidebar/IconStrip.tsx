@@ -33,9 +33,9 @@ function IconStrip({
         className="rounded-lg p-2 transition-colors hover:bg-gray-200/70 dark:hover:bg-zinc-800 lg:mb-2 lg:p-1"
       >
         <img
-          src="/favicon/main.png"
-          alt="Logo"
-          className="w-5 h-5 dark:invert"
+          src="/project-icon.jpg"
+          alt="AI识屏转代码"
+          className="h-5 w-5 rounded object-cover"
         />
       </button>
 
