@@ -55,9 +55,19 @@ BID_MONITOR_SMS_ACCESS_KEY_ID=
 BID_MONITOR_SMS_ACCESS_KEY_SECRET=
 BID_MONITOR_SMS_SIGN_NAME=
 BID_MONITOR_SMS_TEMPLATE_CODE=
+BID_MONITOR_WECHAT_PROVIDER=pushplus
+BID_MONITOR_WECHAT_TOKEN=
+BID_MONITOR_WECHAT_WEBHOOK_URL=
+BID_MONITOR_VOICE_PROVIDER=aliyun
+BID_MONITOR_VOICE_ACCESS_KEY_ID=
+BID_MONITOR_VOICE_ACCESS_KEY_SECRET=
+BID_MONITOR_VOICE_TTS_CODE=
+BID_MONITOR_VOICE_CALLED_SHOW_NUMBER=
 ```
 
 `SUB2API_SSO_SECRET` 必须和 Sub2API 一致且至少 32 个字符；`SUB2API_SSO_AUTO_PROVISION=false` 时，管理员需要先为外部主体建立身份映射。
+
+页面保存的是通知目标和站点选择；邮件、短信、微信、语音的服务商密钥只从服务端环境变量读取。微信目标只用于标识联系人，不承载 PushPlus Token 或企业微信 Webhook。
 
 管理员登录 OpenBidKit 的“用户管理”，在“身份映射”区块绑定 Sub2API 主体和本地 active 用户。对应管理接口为：
 
@@ -220,8 +230,15 @@ POST   /api/monitor/stop
 POST   /api/monitor/run-once
 GET    /api/monitor/config
 PUT    /api/monitor/config
+GET    /api/monitor/sites
+PUT    /api/monitor/sites
+GET    /api/monitor/runs
 GET    /api/monitor/results
 GET    /api/monitor/logs
+POST   /api/monitor/test-notification
+POST   /api/monitor/test-ai
+GET    /api/monitor/contacts
+PUT    /api/monitor/contacts
 DELETE /api/monitor/history
 ```
 

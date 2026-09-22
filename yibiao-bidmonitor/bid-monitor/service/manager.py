@@ -38,6 +38,8 @@ def _default_config() -> dict[str, Any]:
         "interval_minutes": 30,
         "crawler": {"enabled_sites": [], "use_selenium": False},
         "custom_sites": [],
+        "ai_enabled": False,
+        "ai_prompt": "",
     }
 
 
@@ -87,6 +89,7 @@ def _default_core_factory(
         notify_method=str(config.get("notify_method") or "none"),
         email=str(config.get("email") or ""),
         phone=str(config.get("phone") or ""),
+        voice_phone=str(config.get("voice_phone") or ""),
         email_config=config.get("email_config"),
         sms_config=config.get("sms_config"),
         log_callback=log_callback,
@@ -147,7 +150,7 @@ class MonitorManager:
         if not isinstance(runtime_config, dict):
             state.runtime_config = {}
             return
-        allowed = {"notify_method", "email", "phone", "ai_config", "email_config", "sms_config", "voice_config", "contacts"}
+        allowed = {"notify_method", "email", "phone", "voice_phone", "ai_config", "email_config", "sms_config", "wechat_config", "voice_config", "contacts"}
         state.runtime_config = {
             key: copy.deepcopy(value)
             for key, value in runtime_config.items()
@@ -163,6 +166,122 @@ class MonitorManager:
             state.config.update(copy.deepcopy(_redact(config)))
             self._save_config(state)
             return copy.deepcopy(state.config)
+
+    def sites(self, user_id: int | str) -> dict[str, Any]:
+        """返回内置站点和当前用户的自定义站点配置。"""
+        state = self._state(user_id)
+        enabled = set((state.config.get("crawler") or {}).get("enabled_sites") or [])
+        from src.monitor_core import get_default_sites
+
+        builtins = [
+            {
+                "key": key,
+                "name": info.get("name", key),
+                "url": info.get("url", ""),
+                "enabled": key in enabled,
+            }
+            for key, info in get_default_sites().items()
+        ]
+        custom = copy.deepcopy(state.config.get("custom_sites") or [])
+        return {"sites": builtins, "custom_sites": custom}
+
+    def update_sites(
+        self,
+        user_id: int | str,
+        enabled_sites: list[str],
+        custom_sites: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """保存当前用户的站点选择，并限制自定义站点字段规模。"""
+        state = self._state(user_id)
+        normalized_enabled = [str(item).strip() for item in enabled_sites if str(item).strip()][:200]
+        normalized_custom = []
+        for item in custom_sites[:50]:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()[:200]
+            url = str(item.get("url") or "").strip()[:2000]
+            if name and url:
+                normalized_custom.append({"name": name, "url": url})
+        with self._lock:
+            crawler = state.config.setdefault("crawler", {})
+            crawler["enabled_sites"] = normalized_enabled
+            state.config["custom_sites"] = normalized_custom
+            self._save_config(state)
+            return self.sites(user_id)
+
+    def test_notification(
+        self,
+        user_id: int | str,
+        channel: str,
+        target: str,
+        runtime_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """使用服务端运行时凭据发送一条测试通知。"""
+        state = self._state(user_id)
+        config = copy.deepcopy(state.config)
+        if isinstance(runtime_config, dict):
+            config.update(copy.deepcopy(runtime_config))
+        target = str(target or "").strip()
+        channel = str(channel or "").strip().lower()
+        if channel not in {"email", "sms", "wechat", "voice"}:
+            raise ValueError("unsupported notification channel")
+        if channel != "wechat" and not target:
+            raise ValueError("notification target is required")
+        from src.database.storage import BidInfo
+
+        test_bid = BidInfo(
+            title="Bid monitor notification test",
+            url="https://example.com/bid-monitor-test",
+            publish_date=datetime.now(timezone.utc).date().isoformat(),
+            source="Bid Monitor",
+            purchaser="System",
+        )
+        bids = [test_bid]
+        if channel == "email":
+            from src.notifier.email import EmailNotifier
+
+            email_config = dict(config.get("email_config") or {})
+            if not email_config.get("smtp_server") or not email_config.get("sender") or not email_config.get("password"):
+                raise ValueError("email notification is not configured")
+            email_config["receiver"] = target
+            success = EmailNotifier(email_config).send_test()
+        elif channel == "sms":
+            from src.notifier.sms import SMSNotifier
+
+            if not config.get("sms_config"):
+                raise ValueError("sms notification is not configured")
+            success = SMSNotifier(config["sms_config"]).send_test(target)
+        elif channel == "wechat":
+            from src.notifier.wechat import WeChatNotifier
+
+            if not config.get("wechat_config"):
+                raise ValueError("wechat notification is not configured")
+            success = WeChatNotifier(config["wechat_config"]).send_test()
+        else:
+            from src.notifier.voice import VoiceNotifier
+
+            if not config.get("voice_config"):
+                raise ValueError("voice notification is not configured")
+            success = VoiceNotifier(config["voice_config"]).send_test(target)
+        return {"success": bool(success), "channel": channel, "target": target}
+
+    def test_ai(self, user_id: int | str, runtime_config: dict[str, Any] | None = None) -> dict[str, Any]:
+        """调用一次 AI 过滤器验证当前服务端模型配置。"""
+        state = self._state(user_id)
+        config = copy.deepcopy(state.config)
+        if isinstance(runtime_config, dict):
+            config.update(copy.deepcopy(runtime_config))
+        ai_config = config.get("ai_config")
+        if not isinstance(ai_config, dict) or not ai_config.get("enable"):
+            raise ValueError("ai filter is not enabled")
+        from src.ai_guard import AIGuard
+
+        relevant, reason = AIGuard(ai_config, log_callback=lambda message: self._append_log(state, message)).check_relevance(
+            "Bid monitor configuration test",
+            "This request verifies the configured AI filter.",
+            raise_on_error=True,
+        )
+        return {"success": True, "relevant": bool(relevant), "reason": str(reason)}
 
     def _append_log(self, state: _UserState, message: str) -> None:
         with self._lock:

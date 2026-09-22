@@ -16,6 +16,11 @@ export interface MonitorResults {
   items: Array<Record<string, unknown>>;
 }
 
+export interface MonitorSites {
+  sites: Array<{ key: string; name: string; url: string; enabled: boolean }>;
+  custom_sites: Array<Record<string, unknown>>;
+}
+
 export interface MonitorConfig {
   keywords?: string[];
   exclude_keywords?: string[];
@@ -38,6 +43,7 @@ export interface MonitorRuntimeConfig {
   notify_method?: string;
   email?: string;
   phone?: string;
+  voice_phone?: string;
   ai_config?: {
     enable?: boolean;
     api_key?: string;
@@ -47,6 +53,12 @@ export interface MonitorRuntimeConfig {
   };
   email_config?: Record<string, unknown>;
   sms_config?: Record<string, unknown>;
+  wechat_config?: Record<string, unknown>;
   voice_config?: Record<string, unknown>;
   contacts?: Array<Record<string, unknown>>;
+}
+
+export interface MonitorNotificationTest {
+  channel: 'email' | 'sms' | 'wechat' | 'voice';
+  target: string;
 }

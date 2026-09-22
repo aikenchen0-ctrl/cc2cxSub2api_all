@@ -2,9 +2,9 @@ import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyReques
 import { getUserId } from '../auth/middleware';
 import { MonitorService, monitorErrorStatus, type MonitorClientLike } from './service';
 import type { MonitorStoreLike } from './service';
-import type { MonitorConfig } from './types';
+import type { MonitorConfig, MonitorNotificationTest } from './types';
 
-type MonitorRouteService = Pick<MonitorService, 'status' | 'start' | 'stop' | 'runOnce' | 'getConfig' | 'updateConfig' | 'getContacts' | 'updateContacts' | 'results' | 'logs' | 'clearHistory'>;
+type MonitorRouteService = Pick<MonitorService, 'status' | 'start' | 'stop' | 'runOnce' | 'getConfig' | 'updateConfig' | 'getContacts' | 'updateContacts' | 'runs' | 'results' | 'logs' | 'clearHistory' | 'sites' | 'updateSites' | 'testNotification' | 'testAi'>;
 
 interface MonitorRoutesOptions extends FastifyPluginOptions {
   service?: MonitorRouteService;
@@ -103,6 +103,54 @@ export async function monitorRoutes(app: FastifyInstance, opts: MonitorRoutesOpt
     }
   });
 
+  app.get('/monitor/sites', async (req, reply) => {
+    try {
+      return await service.sites(getUserId(req));
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.put('/monitor/sites', async (req, reply) => {
+    try {
+      const body = (req as BodyRequest).body as { enabled_sites?: unknown; custom_sites?: unknown };
+      if (!Array.isArray(body?.enabled_sites) || !Array.isArray(body?.custom_sites)) {
+        reply.code(400).send({ error: 'site configuration must contain arrays' });
+        return;
+      }
+      return await service.updateSites(getUserId(req), {
+        enabled_sites: body.enabled_sites.map(String),
+        custom_sites: body.custom_sites as Array<Record<string, unknown>>,
+      });
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.post('/monitor/test-notification', async (req, reply) => {
+    try {
+      const body = (req as BodyRequest).body as Partial<MonitorNotificationTest>;
+      if (!body || !body.channel || (body.channel !== 'wechat' && typeof body.target !== 'string')) {
+        reply.code(400).send({ error: 'channel and target are required' });
+        return;
+      }
+      return await service.testNotification(getUserId(req), {
+        channel: body.channel as MonitorNotificationTest['channel'],
+        target: typeof body.target === 'string' ? body.target : '',
+      });
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.post('/monitor/test-ai', async (req, reply) => {
+    try {
+      return await service.testAi(getUserId(req));
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
   app.get('/monitor/results', async (req, reply) => {
     try {
       const query = (req.query || {}) as { limit?: string; offset?: string };
@@ -113,6 +161,20 @@ export async function monitorRoutes(app: FastifyInstance, opts: MonitorRoutesOpt
         return;
       }
       return await service.results(getUserId(req), limit, offset);
+    } catch (error) {
+      sendMonitorError(reply, error);
+    }
+  });
+
+  app.get('/monitor/runs', async (req, reply) => {
+    try {
+      const query = (req.query || {}) as { limit?: string };
+      const limit = Number(query.limit ?? 20);
+      if (!Number.isFinite(limit)) {
+        reply.code(400).send({ error: 'invalid limit' });
+        return;
+      }
+      return { runs: await service.runs(getUserId(req), limit) };
     } catch (error) {
       sendMonitorError(reply, error);
     }

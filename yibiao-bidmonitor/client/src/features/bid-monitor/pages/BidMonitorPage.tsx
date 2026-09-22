@@ -3,9 +3,14 @@ import {
   useMonitorClearHistory,
   useMonitorConfig,
   useMonitorContacts,
+  useMonitorSaveSites,
+  useMonitorSites,
+  useMonitorTestAi,
+  useMonitorTestNotification,
   useMonitorLogs,
   useMonitorResults,
   useMonitorRunOnce,
+  useMonitorRuns,
   useMonitorSaveConfig,
   useMonitorSaveContacts,
   useMonitorStart,
@@ -48,13 +53,18 @@ function BidMonitorPage() {
   const configQuery = useMonitorConfig();
   const config = configQuery.data;
   const contactsQuery = useMonitorContacts();
+  const sitesQuery = useMonitorSites();
   const results = useMonitorResults();
   const logs = useMonitorLogs();
+  const runs = useMonitorRuns();
   const start = useMonitorStart();
   const stop = useMonitorStop();
   const runOnce = useMonitorRunOnce();
   const saveConfig = useMonitorSaveConfig();
   const saveContacts = useMonitorSaveContacts();
+  const saveSites = useMonitorSaveSites();
+  const testNotification = useMonitorTestNotification();
+  const testAi = useMonitorTestAi();
   const clearHistory = useMonitorClearHistory();
   const [keywords, setKeywords] = useState('');
   const [excluded, setExcluded] = useState('');
@@ -63,6 +73,15 @@ function BidMonitorPage() {
   const [selenium, setSelenium] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [notificationPhone, setNotificationPhone] = useState('');
+  const [notificationWechat, setNotificationWechat] = useState('');
+  const [notificationVoice, setNotificationVoice] = useState('');
+  const [notificationMethods, setNotificationMethods] = useState<string[]>([]);
+  const [enabledSites, setEnabledSites] = useState<string[]>([]);
+  const [customSites, setCustomSites] = useState<Array<{ name: string; url: string }>>([]);
+  const [customSiteName, setCustomSiteName] = useState('');
+  const [customSiteUrl, setCustomSiteUrl] = useState('');
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
 
   useEffect(() => {
     if (!config) return;
@@ -71,13 +90,24 @@ function BidMonitorPage() {
     setRequired(asLines(config.must_contain_keywords));
     setInterval(String(config.interval_minutes ?? 30));
     setSelenium(Boolean(config.crawler?.use_selenium));
+    setNotificationMethods(parseMethods(config.notify_method));
+    setAiEnabled(Boolean(config.ai_enabled));
+    setAiPrompt(String(config.ai_prompt ?? ''));
   }, [config]);
 
   useEffect(() => {
     const contacts = contactsQuery.data ?? [];
     setNotificationEmail(contacts.find((item) => item.channel === 'email')?.target ?? '');
     setNotificationPhone(contacts.find((item) => item.channel === 'sms')?.target ?? '');
+    setNotificationWechat(contacts.find((item) => item.channel === 'wechat')?.target ?? '');
+    setNotificationVoice(contacts.find((item) => item.channel === 'voice')?.target ?? '');
   }, [contactsQuery.data]);
+
+  useEffect(() => {
+    if (!sitesQuery.data) return;
+    setEnabledSites(sitesQuery.data.sites.filter((site) => site.enabled).map((site) => site.key));
+    setCustomSites(sitesQuery.data.custom_sites ?? []);
+  }, [sitesQuery.data]);
 
   const currentStatus = status.data;
   const busy = start.isPending || stop.isPending || runOnce.isPending;
@@ -87,11 +117,15 @@ function BidMonitorPage() {
     exclude_keywords: parseLines(excluded),
     must_contain_keywords: parseLines(required),
     interval_minutes: Math.max(1, Math.min(1440, Number(interval) || 30)),
-    crawler: {
-      ...(config?.crawler ?? DEFAULT_CONFIG.crawler),
-      use_selenium: selenium,
-    },
-  }), [config, excluded, interval, keywords, required, selenium]);
+      crawler: {
+        ...(config?.crawler ?? DEFAULT_CONFIG.crawler),
+        enabled_sites: enabledSites,
+        use_selenium: selenium,
+      },
+    notify_method: notificationMethods.length ? notificationMethods.join(',') : 'none',
+    ai_enabled: aiEnabled,
+    ai_prompt: aiPrompt.trim(),
+  }), [aiEnabled, aiPrompt, config, enabledSites, excluded, interval, keywords, notificationMethods, required, selenium]);
 
   const runAction = async (action: () => Promise<unknown>, successMessage: string) => {
     try {
@@ -107,9 +141,27 @@ function BidMonitorPage() {
     () => saveContacts.mutateAsync([
       ...(notificationEmail.trim() ? [{ channel: 'email', target: notificationEmail.trim(), enabled: true }] : []),
       ...(notificationPhone.trim() ? [{ channel: 'sms', target: notificationPhone.trim(), enabled: true }] : []),
+      ...(notificationWechat.trim() ? [{ channel: 'wechat', target: notificationWechat.trim(), enabled: true }] : []),
+      ...(notificationVoice.trim() ? [{ channel: 'voice', target: notificationVoice.trim(), enabled: true }] : []),
     ]),
     'Notification targets saved',
   );
+  const saveSiteConfig = () => void runAction(
+    () => saveSites.mutateAsync({ enabled_sites: enabledSites, custom_sites: customSites }),
+    'Site configuration saved',
+  );
+  const addCustomSite = () => {
+    const name = customSiteName.trim();
+    const url = customSiteUrl.trim();
+    if (!name || !url) return;
+    setCustomSites((items) => [...items, { name, url }].slice(0, 50));
+    setCustomSiteName('');
+    setCustomSiteUrl('');
+  };
+  const testChannel = (channel: 'email' | 'sms' | 'wechat' | 'voice', target: string) => {
+    if (!target.trim()) return;
+    void runAction(() => testNotification.mutateAsync({ channel, target: target.trim() }), 'Notification test completed');
+  };
   const clear = () => {
     if (!window.confirm('Clear all stored monitor history?')) return;
     void runAction(() => clearHistory.mutateAsync(), 'History cleared');
@@ -156,8 +208,30 @@ function BidMonitorPage() {
               <div className="bid-monitor-section-head"><div><span className="section-kicker">Notify</span><h3>Notification targets</h3></div><button type="button" className="text-action" onClick={saveNotificationTargets} disabled={saveContacts.isPending}>Save</button></div>
               <label className="bid-monitor-field"><span>Email address</span><input type="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} placeholder="Optional" /></label>
               <label className="bid-monitor-field"><span>Phone number</span><input type="tel" value={notificationPhone} onChange={(event) => setNotificationPhone(event.target.value)} placeholder="Optional" /></label>
+              <label className="bid-monitor-field"><span>WeChat target label</span><input value={notificationWechat} onChange={(event) => setNotificationWechat(event.target.value)} placeholder="Optional; credential stays on server" /></label>
+              <label className="bid-monitor-field"><span>Voice phone number</span><input type="tel" value={notificationVoice} onChange={(event) => setNotificationVoice(event.target.value)} placeholder="Optional" /></label>
+              <div className="bid-monitor-channel-list">
+                {['email', 'sms', 'wechat', 'voice'].map((channel) => <label className="bid-monitor-toggle" key={channel}><input type="checkbox" checked={notificationMethods.includes(channel)} onChange={(event) => setNotificationMethods((items) => event.target.checked ? [...new Set([...items, channel])] : items.filter((item) => item !== channel))} /><span>{channel}</span></label>)}
+              </div>
+              <div className="bid-monitor-test-actions">
+                <button type="button" className="text-action" onClick={() => testChannel('email', notificationEmail)}>Test email</button>
+                <button type="button" className="text-action" onClick={() => testChannel('sms', notificationPhone)}>Test SMS</button>
+                <button type="button" className="text-action" onClick={() => testChannel('wechat', notificationWechat)}>Test WeChat</button>
+                <button type="button" className="text-action" onClick={() => testChannel('voice', notificationVoice)}>Test voice</button>
+              </div>
               <p className="bid-monitor-note">Channel credentials are managed by the server.</p>
             </div>
+            <div className="bid-monitor-ai">
+              <div className="bid-monitor-section-head"><div><span className="section-kicker">Filter</span><h3>AI relevance filter</h3></div><button type="button" className="text-action" onClick={() => void runAction(() => testAi.mutateAsync(), 'AI test completed')} disabled={testAi.isPending}>Test AI</button></div>
+              <label className="bid-monitor-toggle"><input type="checkbox" checked={aiEnabled} onChange={(event) => setAiEnabled(event.target.checked)} /><span>Enable AI second-pass filtering</span></label>
+              <label className="bid-monitor-field"><span>Custom filter prompt</span><textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Optional" /></label>
+            </div>
+          </section>
+
+          <section className="bid-monitor-section bid-monitor-sites">
+            <div className="bid-monitor-section-head"><div><span className="section-kicker">Sources</span><h3>Monitored sites</h3></div><button type="button" className="text-action" onClick={saveSiteConfig} disabled={saveSites.isPending}>Save</button></div>
+            <div className="bid-monitor-site-list">{(sitesQuery.data?.sites ?? []).map((site) => <label className="bid-monitor-site-row" key={site.key}><input type="checkbox" checked={enabledSites.includes(site.key)} onChange={(event) => setEnabledSites((items) => event.target.checked ? [...items, site.key] : items.filter((item) => item !== site.key))} /><span><strong>{site.name}</strong><small>{site.url}</small></span></label>)}</div>
+            <div className="bid-monitor-custom-sites"><h4>Custom sites</h4>{customSites.map((site, index) => <div className="bid-monitor-custom-site" key={`${site.url}-${index}`}><span>{site.name}<small>{site.url}</small></span><button type="button" className="text-action" onClick={() => setCustomSites((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}<div className="bid-monitor-custom-form"><input value={customSiteName} onChange={(event) => setCustomSiteName(event.target.value)} placeholder="Site name" /><input value={customSiteUrl} onChange={(event) => setCustomSiteUrl(event.target.value)} placeholder="https://example.com" /><button type="button" className="secondary-action" onClick={addCustomSite}>Add site</button></div></div>
           </section>
 
           <section className="bid-monitor-section bid-monitor-results">
@@ -172,9 +246,18 @@ function BidMonitorPage() {
           <div className="bid-monitor-section-head"><div><span className="section-kicker">Trace</span><h3>Recent logs</h3></div></div>
           {logs.data?.length ? <pre>{logs.data.join('\n')}</pre> : <div className="bid-monitor-empty">No logs yet.</div>}
         </section>
+        <section className="bid-monitor-section bid-monitor-runs">
+          <div className="bid-monitor-section-head"><div><span className="section-kicker">History</span><h3>Run history</h3></div></div>
+          {runs.data?.length ? <div className="bid-monitor-table-wrap"><table className="bid-monitor-table"><thead><tr><th>Status</th><th>Started</th><th>Finished</th><th>Error</th></tr></thead><tbody>{runs.data.map((run) => <tr key={run.id}><td>{run.status}</td><td>{formatTime(run.startedAt)}</td><td>{formatTime(run.finishedAt)}</td><td>{run.error || '—'}</td></tr>)}</tbody></table></div> : <div className="bid-monitor-empty">No run history yet.</div>}
+        </section>
       </div>
     </div>
   );
+}
+
+function parseMethods(value: string | undefined): string[] {
+  const methods = String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  return methods.includes('both') ? ['email', 'sms'] : methods;
 }
 
 export default BidMonitorPage;

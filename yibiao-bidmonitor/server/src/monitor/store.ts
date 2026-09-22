@@ -8,6 +8,19 @@ export interface MonitorBidInput {
   content?: string | null;
 }
 
+export interface MonitorRunInput {
+  userId: number;
+  profileId?: number | null;
+  status: string;
+}
+
+export interface MonitorNotificationInput {
+  fingerprint: string;
+  channel: string;
+  status: string;
+  lastError?: string | null;
+}
+
 interface MonitorPrismaLike {
   monitorProfile: {
     findFirst(args: unknown): Promise<any>;
@@ -19,7 +32,14 @@ interface MonitorPrismaLike {
     findMany(args: unknown): Promise<any[]>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
+  monitorRun?: {
+    create(args: unknown): Promise<any>;
+    update(args: unknown): Promise<any>;
+    findMany(args: unknown): Promise<any[]>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
   monitorLog: {
+    createMany?(args: unknown): Promise<{ count: number }>;
     findMany(args: unknown): Promise<any[]>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
@@ -28,8 +48,10 @@ interface MonitorPrismaLike {
     deleteMany(args: unknown): Promise<{ count: number }>;
     createMany(args: unknown): Promise<{ count: number }>;
   };
-  monitorNotification?: { deleteMany(args: unknown): Promise<{ count: number }> };
-  monitorRun?: { deleteMany(args: unknown): Promise<{ count: number }> };
+  monitorNotification?: {
+    deleteMany(args: unknown): Promise<{ count: number }>;
+    createMany(args: unknown): Promise<{ count: number }>;
+  };
 }
 
 const MAX_TITLE_LENGTH = 1000;
@@ -87,6 +109,74 @@ export function createMonitorStore(prisma: MonitorPrismaLike) {
     return result.count;
   }
 
+  async function createRun(input: MonitorRunInput): Promise<any> {
+    if (!prisma.monitorRun) return { id: null };
+    return prisma.monitorRun.create({
+      data: {
+        userId: input.userId,
+        profileId: input.profileId ?? null,
+        status: input.status,
+      },
+    });
+  }
+
+  async function finishRun(
+    runId: number,
+    status: string,
+    counts: Record<string, unknown> | null,
+    error: string | null,
+  ): Promise<any> {
+    if (!prisma.monitorRun) return null;
+    return prisma.monitorRun.update({
+      where: { id: runId },
+      data: {
+        status,
+        counts,
+        error,
+        finishedAt: new Date(),
+      },
+    });
+  }
+
+  async function saveLogs(userId: number, runId: number, logs: string[]): Promise<number> {
+    if (!logs.length || !prisma.monitorLog.createMany) return 0;
+    const result = await prisma.monitorLog.createMany({
+      data: logs.slice(-300).map((message) => ({ userId, runId, level: 'info', message: String(message).slice(0, 4000) })),
+    });
+    return result.count;
+  }
+
+  async function saveNotifications(userId: number, notifications: MonitorNotificationInput[]): Promise<number> {
+    if (!prisma.monitorNotification) return 0;
+    if (!notifications.length) return 0;
+    const fingerprints = [...new Set(notifications.map((item) => item.fingerprint).filter(Boolean))];
+    if (!fingerprints.length) return 0;
+    const bids = await prisma.monitorBid.findMany({ where: { userId, fingerprint: { in: fingerprints } }, select: { id: true, fingerprint: true } });
+    const bidIds = new Map(bids.map((bid: any) => [String(bid.fingerprint), bid.id]));
+    const rows = notifications
+      .map((item) => ({
+        userId,
+        bidId: bidIds.get(item.fingerprint),
+        channel: item.channel,
+        status: item.status,
+        attempts: 1,
+        lastError: item.lastError ?? null,
+      }))
+      .filter((item) => item.bidId != null);
+    if (!rows.length) return 0;
+    const result = await prisma.monitorNotification.createMany({ data: rows, skipDuplicates: true });
+    return result.count;
+  }
+
+  async function listRuns(userId: number, limit = 20): Promise<any[]> {
+    if (!prisma.monitorRun) return [];
+    return prisma.monitorRun.findMany({
+      where: { userId },
+      orderBy: { startedAt: 'desc' },
+      take: Math.max(1, Math.min(100, Math.trunc(limit))),
+    });
+  }
+
   async function listBids(userId: number, limit = 50, offset = 0): Promise<any[]> {
     return prisma.monitorBid.findMany({
       where: { userId },
@@ -134,7 +224,21 @@ export function createMonitorStore(prisma: MonitorPrismaLike) {
     await prisma.monitorRun?.deleteMany({ where: { userId } });
   }
 
-  return { getProfile, updateProfile, saveBids, listBids, listLogs, listContacts, replaceContacts, clearHistory };
+  return {
+    getProfile,
+    updateProfile,
+    saveBids,
+    createRun,
+    finishRun,
+    saveLogs,
+    saveNotifications,
+    listRuns,
+    listBids,
+    listLogs,
+    listContacts,
+    replaceContacts,
+    clearHistory,
+  };
 }
 
 export type MonitorStore = ReturnType<typeof createMonitorStore>;

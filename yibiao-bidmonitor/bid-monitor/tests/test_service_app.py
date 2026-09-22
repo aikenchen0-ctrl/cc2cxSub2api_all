@@ -34,6 +34,18 @@ class FakeManager:
     def clear_history(self, user_id):
         return None
 
+    def sites(self, user_id):
+        return {"sites": [], "custom_sites": []}
+
+    def update_sites(self, user_id, enabled_sites, custom_sites):
+        return {"sites": [], "custom_sites": custom_sites}
+
+    def test_notification(self, user_id, channel, target, runtime_config=None):
+        return {"success": True, "channel": channel, "target": target}
+
+    def test_ai(self, user_id, runtime_config=None):
+        return {"success": True, "relevant": True, "reason": "ok"}
+
 
 class ServiceAppTests(unittest.TestCase):
     def setUp(self):
@@ -74,6 +86,25 @@ class ServiceAppTests(unittest.TestCase):
             headers={"X-BidMonitor-Service-Token": "test-token"},
         )
         self.assertIn(response.status_code, (404, 400))
+
+    def test_extended_monitor_actions_are_forwarded(self):
+        headers = {"X-BidMonitor-Service-Token": "test-token"}
+        response = self.client.get("/internal/users/7/sites", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.put(
+            "/internal/users/7/sites",
+            headers=headers,
+            json={"enabled_sites": ["chinabidding"], "custom_sites": []},
+        )
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            "/internal/users/7/test-notification",
+            headers=headers,
+            json={"channel": "email", "target": "user@example.test"},
+        )
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post("/internal/users/7/test-ai", headers=headers)
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

@@ -73,12 +73,17 @@ const monitorStore = createMonitorStore(prisma as any);
 const monitorService = new MonitorService(monitorClient, monitorStore, async (userId) => {
   const ai = getLiveAgentAiConfig();
   const contacts = await monitorStore.listContacts(userId);
+  const profile = await monitorStore.getProfile(userId);
+  const monitorConfig = profile?.config && typeof profile.config === 'object' ? profile.config as Record<string, any> : {};
   const email = contacts.find((item: any) => item.channel === 'email')?.target || '';
   const phone = contacts.find((item: any) => item.channel === 'sms')?.target || '';
+  const voicePhone = contacts.find((item: any) => item.channel === 'voice')?.target || '';
+  const wechat = contacts.find((item: any) => item.channel === 'wechat')?.target || '';
   const runtime: Record<string, unknown> = {
-    notify_method: email && phone ? 'both' : email ? 'email' : phone ? 'sms' : 'none',
+    notify_method: String(monitorConfig.notify_method || 'none'),
     email,
     phone,
+    voice_phone: voicePhone,
     contacts,
   };
   const smtpServer = process.env.BID_MONITOR_EMAIL_SMTP_SERVER?.trim() || '';
@@ -108,6 +113,28 @@ const monitorService = new MonitorService(monitorClient, monitorStore, async (us
       template_code: smsTemplateCode,
     };
   }
+  const wechatProvider = process.env.BID_MONITOR_WECHAT_PROVIDER?.trim() || 'pushplus';
+  const wechatToken = process.env.BID_MONITOR_WECHAT_TOKEN?.trim() || '';
+  const wechatWebhook = process.env.BID_MONITOR_WECHAT_WEBHOOK_URL?.trim() || '';
+  if ((wechatToken && wechatProvider === 'pushplus') || (wechatWebhook && wechatProvider === 'enterprise')) {
+    runtime.wechat_config = {
+      provider: wechatProvider,
+      token: wechatToken,
+      webhook_url: wechatWebhook,
+    };
+  }
+  const voiceAccessKeyId = process.env.BID_MONITOR_VOICE_ACCESS_KEY_ID?.trim() || '';
+  const voiceAccessKeySecret = process.env.BID_MONITOR_VOICE_ACCESS_KEY_SECRET || '';
+  const voiceTtsCode = process.env.BID_MONITOR_VOICE_TTS_CODE?.trim() || '';
+  if (voiceAccessKeyId && voiceAccessKeySecret && voiceTtsCode) {
+    runtime.voice_config = {
+      provider: process.env.BID_MONITOR_VOICE_PROVIDER?.trim() || 'aliyun',
+      access_key_id: voiceAccessKeyId,
+      access_key_secret: voiceAccessKeySecret,
+      tts_code: voiceTtsCode,
+      called_show_number: process.env.BID_MONITOR_VOICE_CALLED_SHOW_NUMBER?.trim() || '',
+    };
+  }
   if (!ai) return runtime;
   const baseUrl = String(ai.base_url || '').trim().replace(/\/+$/, '');
   const completionUrl = /\/chat\/completions$/i.test(baseUrl)
@@ -116,10 +143,11 @@ const monitorService = new MonitorService(monitorClient, monitorStore, async (us
   return {
     ...runtime,
     ai_config: {
-      enable: Boolean(ai.api_key && ai.model_name && baseUrl),
+      enable: Boolean(monitorConfig.ai_enabled && ai.api_key && ai.model_name && baseUrl),
       api_key: ai.api_key,
       base_url: completionUrl,
       model: ai.model_name,
+      prompt: String(monitorConfig.ai_prompt || '').trim(),
     },
   };
 });

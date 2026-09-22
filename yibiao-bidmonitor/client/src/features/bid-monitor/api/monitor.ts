@@ -18,7 +18,21 @@ export interface MonitorConfig {
   interval_minutes?: number;
   crawler?: { enabled_sites?: string[]; use_selenium?: boolean; [key: string]: unknown };
   custom_sites?: Array<Record<string, unknown>>;
+  ai_enabled?: boolean;
+  ai_prompt?: string;
   [key: string]: unknown;
+}
+
+export interface MonitorSite {
+  key: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface MonitorSites {
+  sites: MonitorSite[];
+  custom_sites: Array<{ name: string; url: string }>;
 }
 
 export interface MonitorResultItem {
@@ -34,6 +48,15 @@ export interface MonitorResults {
   offset: number;
   limit: number;
   items: MonitorResultItem[];
+}
+
+export interface MonitorRun {
+  id: number;
+  status: string;
+  counts?: Record<string, unknown> | null;
+  error?: string | null;
+  startedAt: string;
+  finishedAt?: string | null;
 }
 
 export interface MonitorContact {
@@ -76,10 +99,25 @@ export function useMonitorLogs() {
   });
 }
 
+export function useMonitorRuns() {
+  return useQuery({
+    queryKey: [...monitorKey, 'runs'],
+    queryFn: async () => (await http.get<{ runs: MonitorRun[] }>('/monitor/runs', { params: { limit: 20 } })).data.runs,
+    refetchInterval: 10000,
+  });
+}
+
 export function useMonitorContacts() {
   return useQuery({
     queryKey: [...monitorKey, 'contacts'],
     queryFn: async () => (await http.get<{ contacts: MonitorContact[] }>('/monitor/contacts')).data.contacts,
+  });
+}
+
+export function useMonitorSites() {
+  return useQuery({
+    queryKey: [...monitorKey, 'sites'],
+    queryFn: async () => (await http.get<MonitorSites>('/monitor/sites')).data,
   });
 }
 
@@ -124,6 +162,28 @@ export function useMonitorSaveContacts() {
   return useMutation({
     mutationFn: async (contacts: MonitorContact[]) => (await http.put<{ success: boolean }>('/monitor/contacts', { contacts })).data,
     onSuccess: () => invalidateMonitor(qc),
+  });
+}
+
+export function useMonitorSaveSites() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { enabled_sites: string[]; custom_sites: Array<{ name: string; url: string }> }) =>
+      (await http.put<MonitorSites>('/monitor/sites', payload)).data,
+    onSuccess: () => invalidateMonitor(qc),
+  });
+}
+
+export function useMonitorTestNotification() {
+  return useMutation({
+    mutationFn: async (payload: { channel: 'email' | 'sms' | 'wechat' | 'voice'; target: string }) =>
+      (await http.post<{ success: boolean }>('/monitor/test-notification', payload)).data,
+  });
+}
+
+export function useMonitorTestAi() {
+  return useMutation({
+    mutationFn: async () => (await http.post<{ success: boolean; relevant?: boolean; reason?: string }>('/monitor/test-ai')).data,
   });
 }
 

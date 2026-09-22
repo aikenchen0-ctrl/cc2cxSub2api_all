@@ -78,6 +78,44 @@ def create_app(manager: MonitorManager | Any | None = None, service_token: str |
         except Exception as exc:
             raise user_error(exc) from exc
 
+    @app.get("/internal/users/{user_id}/sites", dependencies=[Depends(require_service_token)])
+    async def sites(user_id: str) -> dict[str, Any]:
+        try:
+            return monitor_manager.sites(user_id)
+        except Exception as exc:
+            raise user_error(exc) from exc
+
+    @app.put("/internal/users/{user_id}/sites", dependencies=[Depends(require_service_token)])
+    async def update_sites(user_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            enabled_sites = body.get("enabled_sites") if isinstance(body, dict) else []
+            custom_sites = body.get("custom_sites") if isinstance(body, dict) else []
+            if not isinstance(enabled_sites, list) or not isinstance(custom_sites, list):
+                raise ValueError("site configuration must contain arrays")
+            return monitor_manager.update_sites(user_id, enabled_sites, custom_sites)
+        except Exception as exc:
+            raise user_error(exc) from exc
+
+    @app.post("/internal/users/{user_id}/test-notification", dependencies=[Depends(require_service_token)])
+    async def test_notification(user_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return monitor_manager.test_notification(
+                user_id,
+                str(body.get("channel") or ""),
+                str(body.get("target") or ""),
+                body.get("runtime_config") if isinstance(body, dict) else None,
+            )
+        except Exception as exc:
+            raise user_error(exc) from exc
+
+    @app.post("/internal/users/{user_id}/test-ai", dependencies=[Depends(require_service_token)])
+    async def test_ai(user_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        try:
+            runtime_config = body.get("runtime_config") if isinstance(body, dict) else None
+            return monitor_manager.test_ai(user_id, runtime_config)
+        except Exception as exc:
+            raise user_error(exc) from exc
+
     @app.get("/internal/users/{user_id}/results", dependencies=[Depends(require_service_token)])
     async def results(
         user_id: str,

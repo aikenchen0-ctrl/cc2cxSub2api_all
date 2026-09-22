@@ -4,6 +4,8 @@ import type {
   MonitorResults,
   MonitorRuntimeConfig,
   MonitorStatus,
+  MonitorSites,
+  MonitorNotificationTest,
 } from './types';
 import { normalizeMonitorUserId, sanitizeMonitorConfig } from './scope';
 
@@ -131,5 +133,36 @@ export class BidMonitorClient {
 
   async clearHistory(userId: unknown): Promise<{ success: boolean }> {
     return this.request(this.path(userId, 'history'), { method: 'DELETE' });
+  }
+
+  async sites(userId: unknown): Promise<MonitorSites> {
+    return this.request<MonitorSites>(this.path(userId, 'sites'));
+  }
+
+  async updateSites(
+    userId: unknown,
+    payload: { enabled_sites: string[]; custom_sites: Array<Record<string, unknown>> },
+  ): Promise<MonitorSites> {
+    return this.request<MonitorSites>(this.path(userId, 'sites'), {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async testNotification(
+    userId: unknown,
+    payload: MonitorNotificationTest & { runtime_config?: MonitorRuntimeConfig },
+  ): Promise<{ success: boolean; channel: string; target: string }> {
+    return this.request(this.path(userId, 'test-notification'), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async testAi(userId: unknown, runtimeConfig?: MonitorRuntimeConfig): Promise<Record<string, unknown>> {
+    return this.request(this.path(userId, 'test-ai'), {
+      method: 'POST',
+      body: runtimeConfig ? JSON.stringify({ runtime_config: runtimeConfig }) : undefined,
+    });
   }
 }

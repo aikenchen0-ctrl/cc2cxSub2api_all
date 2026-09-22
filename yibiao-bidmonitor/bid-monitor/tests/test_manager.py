@@ -116,6 +116,15 @@ class ManagerTests(unittest.TestCase):
             self.assertNotIn("runtime-secret", config_file.read_text(encoding="utf-8"))
         self.assertNotIn("runtime-secret", str(self.manager.status("1")))
 
+    def test_site_configuration_is_scoped_and_persisted(self):
+        result = self.manager.update_sites(
+            "1",
+            ["chinabidding"],
+            [{"name": "Custom", "url": "https://example.test"}],
+        )
+        self.assertEqual(result["custom_sites"][0]["name"], "Custom")
+        self.assertEqual(self.manager.status("1")["config"]["crawler"]["enabled_sites"], ["chinabidding"])
+
 
 if __name__ == "__main__":
     unittest.main()
