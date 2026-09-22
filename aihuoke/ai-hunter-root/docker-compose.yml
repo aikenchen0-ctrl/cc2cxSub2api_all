@@ -1,0 +1,58 @@
+services:
+  aihuoke-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: aihuoke-backend:local
+    container_name: aihuoke-backend
+    restart: unless-stopped
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LINK: ${LINK:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:?SUB2API_APP_CREDENTIAL is required}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-5.5}
+      AIHUOKE_SSO_CALLBACK_URL: ${AIHUOKE_SSO_CALLBACK_URL:-http://localhost:3001/api/auth/sso/callback}
+      AIHUOKE_AUTH_DB: ${AIHUOKE_AUTH_DB:-/app/data/auth.db}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:3000","http://localhost:3001"]}'
+      CHECKPOINT_DB_PATH: /app/data/hunt_sessions.db
+      EMAIL_DB_PATH: /app/data/email_automation.db
+      AUTOMATION_QUEUE_DB_PATH: /app/data/automation_queue.db
+      TEMPLATE_SEED_CACHE_PATH: /app/data/template_seed_cache.json
+      HUNTS_DIR: /app/data/hunts
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - aihuoke_data:/app/data
+    networks:
+      - aihuoke_default
+      - sub2api-network
+
+  aihuoke-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: aihuoke-frontend:local
+    container_name: aihuoke-frontend
+    restart: unless-stopped
+    environment:
+      VITE_PORT: 3000
+      VITE_API_PROXY_TARGET: http://aihuoke-backend:8000
+    depends_on:
+      - aihuoke-backend
+    ports:
+      - "${AIHUOKE_PORT:-3001}:3000"
+    networks:
+      - aihuoke_default
+
+volumes:
+  aihuoke_data:
+    name: aihuoke_data
+
+networks:
+  aihuoke_default:
+    driver: bridge
+  sub2api-network:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}

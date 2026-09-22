@@ -182,8 +182,8 @@ export const IMAGE_PROVIDERS: Record<string, ImageProviderOption> = {
 export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   presenton: {
     value: "presenton",
-    label: "Presenton",
-    description: "Generate with your connected Presenton Cloud account",
+    label: "永恒PPT",
+    description: "使用已连接的永恒PPT云端账号生成",
     icon: "/providers/presenton.png",
   },
   codex: {

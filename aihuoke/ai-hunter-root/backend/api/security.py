@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Header, HTTPException, Query, Request, status
 
 from config.settings import get_settings
+from auth_sso import managed, require_identity, set_current_subject
 
 _LOCAL_HOSTS = {"", "127.0.0.1", "::1", "localhost", "testclient", "test"}
 
@@ -26,6 +27,12 @@ def require_api_access(
 ) -> None:
     """Allow localhost access by default; require token for non-local requests when configured."""
     settings = get_settings()
+    if managed():
+        identity = require_identity(request)
+        # Dependencies may be used without the ASGI middleware in unit tests;
+        # set the context here as well so model calls remain user-scoped.
+        set_current_subject(identity.subject)
+        return
     expected = settings.api_access_token.strip()
     client_host = (request.client.host if request.client else "").strip().lower()
 

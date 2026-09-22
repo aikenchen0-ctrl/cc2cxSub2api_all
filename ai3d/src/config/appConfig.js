@@ -20,7 +20,10 @@ export const DEFAULT_SETTINGS = {
   quality: 'balanced',
   compactUi: false,
   generationProvider: 'hunyuan',
-  generationMode: 'hunyuan',
+  // JS Depth is an immediate browser-side fallback when no cloud/local 3D
+  // provider key is configured. Users can still choose a configured provider
+  // after the authenticated health check completes.
+  generationMode: 'cinematic',
   falModelId: DEFAULT_FAL_MODEL,
   screenshotScale: 2,
   language: 'zh',
@@ -43,7 +46,9 @@ export const CUSTOM_CELL_STORAGE_KEY = 'bio-demo-custom-cells'
 export const MAX_PERSISTED_IMAGE_EDGE = 1280
 export const COMPACT_PERSISTED_IMAGE_EDGE = 900
 export const MAX_PERSISTED_IMAGE_CHARS = 3_200_000
-export const MODEL_API_BASE = VITE_ENV.VITE_MODEL_API_BASE || VITE_ENV.VITE_TRIPO_API_BASE || 'http://127.0.0.1:8787'
+// Keep API calls same-origin so the HttpOnly satellite session is sent.  Vite
+// and production reverse proxies forward /api to the Node service.
+export const MODEL_API_BASE = VITE_ENV.VITE_MODEL_API_BASE || VITE_ENV.VITE_TRIPO_API_BASE || ''
 export const GENERATION_POLL_INTERVAL_MS = 3500
 export const GENERATION_TIMEOUT_MS = 8 * 60 * 1000
 export const DEFAULT_HUNYUAN_SKETCH_PROMPT = '一只上皮细胞，光滑表面，细胞核清晰'

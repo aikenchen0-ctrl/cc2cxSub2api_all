@@ -20,14 +20,18 @@ func Apps() []App {
 	ttl := defaultTTL()
 	return []App{
 		{Slug: "canvas", Audience: "canvas", DefaultOrigin: "http://localhost:3522", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "CANVAS_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
-		{Slug: "ju", Audience: "ju", DefaultOrigin: "http://localhost:3000", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "JU_SSO_CALLBACK_URL", DefaultNext: "/projects", TicketTTL: 3 * 24 * time.Hour},
+		// Tickets are deliberately short-lived; the satellite signs its own
+		// three-day session after this one-time handoff is consumed.
+		{Slug: "ju", Audience: "ju", DefaultOrigin: "http://localhost:3000", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "JU_SSO_CALLBACK_URL", DefaultNext: "/projects", TicketTTL: ttl},
 		{Slug: "livart", Audience: "livart", DefaultOrigin: "http://localhost:8080", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "LIVART_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "ppt", Audience: "presenton", DefaultOrigin: "http://localhost:8341", CallbackPath: "/api/v1/auth/sso/callback", CallbackEnv: "PPT_SSO_CALLBACK_URL", DefaultNext: "/upload", TicketTTL: ttl},
 		{Slug: "aicut", Audience: "openchatcut", DefaultOrigin: "http://localhost:5199", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "OPENCHATCUT_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "screen2code", Audience: "screen2code", DefaultOrigin: "http://localhost:5173", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "SCREEN2CODE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "aiexcel", Audience: "aiexcel", DefaultOrigin: "http://localhost:4173", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AIEXCEL_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "qrcode", Audience: "qrcode", DefaultOrigin: "http://localhost:5221", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "QRCODE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
-		{Slug: "yibiao", Audience: "yibiao", DefaultOrigin: "http://localhost:8080", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "YIBIAO_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
+		{Slug: "yibiao", Audience: "yibiao", DefaultOrigin: "http://localhost:8081", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "YIBIAO_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
+		{Slug: "ai3d", Audience: "ai3d", DefaultOrigin: "http://localhost:5174", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AI3D_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
+		{Slug: "aihuoke", Audience: "aihuoke", DefaultOrigin: "http://localhost:3001", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AIHUOKE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 	}
 }
 

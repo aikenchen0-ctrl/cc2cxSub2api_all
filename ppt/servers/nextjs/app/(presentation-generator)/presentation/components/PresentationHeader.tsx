@@ -574,9 +574,9 @@ const PresentationHeader = ({
             onClick={() => {
               router.push("/dashboard");
             }}
-            src="/logo-with-bg.png"
-            alt=""
-            className="w-10 h-10 cursor-pointer object-contain"
+            src="/project-icon.jpg"
+            alt="永恒PPT"
+            className="w-10 h-10 cursor-pointer rounded-lg object-cover"
           />
           {presentationData && !isStreaming && !isEditingTitle ? (
             <ToolTip content="Rename presentation">{titleBlock}</ToolTip>

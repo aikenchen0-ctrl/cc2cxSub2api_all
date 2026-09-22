@@ -16,6 +16,7 @@ from tools.search_readiness import search_readiness
 from automation.notifier import send_feishu_text
 from emailing.imap_client import test_imap_connection
 from emailing.smtp_client import test_smtp_connection
+from auth_sso import managed as satellite_managed
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -125,6 +126,7 @@ class SettingsPayload(BaseModel):
 class SettingsResponse(BaseModel):
     settings: dict[str, str]
     is_configured: bool
+    managed: bool = False
     search_readiness: dict = {}
 
 
@@ -181,11 +183,33 @@ def _now_iso() -> str:
 async def get_settings_api():
     """Return current settings with sensitive values partially masked."""
     _ensure_settings_api_enabled()
-    raw = read_settings()
-    masked = {key: _mask(value) for key, value in raw.items()}
+    # Satellite transport credentials are server-only.  Do not even return a
+    # masked copy to the browser: the client has no reason to know that these
+    # variables exist, and masking still leaks their prefix/suffix.
+    raw = {
+        key: value
+        for key, value in read_settings().items()
+        if key not in {"SUB2API_APP_CREDENTIAL", "SUB2API_SSO_SECRET"}
+        and not key.endswith("_APP_CREDENTIAL")
+        and not key.endswith("_SSO_SECRET")
+    }
+    masked = {key: _mask(value, key) for key, value in raw.items()}
+    if satellite_managed():
+        # Provider/model credentials belong to Sub2API; never return them to
+        # the browser or persist a browser-supplied replacement.
+        for key in (
+            "OPENAI_API_KEY", "OPENAI_API_BASE", "ANTHROPIC_API_KEY",
+            "OPENROUTER_API_KEY", "GROQ_API_KEY", "ZAI_API_KEY",
+            "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "EMAIL_OPENAI_API_KEY",
+            "EMAIL_ANTHROPIC_API_KEY", "EMAIL_OPENROUTER_API_KEY",
+            "EMAIL_GROQ_API_KEY", "EMAIL_ZAI_API_KEY", "EMAIL_MOONSHOT_API_KEY",
+            "EMAIL_MINIMAX_API_KEY",
+        ):
+            masked[key] = ""
     return SettingsResponse(
         settings=masked,
         is_configured=is_configured(),
+        managed=satellite_managed(),
         search_readiness=search_readiness(get_settings()),
     )
 
@@ -303,6 +327,14 @@ async def save_settings(payload: SettingsPayload):
         if field not in provided_fields:
             continue
         value = provided_fields[field]
+        if satellite_managed() and env_key in {
+            "OPENAI_API_KEY", "OPENAI_API_BASE", "ANTHROPIC_API_KEY",
+            "OPENROUTER_API_KEY", "GROQ_API_KEY", "ZAI_API_KEY",
+            "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "EMAIL_OPENAI_API_KEY",
+            "EMAIL_ANTHROPIC_API_KEY", "EMAIL_OPENROUTER_API_KEY", "EMAIL_GROQ_API_KEY",
+            "EMAIL_ZAI_API_KEY", "EMAIL_MOONSHOT_API_KEY", "EMAIL_MINIMAX_API_KEY",
+        }:
+            continue
         if isinstance(value, str) and _is_masked(value):
             continue
         updates[env_key] = str(value)
@@ -318,8 +350,13 @@ async def save_settings(payload: SettingsPayload):
 
     if updates:
         update_settings(updates)
-        for env_key, value in updates.items():
-            _os.environ[env_key] = value
+        # Local mode historically applies settings to the process environment
+        # immediately. Managed mode reads the subject-scoped file through
+        # get_settings(); mutating os.environ here would leak user A's values
+        # into user B's requests.
+        if not satellite_managed():
+            for env_key, value in updates.items():
+                _os.environ[env_key] = value
 
     get_settings.cache_clear()
 
@@ -335,7 +372,8 @@ async def test_email_settings():
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     tested_at = _now_iso()
     update_settings({"EMAIL_SMTP_LAST_TEST_AT": tested_at})
-    _os.environ["EMAIL_SMTP_LAST_TEST_AT"] = tested_at
+    if not satellite_managed():
+        _os.environ["EMAIL_SMTP_LAST_TEST_AT"] = tested_at
     get_settings.cache_clear()
     return SmtpTestResponse(
         status="ok",
@@ -356,7 +394,8 @@ async def test_email_imap_settings():
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     tested_at = _now_iso()
     update_settings({"EMAIL_IMAP_LAST_TEST_AT": tested_at})
-    _os.environ["EMAIL_IMAP_LAST_TEST_AT"] = tested_at
+    if not satellite_managed():
+        _os.environ["EMAIL_IMAP_LAST_TEST_AT"] = tested_at
     get_settings.cache_clear()
     return ImapTestResponse(
         status="ok",
@@ -432,10 +471,24 @@ async def save_license_token(req: SaveTokenRequest):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _mask(value: str) -> str:
-    """Partially mask a secret value for display."""
-    if not value or len(value) < 8:
+def _mask(value: str, key: str = "") -> str:
+    """Mask credential-like settings before they cross the browser boundary."""
+    sensitive = str(key or "").upper()
+    # Keep the historical helper contract for callers that do not provide a
+    # key: long values are masked, while very short display values are left
+    # alone.  The keyed path below additionally protects short credentials.
+    if not sensitive:
+        if not value or len(value) < 8:
+            return value
+        return value[:4] + "****" + value[-4:]
+    is_secret = (
+        sensitive.endswith(("_API_KEY", "_PASSWORD", "_SECRET", "_TOKEN", "_WEBHOOK_URL", "_ACCESS_TOKEN"))
+        or sensitive in {"LANGFUSE_SECRET_KEY", "API_ACCESS_TOKEN"}
+    )
+    if not is_secret:
         return value
+    if not value or len(value) < 8:
+        return "****" if value else value
     return value[:4] + "****" + value[-4:]
 
 

@@ -70,6 +70,7 @@ func ProvideAuthService(
 	defaultSubAssigner DefaultSubscriptionAssigner,
 	affiliateService *AffiliateService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	browserSessionStore BrowserSessionStore,
 ) *AuthService {
 	svc := NewAuthService(
 		entClient,
@@ -88,6 +89,7 @@ func ProvideAuthService(
 	)
 	svc.SetTencentCaptchaService(tencentCaptchaService)
 	svc.SetAliyunCaptchaService(aliyunCaptchaService)
+	svc.SetBrowserSessionStore(browserSessionStore)
 	return svc
 }
 

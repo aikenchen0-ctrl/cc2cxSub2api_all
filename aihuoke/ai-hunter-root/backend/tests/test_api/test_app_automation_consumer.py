@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock
 
-from api.app import _notify_feishu_async, _run_automation_consumer_once, _run_template_seed_prewarm_once
+from api.app import (
+    _notification_hunts_for_subject,
+    _notify_feishu_async,
+    _run_automation_consumer_once,
+    _run_template_seed_prewarm_once,
+)
 from automation.job_queue import HuntJobQueue
 
 
@@ -190,3 +195,20 @@ async def test_embedded_consumer_offloads_feishu_notifications(monkeypatch):
 
     assert called
     assert "hello" in called[0][1]
+
+
+def test_notification_hunts_are_scoped_to_subject(monkeypatch):
+    hunts = {
+        "hunt-a": {"owner_user_id": "user-a", "status": "completed"},
+        "hunt-b": {"owner_user_id": "user-b", "status": "completed"},
+        # A legacy/unowned file must never become visible to a managed tenant.
+        "hunt-local": {"status": "completed"},
+    }
+    monkeypatch.setattr("api.app.managed", lambda: True)
+
+    assert set(_notification_hunts_for_subject(hunts, "user-a")) == {"hunt-a"}
+    assert set(_notification_hunts_for_subject(hunts, "user-b")) == {"hunt-b"}
+    assert _notification_hunts_for_subject(hunts, "") == {}
+
+    monkeypatch.setattr("api.app.managed", lambda: False)
+    assert _notification_hunts_for_subject(hunts, "") is hunts

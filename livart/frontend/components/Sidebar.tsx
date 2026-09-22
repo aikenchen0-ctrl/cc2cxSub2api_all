@@ -499,7 +499,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     const imageSrc = getOriginalImageSrc(item) || getThumbnailImageSrc(item);
     const link = document.createElement('a');
     link.href = imageSrc;
-    link.download = `${title || 'livart-image'}.png`;
+    link.download = `${title || '超级改图图片'}.png`;
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();
@@ -516,7 +516,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
   );
 
   const getImageShareTitle = (item: CanvasItem, title = getCanvasItemDisplayTitle(item)) => (
-    title || getCanvasItemDisplayTitle(item) || 'livart 图片'
+    title || getCanvasItemDisplayTitle(item) || '超级改图图片'
   );
 
   const getImageSharePageUrl = (item: CanvasItem, title?: string) => {
@@ -2039,7 +2039,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
             <div className="relative overflow-visible text-sm font-bold text-black">
               <div className="flex flex-wrap items-center gap-2">
                 <Loader2 className="animate-spin" size={16} />
-                <span>livart 正在生图</span>
+                <span>超级改图正在生图</span>
                 <button
                   type="button"
                   onClick={() => setIsActiveTaskListOpen(isOpen => !isOpen)}

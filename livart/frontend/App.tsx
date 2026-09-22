@@ -76,8 +76,8 @@ const DERIVED_IMAGE_GAP = 20;
 const AUTO_ARRANGE_IMAGE_GAP = 24;
 const MAX_HISTORY_ENTRIES = 80;
 const DEFAULT_CANVAS_BACKGROUND_COLOR = '#fcfcfc';
-const LIVART_SCOPE_REJECTION_MESSAGE = '我目前只支持 livart 里的图片生成、图片编辑、局部重绘、去背景、删除物体、画布操作和作品导出相关问题。你可以直接描述想生成的画面，或告诉我想怎么修改图片。';
-const LIVART_SCOPE_HELP_MESSAGE = '我目前可以帮你处理 livart 里的图片生成、图片编辑、局部重绘、删除物体、去背景、画布操作、画幅比例、参考图、项目导出和下载相关问题。你可以直接描述想生成什么，或者告诉我想如何修改图片。';
+const LIVART_SCOPE_REJECTION_MESSAGE = '我目前只支持超级改图里的图片生成、图片编辑、局部重绘、去背景、删除物体、画布操作和作品导出相关问题。你可以直接描述想生成的画面，或告诉我想怎么修改图片。';
+const LIVART_SCOPE_HELP_MESSAGE = '我目前可以帮你处理超级改图里的图片生成、图片编辑、局部重绘、删除物体、去背景、画布操作、画幅比例、参考图、项目导出和下载相关问题。你可以直接描述想生成什么，或者告诉我想如何修改图片。';
 
 type ImageEditMode = 'local-redraw' | 'remover';
 
@@ -2488,7 +2488,7 @@ function App() {
             {
               id: 'identify-intent',
               title: '识别意图',
-              description: '当前内容不属于 livart 可处理的范围。',
+              description: '当前内容不属于超级改图可处理的范围。',
               type: 'analysis',
               status: 'completed'
             }
@@ -2515,7 +2515,7 @@ function App() {
             {
               id: 'identify-intent',
               title: '识别意图',
-              description: '这是一条 livart 站内功能问答。',
+              description: '这是一条超级改图站内功能问答。',
               type: 'analysis',
               status: 'completed'
             }

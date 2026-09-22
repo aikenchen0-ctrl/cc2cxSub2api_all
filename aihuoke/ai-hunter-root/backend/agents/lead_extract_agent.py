@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import re
+from contextvars import ContextVar
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -59,7 +60,10 @@ logger = logging.getLogger(__name__)
 # ── Progress callback registry ────────────────────────────────────────────
 # Set by _run_hunt before invoking the graph so lead_extract_node can
 # broadcast per-URL progress via SSE without changing the LangGraph signature.
-_progress_callback: Callable[[dict], None] | None = None
+_progress_callback: ContextVar[Callable[[dict], None] | None] = ContextVar(
+    "aihuoke_lead_progress_callback",
+    default=None,
+)
 
 
 def _candidate_budget(target_lead_count: int, scrape_concurrency: int) -> int:
@@ -75,15 +79,21 @@ def _candidate_budget(target_lead_count: int, scrape_concurrency: int) -> int:
 
 
 def set_progress_callback(cb: Callable[[dict], None] | None) -> None:
-    """Set the module-level progress callback (called from routes._run_hunt)."""
-    global _progress_callback
-    _progress_callback = cb
+    """Set the progress callback for the current async hunt context.
+
+    A process-wide callback lets concurrent users' hunts overwrite one
+    another, routing lead-progress SSE events to the wrong owner. ContextVar
+    values are inherited by the graph's child tasks while remaining isolated
+    between simultaneous requests.
+    """
+    _progress_callback.set(cb)
 
 
 def _emit_progress(event: str, **data: Any) -> None:
     """Emit a progress event if a callback is registered."""
-    if _progress_callback:
-        _progress_callback({"event": event, **data})
+    callback = _progress_callback.get()
+    if callback:
+        callback({"event": event, **data})
 
 
 def _derive_priority_tier(fit_score: float, contactability_score: float) -> str:

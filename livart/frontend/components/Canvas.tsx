@@ -1061,7 +1061,7 @@ const getImageShareUrl = (item: CanvasItem) => (
   toAbsoluteImageShareUrl(getOriginalImageSrc(item) || getLargestCanvasImageSrc(item) || getCanvasImageSrc(item))
 );
 
-const buildImageShareTitle = (item: CanvasItem) => `${getCanvasItemDisplayTitle(item)} - livart`;
+const buildImageShareTitle = (item: CanvasItem) => `${getCanvasItemDisplayTitle(item)} - 超级改图`;
 
 const buildImageShareMessage = (item: CanvasItem) => `${buildImageShareTitle(item)}\n${LIVART_SHARE_PROMOTION_TEXT}`;
 
@@ -1225,7 +1225,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const selectedItemIsRotateMenuOpen = selectedItem?.type === 'image' && selectedItem.id === rotateMenuItemId;
   const selectedItemIsShareMenuOpen = selectedItem?.type === 'image' && selectedItem.id === shareMenuItemId;
   const selectedImageShareUrl = selectedItem?.type === 'image' ? getImageShareUrl(selectedItem) : '';
-  const selectedImageShareTitle = selectedItem?.type === 'image' ? buildImageShareTitle(selectedItem) : 'livart 图片';
+  const selectedImageShareTitle = selectedItem?.type === 'image' ? buildImageShareTitle(selectedItem) : '超级改图图片';
   const selectedImageShareMessage = selectedItem?.type === 'image' ? buildImageShareMessage(selectedItem) : LIVART_SHARE_PROMOTION_TEXT;
   const selectedImageSharePageUrl = selectedItem?.type === 'image' && selectedImageShareUrl
     ? buildImageSharePageUrl(selectedItem, selectedImageShareUrl)

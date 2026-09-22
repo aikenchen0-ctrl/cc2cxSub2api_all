@@ -179,8 +179,8 @@ const SettingsPage = () => {
       const isConnected = await checkPresentonAuthStatus();
       if (!isConnected) {
         notify.warning(
-          "Connect Presenton first",
-          "Sign in to Presenton Cloud before selecting it as the text provider."
+          "请先连接永恒PPT",
+          "请先登录永恒PPT云端，再将其选为文本提供商。"
         );
         setSelectedProvider("text-provider");
         return;
@@ -441,7 +441,7 @@ const SettingsPage = () => {
             >
               <p className="text-sm font-semibold">Choose a text provider to continue</p>
               <p className="mt-1 text-xs leading-5">
-                Presenton Cloud is disconnected. Select any text provider below and save the configuration before opening another page.
+                永恒PPT云端连接已断开。请在下方选择文本提供商并保存配置后再打开其他页面。
               </p>
             </div>
           )}

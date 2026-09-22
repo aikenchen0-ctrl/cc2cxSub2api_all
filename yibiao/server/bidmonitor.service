@@ -9,7 +9,8 @@ WorkingDirectory=/opt/bidmonitor/server
 # 使用venv虚拟环境中的Python和uvicorn
 Environment="PATH=/opt/bidmonitor/venv/bin:/usr/local/bin:/usr/bin"
 Environment="VIRTUAL_ENV=/opt/bidmonitor/venv"
-ExecStart=/opt/bidmonitor/venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8080
+Environment="YIBIAO_PORT=8081"
+ExecStart=/opt/bidmonitor/venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8081
 # 自动重启配置
 Restart=always
 RestartSec=10

@@ -10,6 +10,13 @@ import {
   isHunyuanCloudConfigured,
 } from './hunyuan-cloud.mjs'
 
+function requireHunyuanProvider() {
+  if (isHunyuanCloudConfigured() || HUNYUAN_API_BASE) return
+  const error = new Error('No Hunyuan3D provider is configured on the backend.')
+  error.status = 503
+  throw error
+}
+
 export function getHunyuanHealth() {
   const cloud = getHunyuanCloudHealth()
   if (cloud.configured) {
@@ -31,6 +38,7 @@ export function getHunyuanHealth() {
 
 export async function createHunyuanTask(payload) {
   if (isHunyuanCloudConfigured()) return createHunyuanCloudTask(payload)
+  requireHunyuanProvider()
 
   const image = parseDataUrl(payload.imageDataUrl)
   const imageBase64 = image.buffer.toString('base64')
@@ -57,7 +65,7 @@ export async function createHunyuanTask(payload) {
   const taskId = findFirstValue(data, ['uid', 'task_id', 'taskId', 'id']) || `hunyuan-${Date.now()}`
   const rawModelUrl = findModelUrl(data)
   const modelBase64 = findFirstValue(data, ['model_base64', 'modelBase64', 'glb_base64', 'glbBase64'])
-  let modelUrl = rawModelUrl ? `/api/3d/model?url=${encodeURIComponent(rawModelUrl)}` : ''
+  let modelUrl = rawModelUrl ? `/api/3d/model?taskId=${encodeURIComponent(taskId)}&url=${encodeURIComponent(rawModelUrl)}` : ''
 
   if (modelBase64) {
     await saveLocalModel(taskId, modelBase64, 'glb')
@@ -75,6 +83,7 @@ export async function createHunyuanTask(payload) {
 
 export async function getHunyuanTask(taskId) {
   if (isHunyuanCloudConfigured()) return getHunyuanCloudTask(taskId)
+  requireHunyuanProvider()
 
   if (!taskId) {
     throw Object.assign(new Error('taskId is required.'), { status: 400 })
@@ -99,7 +108,7 @@ export async function getHunyuanTask(taskId) {
   const progress = data.progress ?? data.percent ?? null
   const rawModelUrl = findModelUrl(data)
   const modelBase64 = findFirstValue(data, ['model_base64', 'modelBase64', 'glb_base64', 'glbBase64'])
-  let modelUrl = rawModelUrl ? `/api/3d/model?url=${encodeURIComponent(rawModelUrl)}` : ''
+  let modelUrl = rawModelUrl ? `/api/3d/model?taskId=${encodeURIComponent(taskId)}&url=${encodeURIComponent(rawModelUrl)}` : ''
 
   if (modelBase64) {
     await saveLocalModel(taskId, modelBase64, 'glb')

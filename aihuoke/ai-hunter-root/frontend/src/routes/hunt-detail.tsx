@@ -1898,7 +1898,7 @@ export function HuntDetailPage() {
     const lines: string[] = [];
     const now = new Date().toLocaleString();
     lines.push("=".repeat(60));
-    lines.push("AI 获客 — INSIGHT / KEYWORD / EFFECTIVENESS REPORT");
+    lines.push("AI获客 — INSIGHT / KEYWORD / EFFECTIVENESS REPORT");
     lines.push(`Hunt ID : ${huntId}`);
     lines.push(`Exported: ${now}`);
     lines.push("=".repeat(60));

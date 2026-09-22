@@ -31,15 +31,39 @@ func satelliteAppCredential() string {
 	return strings.TrimSpace(os.Getenv(envAppCredential))
 }
 
+func configuredSatelliteCredential(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	for _, exact := range []string{
+		"changeme", "change-me", "replace-me", "your-key", "your_api_key", "your-api-key", "xxx", "sk-xxx",
+	} {
+		if normalized == exact {
+			return false
+		}
+	}
+	for _, prefix := range []string{"your_", "your-", "replace-with-", "replace_with-", "example-", service.SuperAPIKeyPrefix} {
+		if strings.HasPrefix(normalized, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 // SatelliteBearerAccepted reports whether Authorization is the project
 // credential, not a user API key and not a Super Key.
 func SatelliteBearerAccepted(presented string) bool {
 	expected := satelliteAppCredential()
-	if expected == "" {
+	// A user's Super Key is never a valid satellite application credential.
+	// Reject it even when an operator accidentally places it in
+	// SUB2API_APP_CREDENTIAL; otherwise the value would be treated as an
+	// ordinary Bearer credential at the satellite boundary.
+	if !configuredSatelliteCredential(expected) {
 		return false
 	}
 	presented = strings.TrimSpace(presented)
-	if presented == "" {
+	if !configuredSatelliteCredential(presented) {
 		return false
 	}
 	return hmac.Equal([]byte(expected), []byte(presented))

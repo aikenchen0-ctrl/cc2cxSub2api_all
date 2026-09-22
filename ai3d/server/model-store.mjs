@@ -1,4 +1,5 @@
 import { createWriteStream } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -44,14 +45,15 @@ export async function serveLocalModel(url, response) {
   response.end(buffer)
 }
 
-export async function importLocalModel(request, url) {
+export async function importLocalModel(request, url, ownerSubject = '') {
   const fileName = sanitizeFileName(url.searchParams.get('fileName') || 'local-model.glb')
   const ext = getModelExtension(fileName)
   const buffer = await readRawBody(request, MODEL_UPLOAD_LIMIT)
   validateModelBuffer(buffer, ext)
 
   const baseName = fileName.replace(/\.(?:glb|gltf)$/i, '') || 'local-model'
-  const modelId = `local-${Date.now()}-${baseName}`
+  const ownerTag = ownerSubject ? createHash('sha256').update(String(ownerSubject)).digest('hex').slice(0, 12) : 'local'
+  const modelId = `local-${ownerTag}-${Date.now()}-${baseName}`
   await saveLocalModel(modelId, buffer, ext)
 
   return {

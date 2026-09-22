@@ -178,6 +178,8 @@ export default {
     aiExcel: 'AI Spreadsheet',
     artQr: 'Art QR',
     yibiao: 'Auto Bidding',
+    ai3d: 'Image to 3D',
+    aihuoke: 'AI Lead Hunter',
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',

@@ -1,7 +1,37 @@
 import { BODY_LIMIT, MODEL_UPLOAD_LIMIT } from './config.mjs'
 
-export function setCorsHeaders(response) {
-  response.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*')
+const DEFAULT_CORS_ORIGINS = new Set([
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+])
+
+function configuredCorsOrigins() {
+  return String(process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+}
+
+export function setCorsHeaders(response, request = null) {
+  const requestOrigin = String(request?.headers?.origin || '').trim().replace(/\/$/, '')
+  const configured = configuredCorsOrigins()
+  const allowAll = configured.includes('*')
+  const allowed = requestOrigin && (
+    allowAll ||
+    (configured.length ? configured.includes(requestOrigin) : DEFAULT_CORS_ORIGINS.has(requestOrigin))
+  )
+
+  // Credentialed browser requests cannot use `*`. Echo only an explicitly
+  // allowed origin and advertise the decision to caches. Non-browser clients
+  // without an Origin header keep the legacy wildcard behaviour when it was
+  // explicitly configured.
+  if (allowed) {
+    response.setHeader('Access-Control-Allow-Origin', requestOrigin)
+    response.setHeader('Access-Control-Allow-Credentials', 'true')
+    response.setHeader('Vary', 'Origin')
+  } else if (!requestOrigin && (!configured.length || allowAll)) {
+    response.setHeader('Access-Control-Allow-Origin', '*')
+  }
   response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
 }

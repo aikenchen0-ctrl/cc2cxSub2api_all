@@ -14,11 +14,12 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from api.automation_routes import _serialize_job
-from api.routes import _hunts, _sse_queues
+from api.automation_routes import _require_job_owner, _serialize_job
+from api.routes import _hunts, _require_hunt_owner, _sse_queues
 from api.security import require_api_access
 from automation.job_queue import HuntJobQueue
 from config.settings import get_settings
+from auth_sso import current_subject, managed as satellite_managed
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ async def _event_generator(hunt_id: str, queue: asyncio.Queue) -> AsyncGenerator
                 del _sse_queues[hunt_id]
 
 
-async def _automation_job_event_generator(job_id: str) -> AsyncGenerator[str, None]:
+async def _automation_job_event_generator(job_id: str, owner_subject: str = "") -> AsyncGenerator[str, None]:
     queue = _automation_job_queue()
     previous_snapshot = ""
     idle_ticks = 0
@@ -112,8 +113,14 @@ async def _automation_job_event_generator(job_id: str) -> AsyncGenerator[str, No
         if not job:
             yield _sse_event("failed", {"error": "Automation job not found"})
             return
+        if satellite_managed():
+            payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+            owner = str(payload.get("owner_user_id") or "local").strip()
+            if owner != (owner_subject.strip() or current_subject().strip() or "local"):
+                yield _sse_event("failed", {"error": "Automation job not found"})
+                return
 
-        payload = _serialize_job(job)
+        payload = _serialize_job(job, owner_subject)
         snapshot = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         if snapshot != previous_snapshot:
             event_type = "update"
@@ -153,6 +160,10 @@ async def stream_hunt(hunt_id: str):
     if hunt_id not in _hunts:
         raise HTTPException(status_code=404, detail="Hunt not found")
 
+    # SSE is another read path for hunt data; apply the same owner check as
+    # the status/result/export endpoints before registering a queue.
+    _require_hunt_owner(_hunts[hunt_id])
+
     # Create a per-subscriber queue
     queue: asyncio.Queue = asyncio.Queue()
     if hunt_id not in _sse_queues:
@@ -173,11 +184,21 @@ async def stream_hunt(hunt_id: str):
 @sse_router.get("/automation/jobs/{job_id}/stream", dependencies=[Depends(require_api_access)])
 async def stream_automation_job(job_id: str):
     queue = _automation_job_queue()
-    if not queue.get(job_id):
+    job = queue.get(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Automation job not found")
+    # The stream itself runs after the request handler returns, so check and
+    # carry the owner subject explicitly instead of relying on a request-local
+    # context variable to remain set for the lifetime of the connection.
+    owner_subject = current_subject().strip()
+    if satellite_managed():
+        try:
+            _require_job_owner(job)
+        except HTTPException:
+            raise HTTPException(status_code=404, detail="Automation job not found")
 
     return StreamingResponse(
-        _automation_job_event_generator(job_id),
+        _automation_job_event_generator(job_id, owner_subject),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

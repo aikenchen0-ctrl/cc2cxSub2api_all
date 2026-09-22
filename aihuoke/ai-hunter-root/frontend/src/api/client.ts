@@ -1,15 +1,10 @@
 const API_BASE = "/api/v1";
-const API_ACCESS_TOKEN = import.meta.env.VITE_API_ACCESS_TOKEN?.trim() ?? "";
 const API_TIMEOUT_MS = 15000;
 
 function withApiAuth(headers?: HeadersInit): HeadersInit {
-  if (!API_ACCESS_TOKEN) {
-    return headers ?? {};
-  }
-  return {
-    ...(headers ?? {}),
-    "X-API-Key": API_ACCESS_TOKEN,
-  };
+  // Authentication is the satellite's HttpOnly SSO session.  Never put an
+  // API key or Sub2API credential in browser headers or query strings.
+  return headers ?? {};
 }
 const SETTINGS_API_BASE = "/api/settings";
 
@@ -298,6 +293,7 @@ export interface SearchReadiness {
 export interface SettingsApiResponse {
   settings: Record<string, string>;
   is_configured: boolean;
+  managed?: boolean;
   search_readiness?: SearchReadiness;
 }
 
@@ -593,6 +589,7 @@ async function requestSettings<T>(path: string, options?: RequestInit): Promise<
   try {
     res = await fetch(`${SETTINGS_API_BASE}${path}`, {
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       ...options,
       signal: controller.signal,
     });
@@ -621,6 +618,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, {
       headers: withApiAuth({ "Content-Type": "application/json" }),
+      credentials: "include",
       ...options,
       signal: controller.signal,
     });
@@ -659,6 +657,7 @@ async function licensedFinderRequest<T>(path: string, options?: RequestInit): Pr
   try {
     res = await fetch(`${API_BASE}${path}`, {
       headers: withApiAuth({ "Content-Type": "application/json" }),
+      credentials: "include",
       ...options,
       signal: controller.signal,
     });
@@ -697,9 +696,8 @@ export const api = {
     request<AutomationJob>(`/automation/jobs/${jobId}`),
 
   streamAutomationJob: (jobId: string) => {
-    const suffix = API_ACCESS_TOKEN ? `?api_key=${encodeURIComponent(API_ACCESS_TOKEN)}` : "";
-    const url = `${API_BASE}/automation/jobs/${jobId}/stream${suffix}`;
-    return new EventSource(url);
+    const url = `${API_BASE}/automation/jobs/${jobId}/stream`;
+    return new EventSource(url, { withCredentials: true });
   },
 
   getAutomationJobByHunt: (huntId: string) =>
@@ -742,6 +740,7 @@ export const api = {
       method: "POST",
       body: formData,
       headers: withApiAuth(),
+      credentials: "include",
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -860,6 +859,7 @@ export const api = {
     try {
       res = await fetch(`${API_BASE}/hunts/${huntId}/export.csv`, {
         headers: withApiAuth(),
+        credentials: "include",
         signal: controller.signal,
       });
     } catch (error) {
@@ -890,6 +890,7 @@ export const api = {
     try {
       res = await fetch(`${API_BASE}/hunts/${huntId}/export-report.txt`, {
         headers: withApiAuth(),
+        credentials: "include",
         signal: controller.signal,
       });
     } catch (error) {
@@ -913,8 +914,7 @@ export const api = {
   },
 
   streamHunt: (huntId: string) => {
-    const suffix = API_ACCESS_TOKEN ? `?api_key=${encodeURIComponent(API_ACCESS_TOKEN)}` : "";
-    const url = `${API_BASE}/hunts/${huntId}/stream${suffix}`;
-    return new EventSource(url);
+    const url = `${API_BASE}/hunts/${huntId}/stream`;
+    return new EventSource(url, { withCredentials: true });
   },
 };

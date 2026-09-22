@@ -10,6 +10,7 @@ from automation.runtime import get_runtime_state
 from api.hunt_store import load_all_hunts
 from config.settings import get_settings
 from emailing.store import EmailStore
+from auth_sso import scoped_email_db_path
 
 
 def _now() -> datetime:
@@ -61,13 +62,21 @@ def _unique_leads_count(leads: list[Any]) -> int:
     return count
 
 
-def collect_automation_status(*, hunts: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+def collect_automation_status(
+    *,
+    hunts: dict[str, dict[str, Any]] | None = None,
+    owner_user_id: str | None = None,
+) -> dict[str, Any]:
     settings = get_settings()
     queue = HuntJobQueue(settings.automation_queue_db_path)
     queue.init_db()
-    store = EmailStore(settings.email_db_path)
+    store = EmailStore(scoped_email_db_path(settings.email_db_path, owner_user_id))
     store.init_db()
     hunt_map = _resolve_hunt_map(hunts)
+    # A hunt map is also passed in local/operator mode, where the historical
+    # queue database is intentionally shared.  Apply the ID scope only for a
+    # managed SSO request (identified by owner_user_id).
+    hunt_ids = set(hunt_map) if owner_user_id is not None else None
 
     running_hunts = [hunt for hunt in hunt_map.values() if str(hunt.get("status", "")) == "running"]
     pending_hunts = sum(1 for hunt in hunt_map.values() if str(hunt.get("status", "")) == "pending")
@@ -83,9 +92,9 @@ def collect_automation_status(*, hunts: dict[str, dict[str, Any]] | None = None)
 
     return {
         "hunt_jobs": {
-            "queued": queue.count_by_status("queued"),
-            "running": queue.count_by_status("running"),
-            "failed": queue.count_by_status("failed"),
+            "queued": queue.count_by_status("queued", owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "running": queue.count_by_status("running", owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "failed": queue.count_by_status("failed", owner_user_id=owner_user_id, hunt_ids=hunt_ids),
         },
         "hunts": {
             "running": len(running_hunts),
@@ -93,14 +102,14 @@ def collect_automation_status(*, hunts: dict[str, dict[str, Any]] | None = None)
             "running_details": running_details,
         },
         "email_queue": {
-            "pending": store.count_messages_by_status("pending"),
-            "sent": store.count_messages_by_status("sent"),
-            "failed": store.count_messages_by_status("failed"),
-            "cancelled": store.count_messages_by_status("cancelled"),
-            "active_campaigns": store.count_campaigns_by_status("active"),
-            "draft_campaigns": store.count_campaigns_by_status("draft"),
-            "active_sequences": store.count_sequences_by_status("scheduled", "running"),
-            "replied_sequences": store.count_sequences_by_status("replied"),
+            "pending": store.count_messages_by_status("pending", hunt_ids=hunt_ids),
+            "sent": store.count_messages_by_status("sent", hunt_ids=hunt_ids),
+            "failed": store.count_messages_by_status("failed", hunt_ids=hunt_ids),
+            "cancelled": store.count_messages_by_status("cancelled", hunt_ids=hunt_ids),
+            "active_campaigns": store.count_campaigns_by_status("active", hunt_ids=hunt_ids),
+            "draft_campaigns": store.count_campaigns_by_status("draft", hunt_ids=hunt_ids),
+            "active_sequences": store.count_sequences_by_status("scheduled", "running", hunt_ids=hunt_ids),
+            "replied_sequences": store.count_sequences_by_status("replied", hunt_ids=hunt_ids),
         },
         "features": {
             "email_auto_send_enabled": bool(settings.email_auto_send_enabled),
@@ -112,14 +121,20 @@ def collect_automation_status(*, hunts: dict[str, dict[str, Any]] | None = None)
     }
 
 
-def collect_automation_metrics(*, hours: int = 24, hunts: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+def collect_automation_metrics(
+    *,
+    hours: int = 24,
+    hunts: dict[str, dict[str, Any]] | None = None,
+    owner_user_id: str | None = None,
+) -> dict[str, Any]:
     settings = get_settings()
     queue = HuntJobQueue(settings.automation_queue_db_path)
     queue.init_db()
-    store = EmailStore(settings.email_db_path)
+    store = EmailStore(scoped_email_db_path(settings.email_db_path, owner_user_id))
     store.init_db()
     since_iso = _since_iso(hours)
     hunt_map = _resolve_hunt_map(hunts)
+    hunt_ids = set(hunt_map) if owner_user_id is not None else None
 
     recent_hunts = [
         (hunt_id, hunt) for hunt_id, hunt in hunt_map.items()
@@ -149,7 +164,12 @@ def collect_automation_metrics(*, hours: int = 24, hunts: dict[str, dict[str, An
         })
     recent_completed = recent_completed[-3:]
 
-    retrying_jobs = queue.list_recent_retrying_jobs(since_iso=since_iso, limit=10)
+    retrying_jobs = queue.list_recent_retrying_jobs(
+        since_iso=since_iso,
+        limit=10,
+        owner_user_id=owner_user_id,
+        hunt_ids=hunt_ids,
+    )
     retry_lookup: dict[str, dict[str, Any]] = {}
     for job in retrying_jobs:
         last_hunt_id = str(job.get("last_hunt_id", "") or "")
@@ -177,11 +197,11 @@ def collect_automation_metrics(*, hours: int = 24, hunts: dict[str, dict[str, An
         "window_hours": hours,
         "since": since_iso,
         "hunt_jobs": {
-            "completed": queue.count_finished_since("completed", since_iso),
-            "failed": queue.count_finished_since("failed", since_iso),
-            "queued": queue.count_by_status("queued"),
-            "running": queue.count_by_status("running"),
-            "retrying": queue.count_retrying_since(since_iso),
+            "completed": queue.count_finished_since("completed", since_iso, owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "failed": queue.count_finished_since("failed", since_iso, owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "queued": queue.count_by_status("queued", owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "running": queue.count_by_status("running", owner_user_id=owner_user_id, hunt_ids=hunt_ids),
+            "retrying": queue.count_retrying_since(since_iso, owner_user_id=owner_user_id, hunt_ids=hunt_ids),
         },
         "hunts": {
             "created": len(recent_hunts),
@@ -191,19 +211,19 @@ def collect_automation_metrics(*, hours: int = 24, hunts: dict[str, dict[str, An
             "generated_email_sequences": generated_sequences,
         },
         "emails": {
-            "queued": store.count_messages_by_status("pending"),
-            "sent": store.count_messages_since("sent", since_iso=since_iso, time_field="sent_at"),
-            "failed": store.count_messages_since("failed", since_iso=since_iso, time_field="updated_at"),
-            "replied": store.count_reply_events_since(since_iso),
-            "active_campaigns": store.count_campaigns_by_status("active"),
-            "draft_campaigns": store.count_campaigns_by_status("draft"),
-            "active_sequences": store.count_sequences_by_status("scheduled", "running"),
-            "replied_sequences": store.count_sequences_by_status("replied"),
+            "queued": store.count_messages_by_status("pending", hunt_ids=hunt_ids),
+            "sent": store.count_messages_since("sent", since_iso=since_iso, time_field="sent_at", hunt_ids=hunt_ids),
+            "failed": store.count_messages_since("failed", since_iso=since_iso, time_field="updated_at", hunt_ids=hunt_ids),
+            "replied": store.count_reply_events_since(since_iso, hunt_ids=hunt_ids),
+            "active_campaigns": store.count_campaigns_by_status("active", hunt_ids=hunt_ids),
+            "draft_campaigns": store.count_campaigns_by_status("draft", hunt_ids=hunt_ids),
+            "active_sequences": store.count_sequences_by_status("scheduled", "running", hunt_ids=hunt_ids),
+            "replied_sequences": store.count_sequences_by_status("replied", hunt_ids=hunt_ids),
         },
-        "recent_failures": store.list_recent_message_failures(since_iso=since_iso, limit=10),
-        "recent_sent_messages": store.list_sent_messages_since(since_iso=since_iso, limit=10),
-        "recent_reply_events": store.list_reply_events_since(since_iso=since_iso, limit=10),
-        "top_failure_reasons": store.list_message_failure_reasons(since_iso=since_iso, limit=5),
+        "recent_failures": store.list_recent_message_failures(since_iso=since_iso, limit=10, hunt_ids=hunt_ids),
+        "recent_sent_messages": store.list_sent_messages_since(since_iso=since_iso, limit=10, hunt_ids=hunt_ids),
+        "recent_reply_events": store.list_reply_events_since(since_iso=since_iso, limit=10, hunt_ids=hunt_ids),
+        "top_failure_reasons": store.list_message_failure_reasons(since_iso=since_iso, limit=5, hunt_ids=hunt_ids),
         "recent_completed_hunts": recent_completed,
         "recent_failed_hunts": recent_failed_details,
     }

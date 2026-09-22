@@ -50,9 +50,10 @@
         >
           <span
             class="quick-app-icon"
+            :class="item.iconClass"
             aria-hidden="true"
           >
-            <img :src="item.icon" :alt="item.label" class="h-full w-full rounded-[0.45rem] object-cover" />
+            <Icon :name="item.icon" size="sm" :stroke-width="1.75" />
           </span>
           <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
         </a>
@@ -219,12 +220,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
-import { getAuthToken } from '@/api/auth'
 import { buildApiUrl } from '@/api/url'
 import { openJuSso } from '@/utils/juSso'
 
@@ -247,6 +248,28 @@ interface NavItem {
    * 开关切换时菜单自动更新。
    */
   featureFlag?: () => boolean | undefined
+}
+
+type QuickAppIconName =
+  | 'grid'
+  | 'play'
+  | 'sparkles'
+  | 'document'
+  | 'edit'
+  | 'terminal'
+  | 'calculator'
+  | 'qrCode'
+  | 'chartBar'
+  | 'cube'
+  | 'users'
+
+interface QuickAppItem {
+  label: string
+  href: string
+  includeApiKey: false
+  sso: true
+  icon: QuickAppIconName
+  iconClass: string
 }
 
 // applyFeatureFlags 递归过滤掉 featureFlag() === false 的节点（含子节点）。
@@ -282,7 +305,7 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const homePath = '/'
 
-const quickAppItems = computed(() => {
+const quickAppItems = computed<QuickAppItem[]>(() => {
   const canvasSsoUrl =
     import.meta.env.VITE_CANVAS_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/canvas/start')}?next=%2F`
@@ -310,16 +333,24 @@ const quickAppItems = computed(() => {
   const yibiaoSsoUrl =
     import.meta.env.VITE_YIBIAO_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/yibiao/start')}?next=%2F`
+  const ai3dSsoUrl =
+    import.meta.env.VITE_AI3D_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/ai3d/start')}?next=%2F`
+  const aihuokeSsoUrl =
+    import.meta.env.VITE_AIHUOKE_SSO_URL?.trim() ||
+    `${buildApiUrl('/auth/integrations/aihuoke/start')}?next=%2F`
   return [
-    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.artQr'), href: qrcodeSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
-    { label: t('nav.yibiao'), href: yibiaoSsoUrl, includeApiKey: false, sso: true, icon: '/logo.jpg' },
+    { label: t('nav.infiniteCanvas'), href: canvasSsoUrl, includeApiKey: false, sso: true, icon: 'grid', iconClass: 'quick-app-icon-grid' },
+    { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: 'play', iconClass: 'quick-app-icon-play' },
+    { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: 'sparkles', iconClass: 'quick-app-icon-sparkles' },
+    { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: 'document', iconClass: 'quick-app-icon-document' },
+    { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: 'edit', iconClass: 'quick-app-icon-edit' },
+    { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: 'terminal', iconClass: 'quick-app-icon-terminal' },
+    { label: t('nav.aiExcel'), href: aiExcelUrl, includeApiKey: false, sso: true, icon: 'calculator', iconClass: 'quick-app-icon-calculator' },
+    { label: t('nav.artQr'), href: qrcodeSsoUrl, includeApiKey: false, sso: true, icon: 'qrCode', iconClass: 'quick-app-icon-qr' },
+    { label: t('nav.yibiao'), href: yibiaoSsoUrl, includeApiKey: false, sso: true, icon: 'chartBar', iconClass: 'quick-app-icon-chart' },
+    { label: t('nav.ai3d'), href: ai3dSsoUrl, includeApiKey: false, sso: true, icon: 'cube', iconClass: 'quick-app-icon-cube' },
+    { label: t('nav.aihuoke'), href: aihuokeSsoUrl, includeApiKey: false, sso: true, icon: 'users', iconClass: 'quick-app-icon-users' },
   ]
 })
 
@@ -331,7 +362,7 @@ function handleQuickAppClick(event: MouseEvent, item: { href: string; includeApi
 
 async function openQuickApp(url: string) {
   try {
-    await openJuSso(url, getAuthToken())
+    await openJuSso(url)
   } catch (error) {
     const raw = error instanceof Error ? error.message : ''
     if (raw.includes('blocked')) {
@@ -1204,8 +1235,11 @@ onBeforeUnmount(() => {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 0.55rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
   transition: transform 0.16s ease, background-color 0.16s ease;
 }
+
+.quick-app-icon :deep(svg) { display: block; }
 
 .sidebar-link:hover .quick-app-icon {
   transform: translateY(-1px);
@@ -1218,6 +1252,10 @@ onBeforeUnmount(() => {
 .quick-app-icon-edit { color: rgb(234 88 12); background: rgb(255 247 237); border-color: rgb(254 215 170); }
 .quick-app-icon-terminal { color: rgb(8 145 178); background: rgb(236 254 255); border-color: rgb(165 243 252); }
 .quick-app-icon-calculator { color: rgb(22 163 74); background: rgb(240 253 244); border-color: rgb(187 247 208); }
+.quick-app-icon-qr { color: rgb(124 58 237); background: rgb(245 243 255); border-color: rgb(221 214 254); }
+.quick-app-icon-chart { color: rgb(217 119 6); background: rgb(255 251 235); border-color: rgb(253 230 138); }
+.quick-app-icon-cube { color: rgb(79 70 229); background: rgb(238 242 255); border-color: rgb(199 210 254); }
+.quick-app-icon-users { color: rgb(219 39 119); background: rgb(253 242 248); border-color: rgb(251 207 232); }
 
 .dark .quick-app-icon-grid { color: rgb(147 197 253); background: rgb(30 58 138 / 0.35); border-color: rgb(59 130 246 / 0.35); }
 .dark .quick-app-icon-play { color: rgb(249 168 212); background: rgb(131 24 67 / 0.35); border-color: rgb(190 24 93 / 0.35); }
@@ -1226,4 +1264,8 @@ onBeforeUnmount(() => {
 .dark .quick-app-icon-edit { color: rgb(253 186 116); background: rgb(124 45 18 / 0.35); border-color: rgb(234 88 12 / 0.35); }
 .dark .quick-app-icon-terminal { color: rgb(103 232 249); background: rgb(22 78 99 / 0.35); border-color: rgb(8 145 178 / 0.35); }
 .dark .quick-app-icon-calculator { color: rgb(134 239 172); background: rgb(20 83 45 / 0.35); border-color: rgb(22 163 74 / 0.35); }
+.dark .quick-app-icon-qr { color: rgb(196 181 253); background: rgb(76 29 149 / 0.35); border-color: rgb(124 58 237 / 0.35); }
+.dark .quick-app-icon-chart { color: rgb(253 230 138); background: rgb(120 53 15 / 0.35); border-color: rgb(217 119 6 / 0.35); }
+.dark .quick-app-icon-cube { color: rgb(165 180 252); background: rgb(49 46 129 / 0.35); border-color: rgb(99 102 241 / 0.35); }
+.dark .quick-app-icon-users { color: rgb(249 168 212); background: rgb(131 24 67 / 0.35); border-color: rgb(190 24 93 / 0.35); }
 </style>

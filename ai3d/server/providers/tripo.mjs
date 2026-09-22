@@ -1,14 +1,14 @@
 import { createHash, createHmac } from 'node:crypto'
 import path from 'node:path'
 import { fetch as undiciFetch } from 'undici'
-import { OUTBOUND_PROXY_AGENT, TRIPO_API_BASE, TRIPO_API_KEY, TRIPO_MODEL_VERSION, hasOutboundProxy } from '../config.mjs'
+import { OUTBOUND_PROXY_AGENT, TRIPO_API_BASE, TRIPO_API_KEY, TRIPO_MODEL_VERSION, hasConfiguredSecret, hasOutboundProxy } from '../config.mjs'
 import { parseDataUrl, sanitizeFileName } from '../http-utils.mjs'
 import { cacheRemoteModel, hasLocalModel, localModelUrl, shouldUseProxy } from '../model-store.mjs'
 import { findFirstValue, findModelUrl, isSuccessStatus } from '../object-utils.mjs'
 
 export function getTripoHealth() {
   return {
-    configured: Boolean(TRIPO_API_KEY),
+    configured: hasConfiguredSecret(TRIPO_API_KEY),
     modelVersion: TRIPO_MODEL_VERSION,
   }
 }
@@ -50,7 +50,7 @@ export async function getTripoTask(taskId) {
   const data = raw.data || raw
   const status = data.status || data.task_status || data.state || 'unknown'
   const rawModelUrl = findModelUrl(data)
-  let modelUrl = rawModelUrl ? `/api/3d/model?url=${encodeURIComponent(rawModelUrl)}` : ''
+  let modelUrl = rawModelUrl ? `/api/3d/model?taskId=${encodeURIComponent(taskId)}&url=${encodeURIComponent(rawModelUrl)}` : ''
   let cacheError = ''
 
   if (rawModelUrl && isSuccessStatus(status)) {
@@ -74,9 +74,9 @@ export async function getTripoTask(taskId) {
 }
 
 function requireTripoKey() {
-  if (!TRIPO_API_KEY) {
+  if (!hasConfiguredSecret(TRIPO_API_KEY)) {
     const error = new Error('TRIPO_API_KEY is not configured on the backend.')
-    error.status = 500
+    error.status = 503
     throw error
   }
 }

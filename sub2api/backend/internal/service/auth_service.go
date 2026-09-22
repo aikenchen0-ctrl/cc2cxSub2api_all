@@ -50,6 +50,13 @@ var (
 	ErrCaptchaProviderConflict = infraerrors.ServiceUnavailable("CAPTCHA_PROVIDER_CONFLICT", "multiple captcha providers are enabled")
 )
 
+// BrowserSessionTTL is the lifetime of a newly-issued browser session.  The
+// browser only receives the opaque session id; keeping one constant here
+// prevents login, refresh, and the cookie helper from drifting to different
+// session lengths.  The access JWT kept behind the opaque id is re-signed to
+// this same lifetime while retaining the normal revocation and binding claims.
+const BrowserSessionTTL = 3 * 24 * time.Hour
+
 // maxTokenLength 限制 token 大小，避免超长 header 触发解析时的异常内存分配。
 const maxTokenLength = 8192
 
@@ -75,6 +82,7 @@ type AuthService struct {
 	userRepo              UserRepository
 	redeemRepo            RedeemCodeRepository
 	refreshTokenCache     RefreshTokenCache
+	browserSessionStore   BrowserSessionStore
 	cfg                   *config.Config
 	settingService        *SettingService
 	emailService          *EmailService
@@ -86,6 +94,105 @@ type AuthService struct {
 	affiliateService      *AffiliateService
 	defaultSubAssigner    DefaultSubscriptionAssigner
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+}
+
+// SetBrowserSessionStore wires the server-side store used for the HttpOnly
+// panel session cookie. Keeping this optional preserves lightweight service
+// tests that construct AuthService without Redis.
+func (s *AuthService) SetBrowserSessionStore(store BrowserSessionStore) {
+	if s != nil {
+		s.browserSessionStore = store
+	}
+}
+
+// IssueBrowserSession creates a random opaque id and stores the access token
+// on the server. The returned id is safe to place in an HttpOnly cookie.
+func (s *AuthService) IssueBrowserSession(ctx context.Context, accessToken string, ttl time.Duration) (string, time.Duration, error) {
+	if s == nil || s.browserSessionStore == nil || strings.TrimSpace(accessToken) == "" {
+		return "", 0, errors.New("browser session store is not configured")
+	}
+	// Browser sessions have one documented lifetime.  Do not derive it from
+	// the access-token response (which may be a legacy 24-hour value), or from
+	// an SSO ticket's short lifetime.
+	_ = ttl
+	ttl = BrowserSessionTTL
+	sessionID, err := randomBrowserSessionID()
+	if err != nil {
+		return "", 0, err
+	}
+	now := time.Now().UTC()
+	// The normal API access token may intentionally use a shorter deployment
+	// setting (for example the historical 24-hour default).  A browser session
+	// is explicitly a three-day satellite session, so issue a server-side JWT
+	// with the same identity and revocation claims but the browser-session
+	// expiry.  The JWT is never returned to the browser; only sessionID is.
+	storedToken := accessToken
+	if s.cfg != nil && strings.TrimSpace(s.cfg.JWT.Secret) != "" {
+		claims, validateErr := s.ValidateToken(accessToken)
+		if validateErr != nil {
+			return "", 0, fmt.Errorf("validate browser session token: %w", validateErr)
+		}
+		storedToken, err = s.signBrowserSessionToken(claims, now, ttl)
+		if err != nil {
+			return "", 0, err
+		}
+	}
+	data := &BrowserSessionData{AccessToken: storedToken, CreatedAt: now, ExpiresAt: now.Add(ttl)}
+	if err := s.browserSessionStore.StoreBrowserSession(ctx, sessionID, data, ttl); err != nil {
+		return "", 0, err
+	}
+	return sessionID, ttl, nil
+}
+
+func (s *AuthService) signBrowserSessionToken(claims *JWTClaims, now time.Time, ttl time.Duration) (string, error) {
+	if s == nil || s.cfg == nil || claims == nil {
+		return "", errors.New("browser session token claims are unavailable")
+	}
+	copyClaims := &JWTClaims{
+		UserID:       claims.UserID,
+		Email:        claims.Email,
+		Role:         claims.Role,
+		TokenVersion: claims.TokenVersion,
+		SessionID:    claims.SessionID,
+		BindingHash:  claims.BindingHash,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, copyClaims).SignedString([]byte(s.cfg.JWT.Secret))
+	if err != nil {
+		return "", fmt.Errorf("sign browser session token: %w", err)
+	}
+	return token, nil
+}
+
+// ResolveBrowserSession translates an opaque browser cookie into the
+// server-side access token for normal JWT validation.
+func (s *AuthService) ResolveBrowserSession(ctx context.Context, sessionID string) (string, error) {
+	if s == nil || s.browserSessionStore == nil {
+		return "", ErrBrowserSessionNotFound
+	}
+	data, err := s.browserSessionStore.GetBrowserSession(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if data == nil || strings.TrimSpace(data.AccessToken) == "" {
+		return "", ErrBrowserSessionNotFound
+	}
+	if !data.ExpiresAt.IsZero() && time.Now().After(data.ExpiresAt) {
+		_ = s.browserSessionStore.DeleteBrowserSession(ctx, sessionID)
+		return "", ErrBrowserSessionNotFound
+	}
+	return data.AccessToken, nil
+}
+
+func (s *AuthService) DeleteBrowserSession(ctx context.Context, sessionID string) error {
+	if s == nil || s.browserSessionStore == nil {
+		return nil
+	}
+	return s.browserSessionStore.DeleteBrowserSession(ctx, sessionID)
 }
 
 type CaptchaProof struct {

@@ -275,11 +275,14 @@ bun run dev
 
 前端默认地址：
 
-- `http://localhost:3000`
+- `http://localhost:3001`（可用 `VITE_PORT` 覆盖；Docker 容器内部使用 3000）
 
 ## 配置文件放哪里
 
 所有运行时密钥与邮件参数都放在 `backend/.env`，也可以通过前端 `Settings` 页面保存。
+
+从 Sub2API 左侧菜单进入时，Docker/托管模式会通过一次性 SSO 票据建立
+三天 HttpOnly 会话；前端不保存模型 Key，后端使用当前用户身份调用 Sub2API。
 
 正确做法：
 

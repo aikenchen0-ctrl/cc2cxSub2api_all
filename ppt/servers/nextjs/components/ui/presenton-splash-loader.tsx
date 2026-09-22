@@ -11,7 +11,7 @@ interface PresentonSplashLoaderProps {
 export const PRESENTON_SPLASH_MIN_DURATION_MS = 3000;
 
 const SPLASH_ANIMATION_MS = 2600;
-const SPLASH_MASK_SRC = "/Presenton_Splash.png";
+const SPLASH_MASK_SRC = "/project-icon.jpg";
 
 let splashSessionStartedAt: number | null = null;
 let splashMaskReadyPromise: Promise<void> | null = null;
@@ -102,8 +102,8 @@ export function PresentonSplashLoader({
     position: "relative",
     zIndex: 1,
     transform: "translateZ(0)",
-    width: "min(56vw, 511.5px)",
-    aspectRatio: "1023 / 342",
+    width: "min(42vw, 420px)",
+    aspectRatio: "1 / 1",
     visibility: isWordmarkReady ? "visible" : "hidden",
   };
 

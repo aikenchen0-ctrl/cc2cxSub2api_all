@@ -82,7 +82,7 @@ cd /opt/bidmonitor/server
 python app.py
 ```
 
-访问 http://YOUR_SERVER_IP:8080 测试
+访问 http://YOUR_SERVER_IP:8081 测试（可用 `YIBIAO_PORT` 覆盖）
 
 ### 后台运行
 
@@ -125,7 +125,7 @@ sudo systemctl status bidmonitor
 ### 服务器防火墙
 
 ```bash
-sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
+sudo firewall-cmd --zone=public --add-port=8081/tcp --permanent
 sudo firewall-cmd --reload
 ```
 
@@ -134,7 +134,7 @@ sudo firewall-cmd --reload
 1. 登录阿里云控制台
 2. 进入 ECS 实例 → 安全组
 3. 添加入站规则：
-   - 端口范围：8080/8080
+   - 端口范围：8081/8081
    - 授权对象：0.0.0.0/0
 
 ---
@@ -143,7 +143,7 @@ sudo firewall-cmd --reload
 
 手机浏览器打开：
 ```
-http://YOUR_SERVER_IP:8080
+http://YOUR_SERVER_IP:8081
 ```
 
 ---

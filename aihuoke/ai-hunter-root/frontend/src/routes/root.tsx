@@ -1,5 +1,5 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { Crosshair, LayoutDashboard, Plus, Settings, Users } from "lucide-react";
+import { LayoutDashboard, Plus, Settings, Users } from "lucide-react";
 import { LanguageSwitcher } from "@/i18n/LanguageSwitcher";
 import { useT } from "@/i18n/I18nProvider";
 
@@ -11,7 +11,11 @@ export function RootLayout() {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-14 items-center px-4">
           <Link to="/" className="me-8 flex items-center gap-2 text-lg font-bold">
-            <Crosshair className="h-5 w-5 text-primary" />
+            <img
+              src="/project-icon.jpg"
+              alt="AI获客"
+              className="h-5 w-5 rounded object-cover"
+            />
             <span>{t("brand.name")}</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm">

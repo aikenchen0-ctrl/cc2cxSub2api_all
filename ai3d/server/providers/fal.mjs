@@ -1,7 +1,7 @@
 import { createFalClient } from '@fal-ai/client'
 import { fetch as undiciFetch } from 'undici'
 
-import { FAL_API_KEY, FAL_DEFAULT_MODEL, OUTBOUND_PROXY_AGENT } from '../config.mjs'
+import { FAL_API_KEY, FAL_DEFAULT_MODEL, OUTBOUND_PROXY_AGENT, hasConfiguredSecret } from '../config.mjs'
 import { parseDataUrl } from '../http-utils.mjs'
 import { cacheRemoteModelAs, hasLocalModel, localModelUrl } from '../model-store.mjs'
 import { isSuccessStatus } from '../object-utils.mjs'
@@ -56,7 +56,7 @@ let falClient = null
 
 export function getFalHealth() {
   return {
-    configured: Boolean(FAL_API_KEY),
+    configured: hasConfiguredSecret(FAL_API_KEY),
     defaultModel: normalizeFalModelId(FAL_DEFAULT_MODEL),
     models: FAL_MODEL_DEFINITIONS.map(({ id, label }) => ({ id, label })),
   }
@@ -125,7 +125,7 @@ export async function getFalTask(taskId) {
         modelUrl = await cacheRemoteModelAs(cacheId, rawModelUrl, modelFile.ext)
       } catch (error) {
         cacheError = error.message || 'Fal model cache failed.'
-        modelUrl = `/api/3d/model?url=${encodeURIComponent(rawModelUrl)}`
+        modelUrl = `/api/3d/model?taskId=${encodeURIComponent(taskId)}&url=${encodeURIComponent(rawModelUrl)}`
       }
     } else {
       cacheError = 'Fal response did not include a GLB or GLTF URL.'
@@ -239,9 +239,9 @@ function getFalProgress(raw, status) {
 }
 
 function requireFalKey() {
-  if (!FAL_API_KEY) {
+  if (!hasConfiguredSecret(FAL_API_KEY)) {
     const error = new Error('FAL_API_KEY is not configured on the backend.')
-    error.status = 500
+    error.status = 503
     throw error
   }
 }

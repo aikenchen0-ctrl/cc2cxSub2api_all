@@ -84,6 +84,14 @@ func (h *AuthHandler) startSatelliteSSO(c *gin.Context, slug string) {
 	query := parsed.Query()
 	query.Set("ticket", raw)
 	parsed.RawQuery = query.Encode()
+	// A top-level browser navigation cannot attach an Authorization header.
+	// Authenticate it with the HttpOnly access cookie and continue directly to
+	// the satellite callback. API clients that request JSON keep the historical
+	// {redirect_url} response shape.
+	if strings.Contains(strings.ToLower(c.GetHeader("Accept")), "text/html") {
+		c.Redirect(http.StatusFound, parsed.String())
+		return
+	}
 	response.Success(c, gin.H{"redirect_url": parsed.String()})
 }
 

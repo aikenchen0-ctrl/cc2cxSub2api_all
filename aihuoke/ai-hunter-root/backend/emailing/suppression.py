@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import quote
 
 from emailing.store import EmailStore
+from auth_sso import managed as satellite_managed
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
 
@@ -51,6 +52,11 @@ def is_valid_email(email: str) -> bool:
 
 
 def _secret(store: EmailStore | None, settings: Any | None) -> str:
+    # Managed satellites keep unsubscribe secrets inside each owner's
+    # isolated email store. A process-wide configured secret would make a
+    # public token valid for every user's suppression list.
+    if satellite_managed() and store is not None:
+        return store.unsubscribe_secret()
     configured = str(getattr(settings, "email_unsubscribe_secret", "") or "").strip() if settings else ""
     if configured:
         return configured

@@ -21,6 +21,24 @@ func TestSatelliteBearerAccepted(t *testing.T) {
 	require.True(t, service.IsSuperAPIKeyCredential("sk-super-abc"))
 }
 
+func TestSatelliteBearerRejectsSuperKeyAsApplicationCredential(t *testing.T) {
+	t.Setenv("SUB2API_APP_CREDENTIAL", "sk-super-accidental")
+	require.False(t, SatelliteBearerAccepted("sk-super-accidental"))
+}
+
+func TestSatelliteBearerRejectsPlaceholderCredentials(t *testing.T) {
+	for _, placeholder := range []string{"replace-with-app-credential", "your-api-key", "example-secret", "xxx"} {
+		t.Setenv("SUB2API_APP_CREDENTIAL", placeholder)
+		require.False(t, SatelliteBearerAccepted(placeholder), placeholder)
+	}
+
+	t.Setenv("SUB2API_APP_CREDENTIAL", "real-satellite-secret")
+	for _, placeholder := range []string{"replace-with-app-credential", "your-api-key", "example-secret", "xxx"} {
+		require.False(t, SatelliteBearerAccepted(placeholder), placeholder)
+	}
+	require.True(t, SatelliteBearerAccepted("real-satellite-secret"))
+}
+
 func TestParseOnBehalfOfUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

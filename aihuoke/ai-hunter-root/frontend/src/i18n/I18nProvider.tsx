@@ -47,7 +47,7 @@ function applyDocumentLocale(locale: Locale) {
   const meta = LOCALE_META[locale];
   document.documentElement.lang = meta.htmlLang;
   document.documentElement.dir = meta.dir;
-  document.title = DICTIONARIES[locale]["brand.title"] || "AI 获客";
+  document.title = DICTIONARIES[locale]["brand.title"] || "AI获客";
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {

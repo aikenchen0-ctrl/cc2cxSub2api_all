@@ -25,6 +25,7 @@ class AutoStart:
     """Windows 开机自启动管理"""
     
     REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    # Keep the registry value name stable for existing Windows auto-start entries.
     APP_NAME = "BidMonitor"
     
     @classmethod

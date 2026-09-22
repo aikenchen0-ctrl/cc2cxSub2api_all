@@ -11,8 +11,10 @@ from argparse import Namespace
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.automation_routes import router as automation_router
 from api.hunt_store import load_all_hunts
@@ -57,6 +59,16 @@ from emailing.reply_detector import run_reply_detection_once
 from emailing.scheduler import run_scheduler_once
 from emailing.store import EmailStore
 from scripts.headless_worker import JobCancelledError, _campaign_name
+from auth_sso import (
+    default_email_account_id,
+    get_identity,
+    known_subjects,
+    managed,
+    reset_current_subject,
+    router as auth_router,
+    scoped_email_db_path,
+    set_current_subject,
+)
 
 # Configure logging for the entire application
 logging.basicConfig(
@@ -78,6 +90,30 @@ litellm.set_verbose = False
 
 
 logger = logging.getLogger(__name__)
+
+
+class SatelliteSessionMiddleware(BaseHTTPMiddleware):
+    """Require the local SSO session when this deployment is managed."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        # Keep the container liveness probe public.  All tenant-bearing API
+        # routes still require the HttpOnly SSO session in managed mode.
+        if (
+            not managed()
+            or path in {"/health", "/api/auth/sso/callback", "/api/v1/unsubscribe", "/api/v1/unsubscribe/"}
+            or request.method == "OPTIONS"
+        ):
+            return await call_next(request)
+        identity = get_identity(request)
+        if identity is None:
+            return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        request.state.sub2api_identity = identity
+        token = set_current_subject(identity.subject)
+        try:
+            return await call_next(request)
+        finally:
+            reset_current_subject(token)
 
 
 def _now_iso() -> str:
@@ -169,8 +205,10 @@ async def _run_template_seed_prewarm_once() -> bool:
             last_activity_at=_now_iso(),
             last_error="",
         )
+        payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+        owner_subject = str(payload.get("owner_user_id") or "").strip()
+        owner_token = set_current_subject(owner_subject) if owner_subject else None
         try:
-            payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
             template_seed = await _prepare_template_seed(_template_seed_request_from_payload(payload))
             queue.attach_template_seed(job_id, template_seed=template_seed, updated_at=_now_iso())
             update_worker_state(
@@ -190,6 +228,9 @@ async def _run_template_seed_prewarm_once() -> bool:
                 last_error=str(exc),
             )
             logger.warning("[TemplateSeedWorker] prewarm failed for job=%s: %s", job_id[:8], exc)
+        finally:
+            if owner_token is not None:
+                reset_current_subject(owner_token)
         return True
 
     update_worker_state(
@@ -261,6 +302,16 @@ async def _wait_for_hunt_embedded(*, hunt_id: str, poll_seconds: int, should_can
 
 
 async def _run_embedded_consumer_job(args: Namespace, payload: dict[str, object]) -> dict[str, object]:
+    owner_subject = str(payload.get("owner_user_id") or "").strip()
+    owner_token = set_current_subject(owner_subject) if owner_subject else None
+    try:
+        return await _run_embedded_consumer_job_inner(args, payload)
+    finally:
+        if owner_token is not None:
+            reset_current_subject(owner_token)
+
+
+async def _run_embedded_consumer_job_inner(args: Namespace, payload: dict[str, object]) -> dict[str, object]:
     progress_callback = getattr(args, "progress_callback", None)
     cancel_check = getattr(args, "cancel_check", None)
 
@@ -504,166 +555,308 @@ async def _automation_consumer_loop() -> None:
         await asyncio.sleep(max(1, int(get_settings().automation_consumer_poll_seconds)))
 
 
+def _email_worker_subjects() -> list[str]:
+    """Return the owners whose isolated email stores need background work."""
+    if not managed():
+        return [""]
+    subjects = set(known_subjects())
+    for hunt in load_all_hunts(mark_interrupted=False).values():
+        owner = str(hunt.get("owner_user_id") or "").strip()
+        if owner:
+            subjects.add(owner)
+    return sorted(subjects)
+
+
+def _notification_hunts_for_subject(
+    hunts: dict[str, dict[str, object]],
+    subject: str,
+) -> dict[str, dict[str, object]]:
+    """Return only the hunts owned by the notification worker's subject.
+
+    Hunt files live in one directory so the embedded worker can discover all
+    pending work.  That does not make the files a shared notification scope:
+    in managed mode every notification and metric must be derived from the
+    current SSO subject only.  Local (unmanaged) mode keeps the historical
+    shared store behaviour.
+    """
+    if not managed():
+        return hunts
+    owner = str(subject or "").strip()
+    if not owner:
+        return {}
+    return {
+        hunt_id: hunt
+        for hunt_id, hunt in hunts.items()
+        if str(hunt.get("owner_user_id") or "").strip() == owner
+    }
+
+
 async def _email_scheduler_loop() -> None:
     """Poll pending email jobs and dispatch due messages."""
     while True:
+        sleep_seconds = 60
         try:
-            settings = get_settings()
-            if not bool(settings.email_auto_send_enabled):
-                await asyncio.sleep(60)
-                continue
-            ensure_smtp_tested(settings)
-            store = EmailStore(settings.email_db_path)
-            store.init_db()
-            result = await run_scheduler_once(store)
-            if result["sent"] or result["failed"]:
-                logger.info("[EmailScheduler] sent=%s failed=%s skipped=%s", result["sent"], result["failed"], result["skipped"])
+            subjects = _email_worker_subjects()
+            for subject in subjects:
+                subject_token = set_current_subject(subject) if subject else None
+                try:
+                    # Settings (including SMTP credentials and readiness
+                    # markers) are subject-scoped in managed mode.  The
+                    # worker must enter that context before touching either
+                    # the store or the outbound sender.
+                    settings = get_settings()
+                    if not bool(settings.email_auto_send_enabled):
+                        continue
+                    ensure_smtp_tested(settings)
+                    store = EmailStore(scoped_email_db_path(settings.email_db_path, subject))
+                    store.init_db()
+                    result = await run_scheduler_once(store, owner_subject=subject or None)
+                    if result["sent"] or result["failed"]:
+                        logger.info(
+                            "[EmailScheduler] owner=%s sent=%s failed=%s skipped=%s",
+                            subject[:8] if subject else "local",
+                            result["sent"],
+                            result["failed"],
+                            result["skipped"],
+                        )
+                except ValueError as exc:
+                    # One tenant's unconfigured SMTP account must not stop
+                    # the worker from servicing other tenants.
+                    logger.debug("[EmailScheduler] owner=%s skipped: %s", subject[:8] if subject else "local", exc)
+                finally:
+                    if subject_token is not None:
+                        reset_current_subject(subject_token)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("[EmailScheduler] polling iteration failed")
-        await asyncio.sleep(60)
+        await asyncio.sleep(sleep_seconds)
 
 
 async def _email_reply_loop() -> None:
     """Poll inbox for replies and stop follow-up sequences."""
     while True:
+        sleep_seconds = 60
         try:
-            settings = get_settings()
-            if not bool(settings.email_reply_detection_enabled):
-                await asyncio.sleep(max(30, int(settings.email_reply_check_interval_seconds)))
-                continue
-            ensure_imap_tested(settings)
-            store = EmailStore(settings.email_db_path)
-            store.init_db()
-            account = store.get_account("default")
-            if account:
-                result = await run_reply_detection_once(store, account)
-                if result["matched"]:
-                    logger.info("[EmailReply] checked=%s matched=%s skipped=%s", result["checked"], result["matched"], result["skipped"])
+            subjects = _email_worker_subjects()
+            for subject in subjects:
+                subject_token = set_current_subject(subject) if subject else None
+                try:
+                    settings = get_settings()
+                    sleep_seconds = max(30, int(settings.email_reply_check_interval_seconds))
+                    if not bool(settings.email_reply_detection_enabled):
+                        continue
+                    ensure_imap_tested(settings)
+                    store = EmailStore(scoped_email_db_path(settings.email_db_path, subject))
+                    store.init_db()
+                    account = store.get_account(default_email_account_id(subject or ""))
+                    if account:
+                        result = await run_reply_detection_once(store, account, owner_subject=subject or None)
+                        if result["matched"]:
+                            logger.info(
+                                "[EmailReply] owner=%s checked=%s matched=%s skipped=%s",
+                                subject[:8] if subject else "local",
+                                result["checked"],
+                                result["matched"],
+                                result["skipped"],
+                            )
+                except ValueError as exc:
+                    logger.debug("[EmailReply] owner=%s skipped: %s", subject[:8] if subject else "local", exc)
+                finally:
+                    if subject_token is not None:
+                        reset_current_subject(subject_token)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("[EmailReply] polling iteration failed")
-        await asyncio.sleep(max(30, int(settings.email_reply_check_interval_seconds)))
+        await asyncio.sleep(sleep_seconds)
 
 
 async def _automation_notify_loop() -> None:
-    last_summary_at = 0.0
-    last_alert_at = 0.0
-    discovery_buffer: list[dict[str, str | int]] = []
-    send_buffer: list[dict[str, str]] = []
-    seen_hunt_ids: set[str] = set()
-    seen_sent_message_ids: set[str] = set()
-    primed = False
-    last_discovery_flush_at = 0.0
-    last_send_flush_at = 0.0
+    # Every managed subject gets an independent notification state.  Keeping
+    # buffers and deduplication sets per owner prevents one user's leads,
+    # sent-message events, timers, or webhook failures from affecting another
+    # user's notification stream.
+    states: dict[str, dict[str, object]] = {}
     loop = asyncio.get_running_loop()
     while True:
         try:
-            settings = get_settings()
-            webhook_url = str(settings.automation_feishu_webhook_url or "").strip()
-            if not webhook_url:
-                await asyncio.sleep(60)
-                continue
-
-            now_monotonic = loop.time()
-            if bool(getattr(settings, "automation_event_notifications_enabled", True)):
-                batch_flush_interval = max(60, int(getattr(settings, "automation_event_flush_interval_seconds", 600) or 600))
-                discovery_batch_size = max(1, int(getattr(settings, "automation_discovery_batch_size", 5) or 5))
-                send_batch_size = max(1, int(getattr(settings, "automation_send_batch_size", 10) or 10))
-
-                hunts = load_all_hunts(mark_interrupted=False)
-                store = EmailStore(settings.email_db_path)
-                store.init_db()
-                if not primed:
-                    seen_hunt_ids.update(
-                        hunt_id for hunt_id, hunt in hunts.items()
-                        if str(hunt.get("status", "") or "") == "completed"
-                    )
-                    seen_sent_message_ids.update(
-                        str(item.get("id", "") or "")
-                        for item in store.list_sent_messages_since(since_iso="1970-01-01T00:00:00+00:00", limit=5000)
-                        if str(item.get("id", "") or "")
-                    )
-                    primed = True
-                    last_discovery_flush_at = now_monotonic
-                    last_send_flush_at = now_monotonic
-
-                for hunt_id, hunt in hunts.items():
-                    if hunt_id in seen_hunt_ids:
+            subjects = _email_worker_subjects()
+            # Keep the local deployment's original shared notification mode.
+            # Managed deployments normally have one or more known SSO subjects;
+            # each is processed with its own context below.
+            for subject in subjects:
+                subject_token = set_current_subject(subject) if subject else None
+                try:
+                    settings = get_settings()
+                    webhook_url = str(settings.automation_feishu_webhook_url or "").strip()
+                    if not webhook_url:
                         continue
-                    if str(hunt.get("status", "") or "") != "completed":
-                        continue
-                    seen_hunt_ids.add(hunt_id)
-                    result = hunt.get("result") or {}
-                    for lead in result.get("leads", []) or []:
-                        if not isinstance(lead, dict):
-                            continue
-                        emails = lead.get("emails", []) or []
-                        discovery_buffer.append({
-                            "company_name": str(lead.get("company_name", "") or ""),
-                            "website": str(lead.get("website", "") or ""),
-                            "email_count": len(emails) if isinstance(emails, list) else 0,
-                        })
 
-                for item in store.list_sent_messages_since(since_iso="1970-01-01T00:00:00+00:00", limit=500):
-                    message_id = str(item.get("id", "") or "")
-                    if not message_id or message_id in seen_sent_message_ids:
-                        continue
-                    seen_sent_message_ids.add(message_id)
-                    send_buffer.append({
-                        "company_name": str(item.get("lead_name", "") or ""),
-                        "lead_email": str(item.get("lead_email", "") or ""),
-                        "subject": str(item.get("subject", "") or ""),
-                    })
-
-                if discovery_buffer and (
-                    len(discovery_buffer) >= discovery_batch_size
-                    or now_monotonic - last_discovery_flush_at >= batch_flush_interval
-                ):
-                    text = render_discovery_batch_text(discovery_buffer[:])
-                    await asyncio.to_thread(send_feishu_text, webhook_url, text)
-                    discovery_buffer.clear()
-                    last_discovery_flush_at = now_monotonic
-                    logger.info("[AutomationNotify] discovery batch sent")
-
-                if send_buffer and (
-                    len(send_buffer) >= send_batch_size
-                    or now_monotonic - last_send_flush_at >= batch_flush_interval
-                ):
-                    text = render_send_batch_text(send_buffer[:])
-                    await asyncio.to_thread(send_feishu_text, webhook_url, text)
-                    send_buffer.clear()
-                    last_send_flush_at = now_monotonic
-                    logger.info("[AutomationNotify] send batch sent")
-
-            if bool(settings.automation_summary_enabled):
-                interval = max(300, int(settings.automation_summary_interval_seconds or 7200))
-                if now_monotonic - last_summary_at >= interval:
-                    status = collect_automation_status()
-                    metrics = collect_automation_metrics(hours=max(1, interval // 3600))
-                    metrics["status_snapshot"] = status
-                    text = render_summary_text(metrics)
-                    await asyncio.to_thread(send_feishu_text, webhook_url, text)
-                    last_summary_at = now_monotonic
-                    logger.info("[AutomationNotify] summary sent")
-
-            if bool(settings.automation_alerts_enabled):
-                alert_interval = max(300, int(settings.automation_alert_interval_seconds or 1800))
-                if now_monotonic - last_alert_at >= alert_interval:
-                    status = collect_automation_status()
-                    metrics = collect_automation_metrics(hours=2)
-                    should_alert = (
-                        status["hunt_jobs"]["queued"] >= int(settings.automation_alert_backlog_threshold or 20)
-                        or status["email_queue"]["pending"] >= int(settings.automation_alert_backlog_threshold or 20)
-                        or metrics["emails"]["failed"] >= int(settings.automation_alert_failed_messages_threshold or 10)
+                    state = states.setdefault(
+                        subject,
+                        {
+                            "last_summary_at": 0.0,
+                            "last_alert_at": 0.0,
+                            "discovery_buffer": [],
+                            "send_buffer": [],
+                            "seen_hunt_ids": set(),
+                            "seen_sent_message_ids": set(),
+                            "primed": False,
+                            "last_discovery_flush_at": 0.0,
+                            "last_send_flush_at": 0.0,
+                        },
                     )
-                    if should_alert:
-                        text = render_alert_text(status, metrics)
-                        await asyncio.to_thread(send_feishu_text, webhook_url, text)
-                        logger.warning("[AutomationNotify] alert sent")
-                    last_alert_at = now_monotonic
+                    now_monotonic = loop.time()
+                    owner_user_id = subject if managed() and subject else None
+                    hunts = _notification_hunts_for_subject(
+                        load_all_hunts(mark_interrupted=False), subject
+                    )
+
+                    if bool(getattr(settings, "automation_event_notifications_enabled", True)):
+                        batch_flush_interval = max(
+                            60,
+                            int(getattr(settings, "automation_event_flush_interval_seconds", 600) or 600),
+                        )
+                        discovery_batch_size = max(
+                            1,
+                            int(getattr(settings, "automation_discovery_batch_size", 5) or 5),
+                        )
+                        send_batch_size = max(
+                            1,
+                            int(getattr(settings, "automation_send_batch_size", 10) or 10),
+                        )
+                        store = EmailStore(scoped_email_db_path(settings.email_db_path, subject))
+                        store.init_db()
+                        hunt_ids = set(hunts) if owner_user_id is not None else None
+                        discovery_buffer = state["discovery_buffer"]
+                        send_buffer = state["send_buffer"]
+                        seen_hunt_ids = state["seen_hunt_ids"]
+                        seen_sent_message_ids = state["seen_sent_message_ids"]
+                        if not state["primed"]:
+                            seen_hunt_ids.update(
+                                hunt_id
+                                for hunt_id, hunt in hunts.items()
+                                if str(hunt.get("status", "") or "") == "completed"
+                            )
+                            seen_sent_message_ids.update(
+                                str(item.get("id", "") or "")
+                                for item in store.list_sent_messages_since(
+                                    since_iso="1970-01-01T00:00:00+00:00",
+                                    limit=5000,
+                                    hunt_ids=hunt_ids,
+                                )
+                                if str(item.get("id", "") or "")
+                            )
+                            state["primed"] = True
+                            state["last_discovery_flush_at"] = now_monotonic
+                            state["last_send_flush_at"] = now_monotonic
+
+                        for hunt_id, hunt in hunts.items():
+                            if hunt_id in seen_hunt_ids:
+                                continue
+                            if str(hunt.get("status", "") or "") != "completed":
+                                continue
+                            seen_hunt_ids.add(hunt_id)
+                            result = hunt.get("result") or {}
+                            for lead in result.get("leads", []) or []:
+                                if not isinstance(lead, dict):
+                                    continue
+                                emails = lead.get("emails", []) or []
+                                discovery_buffer.append(
+                                    {
+                                        "company_name": str(lead.get("company_name", "") or ""),
+                                        "website": str(lead.get("website", "") or ""),
+                                        "email_count": len(emails) if isinstance(emails, list) else 0,
+                                    }
+                                )
+
+                        for item in store.list_sent_messages_since(
+                            since_iso="1970-01-01T00:00:00+00:00",
+                            limit=500,
+                            hunt_ids=hunt_ids,
+                        ):
+                            message_id = str(item.get("id", "") or "")
+                            if not message_id or message_id in seen_sent_message_ids:
+                                continue
+                            seen_sent_message_ids.add(message_id)
+                            send_buffer.append(
+                                {
+                                    "company_name": str(item.get("lead_name", "") or ""),
+                                    "lead_email": str(item.get("lead_email", "") or ""),
+                                    "subject": str(item.get("subject", "") or ""),
+                                }
+                            )
+
+                        if discovery_buffer and (
+                            len(discovery_buffer) >= discovery_batch_size
+                            or now_monotonic - float(state["last_discovery_flush_at"]) >= batch_flush_interval
+                        ):
+                            text = render_discovery_batch_text(discovery_buffer[:])
+                            await asyncio.to_thread(send_feishu_text, webhook_url, text)
+                            discovery_buffer.clear()
+                            state["last_discovery_flush_at"] = now_monotonic
+                            logger.info("[AutomationNotify] owner=%s discovery batch sent", subject[:8] or "local")
+
+                        if send_buffer and (
+                            len(send_buffer) >= send_batch_size
+                            or now_monotonic - float(state["last_send_flush_at"]) >= batch_flush_interval
+                        ):
+                            text = render_send_batch_text(send_buffer[:])
+                            await asyncio.to_thread(send_feishu_text, webhook_url, text)
+                            send_buffer.clear()
+                            state["last_send_flush_at"] = now_monotonic
+                            logger.info("[AutomationNotify] owner=%s send batch sent", subject[:8] or "local")
+
+                    if bool(settings.automation_summary_enabled):
+                        interval = max(300, int(settings.automation_summary_interval_seconds or 7200))
+                        if now_monotonic - float(state["last_summary_at"]) >= interval:
+                            status = collect_automation_status(
+                                hunts=hunts,
+                                owner_user_id=owner_user_id,
+                            )
+                            metrics = collect_automation_metrics(
+                                hours=max(1, interval // 3600),
+                                hunts=hunts,
+                                owner_user_id=owner_user_id,
+                            )
+                            metrics["status_snapshot"] = status
+                            text = render_summary_text(metrics)
+                            await asyncio.to_thread(send_feishu_text, webhook_url, text)
+                            state["last_summary_at"] = now_monotonic
+                            logger.info("[AutomationNotify] owner=%s summary sent", subject[:8] or "local")
+
+                    if bool(settings.automation_alerts_enabled):
+                        alert_interval = max(300, int(settings.automation_alert_interval_seconds or 1800))
+                        if now_monotonic - float(state["last_alert_at"]) >= alert_interval:
+                            status = collect_automation_status(
+                                hunts=hunts,
+                                owner_user_id=owner_user_id,
+                            )
+                            metrics = collect_automation_metrics(
+                                hours=2,
+                                hunts=hunts,
+                                owner_user_id=owner_user_id,
+                            )
+                            should_alert = (
+                                status["hunt_jobs"]["queued"] >= int(settings.automation_alert_backlog_threshold or 20)
+                                or status["email_queue"]["pending"] >= int(settings.automation_alert_backlog_threshold or 20)
+                                or metrics["emails"]["failed"] >= int(settings.automation_alert_failed_messages_threshold or 10)
+                            )
+                            if should_alert:
+                                text = render_alert_text(status, metrics)
+                                await asyncio.to_thread(send_feishu_text, webhook_url, text)
+                                logger.warning("[AutomationNotify] owner=%s alert sent", subject[:8] or "local")
+                            state["last_alert_at"] = now_monotonic
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    # A bad webhook or malformed per-user setting should not
+                    # prevent other tenants from receiving their notifications.
+                    logger.exception("[AutomationNotify] owner=%s iteration failed", subject[:8] or "local")
+                finally:
+                    if subject_token is not None:
+                        reset_current_subject(subject_token)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -754,6 +947,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    @app.get("/health")
+    async def liveness_check():
+        """Unauthenticated container liveness probe with no tenant data."""
+        return {"ok": True, "service": "aihuoke"}
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -762,6 +960,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(SatelliteSessionMiddleware)
+
+    app.include_router(auth_router)
     app.include_router(router, prefix="/api/v1")
     app.include_router(licensed_finder_router)
     app.include_router(automation_router)

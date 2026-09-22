@@ -1,0 +1,41 @@
+services:
+  agentapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cc2cx/agentapi:latest
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "${AGENTAPI_PORT:-8080}:8080"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      AGENTAPI_ADDR: ":8080"
+      AGENTAPI_WEB_DIR: /app/web
+      AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
+      AGENT_ENABLED: ${AGENT_ENABLED:-true}
+      MODEL_STREAM_TIMEOUT: ${MODEL_STREAM_TIMEOUT:-10m}
+      AGENTAPI_WRITE_TIMEOUT: ${AGENTAPI_WRITE_TIMEOUT:-10m}
+      AGENT_SETTLEMENT_RECONCILE_INTERVAL: ${AGENT_SETTLEMENT_RECONCILE_INTERVAL:-5m}
+      AGENT_SETTLEMENT_RECONCILE_BATCH: ${AGENT_SETTLEMENT_RECONCILE_BATCH:-50}
+    volumes:
+      - agentapi-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 20s
+
+volumes:
+  agentapi-data:

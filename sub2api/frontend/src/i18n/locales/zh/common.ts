@@ -178,6 +178,8 @@ export default {
     aiExcel: 'AI表格',
     artQr: '艺术二维码',
     yibiao: '自动招标',
+    ai3d: '图生3D',
+    aihuoke: 'AI获客',
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',

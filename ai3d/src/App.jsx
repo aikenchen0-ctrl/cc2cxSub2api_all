@@ -131,7 +131,7 @@ function App() {
   const [activePanel, setActivePanel] = useState(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
-  const [toast, setToast] = useState('cc2cx AI3D生成已就绪')
+  const [toast, setToast] = useState('图生3D 已就绪')
   const [favoriteKey, setFavoriteKey] = useState(() => initialUiStateRef.current.favoriteKey)
   const [selectedMicroscope, setSelectedMicroscope] = useState(() => initialUiStateRef.current.selectedMicroscope)
   const [uploadedImage, setUploadedImage] = useState(() => getUploadPreviewFromCustomCells(initialCustomCellsRef.current))

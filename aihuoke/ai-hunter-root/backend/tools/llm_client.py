@@ -16,6 +16,7 @@ import litellm
 from config.settings import Settings, get_settings
 from tools.llm_errors import format_llm_error
 from tools.llm_rate_limiter import get_llm_rate_limiter
+from auth_sso import current_subject, has_configured_secret, managed as satellite_managed, relay_base_url, satellite_headers
 
 
 # Suppress litellm's verbose logging by default
@@ -217,6 +218,19 @@ def _provider_key_map(settings: Settings, scope: str) -> dict[str, str]:
 
 def _inject_api_keys(settings: Settings, scope: str = "default") -> None:
     """Push provider API keys from Settings into env vars for litellm."""
+    if satellite_managed():
+        # In a managed deployment, the only credential accepted by the model
+        # client is the project credential plus the current SSO subject.
+        if not has_configured_secret(os.getenv("SUB2API_APP_CREDENTIAL", "")) or not current_subject().strip():
+            raise RuntimeError("Sub2API satellite credential and session subject are required")
+        base = relay_base_url()
+        if not base:
+            raise RuntimeError("LINK or SUB2API_RELAY_BASE_URL is required")
+        os.environ["OPENAI_API_KEY"] = os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+        os.environ["OPENAI_API_BASE"] = base
+        for env_var in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY", "ZAI_API_KEY", "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "ZHIPUAI_API_KEY"):
+            os.environ.pop(env_var, None)
+        return
     _key_map = _provider_key_map(settings, scope)
     for env_var, value in _key_map.items():
         if value:
@@ -281,10 +295,18 @@ class LLMTool:
         self._hunt_id = hunt_id
         self._agent = agent
         self._hunt_round = hunt_round
+        self._managed = satellite_managed()
         _inject_api_keys(self._settings, self._model_type)
 
     @property
     def model(self) -> str:
+        if self._managed:
+            # Public model name; provider-specific names never leave the app.
+            return apply_openai_api_mode(
+                os.getenv("SUB2API_RELAY_MODEL", "gpt-5.5") or "gpt-5.5",
+                mode="chat",
+                api_base=relay_base_url(),
+            )
         return apply_openai_api_mode(
             _select_model(self._settings, self._model_type),
             mode=getattr(self._settings, "openai_api_mode", "auto"),
@@ -355,6 +377,10 @@ class LLMTool:
             "temperature": temp,
             "max_tokens": tokens,
         }
+        if self._managed:
+            kwargs["api_key"] = os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+            kwargs["api_base"] = relay_base_url()
+            kwargs["extra_headers"] = satellite_headers(required=True)
         effort = reasoning_effort_for_model(
             self.model,
             getattr(self._settings, "llm_reasoning_effort", "") or "",

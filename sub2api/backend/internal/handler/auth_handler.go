@@ -140,6 +140,7 @@ func respondWithTokenPair(c *gin.Context, authService *service.AuthService, user
 			response.InternalError(c, "Failed to generate token")
 			return
 		}
+		setBrowserSessionCookie(c, authService, token, 0)
 		response.Success(c, AuthResponse{
 			AccessToken: token,
 			TokenType:   "Bearer",
@@ -147,6 +148,7 @@ func respondWithTokenPair(c *gin.Context, authService *service.AuthService, user
 		})
 		return
 	}
+	setBrowserSessionCookie(c, authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	response.Success(c, AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
@@ -711,6 +713,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	setBrowserSessionCookie(c, h.authService, result.AccessToken, result.ExpiresIn)
 	response.Success(c, RefreshTokenResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -743,6 +746,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 			// 不影响登出流程
 		}
 	}
+	clearBrowserSessionCookie(c, h.authService)
 	h.consumePendingOAuthSessionOnLogout(c)
 	clearOAuthLogoutCookies(c)
 

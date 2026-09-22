@@ -280,6 +280,7 @@ function LLMProviderPanel({
   defaultModelKey,
   reasoningModelKey,
   apiKeyFieldMap,
+  managed = false,
 }: {
   title: string;
   description: string;
@@ -288,6 +289,7 @@ function LLMProviderPanel({
   defaultModelKey: string;
   reasoningModelKey: string;
   apiKeyFieldMap: Record<string, string>;
+  managed?: boolean;
 }) {
   const currentDefaultModel = values[defaultModelKey] ?? "";
   const currentReasoningModel = values[reasoningModelKey] ?? "";
@@ -298,6 +300,28 @@ function LLMProviderPanel({
   );
 
   const provider = PROVIDERS.find((p) => p.id === providerId) ?? PROVIDERS[0];
+
+  if (managed) {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Cpu className="h-5 w-5 text-primary" />
+            <CardTitle className="text-base">{title}</CardTitle>
+          </div>
+          <CardDescription>
+            {managed ? "此部署由 Sub2API 统一提供模型服务。" : description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+            模型由 Sub2API 托管，当前使用公开模型 <span className="font-mono font-medium">gpt-5.5</span>。
+            本页面不会要求或保存模型 API Key。
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // When provider changes, update API key field visibility and reset models to first preset
   const handleProviderChange = (newId: string) => {
@@ -1607,6 +1631,10 @@ export function SettingsPage() {
     queryKey: ["app-settings"],
     queryFn: api.getSettings,
   });
+  // Keep credential-bearing controls hidden until the server tells us this is
+  // a standalone deployment.  This avoids a managed-mode flash of API-key
+  // inputs while the settings request is still loading.
+  const managed = data?.managed ?? true;
 
   useEffect(() => {
     if (data?.settings) {
@@ -1757,6 +1785,7 @@ export function SettingsPage() {
         defaultModelKey="llm_model"
         reasoningModelKey="reasoning_model"
         apiKeyFieldMap={MAIN_API_KEY_FIELDS}
+        managed={managed}
       />
 
       <LLMProviderPanel
@@ -1767,6 +1796,7 @@ export function SettingsPage() {
         defaultModelKey="email_llm_model"
         reasoningModelKey="email_reasoning_model"
         apiKeyFieldMap={EMAIL_API_KEY_FIELDS}
+        managed={managed}
       />
 
       {/* Search */}

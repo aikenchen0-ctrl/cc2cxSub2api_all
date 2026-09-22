@@ -9,6 +9,7 @@ import {
   HUNYUAN_CLOUD_QUERY_PATH,
   HUNYUAN_CLOUD_SUBMIT_PATH,
   OUTBOUND_PROXY_AGENT,
+  hasConfiguredSecret,
   hasOutboundProxy,
 } from '../config.mjs'
 import { parseDataUrl } from '../http-utils.mjs'
@@ -19,7 +20,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 export const DEFAULT_HUNYUAN_SKETCH_PROMPT = '一只上皮细胞，光滑表面，细胞核清晰'
 
 export function isHunyuanCloudConfigured() {
-  return Boolean(HUNYUAN_CLOUD_API_KEY)
+  return hasConfiguredSecret(HUNYUAN_CLOUD_API_KEY)
 }
 
 export function getHunyuanCloudHealth() {
@@ -249,9 +250,9 @@ function extractImageBase64(value) {
 }
 
 function requireCloudKey() {
-  if (!HUNYUAN_CLOUD_API_KEY) {
+  if (!hasConfiguredSecret(HUNYUAN_CLOUD_API_KEY)) {
     const error = new Error('HUNYUAN_CLOUD_API_KEY is not configured on the backend.')
-    error.status = 500
+    error.status = 503
     throw error
   }
 }

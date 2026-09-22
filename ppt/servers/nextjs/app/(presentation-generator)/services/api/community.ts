@@ -107,7 +107,7 @@ export function getCommunityPresentationTitle(
 export function getCommunityPresentationAuthor(
   presentation: CommunityPresentation
 ) {
-  return presentation.created_by?.trim() || "Presenton";
+  return presentation.created_by?.trim() || "永恒PPT";
 }
 
 export function getCommunityReferenceIds(

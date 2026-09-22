@@ -373,7 +373,7 @@ const getAgentPlanStatusLine = ({
   if (status === 'error') return `${fallbackTitle || '当前步骤'}失败了...`;
   if (status === 'completed') {
     if (stepId === 'understand-demand') return '已理解你的需求...';
-    if (stepId === 'knowledge-answer') return '已整理 livart 知识库回答...';
+    if (stepId === 'knowledge-answer') return '已整理超级改图知识库回答...';
     if (stepId === 'research-industry') return '已完成 WebSearch 行业调研...';
     if (stepId === 'plan-poster-set') return '已完成商品详情图规划...';
     if (stepId === 'run-product-posters') return '已提交商品详情图任务...';
@@ -388,13 +388,13 @@ const getAgentPlanStatusLine = ({
     return '正在判断是生图还是对话...';
   }
   if (stepId === 'knowledge-answer') {
-    return '正在检索 livart 知识库...';
+    return '正在检索超级改图知识库...';
   }
   if (stepId === 'research-industry') {
     return '正在 WebSearch 行业趋势...';
   }
   if (stepId === 'scope-check') {
-    return '正在检查是否属于 livart 能力范围...';
+    return '正在检查是否属于超级改图能力范围...';
   }
   if (stepId === 'plan-task'
     || stepId === 'identify-images'

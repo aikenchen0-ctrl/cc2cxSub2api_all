@@ -98,9 +98,8 @@ body:has(.welcome-page) {
     object-fit: contain;
 }
 .welcome-brand-logo.is-fallback {
-    background: currentColor;
-    mask: url("/logo.svg") center / contain no-repeat;
-    -webkit-mask: url("/logo.svg") center / contain no-repeat;
+    background: url("/project-icon.jpg") center / cover no-repeat;
+    border-radius: 7px;
 }
 .welcome-nav {
     margin-left: auto;

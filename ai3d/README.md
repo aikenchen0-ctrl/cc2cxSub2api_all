@@ -45,10 +45,20 @@ Open the demo video: [Demo MP4](docs/demo/3DCellForge-demo-2026-05-10.mp4)
 
 ```bash
 npm install
+```
+
+Run the API and Vite UI in two terminals:
+
+```bash
+# terminal 1
+npm run dev:api
+
+# terminal 2
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal.
+Open the Vite URL shown in the second terminal. The UI proxies `/api` to the
+Node API on port 8787.
 
 ## Workbench Workflow
 
@@ -154,7 +164,11 @@ Then start the frontend:
 npm run dev
 ```
 
-The frontend talks to the local Node backend at `http://127.0.0.1:8787` by default.
+The frontend listens on `http://localhost:5174` and proxies to the local Node backend
+at `http://127.0.0.1:8787` by default; override the UI port with `VITE_PORT`. Docker
+keeps the container UI on 5173 and maps host port 5174. In managed mode, opening the
+app from Sub2API establishes a three-day HttpOnly SSO session and server-side vision
+analysis is relayed for the current user.
 
 ## Demo Models
 

@@ -9,15 +9,47 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.hunt_store import load_hunt, now_iso
-from api.routes import _hunts, request_hunt_cancel, _unique_leads_count
+from api.routes import _hunts, _require_hunt_owner, request_hunt_cancel, _unique_leads_count
 from api.security import require_api_access
 from automation.job_queue import HuntJobQueue
 from automation.metrics import collect_automation_metrics, collect_automation_status
 from config.settings import get_settings
 from emailing.store import EmailStore
+from auth_sso import current_subject, managed as satellite_managed, scoped_email_db_path
 
 router = APIRouter(prefix="/api/v1/automation", tags=["automation"])
 logger = logging.getLogger(__name__)
+
+
+def _require_job_owner(job: dict[str, Any]) -> None:
+    """Keep queue jobs scoped to the same SSO subject as their hunt."""
+    if not satellite_managed():
+        return
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    subject = current_subject().strip() or "local"
+    raw_owner = payload.get("owner_user_id")
+    owner = str(raw_owner or "").strip()
+    if owner:
+        if owner != subject:
+            raise HTTPException(status_code=404, detail="Automation job not found")
+        return
+    # Jobs written before SSO ownership was added can still be addressed when
+    # they already point at a hunt carrying the owner's subject.
+    hunt_id = str(job.get("last_hunt_id", "") or "").strip()
+    hunt = _hunts.get(hunt_id) or (load_hunt(hunt_id) if hunt_id else None)
+    if not hunt or str(hunt.get("owner_user_id") or "local").strip() != subject:
+        raise HTTPException(status_code=404, detail="Automation job not found")
+
+
+def _visible_hunts() -> dict[str, dict[str, Any]]:
+    if not satellite_managed():
+        return _hunts
+    owner = current_subject().strip() or "local"
+    return {
+        hunt_id: hunt
+        for hunt_id, hunt in _hunts.items()
+        if str(hunt.get("owner_user_id") or "local").strip() == owner
+    }
 
 
 class AutomationJobRequest(BaseModel):
@@ -51,9 +83,10 @@ def _queue() -> HuntJobQueue:
     return queue
 
 
-def _email_store() -> EmailStore:
+def _email_store(subject: str | None = None) -> EmailStore:
     settings = get_settings()
-    store = EmailStore(settings.email_db_path)
+    owner = str(subject if subject is not None else current_subject()).strip() if satellite_managed() else ""
+    store = EmailStore(scoped_email_db_path(settings.email_db_path, owner))
     store.init_db()
     return store
 
@@ -126,10 +159,13 @@ def _email_sequence_preview(sequences: list[Any], limit: int = 10) -> list[dict[
     return preview
 
 
-def _campaign_preview(hunt_id: str) -> dict[str, Any]:
+def _campaign_preview(hunt_id: str, subject: str | None = None) -> dict[str, Any]:
     if not hunt_id:
         return {"campaign_count": 0, "sequence_count": 0, "target_emails": []}
-    store = _email_store()
+    # Automation job SSE serialization runs after the request middleware has
+    # restored the context variable.  Carry the authenticated subject through
+    # explicitly so campaign summaries never fall back to the shared DB.
+    store = _email_store(subject)
     campaigns = store.list_campaigns_for_hunt(hunt_id)
     sequences = []
     for item in campaigns:
@@ -152,7 +188,7 @@ def _campaign_preview(hunt_id: str) -> dict[str, Any]:
     }
 
 
-def _serialize_job(job: dict[str, Any]) -> dict[str, Any]:
+def _serialize_job(job: dict[str, Any], owner_subject: str | None = None) -> dict[str, Any]:
     payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
     template_seed = payload.get("template_seed") if isinstance(payload.get("template_seed"), dict) else {}
     hunt_id = str(job.get("last_hunt_id", "") or "")
@@ -167,7 +203,7 @@ def _serialize_job(job: dict[str, Any]) -> dict[str, Any]:
     email_sequences_count = int((hunt or {}).get("email_sequences_count", 0) or 0)
     if not email_sequences_count and isinstance(email_sequences, list):
         email_sequences_count = len(email_sequences)
-    campaign_preview = _campaign_preview(hunt_id)
+    campaign_preview = _campaign_preview(hunt_id, owner_subject)
     return {
         "job_id": str(job.get("id", "") or ""),
         "status": str(job.get("status", "") or ""),
@@ -207,7 +243,9 @@ def _serialize_job(job: dict[str, Any]) -> dict[str, Any]:
 @router.post("/jobs", dependencies=[Depends(require_api_access)])
 async def create_automation_job(request: AutomationJobRequest):
     queue = _queue()
-    job_id = queue.enqueue(request.model_dump(), now_iso=now_iso())
+    payload = request.model_dump()
+    payload["owner_user_id"] = current_subject().strip() or "local"
+    job_id = queue.enqueue(payload, now_iso=now_iso())
     logger.info(
         "[AutomationQueue] enqueued job=%s website=%s target_leads=%s email_craft=%s",
         job_id[:8],
@@ -222,7 +260,21 @@ async def create_automation_job(request: AutomationJobRequest):
 @router.get("/jobs", dependencies=[Depends(require_api_access)])
 async def list_automation_jobs(limit: int = Query(default=50, ge=1, le=200)):
     queue = _queue()
-    return [_serialize_job(job) for job in queue.list_jobs(limit=limit)]
+    managed_scope = satellite_managed()
+    if not managed_scope:
+        # Keep the local/operator path compatible with lightweight queue
+        # implementations used by development and tests.  More importantly,
+        # an unconfigured local instance must not accidentally apply a tenant
+        # scope to jobs created before SSO was enabled.
+        jobs = queue.list_jobs(limit=limit)
+    else:
+        visible_hunts = _visible_hunts()
+        jobs = queue.list_jobs(
+            limit=limit,
+            owner_user_id=current_subject().strip() or "local",
+            hunt_ids=set(visible_hunts) if visible_hunts is not None else None,
+        )
+    return [_serialize_job(job) for job in jobs]
 
 
 @router.get("/jobs/{job_id}", dependencies=[Depends(require_api_access)])
@@ -231,6 +283,7 @@ async def get_automation_job(job_id: str):
     job = queue.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Automation job not found")
+    _require_job_owner(job)
     return _serialize_job(job)
 
 
@@ -240,6 +293,8 @@ async def get_automation_job_by_hunt(hunt_id: str):
     job = queue.get_by_hunt_id(hunt_id)
     if not job:
         raise HTTPException(status_code=404, detail="Automation job not found for hunt")
+    _require_job_owner(job)
+    _require_hunt_owner(_hunts.get(hunt_id) or load_hunt(hunt_id) or {})
     return _serialize_job(job)
 
 
@@ -248,6 +303,7 @@ async def create_automation_job_from_hunt(hunt_id: str, request: AutomationJobCo
     hunt = load_hunt(hunt_id)
     if not hunt:
         raise HTTPException(status_code=404, detail="Hunt not found")
+    _require_hunt_owner(hunt)
 
     payload = hunt.get("payload") if isinstance(hunt.get("payload"), dict) else {}
     if not payload:
@@ -267,6 +323,7 @@ async def create_automation_job_from_hunt(hunt_id: str, request: AutomationJobCo
         "email_template_examples": list(request.email_template_examples),
         "email_template_notes": str(request.email_template_notes or ""),
     }
+    next_payload["owner_user_id"] = current_subject().strip() or "local"
 
     queue = _queue()
     job_id = queue.enqueue(next_payload, now_iso=now_iso())
@@ -280,9 +337,11 @@ async def cancel_automation_job(job_id: str):
     job = queue.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Automation job not found")
+    _require_job_owner(job)
     queue.cancel(job_id, updated_at=now_iso())
     hunt_id = str(job.get("last_hunt_id", "") or "")
     if hunt_id:
+        _require_hunt_owner(_hunts.get(hunt_id) or load_hunt(hunt_id) or {})
         request_hunt_cancel(hunt_id, reason="Cancelled by user via automation job")
     logger.info("[AutomationQueue] cancelled job=%s", job_id[:8])
     updated = queue.get(job_id)
@@ -295,6 +354,7 @@ async def retry_automation_job(job_id: str):
     job = queue.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Automation job not found")
+    _require_job_owner(job)
     queue.retry_now(job_id, updated_at=now_iso())
     logger.info("[AutomationQueue] retried job=%s", job_id[:8])
     updated = queue.get(job_id)
@@ -303,18 +363,31 @@ async def retry_automation_job(job_id: str):
 
 @router.get("/status", dependencies=[Depends(require_api_access)])
 async def get_automation_status():
-    return collect_automation_status(hunts=_hunts)
+    kwargs = {"hunts": _visible_hunts()}
+    if satellite_managed():
+        kwargs["owner_user_id"] = current_subject().strip() or "local"
+    return collect_automation_status(**kwargs)
 
 
 @router.get("/metrics", dependencies=[Depends(require_api_access)])
 async def get_automation_metrics(hours: int = Query(default=24, ge=1, le=168)):
-    return collect_automation_metrics(hours=hours, hunts=_hunts)
+    kwargs = {"hours": hours, "hunts": _visible_hunts()}
+    if satellite_managed():
+        kwargs["owner_user_id"] = current_subject().strip() or "local"
+    return collect_automation_metrics(**kwargs)
 
 
 @router.get("/health", dependencies=[Depends(require_api_access)])
 async def get_automation_health():
-    status = collect_automation_status(hunts=_hunts)
-    metrics = collect_automation_metrics(hours=2, hunts=_hunts)
+    visible_hunts = _visible_hunts()
+    kwargs = {"hunts": visible_hunts}
+    metrics_kwargs = {"hours": 2, "hunts": visible_hunts}
+    if satellite_managed():
+        owner_user_id = current_subject().strip() or "local"
+        kwargs["owner_user_id"] = owner_user_id
+        metrics_kwargs["owner_user_id"] = owner_user_id
+    status = collect_automation_status(**kwargs)
+    metrics = collect_automation_metrics(**metrics_kwargs)
     return {
         "status": "ok",
         "backlog_hunt_jobs": status["hunt_jobs"]["queued"],

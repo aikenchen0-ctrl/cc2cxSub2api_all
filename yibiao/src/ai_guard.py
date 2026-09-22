@@ -1,6 +1,20 @@
 import json
 import logging
 
+
+class SatelliteConfigurationError(RuntimeError):
+    """The managed relay cannot be called with the current configuration."""
+
+
+def _has_configured_secret(value):
+    normalized = str(value or '').strip().lower()
+    if not normalized:
+        return False
+    return not (
+        normalized in {'changeme', 'change-me', 'replace-me', 'your-key', 'your_api_key', 'your-api-key', 'xxx', 'sk-xxx'}
+        or normalized.startswith(('your_', 'your-', 'replace-with-', 'example-', 'sk-super-'))
+    )
+
 class AIGuard:
     def __init__(self, config=None, log_callback=None):
         self.logger = logging.getLogger("AIGuard")
@@ -18,9 +32,32 @@ class AIGuard:
             self.enabled = False
             return
             
-        self.api_key = config.get('api_key', '')
-        self.base_url = config.get('base_url', 'https://cc.honoursoft.cn/').rstrip('/')
-        self.model = config.get('model', 'claude-sonnet-4-5-20250929-thinking')
+        # Managed satellite calls always terminate at Sub2API.  Never accept a
+        # browser-supplied/user-configured key as a fallback in this mode.
+        import os
+        # Match the server's fail-closed mode detection.  A placeholder in an
+        # example env file must never re-enable the old local-key fallback.
+        self.managed = bool(
+            str(os.getenv('SUB2API_APP_CREDENTIAL') or '').strip()
+            or str(os.getenv('SUB2API_SSO_SECRET') or '').strip()
+        )
+        if self.managed:
+            relay = (os.getenv('SUB2API_RELAY_BASE_URL') or os.getenv('LINK') or '').strip()
+            if relay and '://' not in relay:
+                relay = 'http://' + relay
+            relay = relay.rstrip('/')
+            if relay and not relay.endswith('/v1'):
+                relay += '/v1'
+            self.api_key = os.getenv('SUB2API_APP_CREDENTIAL', '').strip()
+            # A managed satellite must fail closed when the relay address is
+            # missing.  Falling back to loopback can accidentally call an
+            # unrelated local service and violates the shared relay contract.
+            self.base_url = f'{relay}/chat/completions' if relay else ''
+            self.model = os.getenv('SUB2API_RELAY_MODEL', 'gpt-5.5').strip() or 'gpt-5.5'
+        else:
+            self.api_key = config.get('api_key', '')
+            self.base_url = config.get('base_url', 'https://cc.honoursoft.cn/').rstrip('/')
+            self.model = config.get('model', 'gpt-5.5')
         self.enabled = config.get('enable', False)
         self.custom_prompt = config.get('prompt', '')
 
@@ -32,6 +69,14 @@ class AIGuard:
         if not self.enabled:
             return True, "AI未启用"
 
+        if self.managed:
+            from auth_sso import current_subject
+            if (not _has_configured_secret(self.api_key) or not self.base_url or not current_subject().strip()):
+                # This is an integration/configuration failure, not a model
+                # relevance failure.  Never convert it into the historical
+                # "keep the bid" fallback, otherwise a managed request would
+                # silently continue without the required relay identity.
+                raise SatelliteConfigurationError('Sub2API satellite credential, relay URL, or session identity is not configured')
         if not self.api_key:
             return True, "AI未配置Key"
 
@@ -101,10 +146,10 @@ class AIGuard:
             import requests
             import time
             
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
-            }
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+            if self.managed:
+                from auth_sso import satellite_headers
+                headers.update(satellite_headers(required=True))
             
             max_retries = 3
             retry_delay = 2  # 秒

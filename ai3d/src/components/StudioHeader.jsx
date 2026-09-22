@@ -3,8 +3,8 @@ import { t } from '../i18n.js'
 
 const HEADER_TEXT = {
   en: {
-    title: 'cc2cx',
-    subtitle: 'AI3D生成',
+    title: 'Image to 3D',
+    subtitle: 'AI 3D Studio',
     Gallery: 'Gallery',
     Library: 'Library',
     Notebooks: 'Notebooks',
@@ -13,8 +13,8 @@ const HEADER_TEXT = {
     Demo: 'Demo',
   },
   zh: {
-    title: 'cc2cx',
-    subtitle: 'AI3D生成',
+    title: '图生3D',
+    subtitle: 'AI 3D 工作台',
     Gallery: '作品集',
     Library: '模型库',
     Notebooks: '笔记',
@@ -37,7 +37,7 @@ export function StudioHeader({ activePanel, setActivePanel, demoMode, language =
     <header className="studio-header">
       <div className="studio-brand">
         <div className="brand-mark">
-          <Box size={30} />
+          <img src="/project-icon.jpg" alt={text.title} />
         </div>
         <div>
           <strong>{text.title}</strong>

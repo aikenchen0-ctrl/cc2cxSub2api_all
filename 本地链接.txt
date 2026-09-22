@@ -9,6 +9,9 @@ livart 域名：livart.cc2.cx
 ppt 域名：ppt.cc2.cx
 qrcode 域名：qrcode.cc2.cx
 screen2code 域名：screen2code.cc2.cx
+yibiao 域名：yibiao.cc2.cx
+ai3d 域名：ai3d.cc2.cx
+aihuoke 域名：aihuoke.cc2.cx
 
 环境变量名称：link（对于各个项目，只需要配置link即可）
 
@@ -41,6 +44,9 @@ livart_link=http://localhost:8080
 ppt_link=http://localhost:8341
 qrcode_link=http://localhost:5221
 screen2code_link=http://localhost:5173
+yibiao_link=http://localhost:8081
+ai3d_link=http://localhost:5174
+aihuoke_link=http://localhost:3001
 
 线上环境只需替换为：
 
@@ -52,5 +58,8 @@ livart_link=https://livart.cc2.cx
 ppt_link=https://ppt.cc2.cx
 qrcode_link=https://qrcode.cc2.cx
 screen2code_link=https://screen2code.cc2.cx
+yibiao_link=https://yibiao.cc2.cx
+ai3d_link=https://ai3d.cc2.cx
+aihuoke_link=https://aihuoke.cc2.cx
 
 

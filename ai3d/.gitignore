@@ -12,6 +12,7 @@ node_modules
 dist
 dist-ssr
 .generated-models
+.auth
 test-results
 playwright-report
 *.local

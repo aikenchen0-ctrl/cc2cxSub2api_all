@@ -74,6 +74,16 @@ describe('AppSidebar SuperKey quick apps', () => {
   })
 })
 
+describe('AppSidebar satellite quick app icons', () => {
+  it('uses semantic vector icons instead of website logo assets', () => {
+    expect(componentSource).toContain('<Icon :name="item.icon"')
+    expect(componentSource).toContain("icon: 'grid'")
+    expect(componentSource).toContain("icon: 'qrCode'")
+    expect(componentSource).toContain("icon: 'cube'")
+    expect(componentSource).not.toMatch(/icon:\s*['\"]\/(?:logo|yibiao-icon|ai3d-icon|aihuoke-icon)\.jpg['\"]/)
+  })
+})
+
 describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
   it('lists 智能剧场 and 超级改图 as ju-style SSO quick apps without an API key in the URL', () => {
     expect(zhCommon.nav.smartShortDrama).toBe('智能剧场')

@@ -1611,7 +1611,14 @@ func (h *AuthHandler) transitionPendingOAuthAccountToChoiceState(
 	return session, nil
 }
 
-func writeOAuthTokenPairResponse(c *gin.Context, tokenPair *service.TokenPair) {
+func writeOAuthTokenPairResponse(c *gin.Context, authService *service.AuthService, tokenPair *service.TokenPair) {
+	if tokenPair != nil {
+		// OAuth completion is also a browser login. Keep the access JWT in the
+		// JSON response for existing API clients, but issue the same opaque
+		// HttpOnly session used by password/passkey login so a later top-level
+		// satellite navigation can authenticate without an Authorization header.
+		setBrowserSessionCookie(c, authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokenPair.AccessToken,
 		"refresh_token": tokenPair.RefreshToken,
@@ -1695,7 +1702,7 @@ func (h *AuthHandler) bindPendingOAuthLogin(c *gin.Context, provider string) {
 	}
 
 	clearCookies()
-	writeOAuthTokenPairResponse(c, tokenPair)
+	writeOAuthTokenPairResponse(c, h.authService, tokenPair)
 }
 
 func respondPendingOAuthBindingApplyError(c *gin.Context, err error) {
@@ -1890,7 +1897,7 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 	// createPendingOAuthAccount = 注册新账户，需要把钉钉昵称同步到 users.username 作为初始值
 	h.maybeSyncDingTalkAfterRegistration(c.Request.Context(), session, user.ID)
 	clearCookies()
-	writeOAuthTokenPairResponse(c, tokenPair)
+	writeOAuthTokenPairResponse(c, h.authService, tokenPair)
 }
 
 // ExchangePendingOAuthCompletion redeems a pending OAuth browser session into a frontend-safe payload.
@@ -2059,6 +2066,7 @@ func (h *AuthHandler) ExchangePendingOAuthCompletion(c *gin.Context) {
 		payload["refresh_token"] = tokenPair.RefreshToken
 		payload["expires_in"] = tokenPair.ExpiresIn
 		payload["token_type"] = "Bearer"
+		setBrowserSessionCookie(c, h.authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	}
 
 	clearCookies()

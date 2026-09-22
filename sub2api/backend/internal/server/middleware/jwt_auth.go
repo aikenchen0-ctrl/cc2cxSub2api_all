@@ -10,6 +10,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// BrowserSessionCookieName is an opaque HttpOnly session for browser
+// navigations such as satellite SSO. The access JWT is kept server-side.
+const BrowserSessionCookieName = "sub2api_session"
+
 // NewJWTAuthMiddleware 创建 JWT 认证中间件
 func NewJWTAuthMiddleware(
 	authService *service.AuthService,
@@ -37,23 +41,32 @@ func jwtAuth(
 	auditService *service.AuditLogService,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从Authorization header中提取token
+		// 从Authorization header中提取token；浏览器顶层导航没有机会设置
+		// Authorization，因此允许由登录响应设置的 opaque HttpOnly Cookie
+		// 作为同等凭据；Cookie 本身不是 JWT。
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			AbortWithError(c, 401, "UNAUTHORIZED", "Authorization header is required")
-			return
+		tokenString := ""
+		if authHeader != "" {
+			// 验证Bearer scheme
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				AbortWithError(c, 401, "INVALID_AUTH_HEADER", "Authorization header format must be 'Bearer {token}'")
+				return
+			}
+			tokenString = strings.TrimSpace(parts[1])
+			if tokenString == "" {
+				AbortWithError(c, 401, "EMPTY_TOKEN", "Token cannot be empty")
+				return
+			}
+		} else if cookie, err := c.Cookie(BrowserSessionCookieName); err == nil {
+			var resolveErr error
+			tokenString, resolveErr = authService.ResolveBrowserSession(c.Request.Context(), cookie)
+			if resolveErr != nil {
+				tokenString = ""
+			}
 		}
-
-		// 验证Bearer scheme
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			AbortWithError(c, 401, "INVALID_AUTH_HEADER", "Authorization header format must be 'Bearer {token}'")
-			return
-		}
-
-		tokenString := strings.TrimSpace(parts[1])
 		if tokenString == "" {
-			AbortWithError(c, 401, "EMPTY_TOKEN", "Token cannot be empty")
+			AbortWithError(c, 401, "UNAUTHORIZED", "Authorization header is required")
 			return
 		}
 

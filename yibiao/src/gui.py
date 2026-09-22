@@ -377,7 +377,7 @@ class EmailConfigDialog(tk.Toplevel):
             from database.storage import BidInfo
             from datetime import datetime
             test_bid = BidInfo(
-                title="测试标题 - 招标监控系统",
+                title="测试标题 - 自动招标",
                 url="https://example.com/test",
                 source="测试来源",
                 publish_date=datetime.now().strftime("%Y-%m-%d"),
@@ -1298,7 +1298,7 @@ class MonitorGUI:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("招标信息监控系统")
+        self.root.title("自动招标")
         self.root.geometry("720x920")
         self.root.resizable(True, True)
         
@@ -1469,7 +1469,7 @@ class MonitorGUI:
         self.tray = None
         if TRAY_AVAILABLE:
             self.tray = SystemTray(
-                app_name="招标监控",
+                app_name="自动招标",
                 on_show=self._show_window,
                 on_quit=self._quit_app
             )
@@ -1699,7 +1699,7 @@ class MonitorGUI:
         title_frame.place(relx=0.5, rely=0.5, anchor="center")
         
         # 主标题 - 透明背景
-        title_label = tk.Label(title_frame, text="📊 招标监控系统", 
+        title_label = tk.Label(title_frame, text="🔍 自动招标",
                                font=("Microsoft YaHei", 22, "bold"), 
                                fg="white")
         title_label.pack()
@@ -2527,7 +2527,7 @@ class MonitorGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Logo/标题
-        title_label = ttk.Label(main_frame, text="📊 招标监控系统", 
+        title_label = ttk.Label(main_frame, text="🔍 自动招标",
                                 font=("Microsoft YaHei", 18, "bold"))
         title_label.pack(pady=(0, 5))
         
@@ -2547,7 +2547,7 @@ class MonitorGUI:
         ttk.Label(project_frame, text="许可证: MIT License", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
         
         # 版权信息
-        copyright_label = ttk.Label(main_frame, text="© 2025 BidMonitor 开源项目", 
+        copyright_label = ttk.Label(main_frame, text="© 2025 自动招标 开源项目",
                                     font=("Microsoft YaHei", 9), foreground="#888")
         copyright_label.pack(pady=(5, 0))
         
@@ -2830,7 +2830,7 @@ class MonitorGUI:
             return
         
         self.log_window = tk.Toplevel(self.root)
-        self.log_window.title("📋 实时日志 - BidMonitor")
+        self.log_window.title("📋 实时日志 - 自动招标")
         self.log_window.geometry("900x600")
         self.log_window.configure(bg=self.colors['bg'])
         

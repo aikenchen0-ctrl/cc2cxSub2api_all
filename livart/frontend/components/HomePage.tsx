@@ -28,8 +28,8 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onEnterCanvas }) => {
         <div className="flex items-center gap-4">
           <LivartLogo size={44} className="shrink-0 shadow-lg transition-transform hover:scale-105" />
           <div className="flex flex-col -gap-1">
-            <h1 className="text-2xl font-black tracking-tighter text-gray-900 leading-none">livart</h1>
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">Artisan AI Lab</span>
+            <h1 className="text-2xl font-black tracking-tighter text-gray-900 leading-none">超级改图</h1>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">AI 图像创作工作台</span>
           </div>
         </div>
         
@@ -55,7 +55,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onEnterCanvas }) => {
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">AI 时代的创意重塑</span>
           </div>
           <h2 className="text-6xl font-black text-gray-900 tracking-tight">
-            你好，<span className="text-indigo-600">livart</span>
+            你好，<span className="text-indigo-600">超级改图</span>
           </h2>
           <p className="text-lg text-gray-400 font-medium max-w-lg mx-auto leading-relaxed">
             在一个无限的创意空间中，捕捉灵感并将其转化为现实。
@@ -73,7 +73,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, onEnterCanvas }) => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
-                  activeMode === 'chat' ? "与 livart 对话，探索创意边界..." :
+                  activeMode === 'chat' ? "与超级改图对话，探索创意边界..." :
                   activeMode === 'image' ? "描述您想要创造的画面..." :
                   "构思一段惊艳的视觉序列..."
                 }

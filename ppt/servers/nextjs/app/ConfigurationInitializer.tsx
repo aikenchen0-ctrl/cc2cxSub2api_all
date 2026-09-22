@@ -25,7 +25,7 @@ function ConfigurationLoadingScreen() {
       <div className="flex flex-col items-center gap-7 whitespace-nowrap text-center">
         <div aria-hidden="true" className="configuration-loader" />
         <p className="font-syne text-[18px] font-normal leading-normal tracking-[-0.54px] text-[#191919]">
-          Loading Presenton...
+          Loading 永恒PPT...
         </p>
       </div>
 
@@ -65,7 +65,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
   // Fetch user config state
   useEffect(() => {
     fetchUserConfigState();
-    // Configuration bootstrap runs once. Presenton is revalidated separately
+    // Configuration bootstrap runs once. The cloud provider is revalidated separately
     // below whenever the user navigates to another application route.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -116,7 +116,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         );
         if (!statusResponse.ok) {
           await assertBackendReachable();
-          throw new Error(`Presenton status returned ${statusResponse.status}`);
+          throw new Error(`Cloud provider status returned ${statusResponse.status}`);
         }
         const status = await statusResponse.json() as { linked?: boolean };
 
@@ -124,7 +124,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           dispatch(setLLMConfig({ ...config, LLM: '' }));
           notify.warning(
             "Provider setup required",
-            "Presenton Cloud is disconnected. Choose a text provider to continue.",
+            "永恒PPT 云端连接已断开，请选择文本提供商后继续。",
             { id: "provider-setup-required" }
           );
           router.replace('/');
@@ -139,7 +139,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           );
         } else if (!cancelled && selectedProvider === 'presenton') {
           notify.error(
-            "Could not verify Presenton Cloud",
+            "无法验证永恒PPT云端连接",
             "Your current page has been kept open. Try again after checking the backend service.",
             { id: "presenton-status-unavailable" }
           );
@@ -255,15 +255,15 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           );
           if (!response.ok) {
             await assertBackendReachable();
-            throw new Error(`Presenton status returned ${response.status}`);
+            throw new Error(`Cloud provider status returned ${response.status}`);
           }
           const status = await response.json();
           hasPresentonCloud = Boolean(status.linked);
         } catch (error) {
-          console.error('Failed to fetch Presenton cloud status:', error);
+          console.error('Failed to fetch cloud provider status:', error);
           const backendUnavailable = isBackendConnectionError(error);
           notify.error(
-            backendUnavailable ? "Cannot reach backend" : "Could not verify Presenton Cloud",
+            backendUnavailable ? "Cannot reach backend" : "无法验证永恒PPT云端连接",
             backendUnavailable
               ? error.message
               : "Your current page has been kept open. Refresh after checking the backend service.",

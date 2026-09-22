@@ -210,6 +210,10 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 		return
 	}
 
+	// This callback is a browser login too.  Keep the token fragment for the
+	// existing frontend contract, while also establishing the opaque HttpOnly
+	// session used by top-level satellite navigations.
+	setBrowserSessionCookie(c, h.authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	fragment := url.Values{}
 	fragment.Set("access_token", tokenPair.AccessToken)
 	fragment.Set("refresh_token", tokenPair.RefreshToken)
@@ -441,7 +445,7 @@ func (h *AuthHandler) completeEmailOAuthRegistration(c *gin.Context, provider st
 	h.authService.ApplyOAuthSignupPromoCode(c.Request.Context(), user.ID, pendingOAuthPromoCode(session))
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	clearCookies()
-	writeOAuthTokenPairResponse(c, tokenPair)
+	writeOAuthTokenPairResponse(c, h.authService, tokenPair)
 }
 
 func (h *AuthHandler) getEmailOAuthConfig(ctx context.Context, provider string) (config.EmailOAuthProviderConfig, error) {

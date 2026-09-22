@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -447,7 +448,27 @@ class EmailStore:
                 (updated_at, sequence_id),
             )
 
-    def count_messages_for_campaign(self, campaign_id: str, *, status: str | None = None) -> int:
+    @staticmethod
+    def _hunt_scope_clause(
+        alias: str,
+        hunt_ids: Collection[str] | None,
+    ) -> tuple[str, list[str]]:
+        """Build an optional hunt ownership predicate for aggregate queries."""
+        if hunt_ids is None:
+            return "", []
+        ids = [str(hunt_id).strip() for hunt_id in hunt_ids if str(hunt_id).strip()]
+        if not ids:
+            return " AND 1 = 0", []
+        placeholders = ", ".join("?" for _ in ids)
+        return f" AND {alias}.hunt_id IN ({placeholders})", ids
+
+    def count_messages_for_campaign(
+        self,
+        campaign_id: str,
+        *,
+        status: str | None = None,
+        hunt_ids: Collection[str] | None = None,
+    ) -> int:
         query = (
             "SELECT COUNT(*) FROM email_messages m "
             "JOIN lead_email_sequences s ON s.id = m.sequence_id "
@@ -457,47 +478,73 @@ class EmailStore:
         if status:
             query += " AND m.status = ?"
             params.append(status)
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
+        query += scope_clause
+        params.extend(scope_params)
         with self._connect() as conn:
             row = conn.execute(query, params).fetchone()
         return int(row[0]) if row else 0
 
-    def count_messages_by_status(self, status: str) -> int:
+    def count_messages_by_status(self, status: str, *, hunt_ids: Collection[str] | None = None) -> int:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM email_messages WHERE status = ?",
-                (status,),
+                "SELECT COUNT(*) FROM email_messages m "
+                "JOIN lead_email_sequences s ON s.id = m.sequence_id "
+                "WHERE m.status = ?" + scope_clause,
+                [status, *scope_params],
             ).fetchone()
         return int(row[0]) if row else 0
 
-    def count_sequences_by_status(self, *statuses: str) -> int:
+    def count_sequences_by_status(
+        self,
+        *statuses: str,
+        hunt_ids: Collection[str] | None = None,
+    ) -> int:
         if not statuses:
             return 0
         placeholders = ", ".join("?" for _ in statuses)
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             row = conn.execute(
-                f"SELECT COUNT(*) FROM lead_email_sequences WHERE status IN ({placeholders})",
-                list(statuses),
+                f"SELECT COUNT(*) FROM lead_email_sequences s WHERE s.status IN ({placeholders})" + scope_clause,
+                [*statuses, *scope_params],
             ).fetchone()
         return int(row[0]) if row else 0
 
-    def count_campaigns_by_status(self, *statuses: str) -> int:
+    def count_campaigns_by_status(
+        self,
+        *statuses: str,
+        hunt_ids: Collection[str] | None = None,
+    ) -> int:
         if not statuses:
             return 0
         placeholders = ", ".join("?" for _ in statuses)
+        scope_clause, scope_params = self._hunt_scope_clause("c", hunt_ids)
         with self._connect() as conn:
             row = conn.execute(
-                f"SELECT COUNT(*) FROM email_campaigns WHERE status IN ({placeholders})",
-                list(statuses),
+                f"SELECT COUNT(*) FROM email_campaigns c WHERE c.status IN ({placeholders})" + scope_clause,
+                [*statuses, *scope_params],
             ).fetchone()
         return int(row[0]) if row else 0
 
-    def count_messages_since(self, status: str, *, since_iso: str, time_field: str = "updated_at") -> int:
+    def count_messages_since(
+        self,
+        status: str,
+        *,
+        since_iso: str,
+        time_field: str = "updated_at",
+        hunt_ids: Collection[str] | None = None,
+    ) -> int:
         if time_field not in {"created_at", "updated_at", "scheduled_at", "sent_at"}:
             raise ValueError("Unsupported time field")
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             row = conn.execute(
-                f"SELECT COUNT(*) FROM email_messages WHERE status = ? AND {time_field} >= ?",
-                (status, since_iso),
+                f"SELECT COUNT(*) FROM email_messages m "
+                f"JOIN lead_email_sequences s ON s.id = m.sequence_id "
+                f"WHERE m.status = ? AND m.{time_field} >= ?" + scope_clause,
+                [status, since_iso, *scope_params],
             ).fetchone()
         return int(row[0]) if row else 0
 
@@ -536,15 +583,25 @@ class EmailStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def count_reply_events_since(self, since_iso: str) -> int:
+    def count_reply_events_since(self, since_iso: str, *, hunt_ids: Collection[str] | None = None) -> int:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM email_reply_events WHERE received_at >= ?",
-                (since_iso,),
+                "SELECT COUNT(*) FROM email_reply_events r "
+                "JOIN lead_email_sequences s ON s.id = r.sequence_id "
+                "WHERE r.received_at >= ?" + scope_clause,
+                [since_iso, *scope_params],
             ).fetchone()
         return int(row[0]) if row else 0
 
-    def list_recent_message_failures(self, *, since_iso: str, limit: int = 10) -> list[dict[str, Any]]:
+    def list_recent_message_failures(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 10,
+        hunt_ids: Collection[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -552,14 +609,22 @@ class EmailStore:
                 FROM email_messages m
                 JOIN lead_email_sequences s ON s.id = m.sequence_id
                 WHERE m.status = 'failed' AND m.updated_at >= ?
+                """ + scope_clause + """
                 ORDER BY m.updated_at DESC
                 LIMIT ?
                 """,
-                (since_iso, limit),
+                [since_iso, *scope_params, limit],
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_sent_messages_since(self, *, since_iso: str, limit: int = 100) -> list[dict[str, Any]]:
+    def list_sent_messages_since(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 100,
+        hunt_ids: Collection[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -574,14 +639,22 @@ class EmailStore:
                 FROM email_messages m
                 JOIN lead_email_sequences s ON s.id = m.sequence_id
                 WHERE m.status = 'sent' AND m.sent_at >= ?
+                """ + scope_clause + """
                 ORDER BY m.sent_at ASC, m.id ASC
                 LIMIT ?
                 """,
-                (since_iso, limit),
+                [since_iso, *scope_params, limit],
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_reply_events_since(self, *, since_iso: str, limit: int = 100) -> list[dict[str, Any]]:
+    def list_reply_events_since(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 100,
+        hunt_ids: Collection[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -597,25 +670,35 @@ class EmailStore:
                 FROM email_reply_events r
                 JOIN lead_email_sequences s ON s.id = r.sequence_id
                 WHERE r.received_at >= ?
+                """ + scope_clause + """
                 ORDER BY r.received_at DESC, r.id DESC
                 LIMIT ?
                 """,
-                (since_iso, limit),
+                [since_iso, *scope_params, limit],
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_message_failure_reasons(self, *, since_iso: str, limit: int = 5) -> list[dict[str, Any]]:
+    def list_message_failure_reasons(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 5,
+        hunt_ids: Collection[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        scope_clause, scope_params = self._hunt_scope_clause("s", hunt_ids)
         with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT failure_reason, COUNT(*) AS count
-                FROM email_messages
-                WHERE status = 'failed' AND updated_at >= ?
+                FROM email_messages m
+                JOIN lead_email_sequences s ON s.id = m.sequence_id
+                WHERE m.status = 'failed' AND m.updated_at >= ?
+                """ + scope_clause + """
                 GROUP BY failure_reason
                 ORDER BY count DESC, failure_reason ASC
                 LIMIT ?
                 """,
-                (since_iso, limit),
+                [since_iso, *scope_params, limit],
             ).fetchall()
         return [dict(row) for row in rows]
 

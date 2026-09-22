@@ -1,6 +1,8 @@
 // Monochrome line icons (lucide-style, 24×24 stroke) for the editor
 // toolbar/track-header glyphs — replaces emoji for a consistent editor chrome.
 
+import { useT } from '../i18n/locale';
+
 export type IconName =
   | 'plus' | 'cursor' | 'trim' | 'rateStretch' | 'blade' | 'scissors' | 'magnet' | 'mic' | 'chevronDown' | 'check' | 'brush' | 'cloud' | 'insert'
   | 'play' | 'pause' | 'text' | 'copy' | 'trash' | 'bookmark' | 'prev' | 'next'
@@ -134,20 +136,22 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
 /** Brand logo: dialogue bubble + play button (conversational video cutting). Bubble = accent color, play button = onAccent
  * (Skin Discipline Guaranteed ≥4.5 vs.). Use this when replacing sparkles before wordmark. */
 export function BrandMark({ size = 16 }: { size?: number }) {
+  const t = useT();
   return (
-    <img src="/project-icon.jpg" alt="AI剪辑" width={size} height={size} style={{ display: 'block', objectFit: 'cover', borderRadius: Math.max(2, Math.round(size * 0.2)) }} />
+    <img src="/project-icon.jpg" alt={t('AI剪辑')} width={size} height={size} style={{ display: 'block', objectFit: 'cover', borderRadius: Math.max(2, Math.round(size * 0.2)) }} />
   );
 }
 
 /** AI剪辑 word mark. */
 export function OpenChatCutWordmark({ width = 126 }: { width?: number }) {
+  const t = useT();
   return (
     <span
-      aria-label="AI剪辑"
+      aria-label={t('AI剪辑')}
       role="img"
       style={{ display: 'block', flexShrink: 0, width, fontFamily: 'Inter, Geist, system-ui, sans-serif', fontSize: Math.max(16, width / 5.2), fontWeight: 720, letterSpacing: '-0.04em', lineHeight: 1 }}
     >
-      AI剪辑
+      {t('AI剪辑')}
     </span>
   );
 }

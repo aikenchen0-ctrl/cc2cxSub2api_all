@@ -17,6 +17,7 @@ from emailing.body_format import format_plaintext_email_body
 from emailing.guards import screen_recipient
 from emailing.store import EmailStore
 from emailing.suppression import unsubscribe_headers, unsubscribe_url, with_unsubscribe_footer
+from auth_sso import scoped_email_db_path
 
 
 def _send_via_smtp_sync(
@@ -88,6 +89,7 @@ async def send_email(
     body_text: str,
     reply_to: str | None = None,
     thread_key: str | None = None,
+    owner_subject: str | None = None,
 ) -> dict[str, Any]:
     """Send one email via the configured provider."""
     if not to_email.strip():
@@ -103,7 +105,12 @@ async def send_email(
 
     settings = get_settings()
     sender_email = str(account.get("from_email", "") or "")
-    store = EmailStore(str(getattr(settings, "email_db_path", "") or "email_automation.db"))
+    store = EmailStore(
+        scoped_email_db_path(
+            str(getattr(settings, "email_db_path", "") or "email_automation.db"),
+            owner_subject,
+        )
+    )
     store.init_db()
     recipient_verdict = screen_recipient(
         to_email,

@@ -135,6 +135,7 @@ var ProviderSet = wire.NewSet(
 	NewProxyLatencyCache,
 	NewTotpCache,
 	NewRefreshTokenCache,
+	NewBrowserSessionStore,
 	NewErrorPassthroughCache,
 	NewTLSFingerprintProfileCache,
 	NewChannelCache,

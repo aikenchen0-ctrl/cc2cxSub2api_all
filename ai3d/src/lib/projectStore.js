@@ -1,5 +1,5 @@
 import { PROJECT_FALLBACK_STORAGE_KEY } from '../config/appConfig.js'
-import { loadStoredValue, storeValue } from './storage.js'
+import { getStorageNamespace, loadStoredValue, storeValue } from './storage.js'
 
 const DB_NAME = '3dcellforge-projects'
 const DB_VERSION = 1
@@ -68,7 +68,7 @@ function canUseIndexedDb() {
 
 function openProjectDb() {
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION)
+    const request = window.indexedDB.open(`${DB_NAME}:${getStorageNamespace()}`, DB_VERSION)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {

@@ -1,0 +1,35 @@
+services:
+  yibiao:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yibiao:local
+    container_name: yibiao
+    restart: unless-stopped
+    environment:
+      LINK: ${LINK:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:?SUB2API_APP_CREDENTIAL is required}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-5.5}
+      YIBIAO_SSO_CALLBACK_URL: ${YIBIAO_SSO_CALLBACK_URL:-http://localhost:8081/api/auth/sso/callback}
+      YIBIAO_AUTH_DB: ${YIBIAO_AUTH_DB:-/app/server/data/auth.db}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:8080","http://localhost:8081"]}'
+    ports:
+      - "${YIBIAO_PORT:-8081}:8080"
+    volumes:
+      - yibiao_data:/app/server/data
+    networks:
+      - yibiao_default
+      - sub2api-network
+
+volumes:
+  yibiao_data:
+    name: yibiao_data
+
+networks:
+  yibiao_default:
+    driver: bridge
+  sub2api-network:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}

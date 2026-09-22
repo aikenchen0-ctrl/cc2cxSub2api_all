@@ -84,39 +84,151 @@ class HuntJobQueue:
             )
         return job_id
 
-    def count_by_status(self, *statuses: str) -> int:
+    @staticmethod
+    def _decode_payload(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        raw = row.get("payload_json") if isinstance(row, dict) else row["payload_json"]
+        try:
+            payload = json.loads(str(raw or "{}"))
+        except json.JSONDecodeError:
+            payload = {}
+        return payload if isinstance(payload, dict) else {}
+
+    @classmethod
+    def _matches_scope(
+        cls,
+        row: sqlite3.Row,
+        *,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> bool:
+        """Return whether a job belongs to the requested metrics scope.
+
+        Queue jobs carry the owner in their JSON payload.  Older jobs may not
+        have that field, so a linked ``last_hunt_id`` is also accepted when a
+        visible hunt set is supplied.  With no scope arguments all jobs are
+        visible, preserving local/operator behavior.
+        """
+        if owner_user_id is None and hunt_ids is None:
+            return True
+        payload = cls._decode_payload(row)
+        raw_owner = payload.get("owner_user_id")
+        owner = str(raw_owner or "").strip()
+        if owner_user_id is not None:
+            if owner and owner == owner_user_id:
+                return True
+            # A legacy job without an owner can still be scoped safely by its
+            # linked hunt ID.  Do not let a job explicitly owned by another
+            # subject pass through this fallback.
+            if owner and owner != owner_user_id:
+                return False
+        if hunt_ids is not None:
+            hunt_id = str(row["last_hunt_id"] or "").strip()
+            if hunt_id and hunt_id in hunt_ids:
+                return True
+        return False
+
+    def _scoped_rows(
+        self,
+        query: str,
+        params: tuple[Any, ...] = (),
+        *,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> list[sqlite3.Row]:
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            row
+            for row in rows
+            if self._matches_scope(row, owner_user_id=owner_user_id, hunt_ids=hunt_ids)
+        ]
+
+    def count_by_status(
+        self,
+        *statuses: str,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> int:
         if not statuses:
             return 0
+        if owner_user_id is None and hunt_ids is None:
+            placeholders = ", ".join("?" for _ in statuses)
+            with self._connect() as conn:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM hunt_jobs WHERE status IN ({placeholders})",
+                    list(statuses),
+                ).fetchone()
+            return int(row[0]) if row else 0
         placeholders = ", ".join("?" for _ in statuses)
-        with self._connect() as conn:
-            row = conn.execute(
-                f"SELECT COUNT(*) FROM hunt_jobs WHERE status IN ({placeholders})",
-                list(statuses),
-            ).fetchone()
-        return int(row[0]) if row else 0
+        rows = self._scoped_rows(
+            f"SELECT * FROM hunt_jobs WHERE status IN ({placeholders})",
+            tuple(statuses),
+            owner_user_id=owner_user_id,
+            hunt_ids=hunt_ids,
+        )
+        return len(rows)
 
-    def count_finished_since(self, status: str, since_iso: str) -> int:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM hunt_jobs WHERE status = ? AND finished_at >= ?",
-                (status, since_iso),
-            ).fetchone()
-        return int(row[0]) if row else 0
+    def count_finished_since(
+        self,
+        status: str,
+        since_iso: str,
+        *,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> int:
+        if owner_user_id is None and hunt_ids is None:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM hunt_jobs WHERE status = ? AND finished_at >= ?",
+                    (status, since_iso),
+                ).fetchone()
+            return int(row[0]) if row else 0
+        rows = self._scoped_rows(
+            "SELECT * FROM hunt_jobs WHERE status = ? AND finished_at >= ?",
+            (status, since_iso),
+            owner_user_id=owner_user_id,
+            hunt_ids=hunt_ids,
+        )
+        return len(rows)
 
-    def count_retrying_since(self, since_iso: str) -> int:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT COUNT(*) FROM hunt_jobs
-                WHERE status IN ('queued', 'running')
-                  AND last_error != ''
-                  AND updated_at >= ?
-                """,
-                (since_iso,),
-            ).fetchone()
-        return int(row[0]) if row else 0
+    def count_retrying_since(
+        self,
+        since_iso: str,
+        *,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> int:
+        query = """
+            SELECT * FROM hunt_jobs
+            WHERE status IN ('queued', 'running')
+              AND last_error != ''
+              AND updated_at >= ?
+        """
+        if owner_user_id is None and hunt_ids is None:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT COUNT(*) FROM hunt_jobs
+                    WHERE status IN ('queued', 'running')
+                      AND last_error != ''
+                      AND updated_at >= ?
+                    """,
+                    (since_iso,),
+                ).fetchone()
+            return int(row[0]) if row else 0
+        return len(self._scoped_rows(query, (since_iso,), owner_user_id=owner_user_id, hunt_ids=hunt_ids))
 
-    def list_recent_retrying_jobs(self, *, since_iso: str, limit: int = 5) -> list[dict[str, Any]]:
+    def list_recent_retrying_jobs(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 5,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        # Fetch a little extra before applying JSON-payload scope filtering so
+        # one user's records do not crowd another user's recent list.
+        fetch_limit = max(1, int(limit)) if owner_user_id is None and hunt_ids is None else 1000000
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -127,15 +239,17 @@ class HuntJobQueue:
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (since_iso, max(1, int(limit))),
+                (since_iso, fetch_limit),
             ).fetchall()
+        rows = [
+            row
+            for row in rows
+            if self._matches_scope(row, owner_user_id=owner_user_id, hunt_ids=hunt_ids)
+        ][: max(1, int(limit))]
         results: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)
-            try:
-                item["payload"] = json.loads(str(item.get("payload_json") or "{}"))
-            except json.JSONDecodeError:
-                item["payload"] = {}
+            item["payload"] = self._decode_payload(item)
             results.append(item)
         return results
 
@@ -216,32 +330,39 @@ class HuntJobQueue:
             data["payload"] = {}
         return data
 
-    def list_jobs(self, *, limit: int = 100) -> list[dict[str, Any]]:
+    def list_jobs(
+        self,
+        *,
+        limit: int = 100,
+        owner_user_id: str | None = None,
+        hunt_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        fetch_limit = max(1, int(limit)) if owner_user_id is None and hunt_ids is None else 1000000
+        query = """
+            SELECT * FROM hunt_jobs
+            ORDER BY
+              CASE status
+                WHEN 'running' THEN 0
+                WHEN 'queued' THEN 1
+                WHEN 'failed' THEN 2
+                WHEN 'completed' THEN 3
+                ELSE 4
+              END,
+              updated_at DESC,
+              created_at DESC
+            LIMIT ?
+        """
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM hunt_jobs
-                ORDER BY
-                  CASE status
-                    WHEN 'running' THEN 0
-                    WHEN 'queued' THEN 1
-                    WHEN 'failed' THEN 2
-                    WHEN 'completed' THEN 3
-                    ELSE 4
-                  END,
-                  updated_at DESC,
-                  created_at DESC
-                LIMIT ?
-                """,
-                (max(1, int(limit)),),
-            ).fetchall()
+            rows = conn.execute(query, (fetch_limit,)).fetchall()
+        rows = [
+            row
+            for row in rows
+            if self._matches_scope(row, owner_user_id=owner_user_id, hunt_ids=hunt_ids)
+        ][: max(1, int(limit))]
         results: list[dict[str, Any]] = []
         for row in rows:
             data = dict(row)
-            try:
-                data["payload"] = json.loads(str(data.get("payload_json") or "{}"))
-            except json.JSONDecodeError:
-                data["payload"] = {}
+            data["payload"] = self._decode_payload(data)
             results.append(data)
         return results
 

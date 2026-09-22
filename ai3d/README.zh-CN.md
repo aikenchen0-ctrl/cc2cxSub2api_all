@@ -46,10 +46,20 @@ cc2cx AI3D生成 是一个 React + Three.js 应用，用于把上传图片、草
 
 ```bash
 npm install
+```
+
+请在两个终端分别启动 API 和 Vite 前端：
+
+```bash
+# 终端 1
+npm run dev:api
+
+# 终端 2
 npm run dev
 ```
 
-打开终端里显示的 Vite 地址即可。
+打开第二个终端显示的 Vite 地址即可。前端会把 `/api` 代理到 8787 端口的
+Node API。
 
 ## 工作台流程
 
@@ -154,7 +164,10 @@ npm run dev:api
 npm run dev
 ```
 
-默认情况下，前端会访问本地 Node 后端 `http://127.0.0.1:8787`。
+默认情况下，前端监听 `http://localhost:5174`，并通过代理访问本地 Node 后端
+`http://127.0.0.1:8787`；可用 `VITE_PORT` 覆盖前端端口。Docker 部署把容器内
+UI 端口固定为 5173，并映射到宿主机 5174。托管模式从 Sub2API 菜单进入后建立
+三天 HttpOnly SSO 会话，模型视觉分析由服务端按当前用户转发到 Sub2API。
 
 ## Demo 模型
 

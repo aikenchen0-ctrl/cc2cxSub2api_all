@@ -1,0 +1,15 @@
+.git
+.gitignore
+backend/data
+backend/web
+frontend/node_modules
+frontend/dist
+frontend/.vite
+*.db
+*.db-shm
+*.db-wal
+# Never send local dotenv files or secret material into the build context.
+**/.env
+**/.env.*
+!**/.env.example
+**/*.secret

@@ -37,8 +37,8 @@ const ShareLandingPage: React.FC = () => {
   const shareText = `${params.title}\n${params.text}\n${pageUrl}`;
 
   useEffect(() => {
-    document.title = `${params.title} - livart`;
-    ensureMetaTag('og:title', `${params.title} - livart`);
+    document.title = `${params.title} - 超级改图`;
+    ensureMetaTag('og:title', `${params.title} - 超级改图`);
     ensureMetaTag('og:description', params.text);
     ensureMetaTag('og:image', params.imageUrl);
     ensureMetaTag('og:url', pageUrl);
@@ -59,12 +59,12 @@ const ShareLandingPage: React.FC = () => {
       <div className="flex min-h-screen items-center justify-center bg-[#fcfcfc] px-6 font-sans text-zinc-900">
         <div className="max-w-md rounded-3xl border border-zinc-100 bg-white p-6 text-center shadow-[0_30px_90px_-52px_rgba(0,0,0,0.45)]">
           <div className="text-lg font-black">分享链接无效</div>
-          <div className="mt-2 text-sm font-bold leading-6 text-zinc-500">没有找到要分享的图片，请回到 livart 重新发起分享。</div>
+          <div className="mt-2 text-sm font-bold leading-6 text-zinc-500">没有找到要分享的图片，请回到超级改图重新发起分享。</div>
           <a
             href="/"
             className="mt-5 inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-black text-white"
           >
-            打开 livart
+            打开超级改图
           </a>
         </div>
       </div>
@@ -79,7 +79,7 @@ const ShareLandingPage: React.FC = () => {
             <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white">
               <Sparkles size={17} />
             </span>
-            livart
+            超级改图
           </a>
           <a
             href="/"

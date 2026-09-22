@@ -414,7 +414,7 @@ async function boot(): Promise<void> {
     ...initialBounds,
     show: !SMOKE,
     backgroundColor: '#111111',
-    title: 'cut000',
+    title: 'AI剪辑',
     ...desktopWindowFrameOptions(),
     webPreferences: {
       preload: PRELOAD_PATH,

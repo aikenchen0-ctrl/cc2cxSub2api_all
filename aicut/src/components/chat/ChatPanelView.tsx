@@ -38,11 +38,11 @@ function CollapsedPanel({ controller }: { controller: ChatPanelController }) {
     <ChangeLogPortal controller={controller} />
     <aside className="cc-chat-panel collapsed" data-cc-shortcut-surface="agent-chat" tabIndex={-1}
       style={{ gridColumn: 1, gridRow: '2 / 5', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '10px 0', borderRight: `0.5px solid ${theme.border}`, background: theme.panel }}>
-      <button type="button" onClick={props.onToggleCollapse} title={t('展开 cut000 Agent')}
+      <button type="button" onClick={props.onToggleCollapse} title={t('展开 AI剪辑 Agent')}
         style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: 14 }}>
         <span style={{ transform: 'rotate(-90deg)', display: 'inline-flex' }}><Icon name="chevronDown" size={14} /></span>
       </button>
-      <div className="cc-chat-collapsed-brand">cut000</div>
+      <div className="cc-chat-collapsed-brand">{t('AI剪辑')}</div>
     </aside>
   </>;
 }
@@ -62,7 +62,7 @@ function ChatHeader({ controller }: { controller: ChatPanelController }) {
       style={{ background: 'none', border: 'none', color: theme.textDim, cursor: agent.running ? 'default' : 'pointer', opacity: agent.running ? 0.4 : 1, padding: 2, lineHeight: 0 }}>
       <Icon name="trash" size={14} />
     </button>
-    <button type="button" onClick={props.onToggleCollapse} title={t('收起 cut000 Agent')}
+    <button type="button" onClick={props.onToggleCollapse} title={t('收起 AI剪辑 Agent')}
       style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: 13 }}>
       <span style={{ transform: 'rotate(90deg)', display: 'inline-flex' }}><Icon name="chevronDown" size={14} /></span>
     </button>

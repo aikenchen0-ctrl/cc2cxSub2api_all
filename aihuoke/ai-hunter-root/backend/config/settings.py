@@ -316,6 +316,44 @@ class Settings(BaseSettings):
 
 
 @lru_cache
+def _get_settings_for_subject(subject: str) -> Settings:
+    """Build one cached settings object per authenticated subject."""
+    base = Settings()
+    if not subject:
+        return base
+    try:
+        # Imported lazily to avoid a module import cycle during startup.
+        from config.settings_store import read_settings
+
+        overrides = read_settings()
+    except Exception:
+        overrides = {}
+    if not overrides:
+        return base
+    values = base.model_dump()
+    for key, value in overrides.items():
+        field = str(key).strip().lower()
+        if field in values:
+            values[field] = value
+    try:
+        return Settings.model_validate(values)
+    except Exception:
+        # A malformed per-user value must not take the whole satellite down;
+        # retain the validated process defaults and let the UI correct it.
+        return base
+
+
 def get_settings() -> Settings:
-    """Return cached settings singleton."""
-    return Settings()
+    """Return settings scoped to the current SSO subject when managed."""
+    try:
+        from auth_sso import current_subject, managed as satellite_managed
+
+        subject = current_subject().strip() if satellite_managed() else ""
+    except Exception:
+        subject = ""
+    return _get_settings_for_subject(subject)
+
+
+# Preserve the cache invalidation API used by the existing settings routes and
+# tests while keeping the public zero-argument call unchanged.
+get_settings.cache_clear = _get_settings_for_subject.cache_clear

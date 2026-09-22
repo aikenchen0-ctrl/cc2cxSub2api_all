@@ -9,6 +9,7 @@ import {
   RODIN_MESH_MODE,
   RODIN_QUALITY,
   RODIN_TIER,
+  hasConfiguredSecret,
   hasOutboundProxy,
 } from '../config.mjs'
 import { parseDataUrl, sanitizeFileName } from '../http-utils.mjs'
@@ -17,7 +18,7 @@ import { findFirstValue } from '../object-utils.mjs'
 
 export function getRodinHealth() {
   return {
-    configured: Boolean(RODIN_API_KEY),
+    configured: hasConfiguredSecret(RODIN_API_KEY),
     baseUrl: RODIN_API_BASE,
     tier: RODIN_TIER,
     quality: RODIN_QUALITY,
@@ -162,9 +163,9 @@ export function findRodinDownloadItem(raw) {
 }
 
 function requireRodinKey() {
-  if (!RODIN_API_KEY) {
+  if (!hasConfiguredSecret(RODIN_API_KEY)) {
     const error = new Error('RODIN_API_KEY is not configured on the backend.')
-    error.status = 500
+    error.status = 503
     throw error
   }
 }

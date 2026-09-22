@@ -28,12 +28,10 @@ function formatDuration(ms) {
 
 function getModelUrl(cell) {
   const generation = cell.generation || {}
-  const modelUrl = generation.modelUrl || ''
-  const taskId = generation.taskId
-  if (taskId && (/\/api\/3d\/model\?/i.test(modelUrl) || /^https?:\/\//i.test(modelUrl))) {
-    return `/api/3d/local-model/${encodeURIComponent(taskId)}.glb`
-  }
-  return modelUrl
+  // The API may return an authenticated remote-model proxy when caching a
+  // provider result fails.  Do not replace that URL with a non-existent
+  // local filename; the server already enforces task ownership on the proxy.
+  return generation.modelUrl || ''
 }
 
 function getModelSource(cell) {
@@ -515,7 +513,7 @@ export function WorkspaceDrawer({
               value={generationModes.some((option) => option.id === settings.generationMode) ? settings.generationMode : (generationModes[0]?.id || 'hunyuan')}
               onChange={(event) => onUpdateSettings({ ...settings, generationMode: event.target.value, generationProvider: event.target.value })}
             >
-              {generationModes.filter((option) => option.id !== 'cinematic').map((option) => (
+              {generationModes.map((option) => (
                 <option key={option.id} value={option.id}>{modeLabel(language, option.id, option.label)}</option>
               ))}
             </select>
@@ -688,7 +686,7 @@ export function WorkspaceDrawer({
                   {project.thumbnailUrl ? <img src={project.thumbnailUrl} alt={`${project.name} project thumbnail`} /> : <CellThumb cell={cell} />}
                   <div>
                     <strong>{project.name}</strong>
-                    <small>{project.summary || 'cc2cx AI3D生成工作区'} · {formatDate(project.savedAt)}</small>
+                    <small>{project.summary || '图生3D 工作区'} · {formatDate(project.savedAt)}</small>
                   </div>
                   <div className="project-actions">
                     <button type="button" onClick={() => onLoadProject(project.id)}>{t(language, 'load')}</button>

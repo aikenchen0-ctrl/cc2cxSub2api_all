@@ -14,6 +14,7 @@ from typing import Any, Callable
 from api.hunt_store import load_hunt, save_hunt
 from emailing.store import EmailStore
 from emailing.suppression import apply_unsubscribe, looks_like_unsubscribe_request
+from auth_sso import current_subject, managed as satellite_managed
 
 _AUTO_REPLY_SUBJECT_MARKERS = (
     "out of office",
@@ -263,9 +264,15 @@ async def run_reply_detection_once(
     *,
     now_iso: str | None = None,
     fetcher: Callable[..., list[dict[str, Any]]] = fetch_imap_replies,
+    owner_subject: str | None = None,
 ) -> dict[str, int]:
     """Poll inbox once, match replies to sent messages, and stop follow-ups."""
     current = now_iso or _now_iso()
+    # Manual checks run in the authenticated request context. The embedded
+    # worker has no subject and intentionally scans all owners.
+    if owner_subject is None and satellite_managed():
+        owner_subject = current_subject().strip() or None
+    owner_subject = str(owner_subject or "").strip() or None
     inbound_messages = await asyncio.to_thread(fetcher, account, now_iso=current)
     checked = 0
     matched = 0
@@ -284,6 +291,15 @@ async def run_reply_detection_once(
         from_email = str(inbound.get("from_email", "") or "").strip().lower()
         subject_and_body = f"{inbound.get('subject', '')}\n{inbound.get('snippet', '')}"
         if from_email and looks_like_unsubscribe_request(subject_and_body):
+            owned_sequences = store.list_sequences_for_email(from_email)
+            if owner_subject:
+                owned_sequences = [
+                    sequence for sequence in owned_sequences
+                    if str((load_hunt(str(sequence.get("hunt_id", "") or "")) or {}).get("owner_user_id") or "local").strip() == owner_subject
+                ]
+                if not owned_sequences:
+                    skipped += 1
+                    continue
             apply_unsubscribe(
                 store,
                 from_email,
@@ -291,7 +307,7 @@ async def run_reply_detection_once(
                 source="inbound_reply",
                 created_at=current,
             )
-            for sequence in store.list_sequences_for_email(from_email):
+            for sequence in owned_sequences or store.list_sequences_for_email(from_email):
                 _refresh_hunt_email_summary(store, str(sequence["hunt_id"]), str(sequence["campaign_id"]))
             matched += 1
             continue
@@ -304,6 +320,11 @@ async def run_reply_detection_once(
         if not sequence:
             skipped += 1
             continue
+        if owner_subject:
+            hunt = load_hunt(str(sequence.get("hunt_id", "") or ""))
+            if not hunt or str(hunt.get("owner_user_id") or "local").strip() != owner_subject:
+                skipped += 1
+                continue
 
         received_at = str(inbound.get("received_at", "") or current)
         store.create_reply_event({

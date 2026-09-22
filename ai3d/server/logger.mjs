@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile, stat } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { LOG_DIR, LOG_FILE } from './config.mjs'
@@ -20,6 +20,13 @@ export function createRequestId() {
   return randomUUID().slice(0, 12)
 }
 
+// Keep tenant identity out of the diagnostics file while still allowing the
+// authenticated logs endpoint to select only the current user's events.
+export function ownerLogId(subject) {
+  const value = String(subject || '').trim()
+  return value ? createHash('sha256').update(value).digest('hex').slice(0, 24) : ''
+}
+
 export async function logEvent(level, event, fields = {}) {
   const entry = {
     ts: new Date().toISOString(),
@@ -38,13 +45,20 @@ export async function logEvent(level, event, fields = {}) {
   return entry
 }
 
-export async function readRecentLogs(limit = 100) {
+export async function readRecentLogs(limit = 100, ownerSubject = '') {
   try {
     const fileStat = await stat(LOG_FILE)
     const content = await readFile(LOG_FILE, 'utf8')
     const slice = content.length > MAX_LOG_READ_BYTES ? content.slice(-MAX_LOG_READ_BYTES) : content
     const lines = slice.trim().split(/\r?\n/).filter(Boolean)
-    const entries = lines.slice(-normalizeLimit(limit)).map(parseLogLine).filter(Boolean)
+    const ownerId = ownerLogId(ownerSubject)
+    const entries = lines
+      .map(parseLogLine)
+      // In managed mode an entry without an owner is legacy/shared data and
+      // must not become visible to every authenticated tenant. Standalone
+      // diagnostics keep the historical unfiltered behaviour.
+      .filter((entry) => entry && (!ownerId ? true : entry.ownerId === ownerId))
+      .slice(-normalizeLimit(limit))
 
     return {
       file: path.relative(process.cwd(), LOG_FILE),

@@ -37,8 +37,8 @@ server/
 方式一：一键部署（推荐）
   1. 在Windows上运行 pack.bat，自动打包并上传到服务器
   2. 服务器上执行 ./server/setup.sh 完成部署
-  3. 访问 http://服务器IP:8080
-  4. 输入用户名密码登录（默认: CDKJ / cdkj）
+  3. 访问 http://服务器IP:8081（或使用 YIBIAO_PORT 覆盖）
+  4. 从 Sub2API 左侧菜单进入，使用 SSO 登录
 
 方式二：手动部署
   1. 上传代码到服务器 /opt/bidmonitor/
@@ -49,18 +49,17 @@ server/
 
 四、访问认证
 --------------------------------------------------------------------------------
-服务器端已启用 HTTP Basic 认证保护：
-
-  默认账号: CDKJ
-  默认密码: cdkj
-
-如需修改，编辑 server/app.py 中的 AUTH_USERNAME 和 AUTH_PASSWORD 变量。
+服务器端通过 Sub2API 单点登录保护。用户从 Sub2API 左侧菜单进入后，
+`GET /api/auth/sso/callback` 校验一次性 HMAC 票据并签发三天 HttpOnly
+`yibiao_session`；没有会话的 API 请求返回 401。模型请求由服务端携带
+`SUB2API_APP_CREDENTIAL`、`X-Sub2API-On-Behalf-Of` 和
+`X-Sub2API-Satellite: yibiao` 调用 Sub2API `/v1`，浏览器不会接触模型 Key。
 
 
 
 五、API接口
 --------------------------------------------------------------------------------
-基础路径: http://服务器IP:8080
+基础路径: http://服务器IP:8081（容器内部仍监听 8080）
 
 GET  /                    # Web界面
 GET  /api/status          # 获取监控状态
@@ -122,8 +121,8 @@ sudo systemctl status bidmonitor
 
 九、故障排查
 --------------------------------------------------------------------------------
-Q: 无法访问8080端口？
-A: 检查防火墙设置，确保8080端口已开放
+Q: 无法访问8081端口？
+A: 检查 YIBIAO_PORT、Docker 端口映射和防火墙设置
    阿里云/腾讯云需在安全组中添加入站规则
 
 Q: 服务启动失败？
@@ -131,7 +130,7 @@ A: 检查Python版本（需3.8+），检查依赖是否安装完整
    查看日志: cat /opt/bidmonitor/server/logs/server.log
 
 Q: 爬虫失败率高？
-A: 服务器端默认启用Selenium模式，需确保Chrome和chromedriver已安装
+A: 服务器端默认使用普通 HTTP 模式；如需 Selenium 反爬模式，请先安装 Chrome/Chromedriver，再在配置中显式启用浏览器模式。
 
 
 ================================================================================

@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Callable, Awaitable
+
+import litellm
 
 from config.settings import Settings, get_settings
 from tools.llm_errors import format_llm_error
@@ -27,6 +30,7 @@ from tools.llm_client import (
     temperature_for_model,
 )
 from tools.llm_rate_limiter import get_llm_rate_limiter
+from auth_sso import managed as satellite_managed, relay_base_url, satellite_headers
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,13 @@ async def _acompletion_with_rpm_limit(
     else:
         rpm = settings.reasoning_requests_per_minute or settings.llm_requests_per_minute
     limiter = get_llm_rate_limiter(scope, rpm)
+    if satellite_managed():
+        # ReAct calls bypass LLMTool, so attach the same server-only relay
+        # credential and per-user headers explicitly for every completion,
+        # including nudges and fallback calls.
+        kwargs["api_key"] = os.getenv("SUB2API_APP_CREDENTIAL", "").strip()
+        kwargs["api_base"] = relay_base_url()
+        kwargs["extra_headers"] = satellite_headers(required=True)
     return await acompletion_with_retry(limiter, **kwargs)
 
 
@@ -234,15 +245,20 @@ async def react_loop(
     """
     _settings = settings or get_settings()
     max_iter = max_iterations or _settings.react_max_iterations
-    if model_scope == "email_reasoning":
+    if satellite_managed():
+        # Only the public relay model is allowed to leave a managed satellite.
+        model = os.getenv("SUB2API_RELAY_MODEL", "gpt-5.5").strip() or "gpt-5.5"
+        model = apply_openai_api_mode(model, mode="chat", api_base=relay_base_url())
+    elif model_scope == "email_reasoning":
         model = _settings.email_reasoning_model or _settings.reasoning_model
     else:
         model = _settings.reasoning_model
-    model = apply_openai_api_mode(
-        model,
-        mode=getattr(_settings, "openai_api_mode", "auto"),
-        api_base=getattr(_settings, "openai_api_base", ""),
-    )
+    if not satellite_managed():
+        model = apply_openai_api_mode(
+            model,
+            mode=getattr(_settings, "openai_api_mode", "auto"),
+            api_base=getattr(_settings, "openai_api_base", ""),
+        )
     temperature = temperature_for_model(model, _settings.reasoning_temperature)
     max_tokens = _settings.reasoning_max_tokens
 

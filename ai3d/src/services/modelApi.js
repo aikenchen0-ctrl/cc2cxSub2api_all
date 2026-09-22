@@ -66,10 +66,12 @@ export function getAvailableGenerationModes(apiHealth, selectedMode) {
   }
 
   return GENERATION_MODE_OPTIONS.filter((mode) => {
-    if (mode.id === 'cinematic') return false
-    if (mode.id === 'hunyuan' || mode.id === 'hunyuan-sketch' || mode.id === 'auto' || mode.id === 'local') {
-      return !providers || configured.hunyuan
-    }
+    // These modes do not require a remote provider.  Keep them visible even
+    // when the health response correctly reports that all cloud providers are
+    // unconfigured.
+    if (mode.id === 'cinematic' || mode.id === 'local') return true
+    if (mode.id === 'hunyuan' || mode.id === 'hunyuan-sketch') return !providers || configured.hunyuan
+    if (mode.id === 'auto') return !providers || Object.values(configured).some(Boolean)
     if (mode.id === selectedMode) return true
     if (!providers) return mode.id === 'tripo'
     return Boolean(configured[mode.id])
@@ -78,14 +80,15 @@ export function getAvailableGenerationModes(apiHealth, selectedMode) {
 
 export function resolveGenerationMode(mode, apiHealth) {
   const requested = GENERATION_MODE_IDS.has(mode) ? mode : 'hunyuan'
-  if (requested === 'local') return 'hunyuan'
-  if (requested === 'cinematic') return 'hunyuan'
+  if (requested === 'local' || requested === 'cinematic') return requested
   if (requested === 'hunyuan' || requested === 'hunyuan-sketch' || requested === 'auto') return requested
   if (!apiHealth?.providers) return requested
 
   const available = getAvailableGenerationModes(apiHealth, requested)
   if (available.some((item) => item.id === requested)) return requested
-  return 'hunyuan'
+  return getAvailableGenerationModes(apiHealth, requested).some((item) => item.id === 'cinematic')
+    ? 'cinematic'
+    : 'hunyuan'
 }
 
 export function getProviderLabel(provider) {
@@ -99,6 +102,7 @@ export async function create3dGeneration({ provider, imageDataUrl, fileName, pro
   const response = await fetch(apiUrl('/api/3d/generate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ provider, imageDataUrl, fileName, prompt, modelId, model, generateType }),
   })
 
@@ -109,6 +113,7 @@ export async function analyzeAssetImage({ imageDataUrl, fileName }) {
   const response = await fetch(apiUrl('/api/3d/analyze'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ imageDataUrl, fileName }),
   })
 
@@ -119,6 +124,7 @@ export async function uploadLocal3dModel(file) {
   const response = await fetch(apiUrl(`/api/3d/local-model?fileName=${encodeURIComponent(file.name)}`), {
     method: 'POST',
     headers: { 'Content-Type': file.type || 'model/gltf-binary' },
+    credentials: 'include',
     body: file,
   })
 
@@ -126,17 +132,17 @@ export async function uploadLocal3dModel(file) {
 }
 
 export async function get3dApiHealth() {
-  const response = await fetch(apiUrl('/api/3d/health'))
+  const response = await fetch(apiUrl('/api/3d/health'), { credentials: 'include' })
   return readApiResponse(response)
 }
 
 export async function get3dServerLogs(limit = 100) {
-  const response = await fetch(apiUrl(`/api/3d/logs?limit=${encodeURIComponent(limit)}`))
+  const response = await fetch(apiUrl(`/api/3d/logs?limit=${encodeURIComponent(limit)}`), { credentials: 'include' })
   return readApiResponse(response)
 }
 
 export async function get3dGenerationStatus(taskId, provider) {
-  const response = await fetch(apiUrl(`/api/3d/status/${encodeURIComponent(taskId)}?provider=${encodeURIComponent(provider || 'rodin')}`))
+  const response = await fetch(apiUrl(`/api/3d/status/${encodeURIComponent(taskId)}?provider=${encodeURIComponent(provider || 'rodin')}`), { credentials: 'include' })
   return readApiResponse(response)
 }
 

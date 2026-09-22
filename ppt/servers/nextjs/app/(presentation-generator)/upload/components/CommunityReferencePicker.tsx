@@ -164,7 +164,7 @@ export default function CommunityReferencePicker({
                   </div>
                   <div className="flex min-h-[34px] items-center justify-between border-t border-[#EDEEEF] py-2.5 text-[10px] font-medium tracking-[0.4px] text-[#808080]">
                     <span className="min-w-0 flex-1 truncate">
-                      by {item.created_by?.trim() || "Presenton"}
+                      by {item.created_by?.trim() || "永恒PPT"}
                     </span>
                     <div className="ml-2 flex shrink-0 items-center gap-2">
                       <span className="inline-flex items-center gap-1">

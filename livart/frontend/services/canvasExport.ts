@@ -39,7 +39,7 @@ const unwrapApiResponse = async <T>(response: Response): Promise<T> => {
 
 const sanitizeFilename = (value: string) => {
   const normalized = value.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
-  return normalized || 'livart-image';
+  return normalized || '超级改图图片';
 };
 
 const createTimestamp = () => {
@@ -171,14 +171,14 @@ export const exportCanvasProjectImage = async (
     }
 
     const extension = getImageFileExtension(source);
-    const filenamePrefix = sanitizeFilename(imageItem.label || `${projectTitle || 'livart-image'}-${index + 1}`);
+    const filenamePrefix = sanitizeFilename(imageItem.label || `${projectTitle || '超级改图图片'}-${index + 1}`);
     return {
       assetId,
       filename: `${filenamePrefix}-${imageItem.id}.${extension}`
     };
   }));
 
-  const zipFilenamePrefix = sanitizeFilename(projectTitle || 'livart-images');
+  const zipFilenamePrefix = sanitizeFilename(projectTitle || '超级改图图片集');
   const zipFilename = `${zipFilenamePrefix}-${getExportScopeFilenamePart(scope)}-${timestamp}.zip`;
   const imageExport = await createImageExport(exportImages, zipFilename);
   await downloadExportZip(imageExport.downloadUrl, imageExport.filename);

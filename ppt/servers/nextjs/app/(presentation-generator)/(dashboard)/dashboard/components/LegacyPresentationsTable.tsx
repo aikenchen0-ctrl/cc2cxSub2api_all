@@ -113,14 +113,14 @@ export function LegacyPresentationsTable({
         />
         <p className="text-[#4C4C4C]">
           These presentations were created in an older format and can&apos;t be
-          opened in Presenton 0.9.2-beta. {" "}
+          opened in 永恒PPT 0.9.2-beta. {" "}
           <a
             href={LEGACY_RELEASE_URL}
             target="_blank"
             rel="noreferrer"
             className="text-[#C4320A] underline decoration-[#C4320A] underline-offset-2"
           >
-            Download Presenton v0.8.10-beta to access them
+            Download 永恒PPT v0.8.10-beta to access them
           </a>
           .
         </p>

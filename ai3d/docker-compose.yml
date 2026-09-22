@@ -1,0 +1,51 @@
+services:
+  ai3d:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai3d:local
+    container_name: ai3d
+    restart: unless-stopped
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8787
+      VITE_PORT: 5173
+      LINK: ${LINK:-}
+      # Containers reach the colocated Sub2API service through the shared
+      # Docker network.  Keep LINK as the documented local/cloud fallback,
+      # but make the out-of-the-box compose deployment usable without a
+      # host-only localhost relay URL.
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:?SUB2API_APP_CREDENTIAL is required}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-5.5}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      AI3D_SSO_CALLBACK_URL: ${AI3D_SSO_CALLBACK_URL:-http://localhost:5174/api/auth/sso/callback}
+      AI3D_AUTH_DB: ${AI3D_AUTH_DB:-.auth/sessions.json}
+      LOCAL_MODEL_DIR: ${LOCAL_MODEL_DIR:-.generated-models}
+      TRIPO_API_KEY: ${TRIPO_API_KEY:-}
+      RODIN_API_KEY: ${RODIN_API_KEY:-}
+      FAL_API_KEY: ${FAL_API_KEY:-}
+      HUNYUAN_CLOUD_API_KEY: ${HUNYUAN_CLOUD_API_KEY:-}
+      HUNYUAN_API_BASE: ${HUNYUAN_API_BASE:-}
+    ports:
+      - "${AI3D_PORT:-5174}:5173"
+    volumes:
+      - ai3d_auth:/app/.auth
+      - ai3d_models:/app/.generated-models
+    networks:
+      - ai3d_default
+      - sub2api-network
+
+volumes:
+  ai3d_auth:
+    name: ai3d_auth
+  ai3d_models:
+    name: ai3d_models
+
+networks:
+  ai3d_default:
+    driver: bridge
+  sub2api-network:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}

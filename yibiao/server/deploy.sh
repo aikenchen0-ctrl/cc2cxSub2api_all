@@ -9,6 +9,8 @@ echo "=========================================="
 # 进入项目目录
 cd /opt/bidmonitor
 
+YIBIAO_PORT="${YIBIAO_PORT:-8081}"
+
 # 激活虚拟环境
 source venv/bin/activate
 
@@ -21,7 +23,7 @@ mkdir -p data
 
 # 启动服务（前台运行，用于测试）
 echo "🚀 启动服务..."
-echo "访问地址: http://$(curl -s ifconfig.me):8080"
+echo "访问地址: http://$(curl -s ifconfig.me):$YIBIAO_PORT"
 echo ""
 echo "按 Ctrl+C 停止服务"
 echo ""

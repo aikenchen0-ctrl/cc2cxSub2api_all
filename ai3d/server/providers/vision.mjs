@@ -6,9 +6,11 @@ import {
   OPENAI_VISION_MODEL,
   OUTBOUND_PROXY_AGENT,
   VISION_PROVIDER,
+  hasConfiguredSecret,
   hasOutboundProxy,
 } from '../config.mjs'
 import { parseDataUrl, sanitizeFileName } from '../http-utils.mjs'
+import { isManaged, relayBaseUrl, satelliteHeaders } from '../auth-sso.mjs'
 
 const CATEGORY_IDS = new Set(['artifact', 'road', 'vessel', 'aircraft', 'product', 'specimen'])
 const CATEGORY_LABELS = {
@@ -21,11 +23,12 @@ const CATEGORY_LABELS = {
 }
 
 export function getVisionHealth() {
+  const managed = isManaged()
   return {
     provider: VISION_PROVIDER,
-    configured: VISION_PROVIDER === 'openai' && Boolean(OPENAI_API_KEY),
-    model: VISION_PROVIDER === 'openai' ? OPENAI_VISION_MODEL : '',
-    baseUrl: VISION_PROVIDER === 'openai' ? OPENAI_API_BASE : '',
+    configured: VISION_PROVIDER === 'openai' && (managed ? hasConfiguredSecret(process.env.SUB2API_APP_CREDENTIAL) && Boolean(relayBaseUrl()) : hasConfiguredSecret(OPENAI_API_KEY)),
+    model: VISION_PROVIDER === 'openai' ? (managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL) : '',
+    baseUrl: VISION_PROVIDER === 'openai' ? (managed ? relayBaseUrl() : OPENAI_API_BASE) : '',
   }
 }
 
@@ -37,17 +40,22 @@ export async function analyzeAssetImage(payload = {}) {
     return unavailableInsight(fileName, `VISION_PROVIDER=${VISION_PROVIDER} is not supported yet.`)
   }
 
-  if (!OPENAI_API_KEY) {
+  const managed = isManaged()
+  const subject = String(payload._sub2apiSubject || '')
+  if (managed && (!process.env.SUB2API_APP_CREDENTIAL || !subject || !relayBaseUrl())) {
+    throw Object.assign(new Error('Sub2API satellite credentials are not configured.'), { status: 503 })
+  }
+  if (!managed && !hasConfiguredSecret(OPENAI_API_KEY)) {
     return unavailableInsight(fileName, 'OPENAI_API_KEY is not configured on the backend.')
   }
 
-  const raw = await openAiVisionRequest(payload.imageDataUrl, fileName)
+  const raw = await openAiVisionRequest(payload.imageDataUrl, fileName, subject)
   const content = raw?.choices?.[0]?.message?.content || ''
   const parsed = extractJsonObject(content)
   return normalizeVisionInsight(parsed, {
     fileName,
     provider: 'openai',
-    model: OPENAI_VISION_MODEL,
+    model: managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL,
     raw,
   })
 }
@@ -91,18 +99,22 @@ export function extractJsonObject(content) {
   }
 }
 
-async function openAiVisionRequest(imageDataUrl, fileName) {
+async function openAiVisionRequest(imageDataUrl, fileName, subject = '') {
+  const managed = isManaged()
+  const baseUrl = managed ? relayBaseUrl() : OPENAI_API_BASE
+  const model = managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL
+  const authHeaders = managed ? satelliteHeaders(subject, { required: true }) : { Authorization: `Bearer ${OPENAI_API_KEY}` }
   let response
   try {
-    response = await undiciFetch(`${OPENAI_API_BASE.replace(/\/$/, '')}/chat/completions`, {
+    response = await undiciFetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       ...(OUTBOUND_PROXY_AGENT ? { dispatcher: OUTBOUND_PROXY_AGENT } : {}),
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        ...authHeaders,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: OPENAI_VISION_MODEL,
+        model,
         response_format: { type: 'json_object' },
         temperature: 0.2,
         messages: [

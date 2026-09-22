@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 
-from api.hunt_store import load_hunt, save_hunt
+from api.hunt_store import load_all_hunts, load_hunt, save_hunt
 from config.settings import get_settings
 from emailing.email_sender import send_email
 from emailing.guards import hours_ago_iso, screen_recipient, screen_send_window_from_settings
 from emailing.store import EmailStore
+from auth_sso import current_subject, managed as satellite_managed
 
 
 def _now_iso() -> str:
@@ -48,9 +49,24 @@ async def run_scheduler_once(
     *,
     now_iso: str | None = None,
     sender: Callable[..., Awaitable[dict[str, Any]]] = send_email,
+    owner_subject: str | None = None,
 ) -> dict[str, int]:
     """Send pending email jobs that are ready."""
     current = now_iso or _now_iso()
+    # A request-triggered scheduler runs in the authenticated subject's
+    # context. The embedded process worker intentionally has no subject and
+    # continues to process all owners. This prevents one user from manually
+    # sending another user's campaign while preserving the global worker.
+    if owner_subject is None and satellite_managed():
+        owner_subject = current_subject().strip() or None
+    owner_subject = str(owner_subject or "").strip() or None
+    owner_hunt_ids = None
+    if owner_subject:
+        owner_hunt_ids = {
+            hunt_id
+            for hunt_id, hunt in load_all_hunts(mark_interrupted=False).items()
+            if str(hunt.get("owner_user_id") or "local").strip() == owner_subject
+        }
     jobs = store.list_pending_messages_ready(current)
     sent = 0
     failed = 0
@@ -60,6 +76,11 @@ async def run_scheduler_once(
         if not sequence or sequence.get("status") in {"replied", "stopped", "completed", "failed"}:
             skipped += 1
             continue
+        if owner_subject:
+            hunt = load_hunt(str(sequence.get("hunt_id", "") or ""))
+            if not hunt or str(hunt.get("owner_user_id") or "local").strip() != owner_subject:
+                skipped += 1
+                continue
         campaign = store.get_campaign(str(sequence.get("campaign_id", "")))
         if not campaign or campaign.get("status") != "active":
             skipped += 1
@@ -124,6 +145,7 @@ async def run_scheduler_once(
                 "sent",
                 since_iso=hours_ago_iso(24, now=datetime.fromisoformat(current.replace("Z", "+00:00")) if "T" in current else None),
                 time_field="sent_at",
+                hunt_ids=owner_hunt_ids,
             )
             window = screen_send_window_from_settings(
                 settings,
@@ -135,14 +157,16 @@ async def run_scheduler_once(
                 skipped += 1
                 continue
 
-        result = await sender(
-            account,
-            to_email=str(sequence.get("lead_email", "") or ""),
-            subject=str(job.get("subject", "") or ""),
-            body_text=str(job.get("body_text", "") or ""),
-            reply_to=str(account.get("reply_to", "") or ""),
-            thread_key=str(job.get("thread_key", "") or ""),
-        )
+        send_kwargs = {
+            "to_email": str(sequence.get("lead_email", "") or ""),
+            "subject": str(job.get("subject", "") or ""),
+            "body_text": str(job.get("body_text", "") or ""),
+            "reply_to": str(account.get("reply_to", "") or ""),
+            "thread_key": str(job.get("thread_key", "") or ""),
+        }
+        if sender is send_email:
+            send_kwargs["owner_subject"] = owner_subject
+        result = await sender(account, **send_kwargs)
         if result.get("ok"):
             store.mark_message_sent(
                 str(job["id"]),

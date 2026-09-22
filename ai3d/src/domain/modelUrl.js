@@ -1,10 +1,10 @@
 export function getGeneratedModelUrl(cell) {
   if (!cell?.custom) return ''
   const generation = cell.generation || {}
-  const modelUrl = generation.modelUrl || ''
-  const taskId = generation.taskId
-  if (taskId && (/\/api\/3d\/model\?/i.test(modelUrl) || /^https?:\/\//i.test(modelUrl))) {
-    return `/api/3d/local-model/${encodeURIComponent(taskId)}.glb`
-  }
-  return modelUrl
+  // Keep the server-provided URL.  A successful provider task normally
+  // points at a cached local model, while a cache miss deliberately returns
+  // the authenticated `/api/3d/model?...` proxy.  Rewriting that proxy to a
+  // guessed `<taskId>.glb` path makes the owner's model 404 after a cache
+  // failure or process restart.
+  return generation.modelUrl || ''
 }

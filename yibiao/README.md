@@ -31,7 +31,7 @@ python run.py
 cd server
 pip install -r requirements.txt
 python app.py
-# 访问 http://localhost:8080
+# 访问 http://localhost:8081（可用 YIBIAO_PORT 覆盖）
 `
 
 详细部署请参考 `server/DEPLOY.md`

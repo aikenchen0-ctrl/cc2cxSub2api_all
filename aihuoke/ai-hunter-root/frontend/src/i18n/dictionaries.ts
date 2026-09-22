@@ -3,8 +3,8 @@ import type { Locale } from "./locales";
 type Dict = Record<string, string>;
 
 const zh: Dict = {
-  "brand.name": "AI 获客",
-  "brand.title": "AI 获客",
+  "brand.name": "AI获客",
+  "brand.title": "AI获客",
   "nav.dashboard": "任务看板",
   "nav.newHunt": "新建任务",
   "nav.licensedFinder": "持牌找人",
@@ -355,8 +355,8 @@ const zh: Dict = {
 };
 
 const en: Dict = {
-  "brand.name": "AI Lead Gen",
-  "brand.title": "AI Lead Gen",
+  "brand.name": "AI Lead Hunter",
+  "brand.title": "AI Lead Hunter",
   "nav.dashboard": "Dashboard",
   "nav.newHunt": "New task",
   "nav.licensedFinder": "Licensed finder",

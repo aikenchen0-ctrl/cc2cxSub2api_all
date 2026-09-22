@@ -10,6 +10,8 @@
 
 set -e
 
+YIBIAO_PORT="${YIBIAO_PORT:-8081}"
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -84,7 +86,7 @@ echo -e "${YELLOW}[6/6] 启动服务...${NC}"
 cd "$INSTALL_DIR/server"
 
 # 后台启动服务
-nohup python3 -m uvicorn app:app --host 0.0.0.0 --port 8080 > logs/server.log 2>&1 &
+nohup python3 -m uvicorn app:app --host 0.0.0.0 --port "$YIBIAO_PORT" > logs/server.log 2>&1 &
 sleep 3
 
 # 检查是否启动成功
@@ -93,7 +95,7 @@ if pgrep -f "uvicorn app:app" > /dev/null; then
     echo -e "${GREEN}   ✅ BidMonitor 启动成功！${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
-    echo -e "  访问地址: ${GREEN}http://YOUR_SERVER_IP:8080${NC}"
+    echo -e "  访问地址: ${GREEN}http://YOUR_SERVER_IP:$YIBIAO_PORT${NC}"
     echo ""
     echo "  常用命令："
     echo "    查看日志: tail -f $INSTALL_DIR/server/logs/server.log"

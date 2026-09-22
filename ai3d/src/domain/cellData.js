@@ -184,7 +184,7 @@ export const WORKSPACE_PANELS = {
   Logs: 'Diagnostics, API request logs, and generation troubleshooting.',
   Settings: 'Viewer quality, provider defaults, screenshot size, and export preferences.',
   Compare: 'Side-by-side model comparison for shape, material, and generation quality.',
-  Profile: 'Current workspace: cc2cx AI3D生成.',
+  Profile: 'Current workspace: Image to 3D.',
 }
 
 export const CELL_PROFILES = {

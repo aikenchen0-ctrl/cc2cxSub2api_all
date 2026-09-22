@@ -710,6 +710,7 @@ func (h *AuthHandler) CompleteOIDCOAuthRegistration(c *gin.Context) {
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	clearOAuthPendingBrowserCookie(c, secureCookie)
+	setBrowserSessionCookie(c, h.authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokenPair.AccessToken,
@@ -1291,6 +1292,7 @@ func (h *AuthHandler) tryOIDCVerifiedEmailFastPath(
 	fragment.Set("redirect", redirectTo)
 	clearOAuthPendingSessionCookie(c, isRequestHTTPS(c))
 	clearOAuthPendingBrowserCookie(c, isRequestHTTPS(c))
+	setBrowserSessionCookie(c, h.authService, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	redirectWithFragment(c, frontendCallback, fragment)
 	return true
 }

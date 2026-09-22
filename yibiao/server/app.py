@@ -1,5 +1,5 @@
 """
-BidMonitor 服务器端主应用
+自动招标服务器端主应用
 基于 FastAPI 构建的 RESTful API 服务
 """
 import os
@@ -8,17 +8,18 @@ import json
 import asyncio
 import logging
 import threading
+import hashlib
+from functools import wraps
+from contextvars import ContextVar, copy_context
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
-import secrets
 
 # 添加 src 目录到路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,15 +33,48 @@ from apscheduler.triggers.interval import IntervalTrigger
 # 导入原有模块
 from monitor_core import MonitorCore, get_default_sites
 from database.storage import Storage, BidInfo
-from ai_guard import AIGuard
+from ai_guard import AIGuard, SatelliteConfigurationError
+from auth_sso import (
+    SESSION_TTL_SECONDS,
+    consume_ticket,
+    create_session,
+    get_identity,
+    is_managed,
+    require_identity,
+    reset_current_subject,
+    safe_next,
+    set_current_subject,
+    verify_ticket,
+)
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+_APP_SUBJECT: ContextVar[str] = ContextVar("yibiao_app_subject", default="")
+
 # 全局状态
 class AppState:
+    _RUNTIME_FIELDS = (
+        "is_running",
+        "monitor_core",
+        "scheduler",
+        "last_run_time",
+        "next_run_time",
+        "logs",
+        "stop_event",
+        "current_task_running",
+        "manual_run_pending",
+        "today_rounds",
+        "today_date",
+        "progress_current",
+        "progress_total",
+        "progress_site",
+    )
+    _DYNAMIC_FIELDS = frozenset(_RUNTIME_FIELDS) | frozenset({"config", "storage", "_active_config_path"})
+
     def __init__(self):
+        object.__setattr__(self, "_initializing", True)
         self.is_running = False
         self.monitor_core: Optional[MonitorCore] = None
         self.scheduler: Optional[AsyncIOScheduler] = None
@@ -48,6 +82,7 @@ class AppState:
         self.next_run_time: Optional[datetime] = None
         self.logs: List[str] = []
         self.config: Dict[str, Any] = {}
+        self.manual_run_pending = False
         self.storage = Storage()
         self.stop_event = threading.Event()  # 停止事件，用于中断正在运行的任务
         self.current_task_running = False  # 标记当前是否有任务正在执行
@@ -57,6 +92,52 @@ class AppState:
         self.progress_current = 0  # 当前爬取的网站序号
         self.progress_total = 0    # 总网站数
         self.progress_site = ""    # 当前正在爬取的网站名称
+        self.user_states: Dict[str, Dict[str, Any]] = {}
+        # State transitions are synchronous, but requests for one subject can
+        # arrive concurrently on the event loop. Keep a per-subject lock so
+        # start/stop/run-once cannot observe a half-transitioned scheduler.
+        self.user_operation_locks: Dict[str, threading.RLock] = {}
+        self.active_subject = ""
+        object.__setattr__(self, "_initializing", False)
+
+    def _context_state(self):
+        subject = _APP_SUBJECT.get()
+        if not subject:
+            return None
+        states = object.__getattribute__(self, "user_states")
+        return states.get(subject)
+
+    def __getattribute__(self, name):
+        if name not in ("_DYNAMIC_FIELDS", "_context_state", "user_states", "_initializing"):
+            dynamic = object.__getattribute__(self, "_DYNAMIC_FIELDS")
+            if name in dynamic:
+                state = object.__getattribute__(self, "_context_state")()
+                if state is not None:
+                    if name == "config":
+                        return state["config"]
+                    if name == "storage":
+                        return state["storage"]
+                    if name == "_active_config_path":
+                        return state["config_path"]
+                    return state["runtime"].get(name)
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name, value):
+        if name not in ("_DYNAMIC_FIELDS", "_context_state", "user_states", "_initializing") and not object.__getattribute__(self, "__dict__").get("_initializing", False):
+            dynamic = object.__getattribute__(self, "_DYNAMIC_FIELDS")
+            if name in dynamic:
+                state = object.__getattribute__(self, "_context_state")()
+                if state is not None:
+                    if name == "config":
+                        state["config"] = value
+                    elif name == "storage":
+                        state["storage"] = value
+                    elif name == "_active_config_path":
+                        state["config_path"] = value
+                    else:
+                        state["runtime"][name] = value
+                    return
+        object.__setattr__(self, name, value)
         
     def add_log(self, message: str):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -67,30 +148,60 @@ class AppState:
             self.logs = self.logs[-200:]
         logger.info(message)
 
+    def activate_user(self, subject: str):
+        """Load an isolated config/database for the current Sub2API subject."""
+        subject = str(subject or "").strip()
+        if not subject:
+            return None
+        key = hashlib.sha256(subject.encode()).hexdigest()[:32]
+        user_dir = os.path.join(BASE_DIR, "server", "data", "users", key)
+        os.makedirs(user_dir, exist_ok=True)
+        state = self.user_states.get(subject)
+        if state is None:
+            state = {
+                "config_path": os.path.join(user_dir, "server_config.json"),
+                "config": load_config(os.path.join(user_dir, "server_config.json")),
+                "storage": Storage(os.path.join(user_dir, "bids.db")),
+                "runtime": self._snapshot_runtime(),
+            }
+            state["runtime"]["stop_event"] = threading.Event()
+            self.user_states[subject] = state
+        self.active_subject = subject
+        return _APP_SUBJECT.set(subject)
+
+    def _snapshot_runtime(self) -> Dict[str, Any]:
+        return {name: getattr(self, name) for name in self._RUNTIME_FIELDS}
+
+    def _restore_runtime(self, runtime: Dict[str, Any]) -> None:
+        for name in self._RUNTIME_FIELDS:
+            if name in runtime:
+                setattr(self, name, runtime[name])
+
+    def persist_active_state(self) -> None:
+        subject = _APP_SUBJECT.get()
+        if subject and subject in self.user_states:
+            self.user_states[subject]["runtime"] = self._snapshot_runtime()
+
+    def deactivate_user(self, token) -> None:
+        if token is not None:
+            _APP_SUBJECT.reset(token)
+
+    def operation_lock(self, subject: str | None = None) -> threading.RLock:
+        key = str(subject if subject is not None else _APP_SUBJECT.get()).strip() or "local"
+        lock = self.user_operation_locks.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            self.user_operation_locks[key] = lock
+        return lock
+
 app_state = AppState()
 
 # 配置文件路径
 CONFIG_FILE = os.path.join(BASE_DIR, 'server', 'server_config.json')
 
-# HTTP Basic 认证配置
-security = HTTPBasic()
-AUTH_USERNAME = "CDKJ"
-AUTH_PASSWORD = "cdkj"
-
-def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
-    """验证用户名和密码"""
-    correct_username = secrets.compare_digest(credentials.username, AUTH_USERNAME)
-    correct_password = secrets.compare_digest(credentials.password, AUTH_PASSWORD)
-    if not (correct_username and correct_password):
-        raise HTTPException(
-            status_code=401,
-            detail="用户名或密码错误",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
-
-def load_config() -> Dict[str, Any]:
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """加载配置"""
+    managed_mode = is_managed()
     default_config = {
         'keywords': '光伏,风电,风力发电,光伏巡检,风电巡检,无人机巡检,光伏无人机,风机巡检,风力发电巡检,光伏电站无人机,风电场无人机,光伏运维,风机运维,叶片巡检,红外巡检,新能源巡检',
         'exclude': '大疆',
@@ -109,7 +220,9 @@ def load_config() -> Dict[str, Any]:
         'sms_enabled': True,
         'voice_enabled': False,
         'wechat_enabled': False,
-        'ai_enabled': False,
+        # Managed users can use the public relay model immediately after SSO;
+        # local desktop mode remains opt-in until a provider is configured.
+        'ai_enabled': managed_mode,
         'email_configs': [],  # 开源版本默认空
         'sms_config': {
             'provider': 'aliyun',
@@ -130,18 +243,25 @@ def load_config() -> Dict[str, Any]:
             'token': ''
         },
         'ai_config': {
-            'enable': False,
-            'base_url': 'https://api.deepseek.com/chat/completions',
-            'api_key': '',  # 请填入您的API Key
-            'model': 'deepseek-chat'
+            'enable': managed_mode,
+            # Model calls are server-side Sub2API relay calls.  ``api_key`` is
+            # intentionally never read from browser configuration in managed
+            # mode; the field remains only for legacy local config migration.
+            'base_url': '',
+            'api_key': '',
+            'model': 'gpt-5.5'
         },
         'contacts': [],  # 开源版本默认空
-        'use_selenium': True  # Selenium浏览器模式开关
+        # The satellite image does not ship Chrome/Chromedriver.  HTTP mode
+        # keeps a fresh Docker/server deployment usable; operators with a
+        # browser runtime can explicitly enable Selenium in their config.
+        'use_selenium': False  # Selenium浏览器模式开关
     }
     
-    if os.path.exists(CONFIG_FILE):
+    config_path = config_path or CONFIG_FILE
+    if os.path.exists(config_path):
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 saved_config = json.load(f)
                 default_config.update(saved_config)
         except Exception as e:
@@ -149,14 +269,32 @@ def load_config() -> Dict[str, Any]:
     
     return default_config
 
-def save_config(config: Dict[str, Any]):
+def save_config(config: Dict[str, Any], config_path: Optional[str] = None):
     """保存配置"""
     try:
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(config_path or getattr(app_state, "_active_config_path", CONFIG_FILE), 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"保存配置失败: {e}")
+
+
+_SECRET_CONFIG_KEYS = frozenset({
+    'api_key', 'apiKey', 'access_key_secret', 'email_password',
+    'wechat_token', 'password', 'smtp_password', 'imap_password',
+})
+
+
+def _redact_config_value(value: Any) -> Any:
+    """Return config-shaped data without credentials for browser responses."""
+    if isinstance(value, dict):
+        return {
+            key: ('***' if key in _SECRET_CONFIG_KEYS or str(key).lower().endswith(('_password', '_secret', '_token')) else _redact_config_value(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_config_value(item) for item in value]
+    return value
 
 # Pydantic 模型
 class ConfigModel(BaseModel):
@@ -181,7 +319,20 @@ class StatusResponse(BaseModel):
     interval: int
 
 # 定时任务：执行监控
-async def run_monitor_task():
+async def run_monitor_task(subject: str = ""):
+    """Run a monitor task inside the authenticated user's isolated context."""
+    app_token = app_state.activate_user(subject) if subject else None
+    subject_token = set_current_subject(subject) if subject else None
+    try:
+        return await _run_monitor_task()
+    finally:
+        app_state.persist_active_state()
+        if subject_token is not None:
+            reset_current_subject(subject_token)
+        app_state.deactivate_user(app_token)
+
+
+async def _run_monitor_task():
     """执行一次监控任务"""
     # 检查是否应该运行
     if not app_state.is_running:
@@ -219,6 +370,11 @@ async def run_monitor_task():
             log_callback=app_state.add_log,
             ai_config=ai_config
         )
+        # Keep crawled bids in this authenticated user's isolated database.
+        # MonitorCore otherwise creates its historical shared ``data/bids.db``
+        # store by default.
+        monitor.storage = app_state.storage
+        monitor.config['custom_sites'] = config.get('custom_sites', [])
         
         # 设置启用的网站
         monitor.config['crawler'] = monitor.config.get('crawler', {})
@@ -246,10 +402,16 @@ async def run_monitor_task():
         
         # 在线程池中执行同步的爬虫任务，防止阻塞事件循环
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,  # 使用默认线程池
-            lambda: monitor.run_once(progress_callback=progress_callback, stop_event=app_state.stop_event)
-        )
+        # ``run_in_executor`` does not propagate ContextVars into worker
+        # threads. Capture the authenticated context and stop event before
+        # dispatching so callbacks cannot touch another user's state.
+        task_context = copy_context()
+        stop_event = app_state.stop_event
+
+        def blocking_run():
+            return monitor.run_once(progress_callback=progress_callback, stop_event=stop_event)
+
+        result = await loop.run_in_executor(None, task_context.run, blocking_run)
         
         # 检查是否被中断
         if app_state.stop_event.is_set():
@@ -303,6 +465,7 @@ async def run_monitor_task():
                 run_monitor_task,
                 trigger=DateTrigger(run_date=next_run),
                 id='monitor_job',
+                args=[_APP_SUBJECT.get()],
                 replace_existing=True
             )
             app_state.add_log(f"⏰ 下次检索时间: {next_run.strftime('%H:%M:%S')}")
@@ -410,62 +573,90 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
     app_state.config = load_config()
-    app_state.add_log("BidMonitor 服务器已启动")
+    app_state.add_log("自动招标服务器已启动")
     
     yield
     
     # 关闭时
     if app_state.scheduler and app_state.scheduler.running:
         app_state.scheduler.shutdown()
-    app_state.add_log("BidMonitor 服务器已关闭")
+    app_state.add_log("自动招标服务器已关闭")
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="BidMonitor API",
-    description="招标监控系统服务端 API",
+    title="自动招标 API",
+    description="自动招标服务端 API",
     version="1.6",
     lifespan=lifespan
 )
 
-# 添加CORS中间件，允许前端跨域访问
+
+@app.get("/health")
+async def liveness_check():
+    """Unauthenticated container liveness probe with no tenant data."""
+    return {"ok": True, "service": "yibiao"}
+
+# Cookies cannot be used safely with a wildcard origin. Keep same-origin
+# deployment as the default and allow an explicit comma-separated/JSON list
+# for a separately hosted UI.
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:8080", "http://localhost:8081"]
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            values = [str(item).strip().rstrip("/") for item in parsed if str(item).strip()]
+            if values:
+                return values
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    values = [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
+    return values or ["http://localhost:8080", "http://localhost:8081"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有HTTP方法
     allow_headers=["*"],  # 允许所有请求头
 )
 
-# HTTP Basic 认证中间件
-import base64
 from starlette.middleware.base import BaseHTTPMiddleware
 
-class BasicAuthMiddleware(BaseHTTPMiddleware):
-    """HTTP Basic 认证中间件"""
+class SessionAuthMiddleware(BaseHTTPMiddleware):
+    """Require the local HttpOnly session for every business API request."""
     async def dispatch(self, request: Request, call_next):
-        # 检查Authorization头
-        auth_header = request.headers.get("Authorization")
-        
-        if auth_header:
-            try:
-                scheme, credentials = auth_header.split()
-                if scheme.lower() == "basic":
-                    decoded = base64.b64decode(credentials).decode("utf-8")
-                    username, password = decoded.split(":", 1)
-                    if username == AUTH_USERNAME and password == AUTH_PASSWORD:
-                        return await call_next(request)
-            except Exception:
-                pass
-        
-        # 认证失败，返回401
-        return Response(
-            content="认证失败，请输入正确的用户名和密码",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="BidMonitor"'},
-            media_type="text/plain"
-        )
+        path = request.url.path
+        # Preserve the standalone desktop/server mode when no Sub2API
+        # credentials are configured.  Docker-managed instances set either
+        # credential and therefore require the local HttpOnly session.
+        if not is_managed() or path == "/api/auth/sso/callback" or not path.startswith("/api/") or request.method == "OPTIONS":
+            return await call_next(request)
+        identity = get_identity(request)
+        if identity is None:
+            return Response(content=json.dumps({"detail": "Authentication required"}), status_code=401, media_type="application/json")
+        app_token = app_state.activate_user(identity.subject)
+        token = set_current_subject(identity.subject)
+        try:
+            return await call_next(request)
+        finally:
+            app_state.persist_active_state()
+            reset_current_subject(token)
+            app_state.deactivate_user(app_token)
 
-app.add_middleware(BasicAuthMiddleware)
+app.add_middleware(SessionAuthMiddleware)
+
+
+def _with_subject_operation_lock(handler):
+    """Serialize synchronous monitor state transitions per authenticated user."""
+    @wraps(handler)
+    async def locked_handler(*args, **kwargs):
+        subject = _APP_SUBJECT.get()
+        with app_state.operation_lock(subject):
+            return await handler(*args, **kwargs)
+    return locked_handler
 
 # 静态文件
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
@@ -474,13 +665,27 @@ if os.path.exists(STATIC_DIR):
 
 
 # API 路由
+@app.get("/api/auth/sso/callback")
+async def sso_callback(request: Request):
+    """Consume the short-lived Sub2API ticket and issue a three-day session."""
+    try:
+        payload = verify_ticket(request.query_params.get("ticket", ""))
+        identity = consume_ticket(payload)
+    except (ValueError, TypeError) as exc:
+        if str(exc) == "SSO is not configured":
+            raise HTTPException(status_code=503, detail="SSO is not configured") from exc
+        return RedirectResponse("/?error=sso_failed", status_code=303, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    response = RedirectResponse(safe_next(payload.get("next")), status_code=303, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    create_session(identity, response, request)
+    return response
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """返回主页"""
     index_path = os.path.join(STATIC_DIR, 'index.html')
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return HTMLResponse("<h1>BidMonitor 服务正在运行</h1><p>请访问 /static/index.html</p>")
+    return HTMLResponse("<h1>自动招标服务正在运行</h1><p>请访问 /static/index.html</p>")
 
 @app.get("/api/status")
 async def get_status():
@@ -511,6 +716,7 @@ async def get_status():
     }
 
 @app.post("/api/start")
+@_with_subject_operation_lock
 async def start_monitor(background_tasks: BackgroundTasks):
     """开始监控"""
     if app_state.is_running:
@@ -527,13 +733,14 @@ async def start_monitor(background_tasks: BackgroundTasks):
     
     # 立即执行一次（next_run_time会在任务完成后设置）
     app_state.next_run_time = None
-    background_tasks.add_task(run_monitor_task)
+    background_tasks.add_task(run_monitor_task, _APP_SUBJECT.get())
     
     app_state.add_log(f"✅ 监控已启动，间隔 {interval} 分钟")
     
     return {"success": True, "message": "监控已启动"}
 
 @app.post("/api/stop")
+@_with_subject_operation_lock
 async def stop_monitor():
     """停止监控"""
     if not app_state.is_running:
@@ -558,23 +765,34 @@ async def stop_monitor():
     return {"success": True, "message": "监控已停止"}
 
 @app.post("/api/run-once")
+@_with_subject_operation_lock
 async def run_once(background_tasks: BackgroundTasks):
     """立即执行一次检索（不需要启动监控也可使用）"""
     # 记录原始状态
     was_running = app_state.is_running
+    owner_subject = _APP_SUBJECT.get()
+    if app_state.current_task_running or app_state.manual_run_pending:
+        return {"success": False, "message": "妫€绱㈠姟姝ｅ湪杩愯"}
+    app_state.manual_run_pending = True
     app_state.stop_event.clear()  # 确保stop_event未设置
     
     async def manual_run_task():
+        app_token = app_state.activate_user(owner_subject)
+        subject_token = set_current_subject(owner_subject)
         """手动运行任务的包装函数"""
         # 临时设置is_running为True以允许任务执行
         app_state.is_running = True
         try:
-            await run_monitor_task()
+            await _run_monitor_task()
         finally:
             # 如果原来不在运行，则恢复为停止状态
             if not was_running:
                 app_state.is_running = False
                 app_state.next_run_time = None
+            app_state.manual_run_pending = False
+            app_state.persist_active_state()
+            reset_current_subject(subject_token)
+            app_state.deactivate_user(app_token)
     
     background_tasks.add_task(manual_run_task)
     app_state.add_log("🔍 手动触发检索...")
@@ -583,9 +801,11 @@ async def run_once(background_tasks: BackgroundTasks):
 @app.get("/api/config")
 async def get_config():
     """获取配置"""
-    config = app_state.config.copy()
-    # 不再隐藏敏感信息，让前端能正确显示已保存的值
-    return config
+    # Configuration is also tenant data.  Return a detached copy and redact
+    # every credential-like value; the full-config save path preserves the
+    # existing server-side secret when the browser submits an empty field.
+    config = json.loads(json.dumps(app_state.config, ensure_ascii=False))
+    return _redact_config_value(config)
 
 @app.post("/api/config")
 async def update_config(config: ConfigModel):
@@ -691,7 +911,10 @@ async def clear_history():
 @app.get("/api/contacts")
 async def get_contacts():
     """获取联系人列表"""
-    return app_state.config.get('contacts', [])
+    # Contact records contain SMTP and PushPlus credentials.  They remain
+    # server-side and are preserved by the update path when the UI submits
+    # the ``***`` marker unchanged.
+    return _redact_config_value(app_state.config.get('contacts', []))
 
 @app.post("/api/contacts")
 async def update_contacts(contacts: List[Dict[str, Any]]):
@@ -705,11 +928,12 @@ async def update_contacts(contacts: List[Dict[str, Any]]):
         old_contact = old_contacts_by_name.get(name, {})
         
         # 保留email_password如果前端没有传入新值
-        if not contact.get('email_password') and old_contact.get('email_password'):
+        if contact.get('email_password') in ['', None, '***'] and old_contact.get('email_password'):
             contact['email_password'] = old_contact['email_password']
         
         # 保留wechat_token如果前端传入空值但原来有值
-        # (注意：wechat_token用户可能想清空，这里不强制保留)
+        if contact.get('wechat_token') == '***' and old_contact.get('wechat_token'):
+            contact['wechat_token'] = old_contact['wechat_token']
     
     app_state.config['contacts'] = contacts
     save_config(app_state.config)
@@ -728,7 +952,10 @@ async def update_full_config(config: Dict[str, Any]):
                         config[key][secret_key] = app_state.config[key].get(secret_key, '')
     
     if 'ai_config' in config and 'ai_config' in app_state.config:
-        if config['ai_config'].get('api_key') in ['', None, '***']:
+        # Ignore API keys supplied by the browser in managed satellite mode.
+        if is_managed():
+            config['ai_config']['api_key'] = ''
+        elif config['ai_config'].get('api_key') in ['', None, '***']:
             config['ai_config']['api_key'] = app_state.config.get('ai_config', {}).get('api_key', '')
     
     if 'email_configs' in config and config['email_configs']:
@@ -737,6 +964,24 @@ async def update_full_config(config: Dict[str, Any]):
                 old_configs = app_state.config.get('email_configs', [])
                 if i < len(old_configs):
                     email_cfg['password'] = old_configs[i].get('password', '')
+
+    # ``/api/config`` redacts contact credentials.  A later save from the
+    # settings dialogs must therefore preserve the server-side values instead
+    # of replacing them with empty strings.
+    if isinstance(config.get('contacts'), list):
+        old_contacts = app_state.config.get('contacts', [])
+        old_by_name = {
+            str(item.get('name', '')).strip(): item
+            for item in old_contacts
+            if isinstance(item, dict) and str(item.get('name', '')).strip()
+        }
+        for contact in config['contacts']:
+            if not isinstance(contact, dict):
+                continue
+            old_contact = old_by_name.get(str(contact.get('name', '')).strip(), {})
+            for secret_key in ('email_password', 'wechat_token'):
+                if contact.get(secret_key) in ['', None, '***'] and isinstance(old_contact, dict):
+                    contact[secret_key] = old_contact.get(secret_key, '')
     
     app_state.config.update(config)
     save_config(app_state.config)
@@ -871,6 +1116,21 @@ async def test_wechat(req: TestNotifyRequest):
 async def test_ai():
     """测试AI配置"""
     ai_config = app_state.config.get('ai_config', {})
+    managed = is_managed()
+    if managed:
+        try:
+            guard = AIGuard({'enable': True, 'model': os.getenv('SUB2API_RELAY_MODEL', 'gpt-5.5')}, log_callback=app_state.add_log)
+            relevant, reason = guard.check_relevance('自动招标连接测试', '请仅返回相关性判断。', raise_on_error=True)
+            return {'success': True, 'message': f'AI测试成功！回复: {reason[:100]}'}
+        except SatelliteConfigurationError as e:
+            app_state.add_log(f"❌ AI测试异常: {e}")
+            # A missing relay/session/app credential is a local integration
+            # configuration problem. Report 503 so callers can distinguish it
+            # from an upstream model gateway failure (502).
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            app_state.add_log(f"❌ AI测试异常: {e}")
+            raise HTTPException(status_code=502, detail=str(e))
     if not ai_config.get('api_key'):
         raise HTTPException(status_code=400, detail="请先配置AI API Key")
     
@@ -904,6 +1164,4 @@ async def test_ai():
 # 主入口
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
-
-
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("YIBIAO_PORT", "8081")))

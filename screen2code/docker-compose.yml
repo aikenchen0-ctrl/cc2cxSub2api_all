@@ -12,6 +12,7 @@ services:
     ports:
       - "${BACKEND_PORT:-7001}:7001"
     command: poetry run uvicorn main:app --host 0.0.0.0 --port 7001
+    restart: unless-stopped
     volumes:
       - ./backend/data:/app/data
     networks:
@@ -28,6 +29,7 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+    restart: unless-stopped
     networks:
       - default
       - sub2api-network

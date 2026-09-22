@@ -90,6 +90,6 @@ if /i "%REMOTE_EXEC%"=="y" (
 )
 
 echo.
-echo 访问地址: http://%SERVER_IP%:8080
+echo 访问地址: http://%SERVER_IP%:8081
 echo.
 pause

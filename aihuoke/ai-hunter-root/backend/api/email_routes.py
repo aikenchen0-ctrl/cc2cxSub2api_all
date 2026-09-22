@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.hunt_store import load_hunt, save_hunt, now_iso
+from api.routes import _require_hunt_owner
 from api.security import require_api_access
 from config.settings import get_settings
 from emailing.readiness import ensure_imap_tested, ensure_smtp_ready, ensure_smtp_tested
@@ -17,19 +18,21 @@ from emailing.reply_detector import run_reply_detection_once
 from emailing.scheduler import run_scheduler_once
 from emailing.policy import expand_email_targets
 from emailing.store import EmailStore
+from auth_sso import current_subject, default_email_account_id, managed as satellite_managed, scoped_email_db_path
 
 router = APIRouter(prefix="/api/v1", tags=["email"])
 
 
 def _store() -> EmailStore:
-    store = EmailStore(get_settings().email_db_path)
+    subject = current_subject().strip() if satellite_managed() else ""
+    store = EmailStore(scoped_email_db_path(get_settings().email_db_path, subject))
     store.init_db()
     return store
 
 
 def _default_account(store: EmailStore) -> dict[str, Any]:
     settings = get_settings()
-    account_id = "default"
+    account_id = default_email_account_id(current_subject() if satellite_managed() else "")
     existing = store.get_account(account_id)
     current = now_iso()
     payload = {
@@ -151,6 +154,7 @@ async def create_email_campaign(hunt_id: str, payload: CreateCampaignRequest):
     hunt = load_hunt(hunt_id)
     if not hunt or not isinstance(hunt.get("result"), dict):
         raise HTTPException(status_code=404, detail="Hunt result not found")
+    _require_hunt_owner(hunt)
     sequences = hunt["result"].get("email_sequences", [])
     if not isinstance(sequences, list) or not sequences:
         raise HTTPException(status_code=400, detail="No generated email sequences found for this hunt")
@@ -277,6 +281,10 @@ async def create_email_campaign(hunt_id: str, payload: CreateCampaignRequest):
 
 @router.get("/hunts/{hunt_id}/email-campaigns", dependencies=[Depends(require_api_access)])
 async def list_email_campaigns(hunt_id: str):
+    hunt = load_hunt(hunt_id)
+    if not hunt:
+        raise HTTPException(status_code=404, detail="Hunt not found")
+    _require_hunt_owner(hunt)
     store = _store()
     campaigns = store.list_campaigns_for_hunt(hunt_id)
     return [{"campaign": c, **_campaign_summary(store, c["id"])} for c in campaigns]
@@ -288,6 +296,7 @@ async def start_email_campaign(campaign_id: str):
     campaign = store.get_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_hunt_owner(load_hunt(str(campaign.get("hunt_id") or "")) or {})
     settings = get_settings()
     try:
         ensure_smtp_tested(settings)
@@ -307,6 +316,7 @@ async def pause_email_campaign(campaign_id: str):
     campaign = store.get_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    _require_hunt_owner(load_hunt(str(campaign.get("hunt_id") or "")) or {})
     updated = now_iso()
     store.update_campaign_status(campaign_id, "paused", updated_at=updated)
     _write_summary_to_hunt(store, str(campaign["hunt_id"]), campaign_id)
@@ -319,6 +329,7 @@ async def get_email_sequence(sequence_id: str):
     sequence = store.get_sequence(sequence_id)
     if not sequence:
         raise HTTPException(status_code=404, detail="Sequence not found")
+    _require_hunt_owner(load_hunt(str(sequence.get("hunt_id") or "")) or {})
     messages = store.list_messages_for_sequence(sequence_id)
     reply_events = store.list_reply_events_for_sequence(sequence_id)
     return {"sequence": sequence, "messages": messages, "reply_events": reply_events}

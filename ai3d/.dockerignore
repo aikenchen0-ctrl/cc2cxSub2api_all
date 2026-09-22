@@ -1,0 +1,10 @@
+node_modules
+.auth
+.generated-models
+.logs
+dist
+test-results
+playwright-report
+.env*
+!.env.example
+.git

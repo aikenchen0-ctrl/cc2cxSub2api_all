@@ -36,6 +36,7 @@ from observability.cost_tracker import get_tracker, remove_tracker
 from tools.hunt_report import render_hunt_report
 from tools.lead_contract import leads_to_csv
 from tools.search_backend_error import collect_search_backend_error
+from auth_sso import current_subject, managed as satellite_managed, reset_current_subject, set_current_subject
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,37 @@ _hunts: dict[str, dict] = load_all_hunts(mark_interrupted=True)
 # SSE event queues per hunt — subscribers listen here
 _sse_queues: dict[str, list[asyncio.Queue]] = {}
 _reply_detection_task: asyncio.Task[Any] | None = None
+
+
+def _owner_subject() -> str:
+    subject = current_subject().strip()
+    return subject or "local"
+
+
+def _upload_dir_for_owner(subject: str | None = None) -> Path:
+    """Return the upload directory owned by the current satellite subject.
+
+    Managed deployments must never let one user reference another user's
+    uploaded source document.  Keep the subject out of the filesystem path by
+    using a stable, one-way directory name; local development keeps the
+    historical shared upload directory.
+    """
+    root = Path(get_settings().upload_dir).resolve()
+    if not satellite_managed():
+        return root
+    owner = str(subject if subject is not None else current_subject()).strip()
+    if not owner:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    owner_dir = root / hashlib.sha256(owner.encode("utf-8")).hexdigest()[:32]
+    return owner_dir
+
+
+def _require_hunt_owner(hunt: dict[str, Any]) -> None:
+    owner = str(hunt.get("owner_user_id") or "local")
+    if satellite_managed() and owner != current_subject().strip():
+        raise HTTPException(status_code=404, detail="Hunt not found")
+    if not satellite_managed() and owner != "local":
+        return
 
 
 class HuntCancelledError(RuntimeError):
@@ -94,11 +126,11 @@ def _unique_leads_count(leads: list[dict[str, Any]]) -> int:
 
 
 def _validate_uploaded_file_ids(file_ids: list[str]) -> list[str]:
-    """Accept only files that exist under the managed upload directory."""
+    """Accept only files owned by the current user and under the upload root."""
     if not file_ids:
         return []
 
-    upload_root = Path(get_settings().upload_dir).resolve()
+    upload_root = _upload_dir_for_owner()
     validated: list[str] = []
     for raw_path in file_ids:
         resolved = Path(raw_path).resolve()
@@ -268,6 +300,10 @@ def _fallback_template_seed(request: TemplateSeedRequest, insight: dict[str, Any
 
 def _template_seed_cache_key(request: TemplateSeedRequest) -> str:
     payload = {
+        # A template seed may contain private examples and uploaded-file
+        # content, so identical inputs from two users must not share a cache
+        # entry.
+        "owner_user_id": _owner_subject(),
         "website_url": request.website_url.strip(),
         "description": request.description.strip(),
         "product_keywords": sorted(str(item).strip() for item in request.product_keywords if str(item).strip()),
@@ -302,6 +338,9 @@ def _save_template_seed_cache(cache: dict[str, Any]) -> None:
 
 
 async def _prepare_template_seed(request: TemplateSeedRequest) -> dict[str, Any]:
+    # Validate before consulting the cache.  Otherwise a stale cache entry
+    # could bypass the per-user upload ownership check.
+    uploaded_files = _validate_uploaded_file_ids(request.uploaded_file_ids)
     cache_key = _template_seed_cache_key(request)
     cached = _load_template_seed_cache().get(cache_key)
     if isinstance(cached, dict):
@@ -309,7 +348,6 @@ async def _prepare_template_seed(request: TemplateSeedRequest) -> dict[str, Any]
         result["cache_status"] = "hit"
         return result
 
-    uploaded_files = _validate_uploaded_file_ids(request.uploaded_file_ids)
     insight_state = {
         "website_url": request.website_url,
         "description": request.description,
@@ -441,6 +479,11 @@ def _sequence_recipient(sequence: dict[str, Any]) -> str:
 
 
 async def _scan_hunt_replies() -> None:
+    # Managed satellites use the subject-scoped reply worker in ``api.app``.
+    # The legacy loop below owns one shared settings/database context and must
+    # never inspect every tenant's hunts under that mode.
+    if satellite_managed():
+        return
     settings = get_settings()
     if not bool(settings.email_reply_detection_enabled):
         return
@@ -512,6 +555,11 @@ async def _reply_detection_loop() -> None:
 
 def start_background_workers() -> None:
     global _reply_detection_task
+    # ``api.app`` starts the managed-mode worker with one isolated settings and
+    # email store per Sub2API subject.  Do not also start this historical
+    # process-wide worker, which would otherwise scan all tenants together.
+    if satellite_managed():
+        return
     settings = get_settings()
     if bool(settings.email_reply_detection_enabled) and _reply_detection_task is None:
         _reply_detection_task = asyncio.create_task(_reply_detection_loop())
@@ -600,8 +648,13 @@ def _broadcast_stage_data(hunt_id: str, completed_stage: str, state: dict) -> No
 
 # ── Background task runner ──────────────────────────────────────────────
 
-async def _run_hunt(hunt_id: str, request: HuntRequest) -> None:
+async def _run_hunt(hunt_id: str, request: HuntRequest, owner_subject: str = "") -> None:
     """Run the full hunt pipeline in the background."""
+    owner_token = None
+    if owner_subject:
+        # BackgroundTasks run after the request middleware has unwound; carry
+        # the authenticated subject explicitly into the worker context.
+        owner_token = set_current_subject(owner_subject)
     _hunts[hunt_id]["status"] = "running"
     logger.info(
         "[Hunt %s] Starting — url=%s, files=%d, desc=%r, keywords=%s, profile=%s, regions=%s, email=%s",
@@ -798,6 +851,8 @@ async def _run_hunt(hunt_id: str, request: HuntRequest) -> None:
         _broadcast(hunt_id, "failed", {"error": str(e)})
     finally:
         set_progress_callback(None)
+        if owner_token is not None:
+            reset_current_subject(owner_token)
 
 
 # ── State compression for resume ────────────────────────────────────────
@@ -895,8 +950,11 @@ def _slim_state(prior_result: dict, request: ResumeRequest) -> dict:
     }
 
 
-async def _run_resume_hunt(hunt_id: str, request: ResumeRequest, prior_result: dict) -> None:
+async def _run_resume_hunt(hunt_id: str, request: ResumeRequest, prior_result: dict, owner_subject: str = "") -> None:
     """Resume a completed hunt from its prior state."""
+    owner_token = None
+    if owner_subject:
+        owner_token = set_current_subject(owner_subject)
     _hunts[hunt_id]["status"] = "running"
     logger.info(
         "[Hunt %s] Resuming — prior_leads=%d, new_target=%d, max_rounds=%d",
@@ -1055,6 +1113,8 @@ async def _run_resume_hunt(hunt_id: str, request: ResumeRequest, prior_result: d
         _broadcast(hunt_id, "failed", {"error": str(e)})
     finally:
         set_progress_callback(None)
+        if owner_token is not None:
+            reset_current_subject(owner_token)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────────
@@ -1072,8 +1132,8 @@ async def upload_files(files: list[UploadFile] = File(...)):
     Returns a list of server-side file paths to pass as uploaded_file_ids in HuntRequest.
     """
     settings = get_settings()
-    upload_dir = settings.upload_dir
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = _upload_dir_for_owner()
+    upload_dir.mkdir(parents=True, exist_ok=True)
     max_file_bytes = settings.max_upload_size_mb * 1024 * 1024
 
     _ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".json"}
@@ -1087,10 +1147,10 @@ async def upload_files(files: list[UploadFile] = File(...)):
                 detail=f"File type '{ext}' not supported. Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
             )
         unique_name = f"{uuid.uuid4()}{ext}"
-        dest = os.path.join(upload_dir, unique_name)
+        dest = upload_dir / unique_name
         written = 0
         try:
-            with open(dest, "wb") as f:
+            with dest.open("wb") as f:
                 while True:
                     chunk = file.file.read(1024 * 1024)
                     if not chunk:
@@ -1103,10 +1163,10 @@ async def upload_files(files: list[UploadFile] = File(...)):
                         )
                     f.write(chunk)
         except Exception:
-            if os.path.exists(dest):
-                os.remove(dest)
+            if dest.exists():
+                dest.unlink()
             raise
-        results.append({"original_name": file.filename, "file_id": str(Path(dest).resolve())})
+        results.append({"original_name": file.filename, "file_id": str(dest.resolve())})
         logger.info("[Upload] Saved %s → %s", file.filename, dest)
 
     return {"uploaded": results}
@@ -1135,6 +1195,7 @@ def _initialize_hunt(request: HuntRequest) -> tuple[str, HuntRequest]:
         "target_regions": request.target_regions,
         "email_template_examples": request.email_template_examples,
         "email_template_notes": request.email_template_notes,
+        "owner_user_id": _owner_subject(),
     }
     save_hunt(hunt_id, _hunts[hunt_id])
     prepared_request = request.model_copy(
@@ -1148,7 +1209,7 @@ def _initialize_hunt(request: HuntRequest) -> tuple[str, HuntRequest]:
 
 async def create_hunt_internal(request: HuntRequest) -> HuntResponse:
     hunt_id, prepared_request = _initialize_hunt(request)
-    asyncio.create_task(_run_hunt(hunt_id, prepared_request))
+    asyncio.create_task(_run_hunt(hunt_id, prepared_request, current_subject()))
     return HuntResponse(hunt_id=hunt_id, status="pending")
 
 
@@ -1159,7 +1220,7 @@ async def create_hunt(request: HuntRequest, background_tasks: BackgroundTasks):
     Returns a hunt_id to track progress.
     """
     hunt_id, prepared_request = _initialize_hunt(request)
-    background_tasks.add_task(_run_hunt, hunt_id, prepared_request)
+    background_tasks.add_task(_run_hunt, hunt_id, prepared_request, current_subject())
 
     return HuntResponse(hunt_id=hunt_id, status="pending")
 
@@ -1171,6 +1232,7 @@ async def get_hunt_status(hunt_id: str):
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = hunt.get("result") or {}
     return HuntStatus(
         hunt_id=hunt_id,
@@ -1190,6 +1252,7 @@ async def get_hunt_result(hunt_id: str):
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = hunt.get("result") or {}
     deduped_leads = _dedupe_leads(result.get("leads", []))
     return HuntResult(
@@ -1210,9 +1273,11 @@ def _hunt_leads_csv(hunt_id: str | None = None) -> str:
     if hunt_id:
         if hunt_id not in _hunts:
             raise HTTPException(status_code=404, detail="Hunt not found")
+        _require_hunt_owner(_hunts[hunt_id])
         hunts = [_hunts[hunt_id]]
     else:
-        hunts = list(_hunts.values())
+        owner = _owner_subject()
+        hunts = [hunt for hunt in _hunts.values() if not satellite_managed() or str(hunt.get("owner_user_id") or "local") == owner]
     leads: list[dict[str, Any]] = []
     for hunt in hunts:
         result = hunt.get("result") or {}
@@ -1224,6 +1289,7 @@ def _hunt_operator_report(hunt_id: str) -> str:
     if hunt_id not in _hunts:
         raise HTTPException(status_code=404, detail="Hunt not found")
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = dict(hunt.get("result") or {})
     if "search_result_count" not in result:
         result["search_result_count"] = len(result.get("search_results") or [])
@@ -1281,6 +1347,7 @@ async def decide_email_sequence(
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = hunt.get("result") or {}
     sequences = result.get("email_sequences", [])
     if not isinstance(sequences, list):
@@ -1328,6 +1395,7 @@ async def send_email_sequence_draft(
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = hunt.get("result") or {}
     sequences = result.get("email_sequences", [])
     if not isinstance(sequences, list):
@@ -1399,6 +1467,7 @@ async def detect_email_sequence_replies(
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     result = hunt.get("result") or {}
     sequences = result.get("email_sequences", [])
     if not isinstance(sequences, list) or sequence_index < 0 or sequence_index >= len(sequences):
@@ -1446,6 +1515,8 @@ async def list_hunts():
     """List all hunts with their status."""
     items = []
     for hid, h in _hunts.items():
+        if satellite_managed() and str(h.get("owner_user_id") or "local") != _owner_subject():
+            continue
         result = h.get("result") or {}
         items.append({
             "hunt_id": hid,
@@ -1475,6 +1546,7 @@ async def get_hunt_cost(hunt_id: str):
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     status = hunt["status"]
 
     # For running hunts: read live from tracker
@@ -1505,6 +1577,7 @@ async def resume_hunt(hunt_id: str, request: ResumeRequest, background_tasks: Ba
         raise HTTPException(status_code=404, detail="Hunt not found")
 
     hunt = _hunts[hunt_id]
+    _require_hunt_owner(hunt)
     if hunt["status"] == "running":
         raise HTTPException(status_code=409, detail="Hunt is already running")
     if hunt["status"] == "pending":
@@ -1532,6 +1605,6 @@ async def resume_hunt(hunt_id: str, request: ResumeRequest, background_tasks: Ba
     request = request.model_copy(
         update={"enable_email_craft": request.enable_email_craft}
     )
-    background_tasks.add_task(_run_resume_hunt, hunt_id, request, prior_result)
+    background_tasks.add_task(_run_resume_hunt, hunt_id, request, prior_result, current_subject())
 
     return HuntResponse(hunt_id=hunt_id, status="pending")
