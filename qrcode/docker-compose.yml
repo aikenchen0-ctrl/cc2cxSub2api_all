@@ -13,11 +13,15 @@ services:
       PORT: 5221
       QR_CORS_ORIGIN: ${QR_CORS_ORIGIN:-http://localhost:5221}
       QR_API_BASE_URL: ${QR_API_BASE_URL:-}
+      QR_SECURE_COOKIE: ${QR_SECURE_COOKIE:-0}
       LINK: ${LINK:-http://sub2api:8080}
-      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
-      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
+      # Managed satellite deployments must fail fast when either shared
+      # credential is missing; otherwise every SSO callback becomes a generic
+      # 401 "SSO login failed" after the container has already started.
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:?SUB2API_APP_CREDENTIAL is required}
       QR_IMAGE_MODEL: ${QR_IMAGE_MODEL:-gpt-image-2}
-      QR_SESSION_SECRET: ${QR_SESSION_SECRET:-${SUB2API_SSO_SECRET:-}}
+      QR_SESSION_SECRET: ${QR_SESSION_SECRET:-${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}}
     networks:
       - default
       - sub2api-network

@@ -14,6 +14,8 @@ try:
     from .matcher.keyword import KeywordMatcher
     from .notifier.email import EmailNotifier
     from .notifier.sms import SMSNotifier
+    from .notifier.wechat import WeChatNotifier
+    from .notifier.voice import VoiceNotifier
     
     from .crawler.ccgp import CCGPCrawler
     from .crawler.chinabidding import ChinaBiddingCrawler
@@ -32,6 +34,8 @@ except ImportError:
     from matcher.keyword import KeywordMatcher
     from notifier.email import EmailNotifier
     from notifier.sms import SMSNotifier
+    from notifier.wechat import WeChatNotifier
+    from notifier.voice import VoiceNotifier
     
     from crawler.ccgp import CCGPCrawler
     from crawler.chinabidding import ChinaBiddingCrawler
@@ -115,10 +119,13 @@ class MonitorCore:
                  notify_method: str = "email",
                  email: str = "",
                  phone: str = "",
+                 voice_phone: str = "",
                  email_config: Dict[str, Any] = None,
                  sms_config: Dict[str, Any] = None,
                  log_callback: Callable[[str], None] = None,
-                 ai_config: Dict[str, Any] = None):
+                 ai_config: Dict[str, Any] = None,
+                 storage_dir: Optional[str] = None,
+                 config: Optional[Dict[str, Any]] = None):
         """
         初始化监控核心
         
@@ -139,14 +146,17 @@ class MonitorCore:
         self.notify_method = notify_method
         self.email = email
         self.phone = phone
+        self.voice_phone = voice_phone or phone
         self.log_callback = log_callback or (lambda x: None)
+        self.notification_results = []
         
         # 初始化组件
-        self.storage = Storage()
+        db_path = os.path.join(storage_dir, 'bids.db') if storage_dir else 'data/bids.db'
+        self.storage = Storage(db_path)
         self.matcher = KeywordMatcher(keywords, exclude_keywords, must_contain_keywords)
         
         # 加载配置文件
-        self.config = self._load_config()
+        self.config = dict(config) if config is not None else self._load_config()
         
         # 初始化通知器
         if email_config:
@@ -165,6 +175,11 @@ class MonitorCore:
             self.sms_notifier = SMSNotifier(self.config['sms'])
         else:
             self.sms_notifier = None
+
+        wechat_config = self.config.get('wechat_config')
+        self.wechat_notifier = WeChatNotifier(wechat_config) if isinstance(wechat_config, dict) and wechat_config else None
+        voice_config = self.config.get('voice_config')
+        self.voice_notifier = VoiceNotifier(voice_config) if isinstance(voice_config, dict) and voice_config else None
         
         # 初始化 AI 守卫
         self.ai_guard = None
@@ -435,15 +450,29 @@ class MonitorCore:
             'new_count': len(all_matched_bids),
             'failed_sites': failed_sites,
             'total_crawlers': len(self.crawlers),
-            'ai_stats': ai_stats
+            'ai_stats': ai_stats,
+            'notifications': list(self.notification_results),
         }
     
     def _send_notifications(self, bids: List[BidInfo]):
         """发送通知"""
-        success = False
-        
-        if self.notify_method in ('email', 'both') and self.email_notifier:
+        self.notification_results = []
+        any_success = False
+        methods = {item.strip().lower() for item in str(self.notify_method or 'none').split(',')}
+        if 'both' in methods:
+            methods.update({'email', 'sms'})
+
+        def record(channel: str, sent: bool, error: str = ''):
+            self.notification_results.append({
+                'channel': channel,
+                'status': 'sent' if sent else 'failed',
+                'error': error[:500] if error else None,
+            })
+
+        if 'email' in methods:
             try:
+                if not self.email_notifier:
+                    raise RuntimeError('email notifier is not configured')
                 if self.email:
                     # 临时修改收件人
                     original_receiver = self.email_notifier.receiver
@@ -454,19 +483,51 @@ class MonitorCore:
                     success = self.email_notifier.send(bids)
                 
                 if success:
+                    any_success = True
                     self.log(f"[OK] Email sent to {self.email or self.email_notifier.receiver}")
+                record('email', bool(success))
             except Exception as e:
                 self.log(f"[ERROR] Email failed: {e}")
+                record('email', False, str(e))
         
-        if self.notify_method in ('sms', 'both') and self.sms_notifier:
+        if 'sms' in methods:
             try:
+                if not self.sms_notifier:
+                    raise RuntimeError('sms notifier is not configured')
                 if self.phone:
                     success = self.sms_notifier.send(self.phone, bids)
                     if success:
+                        any_success = True
                         self.log(f"[OK] SMS sent to {self.phone}")
+                    record('sms', bool(success))
+                else:
+                    record('sms', False, 'phone target is empty')
             except Exception as e:
                 self.log(f"[ERROR] SMS failed: {e}")
+                record('sms', False, str(e))
+
+        if 'wechat' in methods:
+            try:
+                if not self.wechat_notifier:
+                    raise RuntimeError('wechat notifier is not configured')
+                success = self.wechat_notifier.send(bids)
+                any_success = any_success or bool(success)
+                record('wechat', bool(success))
+            except Exception as e:
+                self.log(f"[ERROR] WeChat failed: {e}")
+                record('wechat', False, str(e))
+
+        if 'voice' in methods:
+            try:
+                if not self.voice_notifier:
+                    raise RuntimeError('voice notifier is not configured')
+                success = self.voice_notifier.call(self.voice_phone, count=len(bids), source=bids[0].source if bids else '')
+                any_success = any_success or bool(success)
+                record('voice', bool(success))
+            except Exception as e:
+                self.log(f"[ERROR] Voice failed: {e}")
+                record('voice', False, str(e))
         
-        if success:
+        if any_success:
             for bid in bids:
                 self.storage.mark_notified(bid)

@@ -7,7 +7,7 @@ import (
 
 func TestLookupKnownApps(t *testing.T) {
 	t.Parallel()
-	for _, slug := range []string{"canvas", "ju", "livart", "ppt", "aicut", "screen2code", "aiexcel", "qrcode", "yibiao", "ai3d", "aihuoke"} {
+	for _, slug := range []string{"canvas", "ju", "livart", "ppt", "aicut", "screen2code", "aiexcel", "qrcode", "yibiao", "ai3d", "aihuoke", "agentapi"} {
 		app, ok := Lookup(slug)
 		if !ok || app.Slug != slug || app.CallbackPath == "" || app.Audience == "" {
 			t.Fatalf("Lookup(%q) = %+v ok=%v", slug, app, ok)
@@ -21,9 +21,10 @@ func TestLookupKnownApps(t *testing.T) {
 func TestNewSatelliteDefaultsUseDedicatedLocalPorts(t *testing.T) {
 	t.Parallel()
 	want := map[string]string{
-		"yibiao":  "http://localhost:8081",
-		"ai3d":    "http://localhost:5174",
-		"aihuoke": "http://localhost:3001",
+		"yibiao":   "http://localhost:8081",
+		"ai3d":     "http://localhost:5174",
+		"aihuoke":  "http://localhost:3001",
+		"agentapi": "http://localhost:18081",
 	}
 	for slug, origin := range want {
 		app, ok := Lookup(slug)
@@ -32,6 +33,24 @@ func TestNewSatelliteDefaultsUseDedicatedLocalPorts(t *testing.T) {
 		}
 		if app.DefaultOrigin != origin {
 			t.Fatalf("%s default origin = %q, want %q", slug, app.DefaultOrigin, origin)
+		}
+	}
+}
+
+func TestPublicOriginOverridesProducePublicSSOCallbacks(t *testing.T) {
+	t.Setenv("qrcode_link", "https://qrcode.cc2.cx")
+	t.Setenv("yibiao_link", "https://yibiao.cc2.cx")
+	t.Setenv("QRCODE_SSO_CALLBACK_URL", "")
+	t.Setenv("YIBIAO_SSO_CALLBACK_URL", "")
+
+	for _, slug := range []string{"qrcode", "yibiao"} {
+		app, ok := Lookup(slug)
+		if !ok {
+			t.Fatalf("Lookup(%q) failed", slug)
+		}
+		want := "https://" + slug + ".cc2.cx" + app.CallbackPath
+		if got := CallbackURL(app.CallbackEnv, slug, app.DefaultOrigin, app.CallbackPath); got != want {
+			t.Errorf("%s callback = %q, want %q", slug, got, want)
 		}
 	}
 }

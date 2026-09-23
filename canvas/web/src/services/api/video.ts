@@ -9,7 +9,7 @@ import { boolConfig, isSeedanceVideoConfig, normalizeSeedanceDuration, normalize
 import { isKIEGrokVideoModel, isKIEKlingV3Config, kieKlingOmniVariant } from "./protocols/kling-models";
 import { autoDLBaseUrl, getAutoDLCapabilities } from "@/lib/autodl";
 import { fetchAutoDLWorkflow } from "./autodl";
-import { isAgnesVideoV25Model, isCogVideoX3Model, modelKey, normalizeCogVideoX3Duration, supportsVideoAudioGeneration } from "@/lib/video-model-capabilities";
+import { amamVideoDefaultResolution, amamVideoReferenceLimits, isAgnesVideoV25Model, isAmamVideoModel, isCogVideoX3Model, modelKey, normalizeAmamVideoRatio, normalizeCogVideoX3Duration, supportsVideoAudioGeneration } from "@/lib/video-model-capabilities";
 import { resolveMediaUrl, uploadMediaFile, uploadRemoteMediaToServer } from "@/services/file-storage";
 import { autoSyncToCloud, imageToDataUrl, resolveImageUrl } from "@/services/image-storage";
 import { buildApiUrl, channelIdForActiveModel, channelProtocolForConfig, directAIProviderForConfig, localChannelForActiveModel, type AiConfig, type VideoElementReference } from "@/stores/use-config-store";
@@ -323,6 +323,22 @@ async function create88APIVideoRequestBody(config: AiConfig, model: string, prom
 }
 
 async function createVideoRequestBody(config: AiConfig, model: string, prompt: string, input: Required<VideoReferenceInput>) {
+    if (isAmamVideoModel(model) && videoChannelProtocol(config, model) === "openai") {
+        if (input.references.length || input.firstFrame || input.lastFrame) throw new VideoRequestError("Amam 模型不支持参考图片或首尾帧");
+        const limits = amamVideoReferenceLimits(model);
+        const body: Record<string, unknown> = {
+            model,
+            prompt,
+            seconds: !config.videoSeconds?.trim() || config.videoSeconds.trim() === "6" ? "5" : config.videoSeconds,
+            size: normalizeAmamVideoRatio(model, !config.size?.trim() || config.size === "1:1" ? "16:9" : config.size),
+            resolution: amamResolution(config.vquality, model),
+        };
+        const videos = await Promise.all(input.videoReferences.slice(0, limits.videos).map(mediaReferenceToURL));
+        const audios = await Promise.all(input.audioReferences.slice(0, limits.audios).map(mediaReferenceToURL));
+        if (videos.length) body["video_reference[]"] = videos;
+        if (audios.length) body["audio_reference[]"] = audios;
+        return body;
+    }
     if (isLegacyGatewayVideoModel(model, videoChannelProtocol(config, model))) {
         if (input.firstFrame || input.lastFrame || input.videoReferences.length || input.audioReferences.length) {
             throw new VideoRequestError("该自定义模型仅支持普通参考图片，不支持首尾帧、视频或音频参考");
@@ -336,6 +352,8 @@ async function createVideoRequestBody(config: AiConfig, model: string, prompt: s
     if (videoChannelProtocol(config, model) === "autodl") {
         const capabilities = getAutoDLCapabilities(await fetchAutoDLWorkflow(autoDLBaseUrl(config, model), model));
         if (!capabilities) throw new VideoRequestError("当前 AutoDL 工作流尚未适配");
+        const seconds = config.videoSeconds?.trim() === "6" ? "" : config.videoSeconds?.trim() || String(capabilities.duration?.default ?? "");
+        const resolution = config.vquality?.trim() === "720" ? "" : config.vquality?.trim() || String(capabilities.resolution?.default ?? "");
         const { autoDLReferenceURL } = await import("./direct-ai");
         const [images, videos, audios, firstFrame, lastFrame] = await Promise.all([
             Promise.all((capabilities.imageMax ? input.references : []).map(autoDLReferenceURL)),
@@ -345,7 +363,7 @@ async function createVideoRequestBody(config: AiConfig, model: string, prompt: s
             capabilities.lastFrame && input.lastFrame ? autoDLReferenceURL(input.lastFrame) : Promise.resolve(""),
         ]);
         return {
-            model, prompt, seconds: config.videoSeconds, size: config.size, resolution_name: config.vquality,
+            model, prompt, seconds, size: config.size === "1:1" || config.size === "1280x720" ? "" : config.size, resolution_name: resolution,
             "input_reference[]": images, "video_reference[]": videos, "audio_reference[]": audios,
             ...(firstFrame ? { first_frame_url: firstFrame } : {}),
             ...(lastFrame ? { last_frame_url: lastFrame } : {}),
@@ -438,6 +456,11 @@ async function createVideoRequestBody(config: AiConfig, model: string, prompt: s
     const audioFiles = kling ? [] : await Promise.all(input.audioReferences.map(mediaReferenceToFormValue));
     audioFiles.forEach((file) => body.append("audio_reference[]", file));
     return body;
+}
+function amamResolution(value: string | undefined, model: string) {
+    const resolution = value?.trim();
+    if (!resolution || resolution === "720") return amamVideoDefaultResolution(model);
+    return /^\d+$/.test(resolution) ? `${resolution}p` : resolution;
 }
 
 async function createArkSeedanceVideoRequestBody(config: AiConfig, model: string, prompt: string, input: Required<VideoReferenceInput>) {
@@ -688,6 +711,13 @@ async function mediaReferenceToFormValue(media: ReferenceVideo | ReferenceAudio)
     const publicUrl = publicHttpUrl(resolvedUrl) || publicHttpUrl(media.url);
     if (publicUrl) return publicUrl;
     return mediaReferenceToFile(media);
+}
+
+async function mediaReferenceToURL(media: ReferenceVideo | ReferenceAudio) {
+    const resolvedUrl = await resolveMediaUrl(media.storageKey, media.url);
+    const publicUrl = publicHttpUrl(resolvedUrl) || publicHttpUrl(media.url);
+    if (!publicUrl) throw new VideoRequestError("Amam 参考视频和音频需要可公开访问的 URL");
+    return publicUrl;
 }
 
 async function referenceTo88APIUrl(reference: ReferenceImage | ReferenceVideo | ReferenceAudio) {

@@ -6,10 +6,11 @@ import { Input, Switch } from "antd";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { useAutoDLWorkflow } from "@/hooks/use-autodl-workflow";
 import { isAutoDLConfig, normalizeAutoDLDuration } from "@/lib/autodl";
+import { getAutoDLCapabilities } from "@/lib/autodl-capabilities";
 import { isLegacyGatewayVideoModel, legacyGatewayVideoBody, legacyGatewayVideoOptions } from "@/lib/legacy-gateway-video";
 import { boolConfig, isSeedanceFastOrMiniModel, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceDurationOptions, seedancePixelLabel, seedanceRatioOptions, seedanceResolutionOptions } from "@/lib/seedance-video";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { COGVIDEOX3_DURATIONS, isCogVideoX3Model, modelKey, normalizeCogVideoX3Duration, supportsVideoAudioGeneration } from "@/lib/video-model-capabilities";
+import { amamVideoDefaultResolution, COGVIDEOX3_DURATIONS, isAmamVideoModel, isCogVideoX3Model, modelKey, normalizeCogVideoX3Duration, normalizeAmamVideoRatio, supportsAmamVideoRatio, supportsVideoAudioGeneration } from "@/lib/video-model-capabilities";
 import { grokVideoModeOptions, isAPIMartKlingV26Config, isAPIMartKlingV3Config, isKIEGrokVideoModel, isKIEKlingV3Config, klingV26DurationOptions, klingV26ModeOptions, klingV26RatioLabels, klingV26RatioOptions, klingV3DurationOptions, klingV3ModeOptions, normalizeKlingV26Duration, normalizeKlingV26Ratio, normalizeKlingV3Duration } from "@/services/api/protocols/kling-models";
 import { channelProtocolForConfig, type AiConfig } from "@/stores/use-config-store";
 
@@ -18,10 +19,12 @@ export { isAPIMartKlingV26Config, isAPIMartKlingV3Config, isAPIMartKlingMotionCo
 export const videoResolutionOptions = [
     { value: "720", label: "720p" },
     { value: "480", label: "480p" },
+    { value: "768", label: "768p" },
     { value: "1080", label: "1080p" },
     { value: "2k", label: "2K" },
     { value: "4k", label: "4K" },
 ];
+const amamResolutionOptions = videoResolutionOptions;
 const resolutionButtonOptions = videoResolutionOptions.slice(0, 2);
 
 const sizeOptions = [
@@ -49,6 +52,7 @@ type VideoSettingsPanelProps = {
 export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", hideNegativePrompt = false, visualOnly = false }: VideoSettingsPanelProps) {
     const model = modelName || config.model || config.videoModel;
     const autodl = isAutoDLConfig(config, model);
+    const amamVideo = isAmamVideoModel(model) && channelProtocolForConfig({ ...config, model, videoModel: model }) === "openai";
     const { data: workflow } = useAutoDLWorkflow(config, model);
     if (isLegacyGatewayVideoModel(model, channelProtocolForConfig({ ...config, model, videoModel: model }))) {
         return <LegacyGatewayVideoSettingsPanel config={config} modelName={model} onConfigChange={onConfigChange} theme={theme} showTitle={showTitle} className={className} visualOnly={visualOnly} />;
@@ -62,10 +66,16 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
 
     const grokMode = config.videoMode === "fun" || config.videoMode === "spicy" ? config.videoMode : "normal";
     const cogVideoX3 = isCogVideoX3Model(model);
-    const seconds = autodl ? config.videoSeconds ?? "" : cogVideoX3 ? normalizeCogVideoX3Duration(config.videoSeconds) : config.videoSeconds || "6";
+    const autoDLResolution = getAutoDLCapabilities(workflow)?.resolution;
+    const autoDLDuration = getAutoDLCapabilities(workflow)?.duration;
+    const selectedAutoDLResolution = !config.vquality || config.vquality === "720" ? String(autoDLResolution?.default ?? "") : config.vquality;
+    const seconds = autodl && (!config.videoSeconds || config.videoSeconds === "6")
+        ? String(autoDLDuration?.default ?? "")
+        : autodl ? config.videoSeconds : amamVideo && config.videoSeconds === "6" ? "5" : cogVideoX3 ? normalizeCogVideoX3Duration(config.videoSeconds) : config.videoSeconds || "6";
+    const displayedResolution = amamVideo && (!config.vquality || config.vquality === "720") ? amamVideoDefaultResolution(model).replace(/p$/i, "") : config.vquality;
     const size = normalizeVideoSizeValue(config.size);
     const dimensions = readSizeDimensions(size);
-    const resolution = normalizeVideoResolutionValue(config.vquality);
+    const resolution = normalizeVideoResolutionValue(displayedResolution);
     const audioGenerationEnabled = supportsVideoAudioGeneration(model, channelProtocolForConfig({ ...config, model, videoModel: model }));
     const generateAudio = boolConfig(config.videoGenerateAudio, false);
     const updateResolution = (value: string) => {
@@ -105,14 +115,24 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
                     </SettingGroup>
                 ) : null}
                 <SettingGroup title="清晰度" color={theme.node.muted}>
-                    <div className="grid grid-cols-3 gap-2.5">
-                        {resolutionButtonOptions.map((item) => (
-                            <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => updateResolution(item.value)}>
-                                {item.label}
-                            </OptionPill>
-                        ))}
-                        <ResolutionInput value={resolution} theme={theme} onChange={updateResolution} />
-                    </div>
+                    {autodl && autoDLResolution?.options?.length ? (
+                        <div className="grid grid-cols-2 gap-2.5">
+                            {autoDLResolution.options.map((item) => (
+                                <OptionPill key={item.label} selected={selectedAutoDLResolution === item.label} theme={theme} onClick={() => onConfigChange("vquality", item.label)}>
+                                    {item.label}
+                                </OptionPill>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-2.5">
+                            {(amamVideo ? amamResolutionOptions : resolutionButtonOptions).map((item) => (
+                                <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => updateResolution(item.value)}>
+                                    {item.label}
+                                </OptionPill>
+                            ))}
+                            <ResolutionInput value={resolution} theme={theme} onChange={updateResolution} />
+                        </div>
+                    )}
                 </SettingGroup>
                 <SettingGroup title="尺寸" color={theme.node.muted}>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
@@ -121,7 +141,7 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
                         <DimensionInput prefix="H" value={dimensions.height} disabled={size === "auto"} theme={theme} onChange={(value) => updateDimension("height", value)} />
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
-                        {seedanceRatioOptions.map((item) => (
+                                {seedanceRatioOptions.filter((item) => !amamVideo || supportsAmamVideoRatio(model, item.value)).map((item) => (
                             <button
                                 key={item.value}
                                 type="button"

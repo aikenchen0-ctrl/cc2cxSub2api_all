@@ -5,6 +5,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- Sub2API SSO 回调期间显示登录处理中状态，不再渲染登录表单；画布创作输入框在文本输入、粘贴、输入法提交和外部清空时同步隐藏/显示占位提示；Skill 列表只显示名称和描述，不渲染封面图标。待在真实门户登录和画布 Skill 列表中验收。
 - 画布默认只生成 1 张图；只有在节点图像设置里手动改成多张后，才会按该数量生成。新建配置节点默认 count 为 1，不再读取全局旧的默认张数。
 - 当前部署已统一为 canvas-app（canvas:workspace），由 sub2api/deploy/docker-compose.override.yml 从当前 canvas 目录构建，唯一端口为 3522。原 3522、3523、3524 及停止的预览备份容器已清理；旧镜像保留用于回退。
 - 沿用 canvas_integrated_data 数据卷；三个预览数据副本及旧 3522 容器文件系统备份位于 sub2api/deploy/migration-backups/canvas-cleanup-20260918-132513。原 3522 丢失的数据目录未恢复。

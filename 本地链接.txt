@@ -47,6 +47,7 @@ screen2code_link=http://localhost:5173
 yibiao_link=http://localhost:8081
 ai3d_link=http://localhost:5174
 aihuoke_link=http://localhost:3001
+agentapi_link=http://localhost:18081
 
 线上环境只需替换为：
 
@@ -61,5 +62,6 @@ screen2code_link=https://screen2code.cc2.cx
 yibiao_link=https://yibiao.cc2.cx
 ai3d_link=https://ai3d.cc2.cx
 aihuoke_link=https://aihuoke.cc2.cx
+agentapi_link=https://agentapi.cc2.cx
 
 

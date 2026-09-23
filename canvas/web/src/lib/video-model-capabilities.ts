@@ -10,6 +10,66 @@ export function isAgnesVideoV25Model(modelName: string) {
     return modelKey(modelName) === "agnes-video-2-5";
 }
 
+export function isAmamVideoModel(modelName: string) {
+    const model = modelKey(modelName);
+    return model.startsWith("xinghe-") || model === "a-sd2-0" || model.startsWith("zhiying-") || model.startsWith("sd-2-5-30");
+}
+
+export function amamVideoReferenceLimits(modelName: string) {
+    const model = modelKey(modelName);
+    if (model.startsWith("xinghe-") || model === "a-sd2-0" || model.includes("minimax-h3")) return { videos: 3, audios: 3 };
+    if (model.includes("wan3-0")) return { videos: 5, audios: 5 };
+    if (model.includes("seedance-2-5") && !model.includes("line")) return { videos: 10, audios: 10 };
+    if (model.includes("seedance-2-5-line1")) return { videos: 3, audios: 3 };
+    if (model.includes("google-omni")) return { videos: 1, audios: 0 };
+    return { videos: 0, audios: 0 };
+}
+
+export function amamVideoDefaultResolution(modelName: string) {
+    const model = modelKey(modelName);
+    if (model.includes("1080p")) return "1080p";
+    if (model.includes("4k")) return "4k";
+    if (model.includes("2k")) return "2k";
+    if (model.includes("768p")) return "768p";
+    if (model === "a-sd2-0" || model.includes("wan3-0")) return "720p";
+    if (model.includes("480p") || model.startsWith("xinghe-")) return "480p";
+    return "720p";
+}
+
+export function normalizeAmamVideoRatio(modelName: string, value: string) {
+    const model = modelKey(modelName);
+    const ratio = amamRatioValue(value);
+    return amamVideoRatios(model).includes(ratio) ? ratio : "16:9";
+}
+
+export function supportsAmamVideoRatio(modelName: string, value: string) {
+    return amamVideoRatios(modelKey(modelName)).includes(amamRatioValue(value));
+}
+
+function amamRatioValue(value: string) {
+    if (!/^\d+x\d+$/.test(value)) return value;
+    const [width, height] = value.split("x").map(Number);
+    function divisor(a: number, b: number): number {
+        return b ? divisor(b, a % b) : a;
+    }
+    const factor = divisor(width, height);
+    return `${width / factor}:${height / factor}`;
+}
+
+function amamVideoRatios(model: string) {
+    return model.includes("minimax-h3")
+        ? ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3", "21:9"]
+        : model.includes("seedance-2-5-line2")
+            ? ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"]
+            : model.includes("seedance-2-5-line1")
+                ? ["16:9", "9:16", "1:1"]
+                : model.includes("seedance-2-5")
+                    ? ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"]
+                    : model.includes("wan3-0")
+                        ? ["16:9", "9:16", "1:1", "4:3", "3:4"]
+                        : ["16:9", "9:16"];
+}
+
 export const COGVIDEOX3_DURATIONS = ["5", "10"] as const;
 
 export function normalizeCogVideoX3Duration(value: string) {
@@ -18,6 +78,7 @@ export function normalizeCogVideoX3Duration(value: string) {
 }
 
 export function supportsVideoFrameReferences(modelName: string, protocol = "") {
+    if (protocol === "openai" && isAmamVideoModel(modelName)) return false;
     if (protocol === "autodl") return modelName === "minimax_h3_b99_002" || modelName === "minimax_h3_lightx2v";
     const model = modelKey(modelName);
     if (protocol === "88api") {
@@ -66,6 +127,7 @@ export function supportsVideoFrameReferences(modelName: string, protocol = "") {
 
 export function supportsVideoAudioGeneration(modelName: string, protocol = "") {
     const model = modelKey(modelName);
+    if (protocol === "openai" && isAmamVideoModel(modelName)) return false;
     if (protocol === "88api") return model === "veo-3-1" || model === "veo-3-1-fast" || model === "sd2-5 480p" || model === "sd2-5 720p" || model.startsWith("kling-3-0-turbo-");
     if (model.includes("motion-control")) return false;
     return (

@@ -5,13 +5,11 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+RUN npm run build
 
 ENV API_HOST=0.0.0.0 \
-    API_PORT=8787 \
-    VITE_PORT=5173 \
+    API_PORT=5173 \
     NODE_ENV=production
-EXPOSE 5173 5174 8787
+EXPOSE 5173
 
-# The Vite UI proxies /api to the colocated Node API. Keeping both processes
-# in one small satellite container also keeps the browser on one origin.
-CMD ["sh", "-c", "node server.mjs & exec npm run dev -- --host 0.0.0.0"]
+CMD ["node", "server.mjs"]

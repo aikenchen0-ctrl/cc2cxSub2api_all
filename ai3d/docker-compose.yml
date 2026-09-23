@@ -8,8 +8,7 @@ services:
     restart: unless-stopped
     environment:
       API_HOST: 0.0.0.0
-      API_PORT: 8787
-      VITE_PORT: 5173
+      API_PORT: 5173
       LINK: ${LINK:-}
       # Containers reach the colocated Sub2API service through the shared
       # Docker network.  Keep LINK as the documented local/cloud fallback,

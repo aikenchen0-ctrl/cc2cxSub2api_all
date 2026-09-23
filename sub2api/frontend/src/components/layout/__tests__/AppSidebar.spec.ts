@@ -86,7 +86,7 @@ describe('AppSidebar satellite quick app icons', () => {
 
 describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
   it('lists 智能剧场 and 超级改图 as ju-style SSO quick apps without an API key in the URL', () => {
-    expect(zhCommon.nav.smartShortDrama).toBe('智能剧场')
+    expect(zhCommon.nav.smartShortDrama).toBe('AI导演台')
     expect(zhCommon.nav.superCanvas).toBe('超级改图')
     expect(zhCommon.nav.superCanvas).not.toBe('超级画布')
     expect(componentSource).toContain("t('nav.smartShortDrama')")

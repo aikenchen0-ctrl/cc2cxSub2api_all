@@ -82,7 +82,7 @@ export function AuthScene() {
                     <div aria-hidden className="auth-scene-video-blend absolute inset-y-0 right-0 hidden w-[clamp(120px,14vw,240px)] lg:block" />
                     <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-4 p-5 sm:p-7 lg:p-9">
                         <Link to="/" className="inline-flex items-center gap-2.5 text-sm font-semibold text-white drop-shadow-sm transition-opacity hover:opacity-80">
-                            <BrandLogo theme="dark" className="size-7 rounded-lg object-cover" alt="智能剧场" fallback={<img src="/project-icon.jpg" alt="智能剧场" className="size-7 rounded-lg object-cover" />} />
+                            <BrandLogo theme="dark" className="size-7 rounded-lg object-cover" alt="AI导演台" fallback={<img src="/project-icon.jpg" alt="AI导演台" className="size-7 rounded-lg object-cover" />} />
                             {appearance.brandName}
                         </Link>
                         <button type="button" className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-black/20 px-3 py-1.5 text-[var(--fs-label)] text-white/76 backdrop-blur-xl transition hover:bg-black/35 disabled:cursor-default" onClick={playVideo} disabled={videoPlaying || !appearance.authVideoUrl} aria-pressed={videoPlaying}>

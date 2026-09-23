@@ -29,6 +29,11 @@ type aiProtocolRequest struct {
 	failureLabel string
 }
 
+func isAmamVideoModel(modelName string) bool {
+	name := strings.NewReplacer(".", "-", "_", "-", "/", "-").Replace(strings.ToLower(strings.TrimSpace(modelName)))
+	return strings.HasPrefix(name, "xinghe-") || strings.HasPrefix(name, "zhiying-") || strings.HasPrefix(name, "a-sd2-") || strings.HasPrefix(name, "sd-2-5-30")
+}
+
 type aiProtocolAdapter struct {
 	id            string
 	path          func(model.ModelChannel, string, string) (string, bool)
@@ -46,6 +51,18 @@ type aiProtocolAdapter struct {
 // HTTP 混合钩子留在原 handler 包边界，避免 service 反向依赖 handler。
 // 表只初始化一次；每阶段只执行自身钩子，bool 表示停止匹配，不表示字段是否改变。
 var builtinAIProtocols = []aiProtocolAdapter{
+	{
+		id: "amam-video",
+		path: func(channel model.ModelChannel, modelName string, path string) (string, bool) {
+			if !strings.EqualFold(strings.TrimSpace(channel.Protocol), service.ModelChannelProtocolOpenAI) || !isAmamVideoModel(modelName) {
+				return path, false
+			}
+			return path, path == "/videos" || strings.HasPrefix(path, "/videos/")
+		},
+		prepare: func(input aiProtocolRequest) (aiProtocolRequest, bool, error) {
+			return input, input.mode == aiProtocolVideoRequest && strings.EqualFold(strings.TrimSpace(input.channel.Protocol), service.ModelChannelProtocolOpenAI) && isAmamVideoModel(input.modelName), nil
+		},
+	},
 	{
 		id: service.ModelChannelProtocolAutoDL,
 		path: func(channel model.ModelChannel, modelName string, path string) (string, bool) {
@@ -398,6 +415,9 @@ func copyAIProtocolResponse(w http.ResponseWriter, response *http.Response, requ
 
 func transformAIProtocolVideoPayload(payload []byte, request *http.Request, channel model.ModelChannel, modelName string, status bool) []byte {
 	if service.IsSub2APIChannel(channel) {
+		return payload
+	}
+	if strings.EqualFold(strings.TrimSpace(channel.Protocol), service.ModelChannelProtocolOpenAI) && isAmamVideoModel(modelName) {
 		return payload
 	}
 	for _, adapter := range builtinAIProtocols {

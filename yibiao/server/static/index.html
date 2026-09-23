@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/jpeg" href="/static/project-icon.jpg">
-    <title>自动招标</title>
+    <title>AI找标投标</title>
+    <script>!function(){var b=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';var e=document.querySelector('link[rel~="icon"]');if(e)e.href=b+'/logo.jpg'}();</script>
+    <script>(function(){var b=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';fetch(b+'/api/v1/settings/public',{credentials:'omit'}).then(function(r){return r.ok?r.json():null}).then(function(x){var l=x&&x.data&&x.data.site_logo;if(!l)return;var e=document.querySelector('link[rel~="icon"]')||document.createElement('link');e.rel='icon';e.href=new URL(l,b+'/').href;if(!e.parentNode)document.head.appendChild(e)}).catch(function(){})})();</script>
     <style>
         * {
             margin: 0;
@@ -512,7 +514,7 @@
 <body>
     <div class="header">
         <div>
-            <h1>🔍 自动招标</h1>
+            <h1>🔍 AI找标投标</h1>
             <div class="subtitle">招标信息监控系统</div>
         </div>
         <button class="refresh-btn" onclick="refreshAll()">🔄 刷新</button>

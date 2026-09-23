@@ -10,7 +10,7 @@ const Header: React.FC = () => {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/project-icon.jpg" alt="永恒PPT" className="h-8 w-8 rounded-lg object-cover" />
+            <img src="/project-icon.jpg" alt="PPT生成" className="h-8 w-8 rounded-lg object-cover" />
           </Link>
 
           <nav className="flex items-center gap-4">

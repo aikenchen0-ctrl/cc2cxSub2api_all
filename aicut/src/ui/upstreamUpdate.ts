@@ -3,7 +3,7 @@ import type {
   DesktopUpdateState,
 } from '../../shared/desktop-update';
 
-export const UPSTREAM_LATEST_RELEASE_URL = 'https://api.github.com/repos/0xsline/OpenChatCut/releases/latest';
+export const UPSTREAM_LATEST_RELEASE_URL = 'https://github.com/0xsline/OpenChatCut/releases.atom';
 export const UPSTREAM_RELEASES_URL = 'https://github.com/0xsline/OpenChatCut/releases/latest';
 
 export const CURRENT_APP_VERSION =
@@ -105,15 +105,20 @@ export async function queryLatestUpstreamRelease(
   fetcher: Fetcher = fetch,
   signal?: AbortSignal,
 ): Promise<UpstreamReleaseResult> {
-  const response = await fetcher(UPSTREAM_LATEST_RELEASE_URL, { signal });
+  const response = await fetcher(UPSTREAM_LATEST_RELEASE_URL, {
+    signal,
+    headers: { accept: 'application/atom+xml, application/xml, text/xml' },
+  });
   if (!response.ok) throw new Error(`Upstream release check failed (${response.status})`);
-  const payload = await response.json() as { tag_name?: unknown };
-  if (typeof payload.tag_name !== 'string' || !parseVersion(payload.tag_name)) {
+  const feed = await response.text();
+  const entryTitle = feed.match(/<entry\b[^>]*>[\s\S]*?<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1];
+  const tagName = entryTitle?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g, '&').trim();
+  if (!tagName || !parseVersion(tagName)) {
     throw new Error('Upstream did not return a valid release version');
   }
   return {
-    latestVersion: payload.tag_name,
-    updateAvailable: isNewerVersion(payload.tag_name, currentVersion),
+    latestVersion: tagName,
+    updateAvailable: isNewerVersion(tagName, currentVersion),
   };
 }
 

@@ -29,7 +29,7 @@ export default function CanvasPage() {
     const enterProject = (id: string) => {
         router.push(`/canvas/${id}`);
     };
-    const createAndEnter = () => enterProject(createProject(`无限画布 ${projects.length + 1}`));
+    const createAndEnter = () => enterProject(createProject(`AI生图生视频 ${projects.length + 1}`));
     const importCanvas = async (file?: File) => {
         if (!file) return;
         try {
@@ -62,7 +62,7 @@ export default function CanvasPage() {
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-6 dark:border-stone-800">
                     <div>
                         <p className="text-xs text-stone-500">画布库</p>
-                        <h1 className="mt-3 text-3xl font-semibold">无限画布</h1>
+                        <h1 className="mt-3 text-3xl font-semibold">AI生图生视频</h1>
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (

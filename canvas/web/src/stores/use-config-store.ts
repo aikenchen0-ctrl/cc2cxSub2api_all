@@ -233,6 +233,11 @@ function isVideoModelName(model: string) {
         value === "wan2.2animate-v4-motion_retargeting" ||
         value.includes("video") ||
         value.includes("seedance") ||
+        value.includes("xinghe") ||
+        value.includes("a-sd2") ||
+        value.startsWith("zhiying-") ||
+        value.includes("sd-2.5-30") ||
+        value.includes("sd-2-5-30") ||
         value.includes("sora") ||
         value.includes("veo") ||
         value.includes("kling") ||

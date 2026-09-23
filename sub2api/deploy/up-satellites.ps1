@@ -27,6 +27,10 @@ Up-Stack "livart" (Join-Path $Root "livart") @("docker-compose.yml") @()
 Up-Stack "ppt" (Join-Path $Root "ppt") @("docker-compose.yml") @("production")
 Up-Stack "qrcode" (Join-Path $Root "qrcode") @("docker-compose.yml") @()
 Up-Stack "screen2code" (Join-Path $Root "screen2code") @("docker-compose.yml") @()
+Up-Stack "yibiao" (Join-Path $Root "yibiao") @("docker-compose.yml") @()
+Up-Stack "ai3d" (Join-Path $Root "ai3d") @("docker-compose.yml") @()
+Up-Stack "aihuoke" (Join-Path $Root "aihuoke") @("docker-compose.yml") @()
+Up-Stack "agentapi" (Join-Path $Root "agentapi") @("docker-compose.yml") @()
 
 Write-Host "`n=== running ==="
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

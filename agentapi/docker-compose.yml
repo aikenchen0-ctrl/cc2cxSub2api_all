@@ -22,6 +22,10 @@ services:
       AGENTAPI_ADDR: ":8080"
       AGENTAPI_WEB_DIR: /app/web
       AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
+      # The public-layer ticket is signed by Sub2API. Keep this injected from
+      # the same deployment env file instead of relying on a stale container.
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
+      AGENTAPI_SSO_AUDIENCE: agentapi
       AGENT_ENABLED: ${AGENT_ENABLED:-true}
       MODEL_STREAM_TIMEOUT: ${MODEL_STREAM_TIMEOUT:-10m}
       AGENTAPI_WRITE_TIMEOUT: ${AGENTAPI_WRITE_TIMEOUT:-10m}

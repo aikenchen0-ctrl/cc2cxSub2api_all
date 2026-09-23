@@ -3,7 +3,9 @@ package middleware
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -13,6 +15,32 @@ import (
 // BrowserSessionCookieName is an opaque HttpOnly session for browser
 // navigations such as satellite SSO. The access JWT is kept server-side.
 const BrowserSessionCookieName = "sub2api_session"
+
+// ensureBrowserSessionCookie bridges existing API-token browser sessions to
+// top-level navigations (such as satellite SSO), which cannot attach a Bearer
+// header. Only the opaque session id is sent to the browser.
+func ensureBrowserSessionCookie(c *gin.Context, authService *service.AuthService, accessToken string) {
+	if c == nil || authService == nil || strings.TrimSpace(accessToken) == "" {
+		return
+	}
+	if _, err := c.Cookie(BrowserSessionCookieName); err == nil {
+		return
+	}
+	sessionID, ttl, err := authService.IssueBrowserSession(c.Request.Context(), accessToken, service.BrowserSessionTTL)
+	if err != nil || strings.TrimSpace(sessionID) == "" || ttl <= 0 {
+		return
+	}
+	secure := c.Request.TLS != nil || strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     BrowserSessionCookieName,
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   int(ttl / time.Second),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
 
 // NewJWTAuthMiddleware 创建 JWT 认证中间件
 func NewJWTAuthMiddleware(
@@ -108,6 +136,9 @@ func jwtAuth(
 		// 会话绑定校验：IP/UA 任一变化即撤销会话（功能可在系统设置中关闭）
 		if !enforceSessionBinding(c, authService, settingService, auditService, claims) {
 			return
+		}
+		if authHeader != "" {
+			ensureBrowserSessionCookie(c, authService, tokenString)
 		}
 
 		c.Set(string(ContextKeyUser), AuthSubject{

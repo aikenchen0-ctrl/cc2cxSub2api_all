@@ -38,11 +38,12 @@ class Storage:
     """
     
     def __init__(self, db_path: str = "data/bids.db"):
-        self.db_path = db_path
+        # Keep the database location stable if a worker changes its cwd.
+        self.db_path = os.path.abspath(os.fspath(db_path))
         # 线程本地存储，用于复用数据库连接
         self._local = threading.local()
         # 确保目录存在
-        db_dir = os.path.dirname(db_path)
+        db_dir = os.path.dirname(self.db_path)
         if db_dir:  # 处理相对路径情况
             os.makedirs(db_dir, exist_ok=True)
         self._init_db()

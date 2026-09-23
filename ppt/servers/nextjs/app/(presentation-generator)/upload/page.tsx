@@ -5,7 +5,7 @@ import Header from "@/app/(presentation-generator)/(dashboard)/dashboard/compone
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "永恒PPT",
+  title: "PPT生成",
   description:
     "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
   alternates: {
@@ -24,16 +24,16 @@ export const metadata: Metadata = {
     "business presentations",
   ],
   openGraph: {
-    title: "永恒PPT",
+    title: "PPT生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     type: "website",
     url: "https://presenton.ai/create",
-    siteName: "永恒PPT",
+    siteName: "PPT生成",
   },
   twitter: {
     card: "summary_large_image",
-    title: "永恒PPT",
+    title: "PPT生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     site: "@presenton_ai",

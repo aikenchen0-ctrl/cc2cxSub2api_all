@@ -17,24 +17,19 @@ import { SessionBar } from '../gateway/SessionBar';
 // through the thunk for either to be split.
 const McpGuideDialog = lazy(() => loadMcpGuideDialog().then((m) => ({ default: m.McpGuideDialog })));
 
-// Language switching: The text pill displays the current language; clicking
-// cycles through the supported locales. First run defaults to the
-// system language (or English) — see i18n/locale.ts.
 export function LocaleToggle() {
   const t = useT();
   const locale = getLocale();
-  const next = ALL_LOCALES[(ALL_LOCALES.indexOf(locale) + 1) % ALL_LOCALES.length]!;
   return (
-    <button
+    <select
       className="cc-tip cc-tip-r"
       data-tip={t('切换界面语言')}
       aria-label={t('切换界面语言')}
-      onClick={() => setLocale(next)}
-      style={{ minWidth: 30, height: 22, background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 4, cursor: 'pointer', padding: '0 5px', fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: theme.textDim, display: 'grid', placeItems: 'center' }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.panelAlt; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = theme.textDim; e.currentTarget.style.background = 'none'; }}>
-      {locale === 'zh' ? '中' : locale.toUpperCase()}
-    </button>
+      value={locale}
+      onChange={(event) => setLocale(event.currentTarget.value as typeof locale)}
+      style={{ minWidth: 58, height: 26, background: theme.panel, border: `0.5px solid ${theme.border}`, borderRadius: 3, cursor: 'pointer', padding: '0 5px', fontSize: 11, fontWeight: 600, color: theme.textDim }}>
+      {ALL_LOCALES.map((value) => <option key={value} value={value}>{value === 'zh' ? '中文' : value === 'en' ? 'English' : value === 'it' ? 'Italiano' : 'Русский'}</option>)}
+    </select>
   );
 }
 

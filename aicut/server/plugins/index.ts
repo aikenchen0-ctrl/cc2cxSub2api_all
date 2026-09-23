@@ -30,6 +30,7 @@ import { normalizeMediaPlugin } from "./normalize-media.ts";
 import { probeMediaPlugin } from "./probe-media.ts";
 import { imageGenerationPlugin } from "./image.ts";
 import { voiceGenerationPlugin } from "./voice.ts";
+import { DoubaoTtsConfig } from "./doubao-tts-config.ts";
 import { aiVoiceOptions, transcriptionOptions } from "./media-provider-config.ts";
 import { soundGenerationPlugin } from "./sound.ts";
 import { musicGenerationPlugin } from "./music.ts";
@@ -59,6 +60,7 @@ import { securityHeadersPlugin } from '../gateway/security-headers.ts';
 
 export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plugin[] {
   installSystemProxy();
+  const doubaoTts = () => DoubaoTtsConfig.fromEnv((name) => getKey(name as Parameters<typeof getKey>[0]));
   return [
     requestShapeGatePlugin(),
     gatewayPlugin(),
@@ -169,18 +171,16 @@ export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plu
         return getKey("ELEVENLABS_TTS_MODEL") || "eleven_multilingual_v2";
       },
       get doubaoBaseUrl() {
-        return (
-          getKey("DOUBAO_TTS_BASE_URL") || "https://openspeech.bytedance.com"
-        );
+        return doubaoTts().baseUrl;
       },
       get doubaoAppId() {
-        return getKey("DOUBAO_TTS_APP_ID");
+        return doubaoTts().appId;
       },
       get doubaoAccessKey() {
-        return getKey("DOUBAO_TTS_ACCESS_KEY");
+        return doubaoTts().accessKey;
       },
       get doubaoResourceId() {
-        return getKey("DOUBAO_TTS_RESOURCE_ID") || "seed-tts-2.0";
+        return doubaoTts().resourceId;
       },
       get minimaxBaseUrl() {
         return getKey("MINIMAX_BASE_URL") || "https://api.minimaxi.com";

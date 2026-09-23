@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.v1.auth.config import SESSION_COOKIE_NAME
-from api.v1.auth.sub2api_sso import HANDOFF_COOKIE_NAME, verify_ticket, safe_next
+from api.v1.auth.sub2api_sso import HANDOFF_COOKIE_NAME, _sso_username, verify_ticket, safe_next
 from models.sql.key_value import KeyValueSqlModel
 from models.sql.user import User
 from tests.integration.test_auth_endpoints import _build_client
@@ -69,7 +69,7 @@ def test_sso_creates_ordinary_account_and_reuses_identity(sso_client):
     assert SESSION_COOKIE_NAME in exchanged.headers["set-cookie"]
     status = client.get("/api/v1/auth/status").json()
     assert status["authenticated"] and status["role"] == "user"
-    assert status["username"] != "admin"
+    assert status["username"].startswith("admin-")
     assert client.get("/api/v1/admin/provider-settings").status_code == 403
     client.cookies.clear()
     assert callback(client, ticket()).headers["location"] == "/?sso=1"
@@ -78,6 +78,13 @@ def test_sso_creates_ordinary_account_and_reuses_identity(sso_client):
     client.cookies.clear()
     callback(client, ticket(sub="8"))
     assert client.get("/api/v1/auth/status").json()["user_id"] != status["user_id"]
+
+
+def test_sso_username_uses_display_name_and_is_stable():
+    name = _sso_username({"displayName": "  林 小明\n", "username": "fallback"}, "42")
+    assert name.startswith("林 小明-")
+    assert name == _sso_username({"displayName": "林 小明"}, "42")
+    assert _sso_username({}, "42").startswith("sub2api-")
 
 
 def test_ticket_cannot_be_replayed_after_new_session(sso_client):

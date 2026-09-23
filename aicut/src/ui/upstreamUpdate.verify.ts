@@ -14,20 +14,23 @@ const samples = [
 
 for (const sample of samples) {
   let requestedUrl = '';
-  const result = await queryLatestUpstreamRelease(sample.current, async (input) => {
+  let requestHeaders: HeadersInit | undefined;
+  const result = await queryLatestUpstreamRelease(sample.current, async (input, init) => {
     requestedUrl = String(input);
-    return new Response(JSON.stringify({ tag_name: sample.tag }), {
+    requestHeaders = init?.headers;
+    return new Response(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>${sample.tag}</title></entry></feed>`, {
       status: 200,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/atom+xml' },
     });
   });
-  assert.equal(requestedUrl, 'https://api.github.com/repos/0xsline/OpenChatCut/releases/latest');
+  assert.equal(requestedUrl, 'https://github.com/0xsline/OpenChatCut/releases.atom');
+  assert.equal(new Headers(requestHeaders).get('accept'), 'application/atom+xml, application/xml, text/xml');
   assert.equal(result.latestVersion, sample.tag);
   assert.equal(result.updateAvailable, sample.available, `${sample.current} compared with ${sample.tag}`);
 }
 
 await assert.rejects(
-  queryLatestUpstreamRelease('0.1.7', async () => new Response('{}', { status: 200 })),
+  queryLatestUpstreamRelease('0.1.7', async () => new Response('<feed><entry><title>not-a-version</title></entry></feed>', { status: 200 })),
   /valid release version/i,
   'missing tag_name should fail instead of reporting a false update',
 );

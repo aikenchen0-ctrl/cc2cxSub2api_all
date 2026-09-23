@@ -46,6 +46,7 @@ export function CanvasPromptChipInput({ value, references, onChange, onReference
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [editorIsEmpty, setEditorIsEmpty] = useState(!value.trim());
     const activeReferences = useMemo(() => references.filter((reference) => reference.active), [references]);
     const referenceByLabel = useMemo(() => new Map(activeReferences.map((reference) => [reference.label, reference])), [activeReferences]);
     const activeLabels = useMemo(() => Array.from(new Set(activeReferences.map((reference) => reference.label))).sort((left, right) => right.length - left.length), [activeReferences]);
@@ -72,6 +73,7 @@ export function CanvasPromptChipInput({ value, references, onChange, onReference
             if (reference) { const chip = createReferenceChip(reference, theme, setImagePreview); chip.dataset.refLabel = token.label; editor.append(chip); }
             else editor.append(document.createTextNode(token.label));
         });
+        setEditorIsEmpty(!value.trim());
         lastEmittedRef.current = value;
     }, [referenceByLabel, skills, theme, tokens, value]);
 
@@ -128,7 +130,9 @@ export function CanvasPromptChipInput({ value, references, onChange, onReference
         skills?.forEach((skill) => {
             if (!skillKeys.has(`${skill.source}:${skill.id}`)) onSkillRemove?.(skill.id, skill.source);
         });
-        emitChange(serializePromptEditor(editor));
+        const nextValue = serializePromptEditor(editor);
+        setEditorIsEmpty(!nextValue.trim());
+        emitChange(nextValue);
         syncMention();
     };
 
@@ -157,7 +161,7 @@ export function CanvasPromptChipInput({ value, references, onChange, onReference
         emitChange(serializePromptEditor(editor));
     };
 
-    const showPlaceholder = !value.trim() && !pendingReferences?.length && !skills?.length;
+    const showPlaceholder = editorIsEmpty && !pendingReferences?.length && !skills?.length;
 
     return (
         <div className="relative w-full">

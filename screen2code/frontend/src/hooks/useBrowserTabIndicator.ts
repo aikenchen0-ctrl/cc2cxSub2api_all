@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
 const CODING_SETTINGS = {
-  title: "AI识屏转代码 · 生成中…",
+  title: "AI一键复刻网站 · 生成中…",
   favicon: "/favicon/coding.png",
 };
 const DEFAULT_SETTINGS = {
-  title: "AI识屏转代码",
+  title: "AI一键复刻网站",
   favicon: "/project-icon.jpg",
 };
 

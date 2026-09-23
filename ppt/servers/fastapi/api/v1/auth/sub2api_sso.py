@@ -29,6 +29,16 @@ HANDOFF_KEY = "sub2api_sso_handoff"
 HANDOFF_TTL_SECONDS = 60
 
 
+def _sso_username(payload: dict, subject: str) -> str:
+    display = payload.get("displayName") or payload.get("username")
+    if not isinstance(display, str):
+        display = ""
+    display = " ".join(display.split())
+    display = "".join(char for char in display if char.isprintable())[:100].strip()
+    suffix = hashlib.sha256(subject.encode()).hexdigest()[:10]
+    return f"{display or 'sub2api'}-{suffix}"
+
+
 def verify_ticket(raw: str, secret: str, now: int | None = None) -> dict:
     if len(secret) < 32 or len(raw) > 8192:
         raise ValueError("SSO unavailable")
@@ -111,7 +121,7 @@ async def sub2api_sso_callback(request: Request, session: AsyncSession = Depends
         await session.flush()
         identity = await session.get(KeyValueSqlModel, identity_id)
         if identity is None:
-            user = User(id=uuid.uuid4(), username="sub2api-" + hashlib.sha256(payload["sub"].encode()).hexdigest(), hashed_password=PASSWORD_HELPER.hash(secrets.token_urlsafe(32)), is_active=True, is_verified=True, is_superuser=False)
+            user = User(id=uuid.uuid4(), username=_sso_username(payload, payload["sub"]), hashed_password=PASSWORD_HELPER.hash(secrets.token_urlsafe(32)), is_active=True, is_verified=True, is_superuser=False)
             session.add(user)
             session.add(KeyValueSqlModel(id=identity_id, key="sub2api_sso_identity", value={"user_id": str(user.id), "sub": payload["sub"]}))
             session.add(KeyValueSqlModel(id=_user_map_id(user.id), key="sub2api_sso_user", value={"sub": payload["sub"]}))
@@ -120,6 +130,7 @@ async def sub2api_sso_callback(request: Request, session: AsyncSession = Depends
                 raise ValueError("Invalid identity mapping")
             user = await session.get(User, uuid.UUID(identity.value["user_id"]))
             if user is not None:
+                user.username = _sso_username(payload, payload["sub"])
                 map_row = await session.get(KeyValueSqlModel, _user_map_id(user.id))
                 if map_row is None:
                     session.add(KeyValueSqlModel(id=_user_map_id(user.id), key="sub2api_sso_user", value={"sub": payload["sub"]}))

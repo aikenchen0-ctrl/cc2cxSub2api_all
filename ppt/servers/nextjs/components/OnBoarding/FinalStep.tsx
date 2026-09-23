@@ -94,7 +94,7 @@ const FinalStep = () => {
         <div className='fixed top-0 left-0 w-full h-full flex flex-col items-center justify-center'>
             <div className='flex flex-col items-center justify-center'>
 
-                <img src="/final_onboarding.png" alt="永恒PPT" className='w-[118px] h-[98px]  object-contain' />
+                <img src="/final_onboarding.png" alt="PPT生成" className='w-[118px] h-[98px]  object-contain' />
                 <h1 className='text-black text-[30px] font-normal font-unbounded py-2.5'>Welcome on board!</h1>
                 <p className='text-[#000000CC] text-xl font-normal font-syne'>You’re all set. Let’s create your first presentation.</p>
 

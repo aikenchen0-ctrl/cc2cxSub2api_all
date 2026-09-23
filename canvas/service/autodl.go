@@ -56,7 +56,8 @@ func AutoDLModelKind(modelName string) string {
 	switch strings.TrimSpace(modelName) {
 	case "indextts2-v1":
 		return "audio"
-	case "minimax_h3_b99_002", "minimax_h3_b99_001", "minimax_h3_b99_003_12s",
+	case "minimax_h3_z0901", "minimax_h3_z0902", "minimax_h3_z0903",
+		"minimax_h3_b99_002", "minimax_h3_b99_001", "minimax_h3_b99_003_12s",
 		"wan2.2animate-v4-motion_retargeting", "minimax_h3_image_audio_to_video_v2_15s",
 		"minimax_h3_lightx2v_v5_15s", "minimax_h3_image_audio_to_video_v2",
 		"minimax_h3_image_audio_to_video", "minimax_h3_lightx2v_v5",

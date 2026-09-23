@@ -424,10 +424,11 @@ func repairDefaultModel(current string, models []string, preferred func(string) 
 
 func isVideoModelName(modelName string) bool {
 	name := strings.ToLower(strings.TrimSpace(modelName))
+	canonical := strings.NewReplacer(".", "-", "_", "-", "/", "-").Replace(name)
 	if kind := AutoDLModelKind(modelName); kind != "unsupported" {
 		return kind == "video"
 	}
-	return name == "minimax-h3" || strings.Contains(name, "seedance") || strings.Contains(name, "video") || strings.Contains(name, "sd2.0 720p") || strings.Contains(name, "sd2.5 720p")
+	return name == "minimax-h3" || strings.Contains(name, "seedance") || strings.Contains(name, "video") || strings.Contains(name, "xinghe") || strings.Contains(name, "a-sd2") || strings.HasPrefix(canonical, "zhiying-") || strings.Contains(canonical, "sd-2-5-30") || strings.Contains(name, "sd2.0 720p") || strings.Contains(name, "sd2.5 720p")
 }
 
 func isImageModelName(modelName string) bool {

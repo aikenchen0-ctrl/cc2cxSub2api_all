@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { FileUp, Pencil, Search, Trash2, Wrench } from "lucide-react";
 import { App, Button, Empty, Form, Input, Modal, Popover, Spin } from "antd";
 
-import { AgentSkillCover, AgentSkillCoverEditor } from "@/components/agent-skill-cover";
+import { AgentSkillCoverEditor } from "@/components/agent-skill-cover";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { AGENT_SKILL_CONTENT_MAX_LENGTH, type AgentSkill } from "@/services/api/agent-skills";
 import { useAgentSkillStore } from "@/stores/use-agent-skill-store";
@@ -49,7 +49,7 @@ export function CanvasAgentSkillPopover({ selectedSkills, onSelect, onDeleteSele
     }, [query, systemSkills, tab, userSkills]);
 
     const selectSkill = (skill: AgentSkill) => {
-        onSelect({ id: skill.id, name: skill.name, source: skill.source });
+        onSelect({ id: skill.id, name: skill.name.replace(/^H3\s+/i, ""), source: skill.source });
         setOpen(false);
     };
 
@@ -113,9 +113,8 @@ export function CanvasAgentSkillPopover({ selectedSkills, onSelect, onDeleteSele
                             style={{ "--skill-hover-bg": theme.toolbar.itemHover } as CSSProperties}
                         >
                             <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => selectSkill(skill)}>
-                                <AgentSkillCover name={skill.name} coverUrl={skill.coverUrl} coverStorageKey={skill.coverStorageKey} borderColor={theme.node.stroke} background={theme.node.fill} />
                                 <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">{skill.name}</span>
+                                    <span className="block truncate text-sm font-medium">{skill.name.replace(/^H3\s+/i, "")}</span>
                                     <span className="block truncate text-xs opacity-55">{skill.description || "自定义创作工作流"}</span>
                                 </span>
                             </button>

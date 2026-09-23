@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "页面不存在 | 永恒PPT",
+  title: "页面不存在 | PPT生成",
 };
 
 /**

@@ -145,7 +145,7 @@ function RunEvalsPage() {
 
   useEffect(() => {
     return () => {
-      document.title = "AI识屏转代码";
+      document.title = "AI一键复刻网站";
       if (faviconFlashIntervalRef.current !== null) {
         window.clearInterval(faviconFlashIntervalRef.current);
       }
@@ -191,16 +191,16 @@ function RunEvalsPage() {
   const runEvals = async (filesToRun?: string[]) => {
     const updateRunningTitle = (completed: number, total: number) => {
       if (total <= 0) {
-        document.title = "AI识屏转代码 · 运行评测…";
+        document.title = "AI一键复刻网站 · 运行评测…";
         return;
       }
       const percent = Math.round((completed / total) * 100);
-      document.title = `(${percent}%) AI识屏转代码 · 运行评测…`;
+      document.title = `(${percent}%) AI一键复刻网站 · 运行评测…`;
     };
 
     try {
       setIsRunning(true);
-      document.title = "AI识屏转代码 · 运行评测…";
+      document.title = "AI一键复刻网站 · 运行评测…";
       setCompletedTasks(0);
       setTotalTasks(0);
       setCurrentModel("");
@@ -319,15 +319,15 @@ function RunEvalsPage() {
         }
       }
 
-      document.title = "✓ AI识屏转代码评测完成";
+      document.title = "✓ AI一键复刻网站评测完成";
       flashFaviconOnComplete();
     } catch (error) {
       console.error("Error running evals:", error);
-      document.title = "❌ AI识屏转代码评测失败";
+      document.title = "❌ AI一键复刻网站评测失败";
       setStatusMessage("Evaluation run failed");
       flashFaviconOnComplete();
       setTimeout(() => {
-        document.title = "AI识屏转代码";
+        document.title = "AI一键复刻网站";
       }, 5000);
     } finally {
       setIsRunning(false);

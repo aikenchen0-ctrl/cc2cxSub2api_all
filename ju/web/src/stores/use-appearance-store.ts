@@ -5,7 +5,7 @@ import { applySkinTheme, DEFAULT_CLASSIC_SKIN, normalizeSkinDefinition } from "@
 
 export const DEFAULT_PUBLIC_APPEARANCE: PublicAppearance = {
     schemaVersion: 7,
-    brandName: "智能剧场",
+    brandName: "AI导演台",
     brandSlug: "smart-theater",
     authHeroTitle: "让一个故事，\n从文字走向银幕。",
     authHeroDescription: "",
@@ -17,10 +17,10 @@ export const DEFAULT_PUBLIC_APPEARANCE: PublicAppearance = {
     authVideoAutoplay: true,
     skinId: "classic",
     activeSkin: DEFAULT_CLASSIC_SKIN,
-    seoTitle: "智能剧场",
-    seoDescription: "智能剧场，面向 AI 影视与短剧创作的工作台。",
+    seoTitle: "AI导演台",
+    seoDescription: "AI导演台，面向 AI 影视与短剧创作的工作台。",
     seoKeywords: "",
-    footerCopyright: `© ${new Date().getFullYear()} 智能剧场. All rights reserved.`,
+    footerCopyright: `© ${new Date().getFullYear()} AI导演台. All rights reserved.`,
     icpFilingEnabled: false,
     icpFilingNumber: "",
     logoConfigured: false,
@@ -155,7 +155,7 @@ export function appearanceLogoURL(appearance: PublicAppearance, theme: "light" |
 }
 
 export function brandStudioLabel(appearance: PublicAppearance) {
-    if (appearance.brandName === DEFAULT_PUBLIC_APPEARANCE.brandName && appearance.brandSlug === DEFAULT_PUBLIC_APPEARANCE.brandSlug) return "智能剧场";
+    if (appearance.brandName === DEFAULT_PUBLIC_APPEARANCE.brandName && appearance.brandSlug === DEFAULT_PUBLIC_APPEARANCE.brandSlug) return "AI导演台";
     return appearance.brandSlug.replace(/-+/g, " ").toLocaleUpperCase();
 }
 

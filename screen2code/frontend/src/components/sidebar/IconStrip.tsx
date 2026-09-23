@@ -34,7 +34,7 @@ function IconStrip({
       >
         <img
           src="/project-icon.jpg"
-          alt="AI识屏转代码"
+          alt="AI一键复刻网站"
           className="h-5 w-5 rounded object-cover"
         />
       </button>

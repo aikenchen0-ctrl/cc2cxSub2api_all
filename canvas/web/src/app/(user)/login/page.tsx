@@ -45,6 +45,7 @@ function LoginContent() {
     const allowRegister = useConfigStore((state) => state.publicSettings?.auth?.allowRegister !== false);
     const [mode, setMode] = useState<"login" | "register">("login");
     const redirect = safeRedirect(searchParams.get("redirect"));
+    const ssoPending = searchParams.get("sso") === "1";
     const ssoHandled = useRef(false);
 
     useEffect(() => {
@@ -100,10 +101,15 @@ function LoginContent() {
     };
 
     return (
+        ssoPending ? (
+            <main className="flex h-full min-h-0 items-center justify-center bg-background px-6">
+                <p role="status" className="text-sm text-stone-500 dark:text-stone-400">正在登录…</p>
+            </main>
+        ) :
         <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-10 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
             <section className="w-full max-w-[420px]">
                 <div className="mb-7 text-center">
-                    <img src="/project-icon.jpg" alt="无限画布" className="mx-auto mb-4 block size-12 rounded-xl object-cover" />
+                    <img src="/project-icon.jpg" alt="AI生图生视频" className="mx-auto mb-4 block size-12 rounded-xl object-cover" />
                     <h1 className="text-3xl font-semibold tracking-normal text-stone-950 dark:text-stone-100">账号登录</h1>
                     <p className="mt-3 text-base leading-7 text-stone-500 dark:text-stone-400">支持账号密码和 Linux.do 登录。</p>
                 </div>

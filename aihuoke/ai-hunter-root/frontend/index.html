@@ -5,6 +5,8 @@
     <link rel="icon" type="image/jpeg" href="/project-icon.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI获客</title>
+    <script>!function(){var b=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';var e=document.querySelector('link[rel~="icon"]');if(e)e.href=b+'/logo.jpg'}();</script>
+    <script>(function(){var b=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';fetch(b+'/api/v1/settings/public',{credentials:'omit'}).then(function(r){return r.ok?r.json():null}).then(function(x){var l=x&&x.data&&x.data.site_logo;if(!l)return;var e=document.querySelector('link[rel~="icon"]')||document.createElement('link');e.rel='icon';e.href=new URL(l,b+'/').href;if(!e.parentNode)document.head.appendChild(e)}).catch(function(){})})();</script>
   </head>
   <body class="min-h-screen bg-background font-sans antialiased">
     <div id="root"></div>

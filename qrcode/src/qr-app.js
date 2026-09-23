@@ -551,7 +551,10 @@ export function createQrApp({
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("Set-Cookie", createSessionCookie(verified.userId));
       response.redirect(verified.next || "/");
-    } catch {
+    } catch (error) {
+      // Keep the browser response generic, but retain the actual reason in
+      // server logs so missing/mismatched production secrets are diagnosable.
+      console.error("QRCode SSO callback failed:", error instanceof Error ? error.message : error);
       response.status(401).send("SSO login failed");
     }
   });

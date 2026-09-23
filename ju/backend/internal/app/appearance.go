@@ -38,7 +38,7 @@ const (
 )
 
 const (
-	defaultAppearanceBrandName = "智能剧场"
+	defaultAppearanceBrandName = "AI导演台"
 	defaultAppearanceBrandSlug = "open-ai-canvas"
 	defaultAppearanceSkinID    = "classic"
 	defaultAppearanceLogoURL   = "/project-icon.jpg"

@@ -26,6 +26,19 @@
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
+        <!-- AgentAPI one-click station entry -->
+        <button
+          v-if="user"
+          type="button"
+          class="btn-ghost btn-icon shrink-0"
+          :title="t('nav.openAgentStation')"
+          :aria-label="t('nav.openAgentStation')"
+          data-testid="open-agent-station"
+          @click="handleOpenAgentStation"
+        >
+          <Icon name="server" size="md" />
+        </button>
+
         <!-- Docs Link -->
         <a
           v-if="docUrl"
@@ -259,8 +272,10 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { buildApiUrl } from '@/api/client'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
+import { openJuSso } from '@/utils/juSso'
 import { resolveRouteMetaKeys } from '@/router/title'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 
@@ -349,6 +364,24 @@ function toggleMobileSidebar() {
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
+}
+
+async function handleOpenAgentStation() {
+  const startUrl = `${buildApiUrl('/auth/integrations/agentapi/start')}?next=%2Fagent-admin`
+  try {
+    await openJuSso(startUrl)
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : ''
+    if (raw.includes('blocked')) {
+      window.alert(t('nav.quickAppsSsoPopupBlocked'))
+    } else if (raw.includes('authenticated')) {
+      window.alert(t('nav.quickAppsSsoNeedLogin'))
+    } else if (/not configured|unavailable/i.test(raw)) {
+      window.alert(t('nav.quickAppsSsoNotConfigured'))
+    } else {
+      window.alert(t('nav.quickAppsSsoUnavailable'))
+    }
+  }
 }
 
 function closeDropdown() {

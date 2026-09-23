@@ -7,8 +7,8 @@ import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-    title: "无限画布",
-    description: "一个无限画布创作工具",
+    title: "AI生图生视频",
+    description: "AI 图片与视频创作工作台",
     icons: { icon: "/project-icon.jpg", shortcut: "/project-icon.jpg" },
 };
 
@@ -25,6 +25,12 @@ export default function RootLayout({
                     fontFamily: '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif',
                 }}
             >
+                <Script id="sub2api-title" strategy="afterInteractive">document.title='AI生图生视频';</Script>
+                <Script
+                    id="sub2api-branding"
+                    strategy="afterInteractive"
+                    dangerouslySetInnerHTML={{ __html: `(function(){var b=/^(localhost|127\\.0\\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';fetch(b+'/api/v1/settings/public',{credentials:'omit'}).then(function(r){return r.ok?r.json():null}).then(function(x){var l=x&&x.data&&x.data.site_logo;if(!l)return;var e=document.querySelector('link[rel~="icon"]')||document.createElement('link');e.rel='icon';e.href=new URL(l,b+'/').href;if(!e.parentNode)document.head.appendChild(e)}).catch(function(){})})();` }}
+                />
                 <Script
                     id="theme-script"
                     strategy="beforeInteractive"

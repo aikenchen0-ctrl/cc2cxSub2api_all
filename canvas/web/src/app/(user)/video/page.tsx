@@ -19,7 +19,7 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { isMiniMaxH3Config } from "@/lib/minimax-video";
 import { ARK_SEEDANCE_REFERENCE_LIMITS, boolConfig, isSeedanceVideoConfig, normalizeSeedanceRatio, seedanceReferenceLabel, seedanceVideoReferenceError, seedanceVideoReferenceHint, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
-import { COGVIDEOX3_DURATIONS, isAgnesVideoV25Model, isCogVideoX3Model, modelKey, normalizeCogVideoX3Duration, supportsVideoAudioGeneration, supportsVideoFrameReferences } from "@/lib/video-model-capabilities";
+import { amamVideoDefaultResolution, amamVideoReferenceLimits, COGVIDEOX3_DURATIONS, isAgnesVideoV25Model, isAmamVideoModel, isCogVideoX3Model, modelKey, normalizeAmamVideoRatio, normalizeCogVideoX3Duration, supportsAmamVideoRatio, supportsVideoAudioGeneration, supportsVideoFrameReferences } from "@/lib/video-model-capabilities";
 import { deleteStoredMedia, downloadRemoteMedia, resolveMediaUrl, uploadMediaFile, uploadRemoteMediaToServer } from "@/services/file-storage";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { deleteVideoGenerationLogs, fetchVideoGenerationLogs, saveVideoGenerationLogs } from "@/services/api/generation-logs";
@@ -152,6 +152,7 @@ export default function VideoPage() {
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
     const referenceLimits = channelProtocolForConfig({ ...videoConfig, model, videoModel: model }) === "ark" && modelKey(model).includes("seedance-2-5") ? ARK_SEEDANCE_REFERENCE_LIMITS : SEEDANCE_REFERENCE_LIMITS;
+    const amamLimits = isAmamVideoModel(model) && channelProtocolForConfig({ ...videoConfig, model, videoModel: model }) === "openai" ? amamVideoReferenceLimits(model) : null;
     const autodl = isAutoDLConfig(videoConfig, model);
     const { data: autodlWorkflow, error: autodlError } = useAutoDLWorkflow(videoConfig, model);
     const autodlCapabilities = getAutoDLCapabilities(autodlWorkflow);
@@ -163,8 +164,8 @@ export default function VideoPage() {
     const isKlingWorkbench = Boolean(klingWorkbench);
     const klingOmni = kieKlingOmniVariant(videoConfig, model);
     const klingAcceptsVideoReferences = klingOmni === "reference-to-video" || klingOmni === "transformation";
-    const referenceImageLimit = klingOmni === "text-to-video" ? 0 : klingOmni === "image-to-video" ? 2 : klingOmni === "transformation" ? 4 : isKlingWorkbench && klingOmni !== "reference-to-video" ? 2 : referenceLimits.images;
-    const videoReferenceLimit = klingAcceptsVideoReferences ? 1 : referenceLimits.videos;
+    const referenceImageLimit = amamLimits || klingOmni === "text-to-video" ? 0 : klingOmni === "image-to-video" ? 2 : klingOmni === "transformation" ? 4 : isKlingWorkbench && klingOmni !== "reference-to-video" ? 2 : referenceLimits.images;
+    const videoReferenceLimit = klingAcceptsVideoReferences ? 1 : amamLimits ? amamLimits.videos : referenceLimits.videos;
     const pendingLogCount = logs.filter((log) => log.status === "生成中" && log.task && !log.video).length;
     const usesBackendVideoTasks = (value: AiConfig) => value.channelMode === "remote" || (value.channelMode === "local" && Boolean(token));
 
@@ -335,8 +336,8 @@ export default function VideoPage() {
         const unsupported = isKlingWorkbench ? selectedFiles.filter((file) => (!file.type.startsWith("image/") || referenceImageLimit === 0) && (!file.type.startsWith("video/") || !klingAcceptsVideoReferences)) : selectedFiles.filter((file) => !file.type.startsWith("image/") && !file.type.startsWith("video/") && !isSupportedAudioFile(file));
         if (unsupported.length) message.warning(isKlingWorkbench ? `当前 Kling 模型仅支持${klingAcceptsVideoReferences ? "参考图和参考视频" : "参考图"}` : "已忽略不支持的参考素材，请使用图片、mp4/mov 视频或 mp3/wav 音频");
         const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/") && file.size <= SEEDANCE_REFERENCE_LIMITS.imageMaxBytes).slice(0, Math.max(0, referenceImageLimit - references.length));
-        const videoFiles = isKlingWorkbench && !klingAcceptsVideoReferences ? [] : selectedFiles.filter((file) => file.type.startsWith("video/") && file.size <= referenceLimits.videoMaxBytes).slice(0, Math.max(0, videoReferenceLimit - videoReferences.length));
-        const audioFiles = isKlingWorkbench ? [] : selectedFiles.filter((file) => isSupportedAudioFile(file) && file.size <= SEEDANCE_REFERENCE_LIMITS.audioMaxBytes).slice(0, referenceLimits.audios - audioReferences.length);
+        const videoFiles = isKlingWorkbench && !klingAcceptsVideoReferences ? [] : selectedFiles.filter((file) => file.type.startsWith("video/") && file.size <= (amamLimits ? SEEDANCE_REFERENCE_LIMITS.videoMaxBytes : referenceLimits.videoMaxBytes)).slice(0, Math.max(0, videoReferenceLimit - videoReferences.length));
+        const audioFiles = isKlingWorkbench || (amamLimits && amamLimits.audios === 0) ? [] : selectedFiles.filter((file) => isSupportedAudioFile(file) && file.size <= SEEDANCE_REFERENCE_LIMITS.audioMaxBytes).slice(0, (amamLimits?.audios ?? referenceLimits.audios) - audioReferences.length);
         if (selectedFiles.some((file) => file.type.startsWith("image/") && file.size > SEEDANCE_REFERENCE_LIMITS.imageMaxBytes)) message.warning("已忽略超过 30MB 的参考图");
         if (selectedFiles.some((file) => file.type.startsWith("video/") && file.size > referenceLimits.videoMaxBytes)) message.warning(`已忽略超过 ${referenceLimits.videoMaxBytes / 1024 / 1024}MB 的参考视频`);
         if (selectedFiles.some((file) => isSupportedAudioFile(file) && file.size > SEEDANCE_REFERENCE_LIMITS.audioMaxBytes)) message.warning("已忽略超过 15MB 的参考音频");
@@ -358,10 +359,10 @@ export default function VideoPage() {
                 const audio = await uploadMediaFile(file, "audio-reference");
                 return { id: nanoid(), name: file.name, type: audio.mimeType, url: audio.url, storageKey: audio.storageKey, durationMs: audio.durationMs };
             }));
-            const nextAudioReferences = autodl ? uploadedAudioReferences : filterAudioReferencesByDuration(audioReferences, uploadedAudioReferences, referenceLimits, message.warning);
+            const nextAudioReferences = autodl || amamLimits ? uploadedAudioReferences : filterAudioReferencesByDuration(audioReferences, uploadedAudioReferences, referenceLimits, message.warning);
             setReferences((value) => [...value, ...nextReferences].slice(0, referenceImageLimit));
             setVideoReferences((value) => [...value, ...nextVideoReferences].slice(0, videoReferenceLimit));
-            setAudioReferences((value) => [...value, ...nextAudioReferences].slice(0, referenceLimits.audios));
+            setAudioReferences((value) => [...value, ...nextAudioReferences].slice(0, amamLimits?.audios ?? referenceLimits.audios));
             if (nextReferences.length) message.success(`已上传 ${nextReferences.length} 张参考图`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "参考素材上传失败");
@@ -479,7 +480,7 @@ export default function VideoPage() {
                 message.error("剪切板里没有可读取的视频");
                 return;
             }
-            const usable = blobs.filter((blob) => blob.size <= referenceLimits.videoMaxBytes).slice(0, Math.max(0, videoReferenceLimit - videoReferences.length));
+            const usable = blobs.filter((blob) => blob.size <= (amamLimits ? SEEDANCE_REFERENCE_LIMITS.videoMaxBytes : referenceLimits.videoMaxBytes)).slice(0, Math.max(0, videoReferenceLimit - videoReferences.length));
             if (blobs.some((blob) => blob.size > referenceLimits.videoMaxBytes)) message.warning(`已忽略超过 ${referenceLimits.videoMaxBytes / 1024 / 1024}MB 的参考视频`);
             const nextVideoReferences = await Promise.all(
                 usable.map(async (blob, index) => {
@@ -502,14 +503,14 @@ export default function VideoPage() {
                 message.error("剪切板里没有可读取的音频");
                 return;
             }
-            const usable = blobs.filter((blob) => blob.size <= SEEDANCE_REFERENCE_LIMITS.audioMaxBytes).slice(0, referenceLimits.audios - audioReferences.length);
+            const usable = blobs.filter((blob) => blob.size <= SEEDANCE_REFERENCE_LIMITS.audioMaxBytes).slice(0, (amamLimits?.audios ?? referenceLimits.audios) - audioReferences.length);
             if (blobs.some((blob) => blob.size > SEEDANCE_REFERENCE_LIMITS.audioMaxBytes)) message.warning("已忽略超过 15MB 的参考音频");
             const uploadedAudioReferences = await Promise.all(usable.map(async (blob, index) => {
                 const audio = await uploadMediaFile(blob, "audio-reference");
                 return { id: nanoid(), name: `clipboard-audio-${index + 1}.mp3`, type: audio.mimeType, url: audio.url, storageKey: audio.storageKey, durationMs: audio.durationMs };
             }));
-            const nextAudioReferences = autodl ? uploadedAudioReferences : filterAudioReferencesByDuration(audioReferences, uploadedAudioReferences, referenceLimits, message.warning);
-            setAudioReferences((value) => [...value, ...nextAudioReferences].slice(0, referenceLimits.audios));
+            const nextAudioReferences = autodl || amamLimits ? uploadedAudioReferences : filterAudioReferencesByDuration(audioReferences, uploadedAudioReferences, referenceLimits, message.warning);
+            setAudioReferences((value) => [...value, ...nextAudioReferences].slice(0, amamLimits?.audios ?? referenceLimits.audios));
             message.success(`已读取 ${nextAudioReferences.length} 个参考音频`);
         } catch {
             message.error("剪切板里没有可读取的音频");
@@ -618,7 +619,7 @@ export default function VideoPage() {
                 return null;
             }
         }
-        if (!kling && !isAutoDLConfig(configValue, modelValue) && !isMiniMaxH3Config(configValue, modelValue) && !isAgnesVideoV25Model(modelValue)) {
+        if (!kling && !isAutoDLConfig(configValue, modelValue) && !(isAmamVideoModel(modelValue) && channelProtocolForConfig({ ...configValue, model: modelValue, videoModel: modelValue }) === "openai") && !isMiniMaxH3Config(configValue, modelValue) && !isAgnesVideoV25Model(modelValue)) {
             const limits = channelProtocolForConfig({ ...configValue, model: modelValue, videoModel: modelValue }) === "ark" && modelKey(modelValue).includes("seedance-2-5") ? ARK_SEEDANCE_REFERENCE_LIMITS : SEEDANCE_REFERENCE_LIMITS;
             const videoReferenceError = seedanceVideoReferenceError(videoReferenceItems, limits);
             if (videoReferenceError) {
@@ -818,8 +819,8 @@ export default function VideoPage() {
                 return;
             }
             const picked = [{ id: nanoid(), name: payload.title, type: payload.mimeType || "audio/mpeg", url: payload.url, storageKey: payload.storageKey, durationMs: payload.durationMs }];
-            const next = autodl ? picked : filterAudioReferencesByDuration(audioReferences, picked, referenceLimits, message.warning);
-            setAudioReferences((value) => [...value, ...next].slice(0, referenceLimits.audios));
+            const next = autodl || amamLimits ? picked : filterAudioReferencesByDuration(audioReferences, picked, referenceLimits, message.warning);
+            setAudioReferences((value) => [...value, ...next].slice(0, amamLimits?.audios ?? referenceLimits.audios));
         };
 
         if (assetPickerTarget === "element") {
@@ -1367,6 +1368,17 @@ function WorkbenchPanel({
 }) {
     const frameReferencesEnabled = supportsVideoFrameReferences(model, channelProtocolForConfig({ ...config, model }));
     const referenceLimits = channelProtocolForConfig({ ...config, model, videoModel: model }) === "ark" && modelKey(model).includes("seedance-2-5") ? ARK_SEEDANCE_REFERENCE_LIMITS : SEEDANCE_REFERENCE_LIMITS;
+    const amamLimits = isAmamVideoModel(model) && channelProtocolForConfig({ ...config, model, videoModel: model }) === "openai" ? amamVideoReferenceLimits(model) : null;
+    const imageReferenceLimit = amamLimits ? 0 : referenceLimits.images;
+    const videoReferenceLimit = amamLimits?.videos ?? referenceLimits.videos;
+    const audioReferenceLimit = amamLimits?.audios ?? referenceLimits.audios;
+    const displayResolution = amamLimits && (!config.vquality || config.vquality === "720") ? amamVideoDefaultResolution(model).replace(/p$/i, "") : config.vquality;
+    const displaySize = amamLimits && config.size === "1:1" ? seedancePixelLabel(displayResolution, "16:9") : config.size;
+    const autoDLResolutionRule = autodlCapabilities?.resolution;
+    const autoDLResolutionValue = !config.vquality || config.vquality === "720" ? String(autoDLResolutionRule?.default ?? "") : config.vquality;
+    const resolutionOptions = autodl && autoDLResolutionRule?.options?.length
+        ? autoDLResolutionRule.options.map((option) => ({ value: option.label, label: option.label }))
+        : isSeedanceVideoConfig(config) ? videoResolutionOptions.slice(0, 3) : videoResolutionOptions;
     const autodl = isAutoDLConfig(config, model);
     const { data: autodlWorkflow } = useAutoDLWorkflow(config, model);
     const cogVideoX3 = isCogVideoX3Model(model);
@@ -1434,9 +1446,9 @@ function WorkbenchPanel({
                                 <KlingV26BottomSettings config={config} updateConfig={updateConfig} generateAudio={generateAudio} isKlingV3={klingBottomVariant === "v3"} />
                             ) : (
                                 <>
-                                    <QuickSelect label="清晰度" value={normalizeVideoResolutionValue(config.vquality)} options={isSeedanceVideoConfig(config) ? videoResolutionOptions.slice(0, 3) : videoResolutionOptions} onChange={(value) => { updateConfig("vquality", value); updateConfig("size", videoSizeForResolution(value, config.size)); }} />
-                                    <QuickSelect label="尺寸" value={videoSizeForResolution(config.vquality, config.size)} options={videoSizeOptions(config.vquality)} onChange={(value) => updateConfig("size", value)} />
-                                    {cogVideoX3 ? <QuickSelect label="秒数" value={normalizeCogVideoX3Duration(config.videoSeconds)} options={cogVideoX3DurationOptions} onChange={(value) => updateConfig("videoSeconds", value)} /> : <QuickNumber label="秒数" value={autodl ? config.videoSeconds ?? "" : normalizeVideoSeconds(config.videoSeconds)} min={1} max={30} onChange={(value) => updateConfig("videoSeconds", value)} clampOnChange={!autodl} normalizeOnBlur={autodl ? (value) => normalizeAutoDLDuration(value, autodlWorkflow) : undefined} />}
+                                    <QuickSelect label="清晰度" value={autodl && autoDLResolutionRule?.options?.length ? autoDLResolutionValue : normalizeVideoResolutionValue(displayResolution)} options={resolutionOptions} onChange={(value) => { updateConfig("vquality", value); if (!autodl) updateConfig("size", videoSizeForResolution(value, config.size)); }} />
+                                    <QuickSelect label="尺寸" value={videoSizeForResolution(displayResolution, displaySize)} options={videoSizeOptions(displayResolution).filter((option) => !amamLimits || supportsAmamVideoRatio(model, option.value))} onChange={(value) => updateConfig("size", value)} />
+                                    {cogVideoX3 ? <QuickSelect label="秒数" value={normalizeCogVideoX3Duration(config.videoSeconds)} options={cogVideoX3DurationOptions} onChange={(value) => updateConfig("videoSeconds", value)} /> : <QuickNumber label="秒数" value={autodl && (config.videoSeconds === "6" || !config.videoSeconds) ? String(autodlCapabilities?.duration?.default ?? "") : autodl ? config.videoSeconds : amamLimits && config.videoSeconds === "6" ? "5" : normalizeVideoSeconds(config.videoSeconds)} min={1} max={30} onChange={(value) => updateConfig("videoSeconds", value)} clampOnChange={!autodl} normalizeOnBlur={autodl ? (value) => normalizeAutoDLDuration(value, autodlWorkflow) : undefined} />}
                                     {audioGenerationEnabled ? <QuickSwitch label="生成音频" checked={generateAudio} onChange={(checked) => updateConfig("videoGenerateAudio", String(checked))} /> : null}
                                     {motionControl ? <QuickSelect label="角色朝向参考" value={normalizeCharacterOrientation(config.videoCharacterOrientation)} options={characterOrientationOptions} onChange={(value) => updateConfig("videoCharacterOrientation", value)} /> : null}
                                 </>
@@ -1490,7 +1502,7 @@ function WorkbenchPanel({
                             <Button size="small" icon={<Upload className="size-3.5" />} onClick={onUploadReferences}>上传</Button>
                             <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => onOpenAssetPicker("image")}>从素材库选择</Button>
                         </div>
-                        <ReferenceImageStrip references={references} maxCount={referenceLimits.images} onRemoveReference={onRemoveReference} onMoveReference={onMoveReference} />
+                        <ReferenceImageStrip references={references} maxCount={imageReferenceLimit} onRemoveReference={onRemoveReference} onMoveReference={onMoveReference} />
                     </div>
                 </WorkbenchSection>
                 <WorkbenchSection title="参考视频" count={videoReferences.length}>
@@ -1500,7 +1512,7 @@ function WorkbenchPanel({
                             <Button size="small" icon={<Upload className="size-3.5" />} onClick={onUploadReferences}>上传</Button>
                             <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => onOpenAssetPicker("video")}>从素材库选择</Button>
                         </div>
-                        <ReferenceVideoStrip references={videoReferences} maxCount={referenceLimits.videos} onRemoveReference={onRemoveVideoReference} onMoveReference={onMoveVideoReference} />
+                        <ReferenceVideoStrip references={videoReferences} maxCount={videoReferenceLimit} onRemoveReference={onRemoveVideoReference} onMoveReference={onMoveVideoReference} />
                     </div>
                 </WorkbenchSection>
                 <WorkbenchSection title="参考音频" count={audioReferences.length}>
@@ -1510,7 +1522,7 @@ function WorkbenchPanel({
                             <Button size="small" icon={<Upload className="size-3.5" />} onClick={onUploadReferences}>上传</Button>
                             <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => onOpenAssetPicker("audio")}>从素材库选择</Button>
                         </div>
-                        <ReferenceAudioStrip references={audioReferences} maxCount={referenceLimits.audios} onRemoveReference={onRemoveAudioReference} onMoveReference={onMoveAudioReference} />
+                        <ReferenceAudioStrip references={audioReferences} maxCount={audioReferenceLimit} onRemoveReference={onRemoveAudioReference} onMoveReference={onMoveAudioReference} />
                     </div>
                 </WorkbenchSection>
                 {motionControl ? <CharacterOrientationSetting value={config.videoCharacterOrientation} onChange={(value) => updateConfig("videoCharacterOrientation", value)} /> : null}

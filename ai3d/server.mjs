@@ -9,6 +9,7 @@ import { createRodinTask, getRodinHealth, getRodinTask } from './server/provider
 import { createTripoTask, getTripoHealth, getTripoTask } from './server/providers/tripo.mjs'
 import { analyzeAssetImage, getVisionHealth } from './server/providers/vision.mjs'
 import { consumeTicket, createSession, getIdentity, isManaged, loadTaskOwners, rememberTaskOwner, requireIdentity, safeNext, verifyTicket } from './server/auth-sso.mjs'
+import { serveStaticApp } from './server/static-app.mjs'
 
 const DEFAULT_GENERATION_PROVIDER = 'rodin'
 const taskOwners = new Map()
@@ -79,6 +80,11 @@ const server = http.createServer(async (request, response) => {
       }
       return
     }
+
+    // Production serves the built React app from this process so the UI,
+    // SSO callback, and API always share one origin. Static assets remain
+    // public; the app itself gates user data on the HttpOnly session above.
+    if (await serveStaticApp(request, response, url)) return
 
     const identity = isManaged() ? await requireIdentity(request) : (await getIdentity(request)) || { subject: '' }
     request.identity = identity

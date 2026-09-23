@@ -7,6 +7,7 @@ import { Providers } from "./providers";
 import MixpanelInitializer from "./MixpanelInitializer";
 import { Toaster } from "@/components/ui/sonner";
 import TailwindBrowserRuntime from "@/components/runtime/TailwindBrowserRuntime";
+import Script from "next/script";
 const inter = localFont({
   src: [
     {
@@ -41,7 +42,7 @@ const unbounded = Unbounded({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://presenton.ai"),
-  title: "永恒PPT",
+  title: "PPT生成",
   description:
     "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
   keywords: [
@@ -55,17 +56,17 @@ export const metadata: Metadata = {
     "professional slides",
   ],
   openGraph: {
-    title: "永恒PPT",
+    title: "PPT生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     url: "https://presenton.ai",
-    siteName: "永恒PPT",
+    siteName: "PPT生成",
     images: [
       {
         url: "https://presenton.ai/presenton-feature-graphics.png",
         width: 1200,
         height: 630,
-        alt: "永恒PPT",
+        alt: "PPT生成",
       },
     ],
     type: "website",
@@ -76,7 +77,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "永恒PPT",
+    title: "PPT生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     images: ["https://presenton.ai/presenton-feature-graphics.png"],
@@ -95,6 +96,8 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${syne.variable} ${manrope.variable} ${unbounded.variable} antialiased`}
       >
+        <script dangerouslySetInnerHTML={{__html: "document.title='PPT生成'"}} />
+        <Script id="sub2api-branding" strategy="afterInteractive" dangerouslySetInnerHTML={{__html: `(function(){var b=/^(localhost|127\\.0\\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';fetch(b+'/api/v1/settings/public',{credentials:'omit'}).then(function(r){return r.ok?r.json():null}).then(function(x){var l=x&&x.data&&x.data.site_logo;if(!l)return;var e=document.querySelector('link[rel~="icon"]')||document.createElement('link');e.rel='icon';e.href=new URL(l,b+'/').href;if(!e.parentNode)document.head.appendChild(e)}).catch(function(){})})();`}} />
         <Providers>
           <MixpanelInitializer>
 

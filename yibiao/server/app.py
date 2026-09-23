@@ -584,8 +584,8 @@ async def lifespan(app: FastAPI):
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="自动招标 API",
-    description="自动招标服务端 API",
+    title="AI找标投标 API",
+    description="AI找标投标服务端 API",
     version="1.6",
     lifespan=lifespan
 )
@@ -685,7 +685,7 @@ async def root():
     index_path = os.path.join(STATIC_DIR, 'index.html')
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return HTMLResponse("<h1>自动招标服务正在运行</h1><p>请访问 /static/index.html</p>")
+    return HTMLResponse("<h1>AI找标投标服务正在运行</h1><p>请访问 /static/index.html</p>")
 
 @app.get("/api/status")
 async def get_status():
