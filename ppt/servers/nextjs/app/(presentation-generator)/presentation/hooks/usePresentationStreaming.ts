@@ -196,7 +196,7 @@ export const usePresentationStreaming = (
       dispatch(setStreaming(false));
       setError(true);
       if (options.showToast !== false) {
-        notify.error("Presentation streaming failed", description);
+        notify.error("演示文稿生成失败", description);
       }
     };
 
@@ -555,7 +555,7 @@ export const usePresentationStreaming = (
                   continue;
                 }
                 shownAssetWarnings.add(detail);
-                notify.warning("Some images could not be generated", detail, {
+                notify.warning("部分图片生成失败", detail, {
                   duration: 12_000,
                 });
               }

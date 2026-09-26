@@ -30,6 +30,10 @@ func New() *gin.Engine {
 	api.GET("/auth/linux-do/authorize", gin.WrapF(handler.LinuxDoAuthorize))
 	api.GET("/auth/linux-do/callback", gin.WrapF(handler.LinuxDoCallback))
 	api.GET("/auth/me", middleware.OptionalAuth, gin.WrapF(handler.CurrentUser))
+	api.GET("/sub2api/balance", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Next()
+	}, middleware.UserAuth, gin.WrapF(handler.Sub2APIUserBalance))
 	api.GET("/settings", gin.WrapF(handler.Settings))
 	api.GET("/storage/config", gin.WrapF(handler.StorageConfig))
 	api.GET("/files/:id", func(c *gin.Context) {

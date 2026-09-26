@@ -6,9 +6,11 @@ import os
 import sys
 import json
 import asyncio
+import math
 import logging
 import threading
 import hashlib
+from urllib.parse import urlsplit, urlunsplit
 from functools import wraps
 from contextvars import ContextVar, copy_context
 from datetime import datetime
@@ -19,6 +21,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, R
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from pydantic import BaseModel
 
 # 添加 src 目录到路径
@@ -649,6 +652,14 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SessionAuthMiddleware)
 
 
+@app.middleware("http")
+async def no_store_sub2api_balance(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/api/sub2api/balance":
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _with_subject_operation_lock(handler):
     """Serialize synchronous monitor state transitions per authenticated user."""
     @wraps(handler)
@@ -686,6 +697,48 @@ async def root():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return HTMLResponse("<h1>AI找标投标服务正在运行</h1><p>请访问 /static/index.html</p>")
+
+def _sub2api_purchase_url() -> str:
+    raw = os.getenv("LINK", "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = "http://" + raw
+    try:
+        parsed = urlsplit(raw)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            return ""
+        if parsed.query or parsed.fragment:
+            return ""
+        return urlunsplit((parsed.scheme, parsed.netloc, "/purchase", "", ""))
+    except ValueError:
+        return ""
+
+
+@app.get("/api/sub2api/balance")
+async def sub2api_user_balance(request: Request):
+    identity = require_identity(request)
+    if not identity.subject.strip():
+        raise HTTPException(status_code=401, detail="Sub2API identity is unavailable")
+    base_url = relay_base_url().rstrip("/")
+    if not base_url:
+        return JSONResponse(status_code=503, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+    try:
+        headers = satellite_headers(required=True)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0)) as client:
+            upstream = await client.get(f"{base_url}/sub2api/balance", headers=headers)
+        if upstream.status_code != 200:
+            status = upstream.status_code if upstream.status_code in {401, 503} else 502
+            return JSONResponse(status_code=status, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+        balance = float(upstream.json().get("balance"))
+        if not math.isfinite(balance):
+            raise ValueError("balance is not finite")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        return JSONResponse(status_code=502, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content={"balance": balance, "recharge_url": _sub2api_purchase_url()}, headers={"Cache-Control": "no-store"})
+
 
 @app.get("/api/status")
 async def get_status():

@@ -71,7 +71,7 @@ const FontManager: React.FC<FontManagerProps> = ({
               <Type className="w-6 h-6 text-[#7A5AF8]" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-[#111827]">Font Management</h2>
+              <h2 className="text-xl font-semibold text-[#111827]">字体管理</h2>
               <p className="text-sm text-[#6B7280] mt-0.5">
                 {allFontsUploaded
                   ? "All fonts are ready! You can proceed to preview."
@@ -211,7 +211,7 @@ const FontManager: React.FC<FontManagerProps> = ({
             {!allFontsUploaded && (
               <div className="flex items-start gap-2 text-sm text-[#6B7280]">
                 <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <p>You can continue without all fonts, but some text may not display correctly.</p>
+                <p>即使未上传全部字体也可以继续，但部分文字可能无法正确显示。</p>
               </div>
             )}
             {allFontsUploaded && (

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -21,9 +22,11 @@ import (
 var slugPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 var domainPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,255}$`)
+var agentIDPattern = regexp.MustCompile(`^agt_[0-9a-f]{32}$`)
 
 type request struct {
 	IdempotencyKey string `json:"idempotency_key"`
+	AgentID        string `json:"agent_id"`
 	Slug           string `json:"slug"`
 	Domain         string `json:"domain"`
 	DisplayName    string `json:"display_name"`
@@ -33,12 +36,15 @@ type request struct {
 }
 
 type result struct {
-	AgentID     string `json:"agent_id"`
-	Slug        string `json:"slug"`
-	Domain      string `json:"domain"`
-	Status      string `json:"status"`
-	BundlePath  string `json:"bundle_path"`
-	Fingerprint string `json:"fingerprint"`
+	AgentID          string `json:"agent_id"`
+	Slug             string `json:"slug"`
+	Domain           string `json:"domain"`
+	Status           string `json:"status"`
+	BundlePath       string `json:"bundle_path"`
+	RuntimeSecretDir string `json:"runtime_secret_dir"`
+	Fingerprint      string `json:"fingerprint"`
+	ControlTokenHash string `json:"control_token_hash"`
+	ModelTokenHash   string `json:"model_token_hash"`
 }
 
 type persisted struct {
@@ -51,6 +57,7 @@ func main() {
 	var stateDir string
 	flag.StringVar(&stateDir, "state-dir", "./provisioning", "directory holding idempotency state and generated bundles")
 	flag.StringVar(&req.IdempotencyKey, "idempotency-key", "", "required one-click provisioning request key")
+	flag.StringVar(&req.AgentID, "agent-id", "", "required agent_id returned by the Sub2API provisioning API")
 	flag.StringVar(&req.Slug, "slug", "", "agent slug")
 	flag.StringVar(&req.Domain, "domain", "", "public platform subdomain")
 	flag.StringVar(&req.DisplayName, "display-name", "", "agent display name")
@@ -94,14 +101,27 @@ func provision(stateDir string, req request) (result, error) {
 		if existing.Result.Fingerprint != fingerprint {
 			return result{}, fmt.Errorf("idempotency key belongs to a different provisioning request")
 		}
+		existing, err = ensureRuntimeSecretsOutsideBundle(absState, existing)
+		if err != nil {
+			return result{}, err
+		}
+		if err := writeJSONAtomic(requestPath, existing, 0o640); err != nil {
+			return result{}, err
+		}
 		return existing.Result, nil
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return result{}, readErr
 	}
 	agentDir := filepath.Join(absState, "agents", req.Slug)
+	runtimeSecretRoot := filepath.Join(absState, "runtime-secrets")
+	runtimeSecretDir := filepath.Join(runtimeSecretRoot, req.Slug)
 	if existing, readErr := readPersisted(filepath.Join(agentDir, "provision.json")); readErr == nil {
 		if existing.Result.Fingerprint != fingerprint {
 			return result{}, fmt.Errorf("slug is already assigned")
+		}
+		existing, err = ensureRuntimeSecretsOutsideBundle(absState, existing)
+		if err != nil {
+			return result{}, err
 		}
 		if err := writeJSONAtomic(requestPath, existing, 0o640); err != nil {
 			return result{}, err
@@ -125,20 +145,50 @@ func provision(stateDir string, req request) (result, error) {
 		return result{}, err
 	}
 	defer os.RemoveAll(tmp)
+	if err := os.MkdirAll(runtimeSecretRoot, 0o700); err != nil {
+		return result{}, err
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(runtimeSecretRoot)
+		if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+			return result{}, fmt.Errorf("runtime secret directory must be private to the worker account")
+		}
+	}
+	if _, err := os.Lstat(runtimeSecretDir); err == nil {
+		return result{}, fmt.Errorf("runtime secret directory is already assigned")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return result{}, err
+	}
+	secretTmp, err := os.MkdirTemp(runtimeSecretRoot, ".provision-"+req.Slug+"-")
+	if err != nil {
+		return result{}, err
+	}
+	defer os.RemoveAll(secretTmp)
 	secret, err := randomSecret()
 	if err != nil {
 		return result{}, err
 	}
-	res := result{AgentID: "agent-" + req.Slug, Slug: req.Slug, Domain: req.Domain, Status: "generated", BundlePath: agentDir, Fingerprint: fingerprint}
+	controlCredential, controlHash, err := randomRuntimeCredential("agt_ctl_")
+	if err != nil {
+		return result{}, err
+	}
+	modelCredential, modelHash, err := randomRuntimeCredential("agt_model_")
+	if err != nil {
+		return result{}, err
+	}
+	res := result{
+		AgentID: req.AgentID, Slug: req.Slug, Domain: req.Domain, Status: "generated",
+		BundlePath: agentDir, RuntimeSecretDir: runtimeSecretDir, Fingerprint: fingerprint,
+		ControlTokenHash: controlHash, ModelTokenHash: modelHash,
+	}
 	state := persisted{Request: req, Result: res}
 	files := map[string]struct {
 		body string
 		mode os.FileMode
 	}{
 		".env":         {renderEnv(req, res), 0o640},
-		"compose.yaml": {renderCompose(req), 0o640},
+		"compose.yaml": {renderCompose(req, runtimeSecretDir), 0o640},
 		"nginx.conf":   {renderNginx(req), 0o640},
-		filepath.Join("secrets", "session_secret"): {secret + "\n", 0o600},
 	}
 	for name, file := range files {
 		path := filepath.Join(tmp, name)
@@ -146,6 +196,16 @@ func provision(stateDir string, req request) (result, error) {
 			return result{}, err
 		}
 		if err := os.WriteFile(path, []byte(file.body), file.mode); err != nil {
+			return result{}, err
+		}
+	}
+	secretFiles := map[string]string{
+		"session_secret":           secret + "\n",
+		"agent_control_credential": controlCredential + "\n",
+		"agent_model_credential":   modelCredential + "\n",
+	}
+	for name, body := range secretFiles {
+		if err := os.WriteFile(filepath.Join(secretTmp, name), []byte(body), 0o600); err != nil {
 			return result{}, err
 		}
 	}
@@ -157,7 +217,14 @@ func provision(stateDir string, req request) (result, error) {
 			return result{}, err
 		}
 	}
+	if err := os.Rename(secretTmp, runtimeSecretDir); err != nil {
+		if !domainClaimExists {
+			_ = os.Remove(domainClaim)
+		}
+		return result{}, err
+	}
 	if err := os.Rename(tmp, agentDir); err != nil {
+		_ = os.RemoveAll(runtimeSecretDir)
 		if !domainClaimExists {
 			_ = os.Remove(domainClaim)
 		}
@@ -174,6 +241,7 @@ func provision(stateDir string, req request) (result, error) {
 
 func normalize(req request) request {
 	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
+	req.AgentID = strings.TrimSpace(req.AgentID)
 	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
 	req.Domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(req.Domain)), ".")
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
@@ -186,6 +254,9 @@ func normalize(req request) request {
 func validate(req request) error {
 	if len(req.IdempotencyKey) < 8 || len(req.IdempotencyKey) > 200 {
 		return fmt.Errorf("idempotency key must contain 8..200 characters")
+	}
+	if !agentIDPattern.MatchString(req.AgentID) {
+		return fmt.Errorf("agent id must be the agt_<32 lowercase hex> id returned by Sub2API")
 	}
 	if !slugPattern.MatchString(req.Slug) {
 		return fmt.Errorf("invalid slug")
@@ -230,6 +301,16 @@ func randomSecret() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
+func randomRuntimeCredential(prefix string) (string, string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	credential := prefix + base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(credential))
+	return credential, hex.EncodeToString(sum[:]), nil
+}
+
 func acquireLock(stateDir string, timeout time.Duration) (func(), error) {
 	lock := filepath.Join(stateDir, ".provision.lock")
 	deadline := time.Now().Add(timeout)
@@ -261,22 +342,212 @@ func writeJSONAtomic(path string, value any, mode os.FileMode) error {
 		return err
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, mode); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func ensureRuntimeSecretsOutsideBundle(stateDir string, state persisted) (persisted, error) {
+	if state.Result.BundlePath != filepath.Join(stateDir, "agents", state.Request.Slug) {
+		return persisted{}, fmt.Errorf("existing provisioning bundle path is invalid")
+	}
+	expectedSecretDir := filepath.Join(stateDir, "runtime-secrets", state.Request.Slug)
+	if err := os.MkdirAll(filepath.Dir(expectedSecretDir), 0o700); err != nil {
+		return persisted{}, err
+	}
+	if runtime.GOOS != "windows" {
+		rootInfo, err := os.Stat(filepath.Dir(expectedSecretDir))
+		if err != nil || !rootInfo.IsDir() || rootInfo.Mode().Perm()&0o077 != 0 {
+			return persisted{}, fmt.Errorf("runtime secret root permissions are too broad")
+		}
+	}
+	if state.Result.RuntimeSecretDir != "" && state.Result.RuntimeSecretDir != expectedSecretDir {
+		return persisted{}, fmt.Errorf("existing runtime secret path is invalid")
+	}
+	legacySecretDir := filepath.Join(state.Result.BundlePath, "secrets")
+	if state.Result.RuntimeSecretDir == "" {
+		if err := os.MkdirAll(filepath.Dir(expectedSecretDir), 0o700); err != nil {
+			return persisted{}, err
+		}
+		if _, err := os.Lstat(expectedSecretDir); err == nil {
+			return persisted{}, fmt.Errorf("runtime secrets exist without matching provisioning metadata")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return persisted{}, err
+		}
+		if err := os.Chmod(legacySecretDir, 0o700); err != nil {
+			return persisted{}, err
+		}
+		if err := validateRuntimeSecretFiles(legacySecretDir, state.Result); err != nil {
+			return persisted{}, fmt.Errorf("legacy runtime secret files are unavailable: %w", err)
+		}
+		if err := os.Rename(legacySecretDir, expectedSecretDir); err != nil {
+			return persisted{}, err
+		}
+		state.Result.RuntimeSecretDir = expectedSecretDir
+		composePath := filepath.Join(state.Result.BundlePath, "compose.yaml")
+		if err := writeFileAtomic(composePath, []byte(renderCompose(state.Request, expectedSecretDir)), 0o640); err != nil {
+			return persisted{}, err
+		}
+		if err := writeJSONAtomic(filepath.Join(state.Result.BundlePath, "provision.json"), state, 0o640); err != nil {
+			return persisted{}, err
+		}
+	}
+	if err := validateRuntimeSecretFiles(state.Result.RuntimeSecretDir, state.Result); err != nil {
+		return persisted{}, fmt.Errorf("runtime secret files are unavailable or unsafe: %w", err)
+	}
+	return state, nil
+}
+
+func validateRuntimeSecretFiles(dir string, result result) error {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("secret directory is not a real directory")
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("secret directory permissions are too broad")
+	}
+	for _, name := range []string{"session_secret", "agent_control_credential", "agent_model_credential"} {
+		fileInfo, statErr := os.Lstat(filepath.Join(dir, name))
+		if statErr != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is not a regular secret file", name)
+		}
+		if runtime.GOOS != "windows" && fileInfo.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("%s permissions are too broad", name)
+		}
+		data, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil || strings.TrimSpace(string(data)) == "" {
+			return fmt.Errorf("%s is empty", name)
+		}
+		if name == "agent_control_credential" {
+			sum := sha256.Sum256([]byte(strings.TrimSpace(string(data))))
+			if hex.EncodeToString(sum[:]) != result.ControlTokenHash {
+				return fmt.Errorf("control credential hash does not match")
+			}
+		}
+		if name == "agent_model_credential" {
+			sum := sha256.Sum256([]byte(strings.TrimSpace(string(data))))
+			if hex.EncodeToString(sum[:]) != result.ModelTokenHash {
+				return fmt.Errorf("model credential hash does not match")
+			}
+		}
+	}
+	return nil
 }
 
 func renderEnv(req request, res result) string {
 	q := strconv.Quote
-	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_BILLING_MODE=owner_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL))
+	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_PROVISIONING_CONTROL_ENABLED=true\nAGENT_PROVISIONING_CONTROL_STALE_AFTER=90s\nAGENT_BILLING_MODE=owner_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL))
 }
 
-func renderCompose(req request) string {
-	return fmt.Sprintf("services:\n  agentapi:\n    image: %s\n    container_name: agentapi-%s\n    restart: unless-stopped\n    env_file: .env\n    read_only: true\n    tmpfs:\n      - /tmp:rw,noexec,nosuid,size=16m\n    volumes:\n      - agentapi_data:/app/data\n    secrets:\n      - session_secret\n      - sub2api_admin_key\n      - sub2api_app_credential\n      - sub2api_sso_secret\n    environment:\n      SESSION_SECRET_FILE: /run/secrets/session_secret\n      SUB2API_ADMIN_KEY_FILE: /run/secrets/sub2api_admin_key\n      SUB2API_APP_CREDENTIAL_FILE: /run/secrets/sub2api_app_credential\n      SUB2API_SSO_SECRET_FILE: /run/secrets/sub2api_sso_secret\n    networks: [agentapi-edge]\nvolumes:\n  agentapi_data:\nsecrets:\n  session_secret:\n    file: ./secrets/session_secret\n  sub2api_admin_key:\n    file: ${SUB2API_ADMIN_KEY_FILE:?set SUB2API_ADMIN_KEY_FILE}\n  sub2api_app_credential:\n    file: ${SUB2API_APP_CREDENTIAL_FILE:?set SUB2API_APP_CREDENTIAL_FILE}\n  sub2api_sso_secret:\n    file: ${SUB2API_SSO_SECRET_FILE:?set SUB2API_SSO_SECRET_FILE}\nnetworks:\n  agentapi-edge:\n    external: true\n", req.Image, req.Slug)
+func renderCompose(req request, secretDir string) string {
+	secretDir = filepath.ToSlash(secretDir)
+	sessionSecretPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/session_secret")
+	controlCredentialPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/agent_control_credential")
+	modelCredentialPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/agent_model_credential")
+	return fmt.Sprintf(`services:
+  agentapi:
+    image: %s
+    container_name: agentapi-%s
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - agentapi_data:/app/data
+    secrets:
+      - session_secret
+      - agent_control_credential
+      - agent_model_credential
+      - sub2api_sso_secret
+    environment:
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+      AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE: /run/secrets/agent_control_credential
+      SUB2API_APP_CREDENTIAL_FILE: /run/secrets/agent_model_credential
+      SUB2API_SSO_SECRET_FILE: /run/secrets/sub2api_sso_secret
+    networks: [agentapi-edge]
+volumes:
+  agentapi_data:
+secrets:
+  session_secret:
+    file: %s
+  agent_control_credential:
+    file: %s
+  agent_model_credential:
+    file: %s
+  sub2api_sso_secret:
+    file: ${SUB2API_SSO_SECRET_FILE:?set SUB2API_SSO_SECRET_FILE}
+networks:
+  agentapi-edge:
+    external: true
+`, req.Image, req.Slug, sessionSecretPath, controlCredentialPath, modelCredentialPath)
 }
 
 func renderNginx(req request) string {
-	return fmt.Sprintf("server {\n    listen 443 ssl http2;\n    server_name %s;\n    include /etc/nginx/snippets/agentapi-wildcard-tls.conf;\n\n    location / {\n        proxy_set_header Host $host;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_set_header X-Request-ID $request_id;\n        proxy_pass http://agentapi-%s:8080;\n    }\n}\n", req.Domain, req.Slug)
+	return fmt.Sprintf(`# managed-by-agentapi-provision-worker agent_id=%s
+server {
+    listen 443 ssl http2;
+    server_name %s;
+    include /etc/nginx/snippets/agentapi-wildcard-tls.conf;
+    client_max_body_size 32m;
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_pass http://agentapi-%s:8080;
+    }
+}
+`, req.AgentID, req.Domain, req.Slug)
 }

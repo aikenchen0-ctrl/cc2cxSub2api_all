@@ -139,7 +139,7 @@ const ImageEditor = ({
         await PresentationGenerationApi.getPreviousGeneratedImages();
       setPreviousGeneratedImages(response);
     } catch (error: any) {
-      notify.error("Could not load images", "Failed to get previous generated images. Please try again.");
+      notify.error("无法加载图片", "获取之前生成的图片失败，请重试。 ");
       console.error("error in getting previous generated images", error);
       setError(
         error.message ||
@@ -293,7 +293,7 @@ const ImageEditor = ({
       console.error("Error in image generation", err);
       const message = err.message || "Failed to generate image. Please try again.";
       setError(message);
-      notify.error("Image generation failed", message);
+      notify.error("图片生成失败", message);
     } finally {
       setIsGenerating(false);
     }
@@ -327,7 +327,7 @@ const ImageEditor = ({
       setUploadedImageUrl(resolveEditorImageSource(result));
     } catch (err:any) {
       setUploadError("Failed to upload image. Please try again.");
-      notify.error("Upload failed", err.message || "Failed to upload image. Please try again.");
+      notify.error("上传失败", err.message || "图片上传失败，请重试。 ");
       console.log("Upload error:", err.message);
     } finally {
       setIsUploading(false);
@@ -340,7 +340,7 @@ const ImageEditor = ({
       const result = await ImagesApi.getUploadedImages();
       setUploadedImages(result);
     } catch (err:any) {
-      notify.error("Could not load images", err.message || "Failed to get uploaded images. Please try again.");
+      notify.error("无法加载图片", err.message || "获取已上传图片失败，请重试。 ");
       console.log("Get uploaded images error:", err.message);
     } finally {
       setUploadedImagesLoading(false);
@@ -358,9 +358,9 @@ const ImageEditor = ({
     try {
       await ImagesApi.deleteImage(image_id);
       setUploadedImages(uploadedImages.filter((image) => image.id !== image_id));
-      notify.success("Image deleted", "The image was removed from your uploads.");
+      notify.success("图片已删除", "该图片已从上传列表移除。 ");
     } catch (err:any) {
-      notify.error("Could not delete image", err.message || "Failed to delete image. Please try again.");
+      notify.error("无法删除图片", err.message || "删除图片失败，请重试。 ");
     }
   };
   return (
@@ -373,7 +373,7 @@ const ImageEditor = ({
           onClick={(e) => e.stopPropagation()}
         >
           <SheetHeader>
-            <SheetTitle>Update Image</SheetTitle>
+            <SheetTitle>更新图片</SheetTitle>
           </SheetHeader>
 
           <div className="mt-6">
@@ -393,7 +393,7 @@ const ImageEditor = ({
               <TabsContent value="generate" className="mt-4 space-y-4 overflow-y-auto hide-scrollbar h-[85vh]">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-medium mb-1">Current Prompt</h3>
+                    <h3 className="text-sm font-medium mb-1">当前提示词</h3>
                     <p className="text-sm text-gray-500">{promptContent}</p>
                   </div>
 
@@ -436,7 +436,7 @@ const ImageEditor = ({
 
                   {stockImageProvider ? (
                     <div className="space-y-3">
-                      <h3 className="text-sm font-medium">Results — click an image to use it</h3>
+          <h3 className="text-sm font-medium">生成结果，点击图片即可使用</h3>
                       <div className="grid grid-cols-2 gap-3">
                         {isSearchingStock
                           ? Array.from({ length: 8 }).map((_, index) => (
@@ -610,7 +610,7 @@ const ImageEditor = ({
                     </div>
                   )}
                   <div>
-                    <h3 className="text-sm font-medium mb-2">Uploaded Images:</h3>
+                    <h3 className="text-sm font-medium mb-2">已上传图片：</h3>
                     <div className="grid grid-cols-2 gap-4">
                       {uploadedImagesLoading ? (
                         <div className="flex items-center justify-center">
@@ -658,7 +658,7 @@ const ImageEditor = ({
                     onToggleFocusPoint={toggleFocusPointMode}
                     onReplaceImage={() => setActiveTab("generate")}
                   />
-                  <h3 className="text-sm font-medium mb-2">Current Image</h3>
+                  <h3 className="text-sm font-medium mb-2">当前图片</h3>
                   <div
                     onClick={(e) => {
                       if (isFocusPointMode) {

@@ -43,6 +43,31 @@ type recordingActivityToucher struct {
 	userIDs []int64
 }
 
+type jwtBrowserSessionStoreStub struct {
+	sessionID string
+	data      *service.BrowserSessionData
+}
+
+func (s *jwtBrowserSessionStoreStub) StoreBrowserSession(_ context.Context, sessionID string, data *service.BrowserSessionData, _ time.Duration) error {
+	s.sessionID = sessionID
+	s.data = data
+	return nil
+}
+
+func (s *jwtBrowserSessionStoreStub) GetBrowserSession(_ context.Context, sessionID string) (*service.BrowserSessionData, error) {
+	if sessionID != s.sessionID || s.data == nil {
+		return nil, service.ErrBrowserSessionNotFound
+	}
+	return s.data, nil
+}
+
+func (s *jwtBrowserSessionStoreStub) DeleteBrowserSession(_ context.Context, sessionID string) error {
+	if sessionID == s.sessionID {
+		s.data = nil
+	}
+	return nil
+}
+
 func (r *recordingActivityToucher) TouchLastActiveForUser(_ context.Context, user *service.User) {
 	if user == nil {
 		return
@@ -124,6 +149,35 @@ func TestJWTAuth_ValidToken_LowercaseBearer(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestJWTAuth_ValidOpaqueBrowserSessionCookie(t *testing.T) {
+	user := &service.User{
+		ID:           1,
+		Email:        "test@example.com",
+		Role:         "user",
+		Status:       service.StatusActive,
+		Concurrency:  5,
+		TokenVersion: 1,
+	}
+	router, authSvc := newJWTTestEnv(map[int64]*service.User{1: user})
+	token, err := authSvc.GenerateToken(context.Background(), user)
+	require.NoError(t, err)
+	store := &jwtBrowserSessionStoreStub{sessionID: "opaque-browser-session", data: &service.BrowserSessionData{
+		AccessToken: token,
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}}
+	authSvc.SetBrowserSessionStore(store)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.AddCookie(&http.Cookie{Name: BrowserSessionCookieName, Value: store.sessionID})
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, float64(1), body["user_id"])
 }
 
 func TestJWTAuth_ValidToken_TouchesLastActive(t *testing.T) {

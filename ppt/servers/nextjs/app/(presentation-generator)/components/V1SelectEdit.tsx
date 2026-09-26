@@ -631,7 +631,7 @@ const HtmlSelectionEditor = ({
               title="AI Edit"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>AI Edit</span>
+              <span>AI 编辑</span>
             </button>
           )}
           <div
@@ -673,7 +673,7 @@ const HtmlSelectionEditor = ({
                   className="inline-flex items-center bg-white/80 rounded-md px-2 py-1 gap-2 text-xs font-medium text-gray-900"
                 >
                   <Edit className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Double-click for AI edit</span>
+              <span>双击进行 AI 编辑</span>
                 </div>
               </div>
             )}

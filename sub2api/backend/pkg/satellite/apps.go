@@ -32,7 +32,8 @@ func Apps() []App {
 		{Slug: "yibiao", Audience: "yibiao", DefaultOrigin: "http://localhost:8081", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "YIBIAO_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "ai3d", Audience: "ai3d", DefaultOrigin: "http://localhost:5174", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AI3D_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 		{Slug: "aihuoke", Audience: "aihuoke", DefaultOrigin: "http://localhost:3001", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AIHUOKE_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
-		{Slug: "agentapi", Audience: "agentapi", DefaultOrigin: "http://localhost:18081", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AGENTAPI_SSO_CALLBACK_URL", DefaultNext: "/agent-admin", TicketTTL: ttl},
+		{Slug: "agentapi", Audience: "agentapi", DefaultOrigin: "http://localhost:18081", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "AGENTAPI_SSO_CALLBACK_URL", DefaultNext: "/dashboard", TicketTTL: ttl},
+		{Slug: "modelaudit", Audience: "modelaudit", DefaultOrigin: "http://localhost:8077", CallbackPath: "/api/auth/sso/callback", CallbackEnv: "MODELAUDIT_SSO_CALLBACK_URL", DefaultNext: "/", TicketTTL: ttl},
 	}
 }
 

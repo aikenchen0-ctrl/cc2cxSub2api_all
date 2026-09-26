@@ -26,8 +26,8 @@ export const EmptyState = () => {
           aria-hidden="true"
         />
         <span className="flex flex-wrap items-center justify-center gap-x-1.5 text-center font-syne text-sm font-medium">
-          <span className="text-[#191919]">No presentations yet.</span>
-          <span className="text-[#7A5AF8]">Get started now</span>
+          <span className="text-[#191919]">还没有演示文稿。</span>
+          <span className="text-[#7A5AF8]">立即开始</span>
         </span>
       </Link>
     </div>

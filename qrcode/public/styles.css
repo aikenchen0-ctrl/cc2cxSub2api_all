@@ -36,7 +36,29 @@ body {
 }
 
 .hero {
+  position: relative;
   padding: 16px 0 24px;
+}
+
+.hero-balance {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(14px, calc((100vw - 1600px) / 2));
+  z-index: 1000;
+}
+
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hero-title img {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 14px;
+  object-fit: cover;
 }
 
 .tag {
@@ -1207,6 +1229,16 @@ h1 {
 
   .hero {
     padding: 8px 0 18px;
+  }
+
+  .hero-title {
+    gap: 12px;
+  }
+
+  .hero-title img {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
   }
 
   h1 {

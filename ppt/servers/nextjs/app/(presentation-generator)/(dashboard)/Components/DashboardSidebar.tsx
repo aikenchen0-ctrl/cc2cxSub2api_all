@@ -8,16 +8,16 @@ import Link from "next/link";
 
 
 export const defaultNavItems = [
-    { key: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
-    { key: "templates" as const, label: "Standard", icon: Star },
-    { key: "designs" as const, label: "Smart", icon: Brain },
-    { key: "community" as const, label: "Community", icon: UsersRound },
+    { key: "dashboard" as const, label: "仪表盘", icon: LayoutDashboard },
+    { key: "templates" as const, label: "标准模板", icon: Star },
+    { key: "designs" as const, label: "智能设计", icon: Brain },
+    { key: "community" as const, label: "社区", icon: UsersRound },
 
 
 
 ];
 export const BelongingNavItems = [
-    { key: "settings" as const, label: "Settings", icon: Settings },
+    { key: "settings" as const, label: "设置", icon: Settings },
     
 ]
 
@@ -27,13 +27,13 @@ const DashboardSidebar = () => {
     return (
         <aside
             className="sticky top-0 flex h-screen w-[114px] shrink-0 flex-col justify-between border-r border-[#E1E1E5] bg-[#F6F6F9] px-4 py-8 backdrop-blur"
-            aria-label="Dashboard sidebar"
+            aria-label="仪表盘侧边栏"
         >
             <div>
 
                 <Link href={`/dashboard`} className="flex items-center  pb-6 border-b border-[#E1E1E5]   gap-2    ">
                     <div className="bg-[#7C51F8] rounded-full cursor-pointer p-1 flex justify-center items-center mx-auto">
-                        <img src="/project-icon.jpg" alt="PPT生成" className="h-[40px] object-contain w-full rounded-lg" />
+                        <img src="/project-icon.jpg" data-sub2api-site-logo alt="PPT生成" className="h-[40px] object-contain w-full rounded-lg" />
                     </div>
                 </Link>
                 <nav className="pt-6 font-syne" aria-label="Dashboard sections">
@@ -47,11 +47,11 @@ const DashboardSidebar = () => {
                                 "flex flex-col tex-center items-center gap-2  transition-colors",
                                 pathname === "/dashboard" ? "" : "ring-transparent",
                             ].join(" ")}
-                            aria-label="Dashboard"
-                            title="Dashboard"
+                            aria-label="仪表盘"
+                            title="仪表盘"
                         >
                             <LayoutDashboard className={["h-4 w-4", pathname === "/dashboard" ? "text-[#5146E5]" : "text-slate-600"].join(" ")} />
-                            <span className="text-[11px] text-slate-800">Dashboard</span>
+                            <span className="text-[11px] text-slate-800">仪表盘</span>
                         </Link>
                         <Link
                             prefetch={false}
@@ -60,23 +60,23 @@ const DashboardSidebar = () => {
                                 "flex flex-col tex-center items-center gap-2  transition-colors",
                                 pathname === "/templates" ? "" : "ring-transparent",
                             ].join(" ")}
-                            aria-label="Templates"
-                            title="Templates"
+                            aria-label="模板"
+                            title="模板"
                         >
                             <div className="flex flex-col cursor-pointer tex-center items-center gap-2  transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={`${pathname === "/templates" ? "#5146E5" : "#475569"}`} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M4 14h6" /><path d="M4 2h10" /><rect x="4" y="18" width="16" height="4" rx="1" /><rect x="4" y="6" width="16" height="4" rx="1" /></svg>
-                                <span className="text-[11px] text-slate-800">Templates</span>
+                                <span className="text-[11px] text-slate-800">模板</span>
                             </div>
                         </Link>
                         <Link
                             prefetch={false}
                             href="/community"
                             className="flex flex-col items-center gap-2 text-center transition-colors"
-                            aria-label="Community"
-                            title="Community"
+                            aria-label="社区"
+                            title="社区"
                         >
                             <UsersRound className={`h-4 w-4 ${pathname === "/community" ? "text-[#5146E5]" : "text-slate-600"}`} />
-                            <span className="text-[11px] text-slate-800">Community</span>
+                            <span className="text-[11px] text-slate-800">社区</span>
                         </Link>
                         {/* <Link
                             prefetch={false}
@@ -90,7 +90,7 @@ const DashboardSidebar = () => {
                         >
                             <div className="flex flex-col cursor-pointer tex-center items-center gap-2  transition-colors">
                                 <Palette className={`h-4 w-4 ${pathname === "/theme" ? "text-[#5146E5]" : "text-slate-600"}`} />
-                                <span className="text-[11px] text-slate-800">Themes</span>
+                                <span className="text-[11px] text-slate-800">主题</span>
                             </div>
                         </Link> */}
                     </div>
@@ -103,7 +103,7 @@ const DashboardSidebar = () => {
                     className="flex flex-col items-center gap-2 transition-colors"
                 >
                     <Settings className="h-4 w-4" />
-                    <span className="text-[11px] text-slate-800">Settings</span>
+                    <span className="text-[11px] text-slate-800">设置</span>
                 </Link>
                 <div className="py-2"/>
                 <Link
@@ -112,7 +112,7 @@ const DashboardSidebar = () => {
                     className="flex flex-col items-center gap-2 transition-colors"
                 >
                     <HelpCircle className="h-4 w-4" />
-                    <span className="text-[11px] text-slate-800">Help</span>
+                    <span className="text-[11px] text-slate-800">帮助</span>
                 </Link>
             </div>
 

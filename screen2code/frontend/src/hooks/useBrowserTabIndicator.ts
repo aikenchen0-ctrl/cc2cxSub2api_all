@@ -63,38 +63,33 @@ const isDevHost = () => {
 const useBrowserTabIndicator = (isCoding: boolean) => {
   useEffect(() => {
     const settings = isCoding ? CODING_SETTINGS : DEFAULT_SETTINGS;
-
-    // Set favicon
-    const faviconEl = document.querySelector(
-      "link[rel='icon']"
-    ) as HTMLLinkElement | null;
-    if (faviconEl) {
+    const faviconEl = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+    let cancelled = false;
+    const applyFavicon = () => {
+      if (!faviconEl) return;
+      const siteLogo = (window as Window & { __SUB2API_SITE_LOGO__?: string }).__SUB2API_SITE_LOGO__;
+      const source = siteLogo || settings.favicon;
       if (isDevHost()) {
-        let cancelled = false;
-        const dotColor = isCoding
-          ? DEV_FAVICON_COLORS.coding
-          : DEV_FAVICON_COLORS.default;
-        getAugmentedFaviconDataUrl(settings.favicon, dotColor)
+        const dotColor = isCoding ? DEV_FAVICON_COLORS.coding : DEV_FAVICON_COLORS.default;
+        getAugmentedFaviconDataUrl(source, dotColor)
           .then((dataUrl) => {
-            if (!cancelled && faviconEl) {
-              faviconEl.href = dataUrl;
-            }
+            if (!cancelled) faviconEl.href = dataUrl;
           })
           .catch(() => {
-            if (!cancelled && faviconEl) {
-              faviconEl.href = settings.favicon;
-            }
+            if (!cancelled) faviconEl.href = source;
           });
-        return () => {
-          cancelled = true;
-        };
       } else {
-        faviconEl.href = settings.favicon;
+        faviconEl.href = siteLogo || settings.favicon;
       }
-    }
-
-    // Set title
+    };
+    applyFavicon();
+    window.addEventListener("sub2api-logo-updated", applyFavicon);
     document.title = settings.title;
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("sub2api-logo-updated", applyFavicon);
+    };
   }, [isCoding]);
 };
 

@@ -254,6 +254,7 @@ type QuickAppIconName =
   | 'grid'
   | 'play'
   | 'sparkles'
+  | 'package'
   | 'document'
   | 'edit'
   | 'terminal'
@@ -262,6 +263,8 @@ type QuickAppIconName =
   | 'chartBar'
   | 'cube'
   | 'users'
+  | 'server'
+  | 'shield'
 
 interface QuickAppItem {
   label: string
@@ -315,6 +318,8 @@ const quickAppItems = computed<QuickAppItem[]>(() => {
   const superCanvasUrl =
     import.meta.env.VITE_SUPER_CANVAS_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/livart/start')}?next=%2F`
+  const aiProductImageUrl =
+    `${buildApiUrl('/auth/integrations/livart/start')}?next=%2F%3Fopen%3Dproduct-poster`
   const pptSsoUrl =
     import.meta.env.VITE_PPT_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/ppt/start')}?next=%2Fupload`
@@ -339,10 +344,12 @@ const quickAppItems = computed<QuickAppItem[]>(() => {
   const aihuokeSsoUrl =
     import.meta.env.VITE_AIHUOKE_SSO_URL?.trim() ||
     `${buildApiUrl('/auth/integrations/aihuoke/start')}?next=%2F`
+  const agentApiSsoUrl = `${buildApiUrl('/auth/integrations/agentapi/start')}?next=%2Fdashboard`
   return [
     { label: t('nav.infiniteCanvas'), href: canvasSsoUrl, includeApiKey: false, sso: true, icon: 'grid', iconClass: 'quick-app-icon-grid' },
     { label: t('nav.smartShortDrama'), href: shortDramaUrl, includeApiKey: false, sso: true, icon: 'play', iconClass: 'quick-app-icon-play' },
     { label: t('nav.superCanvas'), href: superCanvasUrl, includeApiKey: false, sso: true, icon: 'sparkles', iconClass: 'quick-app-icon-sparkles' },
+    { label: t('nav.aiProductImage'), href: aiProductImageUrl, includeApiKey: false, sso: true, icon: 'package', iconClass: 'quick-app-icon-product' },
     { label: t('nav.eternalPpt'), href: pptSsoUrl, includeApiKey: false, sso: true, icon: 'document', iconClass: 'quick-app-icon-document' },
     { label: t('nav.aiCut'), href: aiCutSsoUrl, includeApiKey: false, sso: true, icon: 'edit', iconClass: 'quick-app-icon-edit' },
     { label: t('nav.screen2code'), href: screen2codeSsoUrl, includeApiKey: false, sso: true, icon: 'terminal', iconClass: 'quick-app-icon-terminal' },
@@ -351,6 +358,8 @@ const quickAppItems = computed<QuickAppItem[]>(() => {
     { label: t('nav.yibiao'), href: yibiaoSsoUrl, includeApiKey: false, sso: true, icon: 'chartBar', iconClass: 'quick-app-icon-chart' },
     { label: t('nav.ai3d'), href: ai3dSsoUrl, includeApiKey: false, sso: true, icon: 'cube', iconClass: 'quick-app-icon-cube' },
     { label: t('nav.aihuoke'), href: aihuokeSsoUrl, includeApiKey: false, sso: true, icon: 'users', iconClass: 'quick-app-icon-users' },
+    { label: t('nav.agentApi'), href: agentApiSsoUrl, includeApiKey: false, sso: true, icon: 'server', iconClass: 'quick-app-icon-server' },
+    { label: t('nav.modelAudit'), href: buildApiUrl('/auth/integrations/modelaudit/start') + '?next=%2F', includeApiKey: false, sso: true, icon: 'shield', iconClass: 'quick-app-icon-shield' },
   ]
 })
 
@@ -919,6 +928,7 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/plugins', label: t('nav.plugins'), icon: PluginIcon, featureFlag: flagPluginManagement },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
+    { path: '/admin/agent-provisioning', label: t('nav.agentProvisioning'), icon: ServerIcon },
     {
       path: '/admin/security-audit',
       label: t('nav.securityAudit'),
@@ -1248,6 +1258,7 @@ onBeforeUnmount(() => {
 .quick-app-icon-grid { color: rgb(37 99 235); background: rgb(239 246 255); border-color: rgb(191 219 254); }
 .quick-app-icon-play { color: rgb(219 39 119); background: rgb(253 242 248); border-color: rgb(251 207 232); }
 .quick-app-icon-sparkles { color: rgb(124 58 237); background: rgb(245 243 255); border-color: rgb(221 214 254); }
+.quick-app-icon-product { color: rgb(220 38 38); background: rgb(254 242 242); border-color: rgb(254 202 202); }
 .quick-app-icon-document { color: rgb(5 150 105); background: rgb(236 253 245); border-color: rgb(167 243 208); }
 .quick-app-icon-edit { color: rgb(234 88 12); background: rgb(255 247 237); border-color: rgb(254 215 170); }
 .quick-app-icon-terminal { color: rgb(8 145 178); background: rgb(236 254 255); border-color: rgb(165 243 252); }
@@ -1256,10 +1267,12 @@ onBeforeUnmount(() => {
 .quick-app-icon-chart { color: rgb(217 119 6); background: rgb(255 251 235); border-color: rgb(253 230 138); }
 .quick-app-icon-cube { color: rgb(79 70 229); background: rgb(238 242 255); border-color: rgb(199 210 254); }
 .quick-app-icon-users { color: rgb(219 39 119); background: rgb(253 242 248); border-color: rgb(251 207 232); }
+.quick-app-icon-shield { color: rgb(37 99 235); background: rgb(239 246 255); border-color: rgb(191 219 254); }
 
 .dark .quick-app-icon-grid { color: rgb(147 197 253); background: rgb(30 58 138 / 0.35); border-color: rgb(59 130 246 / 0.35); }
 .dark .quick-app-icon-play { color: rgb(249 168 212); background: rgb(131 24 67 / 0.35); border-color: rgb(190 24 93 / 0.35); }
 .dark .quick-app-icon-sparkles { color: rgb(196 181 253); background: rgb(76 29 149 / 0.35); border-color: rgb(124 58 237 / 0.35); }
+.dark .quick-app-icon-product { color: rgb(252 165 165); background: rgb(127 29 29 / 0.35); border-color: rgb(220 38 38 / 0.35); }
 .dark .quick-app-icon-document { color: rgb(110 231 183); background: rgb(6 78 59 / 0.35); border-color: rgb(5 150 105 / 0.35); }
 .dark .quick-app-icon-edit { color: rgb(253 186 116); background: rgb(124 45 18 / 0.35); border-color: rgb(234 88 12 / 0.35); }
 .dark .quick-app-icon-terminal { color: rgb(103 232 249); background: rgb(22 78 99 / 0.35); border-color: rgb(8 145 178 / 0.35); }
@@ -1268,4 +1281,5 @@ onBeforeUnmount(() => {
 .dark .quick-app-icon-chart { color: rgb(253 230 138); background: rgb(120 53 15 / 0.35); border-color: rgb(217 119 6 / 0.35); }
 .dark .quick-app-icon-cube { color: rgb(165 180 252); background: rgb(49 46 129 / 0.35); border-color: rgb(99 102 241 / 0.35); }
 .dark .quick-app-icon-users { color: rgb(249 168 212); background: rgb(131 24 67 / 0.35); border-color: rgb(190 24 93 / 0.35); }
+.dark .quick-app-icon-shield { color: rgb(147 197 253); background: rgb(30 58 138 / 0.35); border-color: rgb(59 130 246 / 0.35); }
 </style>

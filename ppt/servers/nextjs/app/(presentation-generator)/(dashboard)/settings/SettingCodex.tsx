@@ -351,7 +351,7 @@ export default function CodexConfig({
         return (
             <div className="flex items-center gap-2 py-3 text-gray-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">Checking status…</span>
+                <span className="text-xs">正在检查状态…</span>
             </div>
         );
     }
@@ -361,7 +361,7 @@ export default function CodexConfig({
             <div className="space-y-4">
                 <div className="flex items-center gap-3 py-2">
                     <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
-                    <span className="text-sm text-gray-600">Waiting for sign-in…</span>
+                    <span className="text-sm text-gray-600">等待登录…</span>
                     <button
                         onClick={handleCancelPolling}
                         className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 ml-auto"
@@ -419,7 +419,7 @@ export default function CodexConfig({
                         {!email && accountId && (
                             <p className="text-xs text-gray-500 truncate">ID: {accountId}</p>
                         )}
-                        <p className="text-xs text-gray-400">Signed in to ChatGPT</p>
+                        <p className="text-xs text-gray-400">已登录 ChatGPT</p>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
                         <button
@@ -477,7 +477,7 @@ export default function CodexConfig({
                             <Command>
                                 <CommandInput placeholder="Search models…" />
                                 <CommandList>
-                                    <CommandEmpty>No model found.</CommandEmpty>
+                                    <CommandEmpty>未找到模型。</CommandEmpty>
                                     <CommandGroup>
                                         {CODEX_MODELS.map((model) => (
                                             <CommandItem

@@ -519,11 +519,11 @@ export function ImageToolbar({
   const uploadReplacementImage = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      notify.error("Upload failed", "Please choose a valid image file.");
+      notify.error("上传失败", "请选择有效的图片文件。 ");
       return;
     }
     if (file.size > MAX_UPLOAD_FILE_SIZE) {
-      notify.error("Upload failed", "Image files must be smaller than 5MB.");
+      notify.error("上传失败", "图片文件必须小于 5MB。 ");
       return;
     }
 
@@ -540,7 +540,7 @@ export function ImageToolbar({
         focus_y: 50,
         crop_scale: null,
       });
-      notify.success("Image uploaded", "The selected image was replaced.");
+      notify.success("图片已上传", "已替换所选图片。 ");
     } catch (uploadError: unknown) {
       notify.error(
         "Upload failed",
@@ -710,7 +710,7 @@ export function ImageToolbar({
               <Panel className="w-[220px] p-3">
                 <label className="block text-[12px] font-medium text-[#4B5563]">
                   <span className="mb-2 flex items-center justify-between">
-                    <span>Border radius</span>
+                    <span>圆角</span>
                     <span className="font-medium text-[#191919]">
                       {formatRadiusValue(radiusDraft)}
                     </span>

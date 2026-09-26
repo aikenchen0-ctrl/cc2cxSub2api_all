@@ -1122,7 +1122,7 @@ export const BlocksPanel = ({
         </button>
       </div>
 
-      <SectionLabel>Content</SectionLabel>
+      <SectionLabel>内容</SectionLabel>
 
       <div className="space-y-3">
         {loading && (

@@ -5,7 +5,7 @@ import Header from "@/app/(presentation-generator)/(dashboard)/dashboard/compone
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "PPT生成",
+  title: "PPT 生成",
   description:
     "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
   alternates: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     "business presentations",
   ],
   openGraph: {
-    title: "PPT生成",
+    title: "PPT 生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     type: "website",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PPT生成",
+    title: "PPT 生成",
     description:
       "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
     site: "@presenton_ai",
@@ -47,7 +47,7 @@ const page = () => {
       <Header />
       <div className="mb-8 flex flex-col items-center justify-center px-4 text-center">
         <h1 className="relative font-syne text-4xl font-semibold leading-[112%] text-[#101323] sm:text-5xl lg:text-[64px] min-[1920px]:text-[76px] min-[2560px]:text-[88px]">
-          Generate
+          生成演示文稿
 
           <svg className="absolute -left-6 -top-8 sm:-left-12 sm:-top-12 lg:-left-20 lg:-top-16" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13" fill="none">
             <path d="M9.73497 5.85272C8.05237 5.69492 6.72098 4.39958 6.55904 2.76316L6.28582 0L6.0126 2.76316C5.85066 4.39985 4.51927 5.6952 2.83667 5.85272L0 6.11849L2.83667 6.38426C4.51927 6.54206 5.85066 7.8374 6.0126 9.47382L6.28582 12.237L6.55904 9.47382C6.72098 7.83713 8.05237 6.54178 9.73497 6.38426L12.5716 6.11849L9.73497 5.85272Z" fill="#09CCFE" />
@@ -60,7 +60,7 @@ const page = () => {
           </svg>
 
         </h1>
-        <p className="mt-2 max-w-2xl font-syne text-base text-[#101323CC] sm:text-lg lg:text-xl min-[1920px]:text-2xl">Turn prompts or documents into presentations with AI</p>
+        <p className="mt-2 max-w-2xl font-syne text-base text-[#101323CC] sm:text-lg lg:text-xl min-[1920px]:text-2xl">使用 AI 将提示词或文档转换为演示文稿</p>
       </div>
 
       <UploadPage />

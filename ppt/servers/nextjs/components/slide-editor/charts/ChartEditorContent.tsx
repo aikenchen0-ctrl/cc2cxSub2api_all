@@ -227,7 +227,7 @@ function DataLabelsControl({
   return (
     <div className="space-y-2">
       <div className="flex min-h-6 items-center justify-between gap-3 text-[12px] font-medium text-[#191919]">
-        <span>Data labels</span>
+        <span>数据标签</span>
         <CompactSwitch
           checked={enabled}
           label="Data labels"

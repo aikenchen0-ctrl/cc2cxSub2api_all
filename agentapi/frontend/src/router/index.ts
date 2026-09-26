@@ -3,17 +3,17 @@ import { useAgentSession } from '@/agent/session'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
-  { path: '/home', name: 'Home', component: () => import('@/views/AgentHomeView.vue'), meta: { requiresAuth: false, title: 'Home' } },
-  { path: '/login', name: 'Login', component: () => import('@/views/AgentLoginView.vue'), meta: { requiresAuth: false, title: 'Sign in' } },
-  { path: '/register', name: 'Register', component: () => import('@/views/AgentRegisterView.vue'), meta: { requiresAuth: false, title: 'Create account' } },
-  { path: '/dashboard', name: 'Dashboard', component: () => import('@/views/AgentDashboardView.vue'), meta: { requiresAuth: true, title: 'Dashboard' } },
-  { path: '/recharge', name: 'Recharge', component: () => import('@/views/AgentRechargeView.vue'), meta: { requiresAuth: true, title: 'Recharge' } },
-  { path: '/console', name: 'Console', component: () => import('@/views/AgentModelConsoleView.vue'), meta: { requiresAuth: true, title: 'Model console' } },
-  { path: '/agent-admin', name: 'AgentAdmin', component: () => import('@/views/AgentConsoleView.vue'), meta: { requiresAuth: true, requiresAgentAdmin: true, title: 'Agent Console' } },
-  { path: '/keys', name: 'Keys', component: () => import('@/views/user/AgentAPIKeysView.vue'), meta: { requiresAuth: true, title: 'API Keys' } },
-  { path: '/usage', name: 'Usage', component: () => import('@/views/AgentUsageView.vue'), meta: { requiresAuth: true, title: 'Usage' } },
-  { path: '/profile', name: 'Profile', component: () => import('@/views/AgentProfileView.vue'), meta: { requiresAuth: true, title: 'Profile' } },
-  { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('@/views/NotFoundView.vue'), meta: { title: 'Not found' } },
+  { path: '/home', name: 'Home', component: () => import('@/views/AgentHomeView.vue'), meta: { requiresAuth: false, title: '首页' } },
+  { path: '/login', name: 'Login', component: () => import('@/views/AgentLoginView.vue'), meta: { requiresAuth: false, title: '登录' } },
+  { path: '/register', name: 'Register', component: () => import('@/views/AgentRegisterView.vue'), meta: { requiresAuth: false, title: '注册账号' } },
+  { path: '/dashboard', name: 'Dashboard', component: () => import('@/views/AgentDashboardView.vue'), meta: { requiresAuth: true, title: '总览' } },
+  { path: '/recharge', name: 'Recharge', component: () => import('@/views/AgentRechargeView.vue'), meta: { requiresAuth: true, title: '充值' } },
+  { path: '/console', name: 'Console', component: () => import('@/views/AgentModelConsoleView.vue'), meta: { requiresAuth: true, title: '模型工作台' } },
+  { path: '/agent-admin', name: 'AgentAdmin', component: () => import('@/views/AgentConsoleView.vue'), meta: { requiresAuth: true, requiresAgentAdmin: true, title: '代理站管理' } },
+  { path: '/keys', name: 'Keys', component: () => import('@/views/user/AgentAPIKeysView.vue'), meta: { requiresAuth: true, title: 'API 密钥' } },
+  { path: '/usage', name: 'Usage', component: () => import('@/views/AgentUsageView.vue'), meta: { requiresAuth: true, title: '用量记录' } },
+  { path: '/profile', name: 'Profile', component: () => import('@/views/AgentProfileView.vue'), meta: { requiresAuth: true, title: '个人资料' } },
+  { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('@/views/NotFoundView.vue'), meta: { title: '页面不存在' } },
 ]
 
 const router = createRouter({

@@ -339,7 +339,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
         <span>
           <span className="block text-sm font-semibold text-[#191919]">
             Advanced text-provider settings
-            <span className="ml-1 font-normal text-[#777A82]">(optional)</span>
+                            <span className="ml-1 font-normal text-[#777A82]">（可选）</span>
           </span>
           <span className="mt-1 block text-xs font-normal text-[#6B6C70]">
             Configure output limits and reasoning behavior when needed.
@@ -424,7 +424,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                 The selected limit applies to every generation attempt,
                 including retries.
                 {!hasManualMaxOutputTokens && !useModelMaximum && (
-                  <> The effective default is shown in the field.</>
+                  <>字段中显示的是实际默认值。</>
                 )}
               </p>
             </div>
@@ -516,7 +516,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                   <Command>
                     <CommandInput placeholder="Search providers..." />
                     <CommandList id={providerListId} className="max-h-60 p-1">
-                      <CommandEmpty>No providers found.</CommandEmpty>
+                      <CommandEmpty>未找到服务商。</CommandEmpty>
                       <CommandGroup>
                         {availableProviders.map((provider) => (
                           <CommandItem

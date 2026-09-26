@@ -138,7 +138,7 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
 export function BrandMark({ size = 16 }: { size?: number }) {
   const t = useT();
   return (
-    <img src="/project-icon.jpg" alt={t('AI剪辑')} width={size} height={size} style={{ display: 'block', objectFit: 'cover', borderRadius: Math.max(2, Math.round(size * 0.2)) }} />
+    <img src="/project-icon.jpg" data-sub2api-site-logo alt={t('AI剪辑')} width={size} height={size} style={{ display: 'block', objectFit: 'cover', borderRadius: Math.max(2, Math.round(size * 0.2)) }} />
   );
 }
 

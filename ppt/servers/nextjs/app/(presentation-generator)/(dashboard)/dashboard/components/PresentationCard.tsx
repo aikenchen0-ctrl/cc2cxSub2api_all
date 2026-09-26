@@ -86,13 +86,13 @@ export const PresentationCard = ({
         presentation_id: id,
         slide_count: presentation?.slides?.length || 0,
       });
-      notify.success("Presentation deleted", "The presentation was removed from your dashboard.");
+      notify.success("演示文稿已删除", "演示文稿已从仪表盘移除。 ");
       setShowDeleteDialog(false);
       if (onDeleted) {
         onDeleted(id);
       }
     } else {
-      notify.error("Could not delete presentation", response?.message || "Something went wrong while deleting the presentation.");
+      notify.error("无法删除演示文稿", response?.message || "删除演示文稿时出现问题。 ");
     }
     setIsDeleting(false);
   };
@@ -108,7 +108,7 @@ export const PresentationCard = ({
         duplicate_presentation_id: duplicated?.id,
         slide_count: presentation?.slides?.length || 0,
       });
-      notify.success("Presentation duplicated", "A copy was added to your dashboard.");
+      notify.success("演示文稿已复制", "副本已添加到仪表盘。 ");
       onDuplicated?.(duplicated);
     } catch (error) {
       notify.error(
@@ -159,7 +159,7 @@ export const PresentationCard = ({
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F3FF] text-[#7A5AF8]">
                 <Archive className="h-[18px] w-[18px]" aria-hidden="true" />
               </span>
-              <p className="text-xs font-medium">Preview unavailable</p>
+              <p className="text-xs font-medium">预览不可用</p>
             </div>
           ) : useTemplateV2HtmlPreview ? (
             <TemplateV2HtmlSlidePreview
@@ -231,7 +231,7 @@ export const PresentationCard = ({
                     setShowDeleteDialog(true);
                   }}
                 >
-                  <p>Delete</p>
+                  <p>删除</p>
                   <Trash className="h-4 w-4" />
                 </button>
               </PopoverContent>
@@ -267,7 +267,7 @@ export const PresentationCard = ({
             </DialogTitle>
             <DialogDescription asChild>
               <div className="w-full pt-2 text-sm leading-6 text-[#667085]">
-                <p>This will permanently delete the presentation below.</p>
+                <p>以下演示文稿将被永久删除。</p>
                 <div
                   className="mt-4 rounded-[12px] border border-[#FECDCA] bg-[#FFFBFA] px-4 py-3 text-left"
                   title={title || "Untitled presentation"}

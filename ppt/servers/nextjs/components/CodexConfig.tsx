@@ -337,7 +337,7 @@ export default function CodexConfig({
           <Loader2 className="w-10 h-10 text-[#191919] animate-spin" />
         </div>
         <div className="text-start flex-1 min-w-0">
-          <h4 className="text-[#191919] text-lg font-medium">Checking status</h4>
+          <h4 className="text-[#191919] text-lg font-medium">正在检查状态</h4>
           <p className="text-[#B3B3B3] text-sm font-normal">
             Verifying your ChatGPT connection…
           </p>
@@ -355,7 +355,7 @@ export default function CodexConfig({
               <Loader2 className="w-5 h-5 text-[#191919] animate-spin" />
             </div>
             <div className="text-start min-w-0">
-              <h4 className="text-[#191919] text-lg font-medium">Waiting for sign-in</h4>
+              <h4 className="text-[#191919] text-lg font-medium">等待登录</h4>
               <p className="text-[#B3B3B3] text-sm font-normal">
                 Complete sign-in in the browser tab we opened.
               </p>
@@ -424,7 +424,7 @@ export default function CodexConfig({
               {!email && accountId && (
                 <p className="text-xs text-[#B3B3B3] truncate">ID: {accountId}</p>
               )}
-              <p className="text-xs text-[#B3B3B3]">Signed in to ChatGPT</p>
+              <p className="text-xs text-[#B3B3B3]">已登录 ChatGPT</p>
             </div>
           </div>
           <div className="flex gap-1.5 shrink-0">
@@ -471,8 +471,8 @@ export default function CodexConfig({
           <img src="/providers/OpenAI-white.png" alt="openai Logo" className="w-[27px] h-[27px]" />
         </div>
         <div className="text-start flex-1">
-          <h4 className="text-[#191919] text-sm font-medium">Sign in with ChatGPT</h4>
-          <p className="text-[#B3B3B3]   text-xs font-normal">Use your ChatGPT account — no API  key required</p>
+          <h4 className="text-[#191919] text-sm font-medium">使用 ChatGPT 登录</h4>
+          <p className="text-[#B3B3B3]   text-xs font-normal">使用 ChatGPT 账户登录，无需 API 密钥</p>
         </div>
       </div>
       <ArrowRight className="w-[22px] h-[22px] text-[#4C4C4C]" />

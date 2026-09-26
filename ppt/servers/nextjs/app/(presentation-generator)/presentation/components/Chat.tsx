@@ -2407,7 +2407,7 @@ const Chat = ({
                               <span className="flex h-[14px] w-[14px] items-start justify-center pt-0.5">
                                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
                               </span>
-                              <span>Understanding</span>
+                              <span>理解中</span>
                               <ActivityStatusIcon
                                 activity={{
                                   id: "fallback",
@@ -3040,7 +3040,7 @@ const Chat = ({
                         ) : (
                           <ChevronRight className="h-3 w-3" />
                         )}
-                        <span>Thinking</span>
+                        <span>思考中</span>
                         {message.activity.some(
                           (item) => item.state === "running"
                         ) && (

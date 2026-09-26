@@ -20,12 +20,34 @@ describe('AgentAPIKeysView', () => {
     const wrapper = mount(AgentAPIKeysView)
     await flushPromises()
 
-    await wrapper.get('input[placeholder="Key name, e.g. Desktop client"]').setValue('desktop')
+    await wrapper.get('input[placeholder="密钥名称，例如：桌面客户端"]').setValue('desktop')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith('desktop')
     expect(wrapper.text()).toContain('sk-agent-new-secret')
     expect(wrapper.text()).not.toContain('sk-super-')
+  })
+
+  it('uses a Chinese confirmation dialog before revoking a key', async () => {
+    vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({
+      total: 1,
+      items: [{ id: 1, name: 'desktop', prefix: 'sk-agent-old', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
+    })
+    const revoke = vi.spyOn(agentAPI.keys, 'revoke').mockResolvedValue(undefined)
+    const wrapper = mount(AgentAPIKeysView)
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '撤销')!.trigger('click')
+    await flushPromises()
+
+    expect(revoke).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain('确定撤销“desktop”吗？')
+    document.body.querySelector<HTMLButtonElement>('[data-testid="agent-confirm-action"]')?.click()
+    await flushPromises()
+
+    expect(revoke).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain('已撤销')
+    wrapper.unmount()
   })
 })

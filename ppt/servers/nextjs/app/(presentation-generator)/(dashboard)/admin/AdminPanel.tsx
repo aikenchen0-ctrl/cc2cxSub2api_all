@@ -101,7 +101,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not load users", detail);
+        notify.error("无法加载用户", detail);
       }
     } catch (loadError) {
       trackEvent(MixpanelEvent.Auth_Admin_User_List_Failed, {
@@ -109,10 +109,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           loadError,
-          "Could not load users"
+          "无法加载用户"
         ),
       });
-      notify.error("Could not load users", "Please try again.");
+      notify.error("无法加载用户", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -137,17 +137,17 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not load API keys", detail);
+        notify.error("无法加载 API 密钥", detail);
       }
     } catch (loadError) {
       trackEvent(MixpanelEvent.Auth_Admin_API_Key_List_Failed, {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           loadError,
-          "Could not load API keys"
+          "无法加载 API 密钥"
         ),
       });
-      notify.error("Could not load API keys", "Please try again.");
+      notify.error("无法加载 API 密钥", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -180,7 +180,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           username_length: cleanedUsername.length,
           user_count_after: users.length + 1,
         });
-        notify.success("User created", `${cleanedUsername} can now sign in.`);
+        notify.success("用户已创建", `${cleanedUsername} 现在可以登录。`);
         setUsername("");
         setPassword("");
         await loadUsers("user_created");
@@ -190,17 +190,17 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not create user", detail);
+        notify.error("无法创建用户", detail);
       }
     } catch (createError) {
       trackEvent(MixpanelEvent.Auth_Admin_User_Create_Failed, {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           createError,
-          "Could not create user"
+          "无法创建用户"
         ),
       });
-      notify.error("Could not create user", "Please try again.");
+      notify.error("无法创建用户", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -232,7 +232,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           target_role: user.role,
           sessions_invalidated: true,
         });
-        notify.success("Password reset", "Existing sessions were signed out.");
+        notify.success("密码已重置", "现有会话已退出。 ");
         setDialog(null);
         setResetPasswordValue("");
       } else {
@@ -242,7 +242,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not reset password", detail);
+        notify.error("无法重置密码", detail);
       }
     } catch (resetError) {
       trackEvent(MixpanelEvent.Auth_Admin_User_Password_Reset_Failed, {
@@ -250,10 +250,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           resetError,
-          "Could not reset password"
+          "无法重置密码"
         ),
       });
-      notify.error("Could not reset password", "Please try again.");
+      notify.error("无法重置密码", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -278,7 +278,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           target_role: user.role,
           user_count_after: Math.max(0, users.length - 1),
         });
-        notify.success("User deleted", `${user.username}'s workspace was removed.`);
+        notify.success("用户已删除", `用户 ${user.username} 的工作区已移除。`);
         setDialog(null);
         await loadUsers("user_deleted");
       } else {
@@ -288,7 +288,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not delete user", detail);
+        notify.error("无法删除用户", detail);
       }
     } catch (deleteError) {
       trackEvent(MixpanelEvent.Auth_Admin_User_Delete_Failed, {
@@ -296,10 +296,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           deleteError,
-          "Could not delete user"
+          "无法删除用户"
         ),
       });
-      notify.error("Could not delete user", "Please try again.");
+      notify.error("无法删除用户", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -323,9 +323,9 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
         });
         try {
           await navigator.clipboard.writeText(key.token);
-          notify.success("API key created", "The new key was copied to your clipboard.");
+          notify.success("API 密钥已创建", "新密钥已复制到剪贴板。 ");
         } catch {
-          notify.success("API key created", "Use the copy button to copy the new key.");
+          notify.success("API 密钥已创建", "请使用复制按钮复制新密钥。 ");
         }
       } else {
         const detail = await errorDetail(response);
@@ -333,17 +333,17 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not create API key", detail);
+        notify.error("无法创建 API 密钥", detail);
       }
     } catch (createError) {
       trackEvent(MixpanelEvent.Auth_Admin_API_Key_Create_Failed, {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           createError,
-          "Could not create API key"
+          "无法创建 API 密钥"
         ),
       });
-      notify.error("Could not create API key", "Please try again.");
+      notify.error("无法创建 API 密钥", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -375,24 +375,24 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           api_key_count_after: Math.max(0, keys.length - 1),
         });
         setDialog(null);
-        notify.success("API key revoked");
+        notify.success("API 密钥已撤销");
       } else {
         const detail = await errorDetail(response);
         trackEvent(MixpanelEvent.Auth_Admin_API_Key_Revoke_Failed, {
           status_code: response.status,
           error_message: sanitizeAnalyticsError(detail),
         });
-        notify.error("Could not revoke API key", detail);
+        notify.error("无法撤销 API 密钥", detail);
       }
     } catch (revokeError) {
       trackEvent(MixpanelEvent.Auth_Admin_API_Key_Revoke_Failed, {
         status_code: null,
         error_message: sanitizeAnalyticsError(
           revokeError,
-          "Could not revoke API key"
+          "无法撤销 API 密钥"
         ),
       });
-      notify.error("Could not revoke API key", "Please try again.");
+      notify.error("无法撤销 API 密钥", "请重试。 ");
     } finally {
       setBusy(null);
     }
@@ -410,9 +410,9 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
   const copyKey = async (token: string) => {
     try {
       await navigator.clipboard.writeText(token);
-      notify.success("API key copied");
+      notify.success("API 密钥已复制");
     } catch {
-      notify.error("Could not copy API key", "Please try again.");
+      notify.error("无法复制 API 密钥", "请重试。 ");
     }
   };
 
@@ -473,7 +473,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <UserPlus className="h-4 w-4 text-[#5146E5]" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-[#101323]">Add user</h2>
+                  <h2 className="text-sm font-semibold text-[#101323]">添加用户</h2>
                   <p className="mt-0.5 text-xs text-[#667085]">
                     Create a private workspace and sign-in credentials.
                   </p>
@@ -520,7 +520,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                     <Users className="h-4 w-4 text-[#5146E5]" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-[#101323]">Accounts</h2>
+                    <h2 className="text-sm font-semibold text-[#101323]">账号</h2>
                     <p className="mt-0.5 text-xs text-[#667085]">
                       {users.length} account{users.length === 1 ? "" : "s"}
                     </p>
@@ -585,7 +585,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                     <KeyRound className="h-4 w-4 text-[#5146E5]" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-[#101323]">API and MCP keys</h2>
+                    <h2 className="text-sm font-semibold text-[#101323]">API 和 MCP 密钥</h2>
                     <p className="mt-0.5 text-xs text-[#667085]">
                       Keys are hidden by default. Generate as many as you need.
                     </p>

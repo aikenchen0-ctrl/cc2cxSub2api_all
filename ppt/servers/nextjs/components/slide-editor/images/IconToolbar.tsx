@@ -62,7 +62,7 @@ export function IconToolbar({
           className="size-4 rounded-full border border-black/10"
           style={{ backgroundColor: iconColor }}
         />
-        <span>Color</span>
+        <span>颜色</span>
         <DeferredColorInput
           aria-label="Icon color"
           value={iconColor}
@@ -81,7 +81,7 @@ export function IconToolbar({
         className="flex h-8 items-center gap-2 rounded-[6px] px-2 text-[13px] font-medium hover:bg-[#F6F6F9]"
       >
         <Replace size={16} strokeWidth={1.7} aria-hidden="true" />
-        <span>Change icon</span>
+        <span>更换图标</span>
       </button>
 
       {componentActions ? (

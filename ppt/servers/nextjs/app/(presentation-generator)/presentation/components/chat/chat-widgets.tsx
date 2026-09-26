@@ -28,7 +28,7 @@ const AssistantSparkleIcon = ({ size = 14 }: { size?: number }) => (
 export const AssistantMarker = () => (
   <div className="mb-2 flex items-center gap-1.5 text-[#8A8F98]">
     <AssistantSparkleIcon size={14} />
-    <span className="text-[11px] font-medium leading-4">Assistant</span>
+    <span className="text-[11px] font-medium leading-4">助手</span>
   </div>
 );
 
@@ -158,7 +158,7 @@ export const EditComparisonPreview = ({
           height={14}
           className="h-[14px] w-[14px] shrink-0"
         />
-        <span className="font-semibold text-[#191919]">Select edits</span>
+        <span className="font-semibold text-[#191919]">选择编辑内容</span>
         <span className="ml-auto text-[11px] font-medium leading-[normal] text-[#7A5AF8]">
           {preview.changeCount} {preview.changeCount === 1 ? "Change" : "Changes"}
         </span>

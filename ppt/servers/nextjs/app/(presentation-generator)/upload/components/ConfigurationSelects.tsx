@@ -349,7 +349,7 @@ const LanguageSelect: React.FC<{
           className="font-instrument_sans"
         />
         <CommandList>
-          <CommandEmpty>No language found.</CommandEmpty>
+          <CommandEmpty>未找到语言。</CommandEmpty>
           <CommandGroup>
             {Object.values(LanguageType).map((language) => (
               <CommandItem

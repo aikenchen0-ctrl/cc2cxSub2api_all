@@ -367,7 +367,7 @@ function toggleDropdown() {
 }
 
 async function handleOpenAgentStation() {
-  const startUrl = `${buildApiUrl('/auth/integrations/agentapi/start')}?next=%2Fagent-admin`
+  const startUrl = `${buildApiUrl('/auth/integrations/agentapi/start')}?next=%2Fdashboard`
   try {
     await openJuSso(startUrl)
   } catch (error) {

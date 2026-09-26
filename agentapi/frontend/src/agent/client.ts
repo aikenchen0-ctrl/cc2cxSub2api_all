@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosResponse } from 'axios'
+import { errorMessage as localizeErrorMessage } from './locale'
 
 const DEFAULT_API_BASE = '/api/v1'
 
@@ -36,7 +37,7 @@ function unwrap(response: AxiosResponse): AxiosResponse | Promise<never> {
   return Promise.reject({
     status: response.status,
     code: codeValue(payload.reason) ?? codeValue(payload.code),
-    message: String(payload.message || 'AgentAPI request failed'),
+    message: String(payload.message || '请求失败，请稍后重试。'),
     metadata: payload.metadata,
   } satisfies AgentAPIError)
 }
@@ -47,17 +48,13 @@ agentClient.interceptors.response.use(unwrap, (error: AxiosError<Record<string, 
     return Promise.reject({
       status: error.response.status,
       code: codeValue(payload.reason) ?? codeValue(payload.code),
-      message: String(payload.message || payload.detail || error.message || 'AgentAPI request failed'),
+      message: String(payload.message || payload.detail || error.message || '请求失败，请稍后重试。'),
       metadata: payload.metadata,
     } satisfies AgentAPIError)
   }
-  return Promise.reject({ status: 0, message: 'Network error. Check the AgentAPI connection.' } satisfies AgentAPIError)
+  return Promise.reject({ status: 0, message: '网络连接失败，请检查与 AgentAPI 的连接。' } satisfies AgentAPIError)
 })
 
 export function errorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) return message
-  }
-  return fallback
+  return localizeErrorMessage(error, fallback)
 }

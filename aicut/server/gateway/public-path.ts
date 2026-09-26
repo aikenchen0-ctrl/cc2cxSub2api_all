@@ -4,6 +4,7 @@ const AUTH_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/me',
+  '/api/sub2api/balance',
   '/api/auth/models',
   '/api/auth/register',
   '/api/auth/config',

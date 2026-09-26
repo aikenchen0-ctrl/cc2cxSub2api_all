@@ -109,15 +109,16 @@ func truncateAuditExtraString(value string, limit int) string {
 
 // auditSensitiveReads 需要审计的敏感 GET 读取（method+FullPath → 动作名）。
 var auditSensitiveReads = map[string]string{
-	"GET /api/v1/admin/accounts/data":             "admin.accounts.export",
-	"GET /api/v1/admin/proxies/data":              "admin.proxies.export",
-	"GET /api/v1/admin/redeem-codes/export":       "admin.redeem_codes.export",
-	"GET /api/v1/admin/backups/:id/download-url":  "admin.backups.download",
-	"GET /api/v1/admin/settings/admin-api-key":    "admin.admin_api_key.read",
-	"GET /api/v1/admin/users/:id/api-keys":        "admin.users.api_keys.read",
-	"GET /api/v1/admin/groups/:id/api-keys":       "admin.groups.api_keys.read",
-	"GET /api/v1/admin/backups/s3-config":         "admin.backups.s3_config.read",
-	"GET /api/v1/admin/data-management/s3/config": "admin.data_management.s3_config.read",
+	"GET /api/v1/agent-provisioning/agents/:agent_id": "agent_provisioning.agent.read",
+	"GET /api/v1/admin/accounts/data":                 "admin.accounts.export",
+	"GET /api/v1/admin/proxies/data":                  "admin.proxies.export",
+	"GET /api/v1/admin/redeem-codes/export":           "admin.redeem_codes.export",
+	"GET /api/v1/admin/backups/:id/download-url":      "admin.backups.download",
+	"GET /api/v1/admin/settings/admin-api-key":        "admin.admin_api_key.read",
+	"GET /api/v1/admin/users/:id/api-keys":            "admin.users.api_keys.read",
+	"GET /api/v1/admin/groups/:id/api-keys":           "admin.groups.api_keys.read",
+	"GET /api/v1/admin/backups/s3-config":             "admin.backups.s3_config.read",
+	"GET /api/v1/admin/data-management/s3/config":     "admin.data_management.s3_config.read",
 }
 
 // auditActionOverrides 变更类请求的动作名精确映射（未命中时自动推导）。
@@ -307,6 +308,9 @@ func (b *restoredBody) Close() error { return b.closer.Close() }
 
 // MaskedRequestCredential 提取请求头中的凭证并做首尾掩码。
 func MaskedRequestCredential(c *gin.Context) string {
+	if credential := maskedAgentProvisioningWorkerCredential(c); credential != "" {
+		return credential
+	}
 	if apiKey := strings.TrimSpace(c.GetHeader("x-api-key")); apiKey != "" {
 		return "x-api-key " + service.MaskAuditCredential(apiKey)
 	}

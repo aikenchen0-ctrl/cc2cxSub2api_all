@@ -1,7 +1,10 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +27,166 @@ func testStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+func TestUsersPageReturnsStablePagesAndAgentScopedTotals(t *testing.T) {
+	store := testStore(t)
+	for id := 43; id <= 52; id++ {
+		userID := strconv.Itoa(id)
+		if _, err := store.UpsertUser("agent-test", userID, userID+"@example.com", "User "+userID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, total, err := store.UsersPage("agent-test", 5, 5, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 11 || len(items) != 5 {
+		t.Fatalf("unexpected second user page size or total: total=%d len=%d", total, len(items))
+	}
+	if items[0].MainUserID != "47" || items[4].MainUserID != "43" {
+		t.Fatalf("user page order or offset is incorrect: first=%q last=%q", items[0].MainUserID, items[4].MainUserID)
+	}
+
+	otherAgentItems, otherAgentTotal, err := store.UsersPage("other-agent", 5, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherAgentItems) != 0 || otherAgentTotal != 0 {
+		t.Fatalf("user page escaped its Agent scope: items=%+v total=%d", otherAgentItems, otherAgentTotal)
+	}
+
+	searchItems, searchTotal, err := store.UsersPage("agent-test", 5, 0, "uSeR 4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchTotal != 7 || len(searchItems) != 5 || searchItems[0].MainUserID != "49" {
+		t.Fatalf("case-insensitive search did not filter before pagination: items=%+v total=%d", searchItems, searchTotal)
+	}
+	searchItems, searchTotal, err = store.UsersPage("agent-test", 5, 5, "52")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchTotal != 1 || len(searchItems) != 0 {
+		t.Fatalf("search total/page did not use the same filter: items=%+v total=%d", searchItems, searchTotal)
+	}
+	searchItems, searchTotal, err = store.UsersPage("agent-test", 5, 0, "52")
+	if err != nil || searchTotal != 1 || len(searchItems) != 1 || searchItems[0].MainUserID != "52" {
+		t.Fatalf("identifier search failed: items=%+v total=%d err=%v", searchItems, searchTotal, err)
+	}
+}
+
+func TestAgentModelPolicyDefaultsToPublicCatalogAndPersistsAValidatedSubset(t *testing.T) {
+	store := testStore(t)
+	policy, err := store.AgentModelPolicy("agent-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(publicModelCatalog, ",") {
+		t.Fatalf("unexpected default model policy: customized=%v enabled=%v", policy.Customized, policy.Enabled)
+	}
+
+	policy, err = store.UpdateAgentModelPolicy("agent-test", []string{"gpt-image-2", "gpt-5.5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"gpt-5.5", "gpt-image-2"}
+	if !policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(want, ",") {
+		t.Fatalf("unexpected saved model policy: customized=%v enabled=%v", policy.Customized, policy.Enabled)
+	}
+
+	policy, err = store.AgentModelPolicy("agent-test")
+	if err != nil || !policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(want, ",") {
+		t.Fatalf("model policy was not persisted: policy=%+v err=%v", policy, err)
+	}
+	if _, err := store.UpdateAgentModelPolicy("agent-test", []string{"private-provider-model"}); err == nil {
+		t.Fatal("model outside the public catalog was accepted")
+	}
+	if _, err := store.UpdateAgentModelPolicy("agent-test", []string{"gpt-5.5", "gpt-5.5"}); err == nil {
+		t.Fatal("duplicate models were accepted")
+	}
+	policy, err = store.UpdateAgentModelPolicy("agent-test", []string{})
+	if err != nil || !policy.Customized || len(policy.Enabled) != 0 {
+		t.Fatalf("explicit empty policy should disable all models: policy=%+v err=%v", policy, err)
+	}
+	if _, err := store.UpdateAgentModelPolicy("missing-agent", []string{"gpt-5.5"}); !errors.Is(err, errNotFound) {
+		t.Fatalf("unknown Agent policy update error=%v, want not found", err)
+	}
+}
+
+func TestLegacySettlementTableUpgradesForUsageSnapshot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE settlements (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		agent_id TEXT NOT NULL,
+		proxy_main_user_id TEXT NOT NULL,
+		billing_main_user_id TEXT NOT NULL,
+		request_id TEXT NOT NULL,
+		usage_id TEXT NOT NULL,
+		reserved_cents INTEGER NOT NULL,
+		actual_cents INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		error TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		UNIQUE(agent_id, request_id)
+	)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, status, created_at, updated_at) VALUES ('agent-test', '42', 'owner', 'legacy-request', 'legacy-request', 100, 'confirmed', 1, 1)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenStore(path, "test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	items, err := store.Usage("agent-test", "42", 10)
+	if err != nil || len(items) != 1 || items[0].RequestID != "legacy-request" || items[0].Source != "" || items[0].InputTokens != 0 {
+		t.Fatalf("legacy settlement did not survive snapshot migration: items=%+v err=%v", items, err)
+	}
+}
+
+func TestUsagePageCountsAndScopesRowsWithoutSilentTruncation(t *testing.T) {
+	store := testStore(t)
+	if _, err := store.UpsertUser("agent-test", "43", "other@example.com", "Other"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Allocate("agent-test", "42", 600, "usage-page-alloc-42", "order-42", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Allocate("agent-test", "43", 100, "usage-page-alloc-43", "order-43", "test"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 5; i++ {
+		requestID := "page-user-42-" + strconv.Itoa(i)
+		if _, created, err := store.PrepareSettlement("agent-test", "42", "owner", requestID, requestID, 10); err != nil || !created {
+			t.Fatalf("create paged settlement %d: created=%v err=%v", i, created, err)
+		}
+	}
+	if _, created, err := store.PrepareSettlement("agent-test", "43", "owner", "page-user-43", "page-user-43", 10); err != nil || !created {
+		t.Fatalf("create second user's settlement: created=%v err=%v", created, err)
+	}
+
+	items, total, err := store.UsagePage("agent-test", "42", 2, 2)
+	if err != nil || total != 5 || len(items) != 2 || items[0].RequestID != "page-user-42-3" || items[1].RequestID != "page-user-42-2" {
+		t.Fatalf("unexpected scoped usage page: items=%+v total=%d err=%v", items, total, err)
+	}
+	adminItems, adminTotal, err := store.UsagePage("agent-test", "", 10, 0)
+	if err != nil || adminTotal != 6 || len(adminItems) != 6 {
+		t.Fatalf("agent admin page missed records: items=%+v total=%d err=%v", adminItems, adminTotal, err)
+	}
 }
 
 func TestWalletAllocationConsumptionAndRefundAreIdempotent(t *testing.T) {
@@ -179,7 +342,7 @@ func TestDisabledAgentStartsSuspended(t *testing.T) {
 	defer store.Close()
 	cfg := Config{
 		AgentID: "disabled-agent", AgentName: "Disabled", SiteName: "Disabled",
-		AdminKey: "admin", AppCredential: "app", OwnerMainUserID: "owner", BillingMode: "owner_upstream", AgentDisabled: true,
+		RuntimeControlCredential: "agt_ctl_test-control-secret", AppCredential: "app", OwnerMainUserID: "owner", BillingMode: "owner_upstream", AgentDisabled: true,
 	}
 	if err := store.UpsertAgent(cfg); err != nil {
 		t.Fatal(err)
@@ -190,6 +353,26 @@ func TestDisabledAgentStartsSuspended(t *testing.T) {
 	}
 	if agent.Status != "suspended" {
 		t.Fatalf("disabled agent status=%q, want suspended", agent.Status)
+	}
+}
+
+func TestRuntimeControlCredentialIsRequiredOnlyForProvisionedAgents(t *testing.T) {
+	cfg := Config{
+		AgentID: "agent-local", AppCredential: "app", OwnerMainUserID: "owner",
+		BillingMode: "owner_upstream",
+	}
+	if got := agentConfigStatus(cfg); got != "active" {
+		t.Fatalf("local agent without provisioning control status=%q, want active", got)
+	}
+
+	cfg.AgentID = "agt_test"
+	cfg.ProvisioningControlEnabled = true
+	if got := agentConfigStatus(cfg); got != "suspended" {
+		t.Fatalf("managed agent without runtime control credential status=%q, want suspended", got)
+	}
+	cfg.RuntimeControlCredential = "agt_ctl_test-runtime-control-secret"
+	if got := agentConfigStatus(cfg); got != "active" {
+		t.Fatalf("managed agent with runtime control credential status=%q, want active", got)
 	}
 }
 
@@ -313,5 +496,85 @@ func TestVideoTaskMappingIsScopedAndIdempotent(t *testing.T) {
 	updated, err := store.VideoTask("agent-test", "video-1")
 	if err != nil || updated.Status != "completed" {
 		t.Fatalf("unexpected video task: %+v err=%v", updated, err)
+	}
+}
+
+func TestPendingVideoTasksTreatsDoneAsTerminal(t *testing.T) {
+	store := testStore(t)
+	for _, item := range []struct {
+		id     string
+		status string
+	}{
+		{id: "video-queued", status: "queued"},
+		{id: "video-done", status: "done"},
+		{id: "video-completed", status: "completed"},
+		{id: "video-failed-pending", status: "failed"},
+	} {
+		if item.id == "video-failed-pending" {
+			if err := store.Allocate("agent-test", "42", 100, "allocate-pending-video-task", "order", "test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := store.PrepareSettlement("agent-test", "42", "owner", "request-"+item.id, "request-"+item.id, 50); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := store.RecordVideoTask("agent-test", "42", item.id, "request-"+item.id, item.status); err != nil {
+			t.Fatalf("record %s video task: %v", item.status, err)
+		}
+	}
+
+	pending, err := store.PendingVideoTasks("agent-test", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("terminal tasks should only be re-polled while their settlement is pending: %+v", pending)
+	}
+	found := map[string]bool{}
+	for _, task := range pending {
+		found[task.TaskID] = true
+	}
+	if !found["video-queued"] || !found["video-failed-pending"] || found["video-done"] || found["video-completed"] {
+		t.Fatalf("unexpected pending video tasks: %+v", pending)
+	}
+}
+
+func TestImageTaskMappingIsScopedIdempotentAndTerminalAware(t *testing.T) {
+	store := testStore(t)
+	task, err := store.RecordImageTask("agent-test", "42", "image-1", "request-image-1", "processing")
+	if err != nil || task.TaskID != "image-1" || task.MainUserID != "42" {
+		t.Fatalf("record image task: task=%+v err=%v", task, err)
+	}
+	if _, err := store.RecordImageTask("agent-test", "42", "image-1", "request-image-1", "completed"); err != nil {
+		t.Fatalf("idempotent image task update failed: %v", err)
+	}
+	if _, err := store.RecordImageTask("agent-test", "other", "image-1", "request-other", "processing"); !errors.Is(err, errIdempotencyConflict) {
+		t.Fatalf("image task ownership conflict was accepted: %v", err)
+	}
+	if err := store.UpdateImageTaskStatus("agent-test", "image-1", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordImageTask("agent-test", "42", "image-pending", "request-image-pending", "queued"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Allocate("agent-test", "42", 100, "allocate-pending-image-task", "order", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.PrepareSettlement("agent-test", "42", "owner", "request-image-failed-pending", "request-image-failed-pending", 50); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordImageTask("agent-test", "42", "image-failed-pending", "request-image-failed-pending", "failed"); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := store.PendingImageTasks("agent-test", 10)
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("terminal image task should only be re-polled while its settlement is pending: pending=%+v err=%v", pending, err)
+	}
+	found := map[string]bool{}
+	for _, task := range pending {
+		found[task.TaskID] = true
+	}
+	if !found["image-pending"] || !found["image-failed-pending"] || found["image-1"] {
+		t.Fatalf("unexpected pending image tasks: %+v", pending)
 	}
 }

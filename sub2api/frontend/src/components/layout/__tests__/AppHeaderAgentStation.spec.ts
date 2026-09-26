@@ -22,7 +22,7 @@ describe('AppHeader AgentAPI station entry', () => {
 
   it('uses the shared SSO start endpoint without putting credentials in the URL', () => {
     expect(componentSource).toContain("buildApiUrl('/auth/integrations/agentapi/start')")
-    expect(componentSource).toContain('?next=%2Fagent-admin')
+    expect(componentSource).toContain('?next=%2Fdashboard')
     expect(componentSource).toContain('openJuSso(startUrl)')
     expect(componentSource).not.toMatch(/agentapi\/start[^\n]*(apiKey|superKey|token)/i)
   })

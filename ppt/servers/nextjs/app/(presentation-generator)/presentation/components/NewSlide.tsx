@@ -133,7 +133,7 @@ const LayoutItem = memo(({ layout, onSelect }: LayoutItemProps) => {
                 <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E2E2EA] bg-[#FAFAFB]">
                   <Plus className="h-4 w-4" />
                 </span>
-                <span className="text-sm font-medium">Empty Slide</span>
+                <span className="text-sm font-medium">空白幻灯片</span>
               </div>
             </div>
           ) : v2Layout ? (
@@ -234,7 +234,7 @@ const NewSlideV1 = ({
         setShowNewSlideSelection(false);
       } catch (error: any) {
         console.error(error);
-        notify.error("Could not add slide", "Something went wrong while adding the new slide.");
+        notify.error("无法添加幻灯片", "添加新幻灯片时出现问题。 ");
       }
     },
     [

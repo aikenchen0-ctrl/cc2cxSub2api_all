@@ -97,7 +97,7 @@ export default function AuthGate() {
         trackEvent(MixpanelEvent.Auth_Unauthorized_Redirect, {
           configured: true,
         });
-        notify.error("Unauthorized", "Sign in to view this page.", {
+        notify.error("未授权", "请登录后查看此页面。", {
           id: "auth-unauthorized-redirect",
           duration: 5000,
         });
@@ -117,7 +117,7 @@ export default function AuthGate() {
       });
 
       if (!response.ok) {
-        throw new Error("Could not load login state");
+        throw new Error("无法加载登录状态");
       }
 
       const data = (await response.json()) as AuthStatus;
@@ -141,12 +141,12 @@ export default function AuthGate() {
         auth_disabled: false,
         error_message: sanitizeAnalyticsError(
           fetchError,
-          "Could not load login state"
+          "无法加载登录状态"
         ),
       });
       notify.error(
-        "Could not load login",
-        "We could not connect to the login service. Please refresh and try again."
+        "无法加载登录",
+        "无法连接登录服务，请刷新后重试。"
       );
     } finally {
       setIsLoading(false);
@@ -169,7 +169,7 @@ export default function AuthGate() {
         redirect?: string;
       } | null;
       if (!response.ok || data?.authenticated !== true) {
-        throw new Error("SSO exchange failed");
+        throw new Error("单点登录交换失败");
       }
       const redirect = data.redirect;
       if (
@@ -179,7 +179,7 @@ export default function AuthGate() {
         redirect.includes("\\") ||
         /[\u0000-\u001f]/.test(redirect)
       ) {
-        throw new Error("Invalid SSO redirect");
+        throw new Error("无效的单点登录跳转地址");
       }
       setStatus({
         configured: true,
@@ -191,7 +191,7 @@ export default function AuthGate() {
       window.history.replaceState({}, "", window.location.pathname);
     } catch (error) {
       console.error(error);
-      notify.error("SSO sign-in failed", "Please return to Sub2API and try again.");
+      notify.error("单点登录失败", "请返回 Sub2API 后重试。 ");
       await refreshStatus();
     } finally {
       setIsLoading(false);
@@ -229,8 +229,8 @@ export default function AuthGate() {
         reason: "username_too_short",
       });
       notify.warning(
-        "Username too short",
-        "Your username must be at least 3 characters."
+        "用户名过短",
+        "用户名至少需要 3 个字符。"
       );
       return;
     }
@@ -242,8 +242,8 @@ export default function AuthGate() {
         reason: "password_too_short",
       });
       notify.warning(
-        "Password too short",
-        `Your password must be at least ${minimumPasswordLength} characters.`
+        "密码过短",
+        `密码至少需要 ${minimumPasswordLength} 个字符。`
       );
       return;
     }
@@ -254,8 +254,8 @@ export default function AuthGate() {
         reason: "passwords_do_not_match",
       });
       notify.warning(
-        "Passwords do not match",
-        "Make sure both password fields match before continuing."
+        "两次密码不一致",
+        "请确认两次输入的密码一致后继续。"
       );
       return;
     }
@@ -297,21 +297,21 @@ export default function AuthGate() {
             status_code: response.status,
             error_message: sanitizeAnalyticsError(
               detail,
-              isSetupMode ? "Could not create account" : "Sign-in failed"
+              isSetupMode ? "无法创建账户" : "登录失败"
             ),
           }
         );
         if (response.status === 401) {
           notify.error(
-            "Sign-in failed",
+            "登录失败",
             detail === UNAUTHORIZED_DETAIL
-              ? "The username or password is incorrect. Please try again."
+              ? "用户名或密码错误，请重试。"
               : detail
           );
         } else {
           notify.error(
-            isSetupMode ? "Could not create account" : "Sign-in failed",
-            detail || "Something went wrong. Please try again."
+            isSetupMode ? "无法创建账户" : "登录失败",
+            detail || "操作失败，请重试。"
           );
         }
         return;
@@ -329,7 +329,7 @@ export default function AuthGate() {
         });
         setPassword("");
         setConfirmPassword("");
-        notify.success("Account created", "Sign in with your new username and password to continue.", {
+        notify.success("账户已创建", "请使用新用户名和密码登录以继续。", {
           duration: 6000,
         });
         return;
@@ -348,8 +348,8 @@ export default function AuthGate() {
       setPassword("");
       setConfirmPassword("");
       notify.success(
-        "Signed in",
-        "Welcome back. Loading your workspace."
+        "登录成功",
+        "欢迎回来，正在加载工作区。"
       );
     } catch (submitError) {
       console.error(submitError);
@@ -361,13 +361,13 @@ export default function AuthGate() {
           status_code: null,
           error_message: sanitizeAnalyticsError(
             submitError,
-            isSetupMode ? "Could not create account" : "Login unavailable"
+            isSetupMode ? "无法创建账户" : "登录不可用"
           ),
         }
       );
       notify.error(
-        "Login unavailable",
-        "The login service is unavailable right now. Please try again in a moment."
+        "登录不可用",
+        "登录服务暂时不可用，请稍后重试。"
       );
     } finally {
       setIsSubmitting(false);
@@ -391,6 +391,7 @@ export default function AuthGate() {
             <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-[4px] bg-[#F4F3FF] p-3">
               <Image
                 src="/project-icon.jpg"
+                data-sub2api-site-logo
                 alt="PPT生成"
                 width={161}
                 height={166}
@@ -399,10 +400,10 @@ export default function AuthGate() {
             </div>
             <div>
               <p className="font-syne text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A5AF8]">
-                Secure instance
+                安全实例
               </p>
               <h1 className="mt-1 font-unbounded text-xl font-normal leading-tight tracking-[-0.03em] text-black sm:text-[22px]">
-                {isSetupMode ? "Create your admin login" : "Sign in to continue"}
+                {isSetupMode ? "创建管理员账号" : "登录以继续"}
               </h1>
             </div>
           </div>
@@ -410,14 +411,14 @@ export default function AuthGate() {
 
         <p className="max-w-md text-sm leading-relaxed text-[#6B7280]">
           {isSetupMode
-            ? "One-time setup for this deployment. You will use the same username and password on future visits."
-            : "This deployment is protected. Enter your credentials to open the app."}
+            ? "首次部署设置。之后访问时请使用相同的用户名和密码。"
+            : "此部署受到保护。请输入凭据以打开应用。"}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-7 space-y-5">
           <div className="space-y-2">
             <label htmlFor="username" className="block text-sm font-medium text-[#374151]">
-              Username
+              用户名
             </label>
             <input
               id="username"
@@ -426,11 +427,11 @@ export default function AuthGate() {
               onChange={(event) =>
                 setUsername(event.target.value.replace(/\s/g, ""))
               }
-              placeholder="Username"
+              placeholder="用户名"
               minLength={3}
               maxLength={128}
               pattern="\S+"
-              title="Username cannot contain spaces"
+              title="用户名不能包含空格"
               required
               spellCheck={false}
               className="h-12 w-full rounded-lg border border-[#E1E1E5] bg-white px-4 text-sm text-[#191919] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#7A5AF8] focus:ring-2 focus:ring-[#7A5AF8]/15"
@@ -440,7 +441,7 @@ export default function AuthGate() {
 
           <div className="space-y-2">
             <label htmlFor="password" className="block text-sm font-medium text-[#374151]">
-              Password
+              密码
             </label>
             <input
               id="password"
@@ -449,7 +450,7 @@ export default function AuthGate() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={
-                isSetupMode ? "At least 8 characters" : "Enter your password"
+                isSetupMode ? "至少 8 个字符" : "输入密码"
               }
               minLength={isSetupMode ? 8 : 6}
               maxLength={128}
@@ -462,7 +463,7 @@ export default function AuthGate() {
           {isSetupMode ? (
             <div className="space-y-2">
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-[#374151]">
-                Confirm password
+                确认密码
               </label>
               <input
                 id="confirmPassword"
@@ -470,7 +471,7 @@ export default function AuthGate() {
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Re-enter your password"
+                placeholder="再次输入密码"
                 minLength={8}
                 maxLength={128}
                 required
@@ -482,7 +483,7 @@ export default function AuthGate() {
 
           {!isSetupMode && status.configured ? (
             <p className="rounded-lg border border-[#EDEEEF] bg-white px-4 py-3 text-xs leading-relaxed text-[#6B7280]">
-              Use the username and password provided by your administrator.
+              请使用管理员提供的用户名和密码。
             </p>
           ) : null}
 
@@ -493,11 +494,11 @@ export default function AuthGate() {
           >
             {isSubmitting
               ? isSetupMode
-                ? "Saving credentials…"
-                : "Signing in…"
+                ? "正在保存凭据…"
+                : "正在登录…"
               : isSetupMode
-                ? "Create account"
-                : "Sign in"}
+                ? "创建账号"
+                : "登录"}
           </button>
         </form>
       </section>

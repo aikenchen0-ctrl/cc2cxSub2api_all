@@ -188,7 +188,7 @@ const OutlineContent: React.FC<OutlineContentProps> = ({
       {!isStreaming && !isLoading && outlines && outlines.length === 0 && (
         <div className="rounded-lg border-2 border-dashed border-gray-200 bg-white py-12 text-center">
           <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-          <p className="mb-4 text-gray-600">No outlines available</p>
+          <p className="mb-4 text-gray-600">暂无大纲</p>
           <Button
             variant="outline"
             onClick={onAddSlide}

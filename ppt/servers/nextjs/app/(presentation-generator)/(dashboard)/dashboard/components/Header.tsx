@@ -46,6 +46,7 @@ const Header = () => {
             <Link href="/dashboard" onClick={() => trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/dashboard" })}>
               <img
                 src="/project-icon.jpg"
+                data-sub2api-site-logo
                 alt="永恒PPT"
                 className="h-[40px] w-[40px]"
               />

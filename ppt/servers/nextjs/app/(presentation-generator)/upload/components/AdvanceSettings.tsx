@@ -139,7 +139,7 @@ const AdvanceSettings = ({
                                     <h2 className="font-syne text-lg font-semibold leading-none text-[#191919] min-[1800px]:text-xl min-[2200px]:text-2xl">
                                         Advanced Settings
                                     </h2>
-                                    <p className="mt-1 text-sm text-[#808080] min-[1800px]:text-base">Adjust Presentation Behavior</p>
+                                    <p className="mt-1 text-sm text-[#808080] min-[1800px]:text-base">调整演示文稿生成方式</p>
                                 </div>
 
                                 <Button
@@ -182,7 +182,7 @@ const AdvanceSettings = ({
 
                             <div className="space-y-4 px-6 pb-5 pt-3.5 min-[1800px]:space-y-5 min-[1800px]:px-8 min-[1800px]:pb-7 min-[1800px]:pt-5">
                                 <div className="flex items-center justify-between gap-3">
-                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">Tone</label>
+                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">语气</label>
                                     <Select
                                         value={advancedDraft.tone}
                                         onValueChange={(value) =>
@@ -204,7 +204,7 @@ const AdvanceSettings = ({
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3">
-                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">Verbosity</label>
+                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">详细程度</label>
                                     <Select
                                         value={advancedDraft.verbosity}
                                         onValueChange={(value) =>
@@ -238,7 +238,7 @@ const AdvanceSettings = ({
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3">
-                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">Title Slide</label>
+                                    <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">标题页</label>
                                     <Switch
                                         checked={advancedDraft.includeTitleSlide}
                                         onCheckedChange={(checked) =>

@@ -90,7 +90,7 @@ export default function VertexAzureManualFields({
       {provider === 'vertex' && (
         <>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">Model</label>
+            <label className="block text-sm font-medium text-gray-700">模型</label>
             <input
               type="text"
               value={llmConfig.VERTEX_MODEL || ''}
@@ -106,7 +106,7 @@ export default function VertexAzureManualFields({
                 type="button"
                 className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-[#F9F9FA] px-3 py-2.5 text-left text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
               >
-                <span>Advanced settings</span>
+                <span>高级设置</span>
                 <ChevronDown
                   className={cn(
                     'h-4 w-4 shrink-0 text-gray-600 transition-transform duration-200',
@@ -119,7 +119,7 @@ export default function VertexAzureManualFields({
             <CollapsibleContent className="space-y-3 overflow-hidden">
               <div className="space-y-3 border-t border-gray-100 pt-3">
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-gray-700">Project ID</label>
+                  <label className="block text-sm font-medium text-gray-700">项目 ID</label>
                   <input
                     type="text"
                     value={llmConfig.VERTEX_PROJECT || ''}
@@ -129,7 +129,7 @@ export default function VertexAzureManualFields({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-gray-700">Region</label>
+                  <label className="block text-sm font-medium text-gray-700">区域</label>
                   <input
                     type="text"
                     value={llmConfig.VERTEX_LOCATION || ''}
@@ -139,7 +139,7 @@ export default function VertexAzureManualFields({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-gray-700">Custom endpoint</label>
+                  <label className="block text-sm font-medium text-gray-700">自定义端点</label>
                   <input
                     type="text"
                     value={llmConfig.VERTEX_BASE_URL || ''}
@@ -157,7 +157,7 @@ export default function VertexAzureManualFields({
       {provider === 'azure' && (
         <>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">Azure endpoint</label>
+            <label className="block text-sm font-medium text-gray-700">Azure 端点</label>
             <input
               type="text"
               value={llmConfig.AZURE_OPENAI_ENDPOINT || ''}
@@ -168,7 +168,7 @@ export default function VertexAzureManualFields({
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">Model name</label>
+            <label className="block text-sm font-medium text-gray-700">模型名称</label>
             <input
               type="text"
               value={llmConfig.AZURE_OPENAI_MODEL || ''}
@@ -179,7 +179,7 @@ export default function VertexAzureManualFields({
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">API version</label>
+            <label className="block text-sm font-medium text-gray-700">API 版本</label>
             <input
               type="text"
               value={llmConfig.AZURE_OPENAI_API_VERSION || ''}

@@ -30,7 +30,7 @@ function unpack<T>(raw: string): T | null {
   try { return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as T; } catch { return null; }
 }
 
-export function satelliteHeaders(userId: string) {
+export function satelliteHeaders(userId: string): Record<string, string> {
   const credential = process.env.SUB2API_APP_CREDENTIAL?.trim();
   const subject = userId?.trim();
   if (!credential || !subject) return { "Content-Type": "application/json" };

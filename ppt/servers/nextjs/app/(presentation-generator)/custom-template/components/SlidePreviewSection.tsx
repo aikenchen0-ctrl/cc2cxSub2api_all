@@ -83,7 +83,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                                 <Images className="w-6 h-6 text-[#7A5AF8]" />
                             </div>
                             <div>
-                                <h2 className="text-xl font-semibold text-[#111827]">Slide Preview</h2>
+                                <h2 className="text-xl font-semibold text-[#111827]">幻灯片预览</h2>
                                 <p className="text-sm text-[#6B7280] mt-0.5">
                                     {slideCount} slide{slideCount !== 1 ? 's' : ''} ready
                                     {fontCount > 0 && (
@@ -184,7 +184,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="template-description">
-                                Description <span className="text-gray-400">(optional)</span>
+                                描述 <span className="text-gray-400">（可选）</span>
                             </Label>
                             <Textarea
                                 id="template-description"

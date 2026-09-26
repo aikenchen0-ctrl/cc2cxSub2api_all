@@ -101,11 +101,38 @@ describe('AppSidebar 智能剧场 and 超级改图 SSO entries', () => {
   })
 })
 
+describe('AppSidebar AI商品图 SSO entry', () => {
+  it('opens the Livart product-poster editor through SSO', () => {
+    expect(zhCommon.nav.aiProductImage).toBe('AI商品图')
+    expect(componentSource).toContain("t('nav.aiProductImage')")
+    expect(componentSource).toContain("?next=%2F%3Fopen%3Dproduct-poster")
+    expect(componentSource).toMatch(/label: t\('nav\.aiProductImage'\),\s*href: aiProductImageUrl,\s*includeApiKey: false,\s*sso: true/)
+  })
+})
+
 describe('AppSidebar AI剪辑 SSO entry', () => {
   it('opens aicut through authenticated SSO without exposing an API key', () => {
     expect(zhCommon.nav.aiCut).toBe('AI剪辑')
     expect(componentSource).toContain("/auth/integrations/aicut/start")
     expect(componentSource).toMatch(/label: t\('nav\.aiCut'\),\s*href: aiCutSsoUrl,\s*includeApiKey: false,\s*sso: true/)
+  })
+})
+
+describe('AppSidebar AgentAPI SSO entry', () => {
+  it('opens the user dashboard through the registered SSO route without passing a key', () => {
+    expect(zhCommon.nav.agentApi).toBe('代理分站')
+    expect(componentSource).toContain("/auth/integrations/agentapi/start")
+    expect(componentSource).toContain('?next=%2Fdashboard')
+    expect(componentSource).toMatch(/label: t\('nav\.agentApi'\), href: agentApiSsoUrl, includeApiKey: false, sso: true, icon: 'server'/)
+    expect(componentSource).not.toMatch(/agentApiSsoUrl[^\n]*includeApiKey: true/)
+  })
+})
+
+describe('AppSidebar ModelAudit SSO entry', () => {
+  it('opens ModelAudit through its registered SSO route without passing an API key', () => {
+    expect(componentSource).toContain("t('nav.modelAudit')")
+    expect(componentSource).toContain("buildApiUrl('/auth/integrations/modelaudit/start')")
+    expect(componentSource).toMatch(/label: t\('nav\.modelAudit'\), href: buildApiUrl\('\/auth\/integrations\/modelaudit\/start'\) \+ '\?next=%2F', includeApiKey: false, sso: true, icon: 'shield'/)
   })
 })
 

@@ -92,6 +92,52 @@ func TestGroupModelAllowlistSuperKeyBypassesEnabledList(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeModelScopeBlocksUnlistedAndMissingModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	calls := 0
+	router.Use(func(c *gin.Context) {
+		c.Set(ContextKeyAgentRuntimeModelAllowlist, []string{"gpt-5.5"})
+		c.Set(ContextKeyAgentRuntimeModelScoped, true)
+		c.Next()
+	})
+	router.Use(GroupModelAllowlist())
+	router.POST("/v1/chat/completions", func(c *gin.Context) {
+		calls++
+		c.Status(http.StatusOK)
+	})
+	allowed := doJSON(t, router, http.MethodPost, "/v1/chat/completions", `{"model":"gpt-5.5"}`)
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("allowed runtime model status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+	blocked := doJSON(t, router, http.MethodPost, "/v1/chat/completions", `{"model":"gpt-image-2"}`)
+	if blocked.Code != http.StatusNotFound || calls != 1 {
+		t.Fatalf("unlisted runtime model was not blocked before handler: status=%d calls=%d body=%s", blocked.Code, calls, blocked.Body.String())
+	}
+	missing := doJSON(t, router, http.MethodPost, "/v1/chat/completions", `{"messages":[]}`)
+	if missing.Code != http.StatusNotFound || calls != 1 {
+		t.Fatalf("missing model bypassed configured runtime scope: status=%d calls=%d body=%s", missing.Code, calls, missing.Body.String())
+	}
+}
+
+func TestAgentRuntimeModelScopeFiltersModelDiscovery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(ContextKeyAgentRuntimeModelAllowlist, []string{"gpt-5.5", "gpt-image-2"})
+		c.Set(ContextKeyAgentRuntimeModelScoped, true)
+		c.Next()
+	})
+	router.Use(GroupModelAllowlist())
+	router.GET("/v1/models", func(c *gin.Context) { c.Status(http.StatusInternalServerError) })
+	request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"id":"gpt-5.5"`) || !strings.Contains(recorder.Body.String(), `"id":"gpt-image-2"`) || strings.Contains(recorder.Body.String(), "seedance-2.0") {
+		t.Fatalf("runtime model discovery was not scoped: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestGroupModelAllowlistDisabledDoesNotReadBody(t *testing.T) {
 	router, calls := newGroupModelAllowlistTestRouter(allowlistAPIKey(false, "claude-sonnet-4.5"), "/v1")
 

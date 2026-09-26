@@ -187,7 +187,7 @@ function InfographicItemsControl({
             )}
           >
             <Plus size={16} strokeWidth={1} aria-hidden />
-            <span>Add Item</span>
+            <span>添加项目</span>
           </button>
           <div className="my-1 h-px bg-[#E7E8EC]" aria-hidden />
           <button
@@ -201,7 +201,7 @@ function InfographicItemsControl({
             )}
           >
             <Trash2 size={16} strokeWidth={1} aria-hidden />
-            <span>Last Item</span>
+            <span>最后一项</span>
             <span className="ml-auto text-[11px] text-[#8A8D96]">{count}</span>
           </button>
         </Panel>

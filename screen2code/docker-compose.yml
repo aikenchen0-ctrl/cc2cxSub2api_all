@@ -4,7 +4,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      LINK: http://sub2api:8080
+      # LINK is the public Sub2API origin used for browser-facing recharge URLs.
+      LINK: ${LINK:-}
+      # Container-to-container traffic belongs on the relay URL, not LINK.
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:-}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}

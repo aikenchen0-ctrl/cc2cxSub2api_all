@@ -29,7 +29,71 @@ export default function RootLayout({
                 <Script
                     id="sub2api-branding"
                     strategy="afterInteractive"
-                    dangerouslySetInnerHTML={{ __html: `(function(){var b=/^(localhost|127\\.0\\.1)$/.test(location.hostname)?'http://localhost:18080':'https://api.cc2.cx';fetch(b+'/api/v1/settings/public',{credentials:'omit'}).then(function(r){return r.ok?r.json():null}).then(function(x){var l=x&&x.data&&x.data.site_logo;if(!l)return;var e=document.querySelector('link[rel~="icon"]')||document.createElement('link');e.rel='icon';e.href=new URL(l,b+'/').href;if(!e.parentNode)document.head.appendChild(e)}).catch(function(){})})();` }}
+                    dangerouslySetInnerHTML={{ __html: `(function(){
+                        var b = /^(localhost|127\\.0\\.0\\.1)$/i.test(location.hostname) ? 'http://localhost:18080' : 'https://api.cc2.cx';
+                        var logo = b + '/logo.jpg';
+                        var selector = '[data-sub2api-site-logo]';
+                        var iconSelector = 'link[rel~="icon"]';
+                        function resolve(value) {
+                            if (typeof value !== 'string' || !value.trim()) return b + '/logo.jpg';
+                            var v = value.trim();
+                            if (v.indexOf('data:image/') === 0) return v;
+                            try {
+                                var u = new URL(v, b + '/');
+                                return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : b + '/logo.jpg';
+                            } catch (_) {
+                                return b + '/logo.jpg';
+                            }
+                        }
+                        function patch(root) {
+                            if (!root || root.nodeType !== 1) return;
+                            if (root.matches(iconSelector) && root.href !== logo) root.href = logo;
+                            if (root.matches(selector) && root instanceof HTMLImageElement && root.src !== logo) root.src = logo;
+                            root.querySelectorAll(iconSelector).forEach(function (icon) { if (icon.href !== logo) icon.href = logo; });
+                            root.querySelectorAll(selector).forEach(function (image) {
+                                if (image instanceof HTMLImageElement && image.src !== logo) image.src = logo;
+                            });
+                        }
+                        function apply(value) {
+                            logo = resolve(value);
+                            var icons = document.querySelectorAll(iconSelector);
+                            if (!icons.length) {
+                                var icon = document.createElement('link');
+                                icon.rel = 'icon';
+                                document.head.appendChild(icon);
+                                icons = document.querySelectorAll(iconSelector);
+                            }
+                            icons.forEach(function (icon) { if (icon.href !== logo) icon.href = logo; });
+                            patch(document.documentElement);
+                            window.__SUB2API_SITE_LOGO__ = logo;
+                            window.dispatchEvent(new Event('sub2api-logo-updated'));
+                        }
+                        function load() {
+                            fetch(b + '/api/v1/settings/public', {
+                                credentials: 'omit',
+                                cache: 'no-store',
+                                headers: { Accept: 'application/json' }
+                            })
+                                .then(function (response) { return response.ok ? response.json() : null; })
+                                .then(function (settings) { apply(settings && settings.data && settings.data.site_logo); })
+                                .catch(function () { apply(''); });
+                        }
+                        apply('');
+                        new MutationObserver(function (records) {
+                            records.forEach(function (record) {
+                                if (record.type === 'attributes') patch(record.target);
+                                record.addedNodes.forEach(patch);
+                            });
+                        }).observe(document.documentElement, {
+                            subtree: true,
+                            childList: true,
+                            attributes: true,
+                            attributeFilter: ['src', 'href']
+                        });
+                        load();
+                        window.addEventListener('focus', load);
+                        document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+                    })();` }}
                 />
                 <Script
                     id="theme-script"

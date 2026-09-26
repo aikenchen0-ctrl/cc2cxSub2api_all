@@ -95,7 +95,7 @@ const LoadingStates: React.FC<LoadingStatesProps> = ({ type, message }) => {
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg text-left text-xs text-gray-600">
-              <p className="font-medium mb-2">Expected structure:</p>
+              <p className="font-medium mb-2">预期结构：</p>
               <code className="block">
                 export default MyLayout
                 <br />

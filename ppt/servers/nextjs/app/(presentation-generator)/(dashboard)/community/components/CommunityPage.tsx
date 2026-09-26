@@ -264,7 +264,7 @@ export default function CommunityPage() {
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
             <label className="flex h-10 w-full items-center gap-2.5 rounded-full border border-[#DBDBDB99] bg-white px-2.5 sm:w-[234px]">
               <Search className="h-4 w-4 shrink-0 text-[#808080]" strokeWidth={1.75} />
-              <span className="sr-only">Search community presentations</span>
+              <span className="sr-only">搜索社区演示文稿</span>
               <input
                 type="search"
                 value={query}

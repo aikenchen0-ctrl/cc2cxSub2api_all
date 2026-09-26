@@ -158,7 +158,7 @@ function GapControl({
 
   return (
     <label className="flex  items-center gap-2.5 px-1 text-[14px] font-medium font-manrope text-[#191919]">
-      <span>Gap</span>
+      <span>间距</span>
       <span className="flex gap-2  items-center rounded-md bg-white">
         <input
           type="text"
@@ -255,7 +255,7 @@ function ItemsControl({
             )}
           >
             <Plus size={16} strokeWidth={1} aria-hidden />
-            <span>Add Item</span>
+            <span>添加项目</span>
           </button>
           <div className="h-px my-1 bg-[#E7E8EC]" aria-hidden />
           <button
@@ -269,7 +269,7 @@ function ItemsControl({
             )}
           >
             <Trash2 size={16} strokeWidth={1} aria-hidden />
-            <span>Last Item</span>
+            <span>最后一项</span>
             <span className="ml-auto text-[11px] text-[#8A8D96]">
               {children.length}
             </span>
@@ -364,7 +364,7 @@ export function TemplateV2LayoutToolbar({
               title="Ungroup"
               onClick={ungroupAction.onUngroup}
             >
-              <span>Ungroup</span>
+              <span>取消组合</span>
             </div>
             <ToolbarDivider />
           </>

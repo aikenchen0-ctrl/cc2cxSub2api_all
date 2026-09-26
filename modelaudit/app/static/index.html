@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Sub2API 上游审计</title>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">SUB2API SATELLITE</p>
+            <h1>上游审计</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span id="identity" class="identity"></span>
+          <button id="logout" class="button button-quiet hidden" type="button">退出</button>
+        </div>
+      </header>
+
+      <section id="login-gate" class="panel login-gate hidden">
+        <div class="login-icon">↗</div>
+        <div>
+          <h2>请从 Sub2API 管理员菜单进入</h2>
+          <p>本面板使用 Sub2API 单次 SSO 票据登录，只允许当前有效的管理员会话访问。</p>
+        </div>
+      </section>
+
+      <section id="app" class="hidden">
+        <div class="hero panel">
+          <div>
+            <p class="eyebrow">INDEPENDENT UPSTREAM CHECKS</p>
+            <h2>四项独立检查，结果分别留档</h2>
+            <p class="subtle">仅通过普通网关 API Key 发起短探针。未能核实目标账号的请求会标为未固定，不参与判断。</p>
+          </div>
+          <div class="hero-actions">
+            <button id="run-now" class="button button-primary" type="button">立即扫描</button>
+            <a id="download-report" class="button button-secondary disabled" href="#" aria-disabled="true">下载最近报告</a>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <article class="summary-card"><span>上游账号</span><strong id="account-count">—</strong></article>
+          <article class="summary-card"><span>最近扫描</span><strong id="run-time">—</strong></article>
+          <article class="summary-card"><span>未关闭告警</span><strong id="alert-count">—</strong></article>
+          <article class="summary-card"><span>调度状态</span><strong id="scan-state">—</strong></article>
+        </div>
+
+        <section class="panel settings-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">SCHEDULE & RULES</p>
+              <h2>扫描与停用规则</h2>
+            </div>
+            <button id="save-settings" class="button button-secondary" type="button">保存设置</button>
+          </div>
+          <div class="settings-grid">
+            <label class="field">
+              <span>扫描间隔</span>
+              <select id="interval">
+                <option value="30">30 分钟</option>
+                <option value="60">60 分钟</option>
+              </select>
+            </label>
+            <label class="toggle-field"><input id="scheduler-enabled" type="checkbox"><span>启用定时扫描</span></label>
+            <label class="toggle-field"><input id="auto-stop-enabled" type="checkbox"><span>允许规则自动停用账号</span></label>
+          </div>
+          <div class="rule-row">
+            <span class="rule-title">唯一停用规则：</span>
+            <label class="toggle-field"><input class="stop-rule" value="modeltrace_red" type="checkbox"><span>ModelTrace 高置信降档（第二轮同候选确认）</span></label>
+          </div>
+          <p class="note">其他检查只产生告警。自动停用默认关闭；开启后仍需勾选上述规则，不会自动恢复账号。</p>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">LATEST SCAN</p>
+              <h2>账号检查结果</h2>
+            </div>
+            <span id="run-status" class="status-pill neutral">等待数据</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>上游账号</th>
+                  <th>模型真伪</th>
+                  <th>输入 token 差值</th>
+                  <th>缓存与费用</th>
+                  <th>观察倍率</th>
+                  <th>账号状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="accounts-body">
+                <tr><td colspan="7" class="empty">暂无扫描记录</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="lower-grid">
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">ALERTS</p>
+                <h2>最近告警</h2>
+              </div>
+            </div>
+            <div id="alerts" class="alert-list"><p class="empty">暂无告警</p></div>
+          </section>
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">GROUP PROFILES</p>
+                <h2>探针配置状态</h2>
+              </div>
+            </div>
+            <div id="groups" class="group-list"><p class="empty">暂无配置</p></div>
+            <p class="note">这里只显示普通 API Key 是否已配置，不显示密钥内容。</p>
+          </section>
+        </div>
+        <p id="toast" class="toast" role="status"></p>
+      </section>
+      <footer>Sub2API 上游审计 · SQLite 本地保存 · 不保存原始探针内容</footer>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -83,6 +83,7 @@ export function TemplateEditorHeader({
         <button onClick={onBack} aria-label="Dashboard" type="button">
           <img
             src="/project-icon.jpg"
+            data-sub2api-site-logo
             alt="永恒PPT"
             className="h-10 w-10 cursor-pointer object-contain"
           />
@@ -180,7 +181,7 @@ export function TemplateEditorHeader({
               type="button"
             >
               <Trash2 className="h-4 w-4" />
-              <span className="hidden xl:inline">Delete Template</span>
+              <span className="hidden xl:inline">删除模板</span>
             </button>
             <div className="hidden h-[16.5px] w-px bg-[#EDEEEF] md:block" />
           </>

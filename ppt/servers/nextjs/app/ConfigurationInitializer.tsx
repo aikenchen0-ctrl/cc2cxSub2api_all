@@ -99,8 +99,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         if (!runtime.configured) {
           if (!cancelled) {
             notify.warning(
-              "Provider setup required",
-              "Choose and configure a text provider before opening other pages.",
+              "需要配置服务商",
+              "请先选择并配置文本服务商，再打开其他页面。",
               { id: "provider-setup-required" }
             );
             router.replace('/');
@@ -133,7 +133,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         console.error('Failed to revalidate provider configuration:', error);
         if (!cancelled && isBackendConnectionError(error)) {
           notify.error(
-            "Cannot reach backend",
+            "无法连接后端",
             error.message,
             { id: "backend-unreachable" }
           );
@@ -145,8 +145,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           );
         } else if (!cancelled) {
           notify.error(
-            "Could not verify provider settings",
-            "Your current page has been kept open. Refresh after checking the backend service.",
+            "无法验证服务商设置",
+            "当前页面已保留，请检查后端服务后刷新。",
             { id: "configuration-unavailable" }
           );
         }
@@ -200,8 +200,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
     } catch (error) {
       console.error('Failed to reach the FastAPI backend:', error);
       notify.error(
-        "Cannot reach backend",
-        error instanceof Error ? error.message : "Check the backend service and try again.",
+        "无法连接后端",
+        error instanceof Error ? error.message : "请检查后端服务后重试。",
         { id: "backend-unreachable" }
       );
       setIsLoading(false);
@@ -217,8 +217,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
     } catch (e) {
       console.error('Failed to fetch can-change-keys:', e);
       notify.error(
-        "Could not load configuration",
-        "Your current page has been kept open. Refresh after checking the backend service.",
+        "无法加载配置",
+        "当前页面已保留，请检查后端服务后刷新。",
         { id: "configuration-unavailable" }
       );
       setIsLoading(false);
@@ -235,8 +235,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
       } catch (e) {
         console.error('Failed to fetch user config:', e);
         notify.error(
-          "Could not load provider settings",
-          "Your current page has been kept open. Refresh after checking the backend service.",
+          "无法加载服务商设置",
+          "当前页面已保留，请检查后端服务后刷新。",
           { id: "configuration-unavailable" }
         );
         setIsLoading(false);
@@ -291,8 +291,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           } catch (error) {
             const backendUnavailable = isBackendConnectionError(error);
             notify.error(
-              backendUnavailable ? "Cannot reach backend" : "Could not connect to Ollama",
-              error instanceof Error ? error.message : "Check the Ollama URL and try again.",
+              backendUnavailable ? "无法连接后端" : "无法连接 Ollama",
+              error instanceof Error ? error.message : "请检查 Ollama 地址后重试。",
               { id: backendUnavailable ? "backend-unreachable" : "ollama-unreachable" }
             );
             setIsLoading(false);
@@ -335,8 +335,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         dispatch(setLLMConfig(runtimeConfig));
         if (!runtime.configured) {
           notify.error(
-            "Instance not configured",
-            "Ask the administrator to configure the AI providers in Settings."
+            "实例尚未配置",
+            "请联系管理员在设置中配置 AI 服务商。"
           );
           setIsLoading(false);
           return;
@@ -344,8 +344,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
       } catch (error) {
         console.error("Failed to fetch runtime configuration:", error);
         notify.error(
-          "Could not load provider settings",
-          "Your current page has been kept open. Refresh after checking the backend service.",
+          "无法加载服务商设置",
+          "当前页面已保留，请检查后端服务后刷新。",
           { id: "configuration-unavailable" }
         );
         setIsLoading(false);

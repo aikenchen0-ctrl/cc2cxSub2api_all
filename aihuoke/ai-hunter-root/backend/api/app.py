@@ -65,6 +65,7 @@ from auth_sso import (
     known_subjects,
     managed,
     reset_current_subject,
+    balance_router,
     router as auth_router,
     scoped_email_db_path,
     set_current_subject,
@@ -962,7 +963,15 @@ def create_app() -> FastAPI:
 
     app.add_middleware(SatelliteSessionMiddleware)
 
+    @app.middleware("http")
+    async def no_store_sub2api_balance(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/api/sub2api/balance":
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.include_router(auth_router)
+    app.include_router(balance_router)
     app.include_router(router, prefix="/api/v1")
     app.include_router(licensed_finder_router)
     app.include_router(automation_router)

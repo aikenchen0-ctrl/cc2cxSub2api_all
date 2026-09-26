@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,20 @@ const (
 	HeaderAppCredential = "X-Sub2API-App-Credential"
 	envAppCredential    = "SUB2API_APP_CREDENTIAL"
 )
+
+const (
+	ContextKeyAgentRuntimeModelAllowlist = "agent_runtime_model_allowlist"
+	ContextKeyAgentRuntimeModelScoped    = "agent_runtime_model_scoped"
+)
+
+type satelliteUserKeyResolver interface {
+	SatelliteUserKey(context.Context, int64) (*service.APIKey, error)
+}
+
+type agentRuntimeModelAuthenticator interface {
+	LookupRuntimeCredential(context.Context, string) (*service.AgentRuntimeCredential, error)
+	IsActiveRuntimeUser(context.Context, string, int64) (bool, error)
+}
 
 var errSatelliteUser = errors.New("invalid satellite user")
 
@@ -122,7 +137,63 @@ func bindSatelliteSuperKeyContext(c *gin.Context, satelliteHandled bool, apiKey 
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.SuperAPIKey, true))
 }
 
-func loadSatelliteUserKey(c *gin.Context, apiKeyService *service.APIKeyService, presented string) (*service.APIKey, bool) {
+func loadSatelliteUserKey(c *gin.Context, apiKeyService satelliteUserKeyResolver, presented string, runtimeService agentRuntimeModelAuthenticator) (*service.APIKey, bool) {
+	slug := ""
+	if c != nil {
+		slug = strings.TrimSpace(c.GetHeader(HeaderSatelliteApp))
+	}
+	// AgentAPI is deliberately not allowed to use the shared satellite app
+	// credential. Its model credential is bound in the Sub2API database to one
+	// agent and one Owner account. X-Sub2API-On-Behalf-Of still identifies the
+	// active mapped Session user; the owner account is only the billing key.
+	if slug == "agentapi" || strings.HasPrefix(strings.TrimSpace(presented), "agt_") {
+		if slug != "agentapi" {
+			AbortWithError(c, http.StatusUnauthorized, "AGENT_RUNTIME_SATELLITE_REQUIRED", "Agent runtime credentials require the agentapi satellite identity")
+			return nil, true
+		}
+		presented = strings.TrimSpace(presented)
+		if !strings.HasPrefix(presented, "agt_model_") {
+			AbortWithError(c, http.StatusUnauthorized, "AGENT_RUNTIME_CREDENTIAL_REQUIRED", "a per-Agent model credential is required")
+			return nil, true
+		}
+		if runtimeService == nil {
+			AbortWithError(c, http.StatusServiceUnavailable, "AGENT_RUNTIME_AUTH_UNAVAILABLE", "Agent runtime credential authentication is unavailable")
+			return nil, true
+		}
+		credential, err := runtimeService.LookupRuntimeCredential(c.Request.Context(), presented)
+		if err != nil || credential == nil || credential.Purpose != "model" {
+			AbortWithError(c, http.StatusUnauthorized, "AGENT_RUNTIME_CREDENTIAL_INVALID", "Agent runtime credential is invalid or revoked")
+			return nil, true
+		}
+		sessionUserID, err := parseOnBehalfOfUserID(c)
+		if err != nil {
+			AbortWithError(c, http.StatusUnauthorized, "SATELLITE_USER_REQUIRED", "X-Sub2API-On-Behalf-Of must be the current Agent user id")
+			return nil, true
+		}
+		active, err := runtimeService.IsActiveRuntimeUser(c.Request.Context(), credential.AgentID, sessionUserID)
+		if err != nil {
+			AbortWithError(c, http.StatusServiceUnavailable, "AGENT_RUNTIME_USER_LOOKUP_UNAVAILABLE", "Agent user mapping could not be verified")
+			return nil, true
+		}
+		if !active {
+			AbortWithError(c, http.StatusForbidden, "AGENT_RUNTIME_USER_SCOPE_MISMATCH", "current user is not an active member of this Agent")
+			return nil, true
+		}
+		if apiKeyService == nil {
+			AbortWithError(c, http.StatusServiceUnavailable, "SATELLITE_UNAVAILABLE", "Satellite Super Key service is unavailable")
+			return nil, true
+		}
+		key, err := apiKeyService.SatelliteUserKey(c.Request.Context(), credential.OwnerMainUserID)
+		if err != nil || key == nil {
+			AbortWithError(c, http.StatusUnauthorized, "SATELLITE_USER_UNAVAILABLE", "Unable to resolve Agent owner")
+			return nil, true
+		}
+		c.Set(ContextKeyAgentRuntimeID, credential.AgentID)
+		c.Set(ContextKeyAgentRuntimeOwner, credential.OwnerMainUserID)
+		c.Set(ContextKeyAgentRuntimeSessionUser, sessionUserID)
+		bindAgentRuntimeModelScope(c, credential)
+		return key, true
+	}
 	if !SatelliteBearerAccepted(presented) {
 		return nil, false
 	}
@@ -145,4 +216,24 @@ func loadSatelliteUserKey(c *gin.Context, apiKeyService *service.APIKeyService, 
 		return nil, true
 	}
 	return key, true
+}
+
+func bindAgentRuntimeModelScope(c *gin.Context, credential *service.AgentRuntimeCredential) {
+	if c == nil || credential == nil {
+		return
+	}
+	models := credential.ModelAllowlist
+	if !credential.ModelAllowlistWasSet {
+		models = satellitePublicModelCatalog()
+	}
+	c.Set(ContextKeyAgentRuntimeModelAllowlist, models)
+	c.Set(ContextKeyAgentRuntimeModelScoped, credential.ModelAllowlistWasSet)
+}
+
+func satellitePublicModelCatalog() []string {
+	models := make([]string, 0, len(domain.SatelliteTextModels)+len(domain.SatelliteImageModels)+len(domain.SatelliteVideoModels))
+	models = append(models, domain.SatelliteTextModels...)
+	models = append(models, domain.SatelliteImageModels...)
+	models = append(models, domain.SatelliteVideoModels...)
+	return models
 }

@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -32,6 +34,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 	}
 
 	userRepo := &stubUserRepo{
+		getFirstAdmin: func(context.Context) (*service.User, error) { return admin, nil },
 		getByID: func(ctx context.Context, id int64) (*service.User, error) {
 			if id != admin.ID {
 				return nil, service.ErrUserNotFound
@@ -123,8 +126,116 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 	})
 }
 
+func TestAdminAuthProvisioningWorkerCredentialIsStrictlyScoped(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const credential = "worker-only-provisioning-credential-test-value"
+	admin := &service.User{ID: 91, Email: "platform-admin@example.com", Role: service.RoleAdmin, Status: service.StatusActive, Concurrency: 2}
+	userService := service.NewUserService(&stubUserRepo{
+		getFirstAdmin: func(context.Context) (*service.User, error) { return admin, nil },
+	}, nil, nil, nil)
+	t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL", credential)
+	secretPath := filepath.Join(t.TempDir(), "worker-credential")
+	if err := os.WriteFile(secretPath, []byte(credential), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE", secretPath)
+
+	router := gin.New()
+	router.Use(gin.HandlerFunc(NewAdminAuthMiddleware(nil, userService, nil, nil)))
+	router.Any("/*path", func(c *gin.Context) {
+		subject, _ := GetAuthSubjectFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"auth_method": c.GetString("auth_method"), "user_id": subject.UserID})
+	})
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+		status int
+	}{
+		{name: "pending list", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents?status=pending&page=1&page_size=100", status: http.StatusOK},
+		{name: "provisioning list", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents?status=provisioning", status: http.StatusOK},
+		{name: "change stream", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents/stream", status: http.StatusOK},
+		{name: "agent status", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef", status: http.StatusOK},
+		{name: "claim", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/claim", status: http.StatusOK},
+		{name: "lease renewal", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/lease", status: http.StatusOK},
+		{name: "runtime credential registration", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/runtime-credentials", status: http.StatusOK},
+		{name: "progress", method: http.MethodPatch, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/progress", status: http.StatusOK},
+		{name: "activate", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/activate", status: http.StatusOK},
+		{name: "runtime credential revocation", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/runtime-credentials/revoke", status: http.StatusForbidden},
+		{name: "claim query rejected", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/claim?force=true", status: http.StatusForbidden},
+		{name: "create", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents", status: http.StatusForbidden},
+		{name: "suspend", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/suspend", status: http.StatusForbidden},
+		{name: "resume", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/resume", status: http.StatusForbidden},
+		{name: "revoke", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/revoke", status: http.StatusForbidden},
+		{name: "retry", method: http.MethodPost, path: "/api/v1/agent-provisioning/agents/agt_0123456789abcdef0123456789abcdef/retry", status: http.StatusForbidden},
+		{name: "failed list", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents?status=failed", status: http.StatusForbidden},
+		{name: "filtered list", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents?status=pending&q=secret", status: http.StatusForbidden},
+		{name: "malformed list query", method: http.MethodGet, path: "/api/v1/agent-provisioning/agents?status=pending&%ZZ=secret", status: http.StatusForbidden},
+		{name: "unrelated admin API", method: http.MethodGet, path: "/api/v1/admin/users", status: http.StatusForbidden},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(tc.method, tc.path, nil)
+			request.Header.Set(agentProvisioningWorkerCredentialHeader, credential)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			if tc.status == http.StatusOK {
+				require.Contains(t, response.Body.String(), `"auth_method":"agent_provisioning_worker"`)
+				require.Contains(t, response.Body.String(), `"user_id":91`)
+			}
+		})
+	}
+
+	t.Run("invalid credential is rejected", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/agent-provisioning/agents/stream", nil)
+		request.Header.Set(agentProvisioningWorkerCredentialHeader, "wrong")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusUnauthorized, response.Code)
+	})
+
+	t.Run("missing server credential fails closed", func(t *testing.T) {
+		t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL", "")
+		t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE", "")
+		missingCredentialRouter := gin.New()
+		missingCredentialRouter.Use(gin.HandlerFunc(NewAdminAuthMiddleware(nil, userService, nil, nil)))
+		missingCredentialRouter.GET("/api/v1/agent-provisioning/agents/stream", func(c *gin.Context) {
+			c.Status(http.StatusOK)
+		})
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/agent-provisioning/agents/stream", nil)
+		request.Header.Set(agentProvisioningWorkerCredentialHeader, credential)
+		response := httptest.NewRecorder()
+		missingCredentialRouter.ServeHTTP(response, request)
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	})
+}
+
+func TestLoadAgentProvisioningWorkerCredentialRequiresAbsoluteRegularFile(t *testing.T) {
+	secretPath := filepath.Join(t.TempDir(), "worker-credential")
+	const fileCredential = "file-backed-worker-credential-with-minimum-length"
+	if err := os.WriteFile(secretPath, []byte(fileCredential), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL", "inline-fallback")
+	t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE", secretPath)
+	require.Equal(t, fileCredential, loadAgentProvisioningWorkerCredential())
+	t.Setenv("AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE", "relative-secret")
+	require.Empty(t, loadAgentProvisioningWorkerCredential())
+}
+
+func TestProvisioningWorkerCredentialAuditMask(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/agent-provisioning/agents/stream", nil)
+	ctx.Request.Header.Set(agentProvisioningWorkerCredentialHeader, "sensitive-worker-credential-value")
+	masked := MaskedRequestCredential(ctx)
+	require.NotContains(t, masked, "sensitive-worker-credential-value")
+	require.Contains(t, masked, "agent_provisioning_worker")
+}
+
 type stubUserRepo struct {
-	getByID func(ctx context.Context, id int64) (*service.User, error)
+	getByID       func(ctx context.Context, id int64) (*service.User, error)
+	getFirstAdmin func(ctx context.Context) (*service.User, error)
 }
 
 func (s *stubUserRepo) Create(ctx context.Context, user *service.User) error {
@@ -147,7 +258,10 @@ func (s *stubUserRepo) GetByEmail(ctx context.Context, email string) (*service.U
 }
 
 func (s *stubUserRepo) GetFirstAdmin(ctx context.Context) (*service.User, error) {
-	panic("unexpected GetFirstAdmin call")
+	if s.getFirstAdmin == nil {
+		panic("unexpected GetFirstAdmin call")
+	}
+	return s.getFirstAdmin(ctx)
 }
 
 func (s *stubUserRepo) Update(ctx context.Context, user *service.User, fields service.UserUpdateFields) error {

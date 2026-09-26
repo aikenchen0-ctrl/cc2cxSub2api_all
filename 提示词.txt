@@ -1,0 +1,45 @@
+做一个独立旁路进程，不要侵入式改造、我们当前的sub2api。只通过它已有的admin apikey和 HTTP 接口工作，最终目标是，一个上游模型检测管理面板，并支持实现预警，设置规则发现降智时停止该上游调。
+
+目标：按可配置间隔（默认 60 分钟，允许 30/60）扫一遍全部 active 上游账号。每个账号做四项检测，结果写入本地 SQLite，并输出一份报告。并发不超过该账号自己的 concurrency。探针会消耗订阅额度，这是预期成本，写进日志。
+
+接入（不侵入）：
+- 管理面用管理员密钥，请求头 x-api-key。备用才是管理员 JWT，Authorization: Bearer。
+- 只读：GET /api/v1/admin/accounts，GET /api/v1/admin/accounts/:id，GET /api/v1/admin/accounts/:id/usage。探针前读一次 usage，探针后读一次，用增量对账。
+- 禁止调用 accounts export，禁止把上游 token 写进报告或聊天。
+- POST /api/v1/admin/accounts/:id/test 不能传模型和探针，不要用它做智商测试。
+- 探针走网关的用户 API Key，不直连上游。每个上游账号使用唯一且稳定的 session 头（session_id / X-Session-Id），把该账号的全部探针钉在同一个上游账号上。钉不住就标 unpinned，该项作废，不要假装测过。
+- 若前面有 Nginx，必须已开启 underscores_in_headers on，否则 session_id 会被丢掉。
+
+1. 模型真伪
+参照 https://github.com/xqy2006/ModelTrace
+导入 enrollment.py / fingerprint.py，调用 test_automatic 或等价的三条长整数挑战。不要跑它的网页，不要启用 Codex 插件。
+指纹库是闭集。库外模型会被硬归到最像的候选，必须标成 unknown，不能报成某个具体模型名。
+Claude Code 系统提示会污染指纹，探针不要带 Claude Code 的 system prompt。
+ModelTrace 不读 usage，费用不要从它拿。
+
+2. 费用暗改（隐藏 prompt、虚增 input token）
+参照 https://github.com/toby-bridges/api-relay-audit 的 token injection，只抄这一步，不要跑它的 14 步安全审计。
+发极短请求（Say hi，无 system prompt），本地估算 expected input tokens，减去回包 usage 里的实际 input tokens。
+delta > 100 标红，> 20 标黄，≤ 20 当正常误差。这是信号，不是判决。
+不要参考 RelayRadar，它没有可抄的公式。
+
+3. 缓存套利（上游命中缓存，记账仍按全价）
+参照 LiteLLM prompt caching：https://docs.litellm.ai/docs/completion/prompt_caching
+以及字段口径修正：https://github.com/BerriAI/litellm/issues/6215
+同一段超过该模型最小缓存长度的前缀，字节级相同地打两次，第二次必须出现 cache read。前缀低于阈值时缓存会静默不生效，这种情况标 inconclusive，不要判套利。
+OpenAI：prompt_tokens 已包含 cached_tokens。未缓存 = prompt_tokens - cached_tokens。禁止把 cached_tokens 再加一次。
+Anthropic：input_tokens、cache_creation_input_tokens、cache_read_input_tokens 三者不相交，不要套 OpenAI 的减法。
+第二次 cache_read 仍为 0，且前缀已超阈值、session 已钉住，才标缓存未生效。
+价格表参照 LiteLLM 的 model_prices_and_context_window.json，手算 expected cost，和回包 usage 对。数量差超过约 10% 才当异常。https://docs.litellm.ai/docs/troubleshoot/cost_discrepancy
+
+4. 隐藏倍率
+没有现成审计器。计费语义参照 New API：
+https://github.com/majiayu000/spellbook/blob/1fb8a117c9c89e4f9f0af0057e8518b13110efd5/skills/cliproxy-newapi-stack/references/newapi-pricing.md
+CacheRatio、CompletionRatio 是乘数，不是单价。
+sub2api 没有这套 ratio 表。探针前后读 GET /api/v1/admin/accounts/:id/usage，增量除以回包 usage 的对应 token，得到实际倍率，再和该账号配置的 rate_multiplier、以及对外宣称倍率比较。差一个数量级标暗改。
+不要参考 tokenfuse，它做预算熔断，不做倍率审计。
+
+约束：
+- 四个检测分成四个模块，互相只通过明确的数据结构通信。调度、钉号、存储各自独立。
+- 管理员密钥和用户网关 Key 只从环境变量读，不进仓库，不进报告。
+- 报告必须分开写：归因结果、暗改 delta、cache write/read、实际倍率。不要合成一个「智商分」。

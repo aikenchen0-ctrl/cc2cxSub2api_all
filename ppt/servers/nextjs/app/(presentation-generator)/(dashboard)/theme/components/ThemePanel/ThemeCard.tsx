@@ -53,7 +53,7 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, onSelect, onDelete,
             <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4">
               <AlertTriangle className="h-6 w-6 text-red-500" />
             </div>
-            <h3 className="text-lg font-semibold text-[#191919] mb-2">Delete Theme?</h3>
+            <h3 className="text-lg font-semibold text-[#191919] mb-2">删除主题？</h3>
             <p className="text-sm text-gray-500 leading-relaxed">
               You're about to delete <span className="font-medium text-gray-700">"{theme.name}"</span>. This action cannot be undone.
             </p>
@@ -180,6 +180,5 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, onSelect, onDelete,
   </div>)
 
 }
-
 
 

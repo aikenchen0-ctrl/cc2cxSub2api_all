@@ -45,6 +45,10 @@ func (r *keyBillingRouteRateRepo) GetRPMOverrideByUserAndGroup(context.Context, 
 }
 
 func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRouteRateRepo, string) {
+	return newKeyBillingRouteTestRouterWithBalance(runMode, 10)
+}
+
+func newKeyBillingRouteTestRouterWithBalance(runMode string, balance float64) (*gin.Engine, *keyBillingRouteRateRepo, string) {
 	gin.SetMode(gin.TestMode)
 	group := &service.Group{
 		ID:               42,
@@ -54,7 +58,7 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
 		SubscriptionType: service.SubscriptionTypeStandard,
 		RateMultiplier:   0.75,
 	}
-	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: balance}
 	var groupID *int64
 	var apiKeyGroup *service.Group
 	if runMode != config.RunModeSimple {
@@ -116,6 +120,32 @@ func TestGatewayRoutesKeyBillingInfoPathIsRegistered(t *testing.T) {
 	}
 
 	t.Fatal("GET /v1/sub2api/billing should be registered")
+}
+
+func TestGatewayRoutesSatelliteUserBalanceAllowsZeroBalance(t *testing.T) {
+	router, _, key := newKeyBillingRouteTestRouterWithBalance(config.RunModeStandard, 0)
+	req := httptest.NewRequest(http.MethodGet, "/v1/sub2api/balance", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, "sub2api.user_balance", body["object"])
+	require.Equal(t, float64(0), body["balance"])
+}
+
+func TestGatewayRoutesSatelliteUserBalanceUnauthorizedIsNoStore(t *testing.T) {
+	router, _, _ := newKeyBillingRouteTestRouterWithBalance(config.RunModeStandard, 0)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/sub2api/balance", nil))
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 }
 
 func TestGatewayRoutesKeyBillingInfoEndToEnd(t *testing.T) {

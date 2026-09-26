@@ -192,7 +192,7 @@ const PresentationPage = ({ presentation_id, exportCookie }: PresentationPagePro
       }
     } catch (error) {
       setError(true);
-      notify.error("Failed to load presentation", "The presentation could not be loaded. Please try again.");
+      notify.error("无法加载演示文稿", "演示文稿加载失败，请重试。 ");
       console.error("Error fetching user slides:", error);
     } finally {
       setContentLoading(false);
@@ -266,7 +266,7 @@ const PresentationPage = ({ presentation_id, exportCookie }: PresentationPagePro
             role="alert"
           >
             <AlertCircle className="w-16 h-16 mb-4 text-red-500" />
-            <strong className="font-bold text-4xl mb-2">Oops!</strong>
+          <strong className="font-bold text-4xl mb-2">出错了！</strong>
             <p className="block text-2xl py-2">
               We encountered an issue loading your presentation.
             </p>

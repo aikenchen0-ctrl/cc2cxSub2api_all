@@ -37,7 +37,7 @@ export function StudioHeader({ activePanel, setActivePanel, demoMode, language =
     <header className="studio-header">
       <div className="studio-brand">
         <div className="brand-mark">
-          <img src="/project-icon.jpg" alt={text.title} />
+          <img src="/project-icon.jpg" data-sub2api-site-logo alt={text.title} />
         </div>
         <div>
           <strong>{text.title}</strong>
@@ -70,6 +70,7 @@ export function StudioHeader({ activePanel, setActivePanel, demoMode, language =
           {text.Demo}
         </button>
       </nav>
+      <div data-sub2api-balance-widget />
       <button type="button" className={activePanel === 'Profile' ? 'profile-button active' : 'profile-button'} onClick={() => openPanel('Profile')}>
         <Box size={18} />
         <ChevronDown size={13} />

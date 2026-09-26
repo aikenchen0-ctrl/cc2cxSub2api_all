@@ -95,14 +95,14 @@ const FinalStep = () => {
             <div className='flex flex-col items-center justify-center'>
 
                 <img src="/final_onboarding.png" alt="PPT生成" className='w-[118px] h-[98px]  object-contain' />
-                <h1 className='text-black text-[30px] font-normal font-unbounded py-2.5'>Welcome on board!</h1>
-                <p className='text-[#000000CC] text-xl font-normal font-syne'>You’re all set. Let’s create your first presentation.</p>
+                <h1 className='text-black text-[30px] font-normal font-unbounded py-2.5'>欢迎使用！</h1>
+                <p className='text-[#000000CC] text-xl font-normal font-syne'>一切准备就绪，现在创建您的第一份演示文稿吧。</p>
 
                 {trackingEnabled !== null && (
                     <div className='flex items-center gap-3 mt-8 px-5 py-3.5 rounded-[10px] border border-[#EDEEEF] bg-white'>
                         <div>
-                            <p className='text-sm font-medium text-[#191919] font-syne'>Usage analytics</p>
-                            <p className='text-[11px] text-[#9CA3AF] font-syne leading-tight mt-0.5'>Help improve 永恒PPT by sharing anonymous usage data.</p>
+                            <p className='text-sm font-medium text-[#191919] font-syne'>使用分析</p>
+                            <p className='text-[11px] text-[#9CA3AF] font-syne leading-tight mt-0.5'>分享匿名使用数据，帮助改进永恒PPT。</p>
                         </div>
                         <Switch
                             checked={trackingEnabled}
@@ -112,12 +112,12 @@ const FinalStep = () => {
                     </div>
                 )}
 
-                <button onClick={handleGoToUpload} className='bg-[#7C51F8] px-[23px] mt-8 py-[15px]  rounded-[70px] text-white text-lg font-syne font-semibold'>My First Presentation 🚀</button>
+                        <button onClick={handleGoToUpload} className='bg-[#7C51F8] px-[23px] mt-8 py-[15px]  rounded-[70px] text-white text-lg font-syne font-semibold'>创建我的第一份演示文稿 🚀</button>
                 <button onClick={fireRealisticConfetti} className='mt-3 flex items-center gap-1.5 text-sm text-[#7A5AF8] font-syne font-medium hover:underline'>
                     <PartyPopper className='w-4 h-4' /> Celebrate again!
                 </button>
             </div>
-            <button onClick={handleGoToDashboard} className='absolute uppercase bottom-20 text-[#7A5AF8] flex items-center gap-2 right-10  text-xs font-normal font-syne'>Go to your dashboard <ArrowRight className='w-4 h-4 text-[#7A5AF8]' /></button>
+            <button onClick={handleGoToDashboard} className='absolute uppercase bottom-20 text-[#7A5AF8] flex items-center gap-2 right-10  text-xs font-normal font-syne'>前往仪表盘 <ArrowRight className='w-4 h-4 text-[#7A5AF8]' /></button>
         </div>
     )
 }

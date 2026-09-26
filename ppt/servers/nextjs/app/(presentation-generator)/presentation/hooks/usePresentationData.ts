@@ -78,7 +78,7 @@ export const usePresentationData = (
       return normalizedData;
     } catch (error) {
       setError(true);
-      notify.error("Failed to load presentation", "The presentation could not be loaded. Please try again.");
+      notify.error("无法加载演示文稿", "演示文稿加载失败，请重试。 ");
       console.error("Error fetching user slides:", error);
       setLoading(false);
       return undefined;

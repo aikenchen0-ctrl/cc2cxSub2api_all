@@ -1,0 +1,393 @@
+name: cc2cx-source
+
+services:
+  aicut:
+    build: { context: ./aicut, dockerfile: Dockerfile }
+    image: cc2cx/aicut:talent
+    container_name: cc2cx-aicut
+    restart: unless-stopped
+    command: ["./node_modules/.bin/vite", "--config", "config/vite.config.ts", "--host", "0.0.0.0"]
+    ports: ["127.0.0.1:5199:5199"]
+    environment:
+      SUB2API_BASE: http://sub2api:8080
+      LINK: https://api.cc2.cx
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      OPENCHATCUT_SSO_CALLBACK_URL: https://aicut.cc2.cx/api/auth/sso/callback
+      OCC_SESSION_SECRET: ${OCC_SESSION_SECRET}
+      OCC_SECURE_COOKIE: "1"
+      OCC_OPEN_REGISTER: "0"
+      OCC_PUBLIC_MCP: "0"
+    volumes: ["cc2cx-apps_aicut-data:/root/.openchatcut"]
+    networks: [gateway]
+
+  aiexcel:
+    build: { context: ./aiexcel, dockerfile: Dockerfile }
+    image: cc2cx/aiexcel:talent
+    container_name: cc2cx-aiexcel
+    restart: unless-stopped
+    ports: ["127.0.0.1:4173:80"]
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      LINK: https://api.cc2.cx
+      NODE_ENV: production
+    networks: [gateway]
+
+  ju-backend:
+    build: { context: ./ju, dockerfile: backend/Dockerfile }
+    image: cc2cx/ju-backend:talent
+    container_name: cc2cx-ju-backend
+    restart: unless-stopped
+    environment:
+      CANVAS_BACKEND_ADDR: ":8080"
+      CANVAS_BACKEND_DATA_DIR: /data
+      CANVAS_DATABASE_DRIVER: sqlite
+      CANVAS_AUTO_MIGRATE: "false"
+      CANVAS_REGISTRATION_ENABLED: "false"
+      CANVAS_CORS_ORIGINS: https://ju.cc2.cx
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      SUB2API_RELAY_MODELS: gpt-5.5
+      SUB2API_RELAY_ALLOW_LOCAL: "true"
+      LINK: https://api.cc2.cx
+      REDIS_URL: redis://cc2cx-ju-sso-redis:6379/0
+      GIN_MODE: release
+    volumes: ["cc2cx-apps_ju-data:/data"]
+    networks:
+      gateway: {}
+      ju-internal: { aliases: [backend] }
+
+  ju-web:
+    build: { context: ./ju, dockerfile: Dockerfile }
+    image: cc2cx/ju-web:talent
+    container_name: cc2cx-ju-web
+    restart: unless-stopped
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [ju-backend]
+    networks: [ju-internal]
+
+  livart-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cc2cx-livart-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: livart
+      POSTGRES_USER: livart
+      POSTGRES_PASSWORD: ${LIVART_POSTGRES_PASSWORD}
+    volumes: ["cc2cx-apps_livart-postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U livart -d livart"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [livart-internal]
+
+  livart-rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cc2cx-livart-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: livart
+      RABBITMQ_DEFAULT_PASS: ${LIVART_RABBITMQ_PASSWORD}
+    volumes: ["cc2cx-apps_livart-rabbitmq-data:/var/lib/rabbitmq"]
+    networks: [livart-internal]
+
+  livart-minio:
+    image: quay.io/minio/minio:latest
+    container_name: cc2cx-livart-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: livartminio
+      MINIO_ROOT_PASSWORD: ${LIVART_MINIO_PASSWORD}
+    volumes: ["cc2cx-apps_livart-minio-data:/data"]
+    networks: [livart-internal]
+
+  livart:
+    build: { context: ./livart, dockerfile: Dockerfile }
+    image: cc2cx/livart:talent
+    container_name: cc2cx-livart
+    restart: unless-stopped
+    ports: ["127.0.0.1:8180:8080"]
+    depends_on:
+      livart-postgres: { condition: service_healthy }
+      livart-rabbitmq: { condition: service_started }
+      livart-minio: { condition: service_started }
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "8080"
+      DB_HOST: cc2cx-livart-postgres
+      DB_PORT: "5432"
+      DB_NAME: livart
+      DB_USER: livart
+      DB_PASSWORD: ${LIVART_POSTGRES_PASSWORD}
+      RABBITMQ_HOST: cc2cx-livart-rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: livart
+      RABBITMQ_PASSWORD: ${LIVART_RABBITMQ_PASSWORD}
+      MINIO_ENDPOINT: http://cc2cx-livart-minio:9000
+      MINIO_ACCESS_KEY: livartminio
+      MINIO_SECRET_KEY: ${LIVART_MINIO_PASSWORD}
+      MINIO_BUCKET: livart
+      JWT_SECRET: ${LIVART_JWT_SECRET}
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      CORS_ALLOWED_ORIGINS: https://livart.cc2.cx
+      LIVART_DEFAULT_API_BASE_URL: https://api.cc2.cx/v1
+      LIVART_DEFAULT_CHAT_MODEL: gpt-5.5
+    networks: [gateway, livart-internal]
+
+  qrcode:
+    build: { context: ./qrcode, dockerfile: Dockerfile }
+    image: cc2cx/qrcode:talent
+    container_name: cc2cx-qrcode
+    restart: unless-stopped
+    ports: ["127.0.0.1:5221:5221"]
+    environment:
+      PORT: "5221"
+      QR_CORS_ORIGIN: https://qrcode.cc2.cx
+      QR_API_BASE_URL: https://api.cc2.cx
+      LINK: https://api.cc2.cx
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+    networks: [gateway]
+
+  screen2code-backend:
+    build: { context: ./screen2code/backend, dockerfile: Dockerfile }
+    image: cc2cx/screen2code-backend:talent
+    container_name: cc2cx-screen2code-backend
+    restart: unless-stopped
+    command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7001"]
+    environment:
+      BACKEND_PORT: "7001"
+      IS_PROD: "true"
+      SCREEN2CODE_AUTH_REQUIRED: "true"
+      SCREEN2CODE_ALLOWED_ORIGINS: https://screen2code.cc2.cx
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      LINK: https://api.cc2.cx
+      LOCAL_ASSET_BASE_URL: https://screen2code.cc2.cx
+    volumes: ["cc2cx-apps_screen2code-data:/app/data"]
+    networks: [gateway, screen2code-internal]
+
+  screen2code-frontend:
+    build: { context: ./screen2code/frontend, dockerfile: Dockerfile }
+    image: cc2cx/screen2code-frontend:talent
+    container_name: cc2cx-screen2code-frontend
+    restart: unless-stopped
+    ports: ["127.0.0.1:5173:5173"]
+    environment:
+      PROXY_CODEGEN_BACKEND: http://cc2cx-screen2code-backend:7001
+      VITE_IS_DEPLOYED: "true"
+    depends_on: [screen2code-backend]
+    networks: [screen2code-internal]
+
+  ppt:
+    build: { context: ./ppt, dockerfile: Dockerfile }
+    image: cc2cx/ppt:talent
+    container_name: presenton-fix
+    restart: unless-stopped
+    ports: ["127.0.0.1:8341:80", "127.0.0.1:1455:1455"]
+    volumes: ["/opt/presenton/app_data:/app_data"]
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      LINK: https://api.cc2.cx
+      PRESENTON_BASE_URL: https://ppt.cc2.cx
+    networks: [gateway]
+
+  ai3d:
+    build: { context: ./ai3d, dockerfile: Dockerfile }
+    image: ai3d:talent
+    container_name: ai3d
+    restart: unless-stopped
+    ports: ["127.0.0.1:5174:5173"]
+    environment:
+      LINK: https://api.cc2.cx
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      AI3D_SSO_CALLBACK_URL: https://ai3d.cc2.cx/api/auth/sso/callback
+    volumes:
+      - ai3d_models:/app/.generated-models
+      - ai3d_auth:/app/.auth
+    networks: [gateway]
+
+  yibiao:
+    build: { context: ./yibiao, dockerfile: Dockerfile }
+    image: yibiao:talent
+    container_name: yibiao
+    restart: unless-stopped
+    ports: ["127.0.0.1:8081:8080"]
+    environment:
+      LINK: https://api.cc2.cx
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      YIBIAO_SSO_CALLBACK_URL: https://yibiao.cc2.cx/api/auth/sso/callback
+      YIBIAO_AUTH_DB: /app/server/data/auth.db
+    volumes: ["yibiao_data:/app/server/data"]
+    networks: [gateway]
+
+  aihuoke-backend:
+    build: { context: ./aihuoke/ai-hunter-root/backend, dockerfile: Dockerfile }
+    image: aihuoke-backend:talent
+    container_name: aihuoke-backend
+    restart: unless-stopped
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_BASE_URL: http://sub2api:8080
+      LINK: https://api.cc2.cx
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      AIHUOKE_SSO_CALLBACK_URL: https://aihuoke.cc2.cx/api/auth/sso/callback
+    volumes: ["aihuoke_data:/app/data"]
+    networks: [gateway]
+
+  aihuoke-frontend:
+    build: { context: ./aihuoke/ai-hunter-root/frontend, dockerfile: Dockerfile }
+    image: aihuoke-frontend:talent
+    container_name: aihuoke-frontend
+    restart: unless-stopped
+    ports: ["127.0.0.1:3001:3000"]
+    environment:
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      VITE_API_PROXY_TARGET: http://aihuoke-backend:8000
+    depends_on: [aihuoke-backend]
+    networks: [gateway]
+
+  agentapi:
+    build: { context: ./agentapi, dockerfile: Dockerfile }
+    image: cc2cx/agentapi:talent
+    container_name: agentapi
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:18081:8080"]
+    env_file:
+      - path: /opt/cc2cx-production/agentapi/backend/.env
+        required: false
+    environment:
+      AGENTAPI_ADDR: ":8080"
+      AGENTAPI_WEB_DIR: /app/web
+      AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      AGENTAPI_SSO_AUDIENCE: agentapi
+    volumes: ["agentapi-data:/app/data"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks: [gateway]
+
+  ju-sso-redis:
+    image: redis:8-alpine
+    container_name: cc2cx-ju-sso-redis
+    restart: unless-stopped
+    volumes: ["cc2cx-apps_ju-sso-redis-data:/data"]
+    networks: [gateway]
+
+  sub2api:
+    build: { context: ./sub2api, dockerfile: Dockerfile }
+    image: cc2cx/sub2api:talent
+    container_name: sub2api
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ulimits:
+      nofile: { soft: 100000, hard: 100000 }
+    ports: ["0.0.0.0:8080:8080"]
+    volumes: ["/opt/sub2api-deploy/data:/app/data:Z"]
+    env_file:
+      - path: /opt/cc2cx-production/sub2api-runtime.env
+        required: true
+    environment:
+      AUTO_SETUP: "true"
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+      DATABASE_HOST: sub2api-postgres
+      REDIS_HOST: sub2api-redis
+      OPENCHATCUT_SSO_CALLBACK_URL: https://aicut.cc2.cx/api/auth/sso/callback
+      AIEXCEL_SSO_CALLBACK_URL: https://aiexcel.cc2.cx/api/auth/sso/callback
+      CANVAS_SSO_CALLBACK_URL: https://canvas.cc2.cx/api/auth/sso/callback
+      JU_SSO_CALLBACK_URL: https://ju.cc2.cx/api/auth/sso/callback
+      LIVART_SSO_CALLBACK_URL: https://livart.cc2.cx/api/auth/sso/callback
+      PPT_SSO_CALLBACK_URL: https://ppt.cc2.cx/api/v1/auth/sso/callback
+      SCREEN2CODE_SSO_CALLBACK_URL: https://screen2code.cc2.cx/api/auth/sso/callback
+      AI3D_SSO_CALLBACK_URL: https://ai3d.cc2.cx/api/auth/sso/callback
+      AIHUOKE_SSO_CALLBACK_URL: https://aihuoke.cc2.cx/api/auth/sso/callback
+      YIBIAO_SSO_CALLBACK_URL: https://yibiao.cc2.cx/api/auth/sso/callback
+      AGENTAPI_SSO_CALLBACK_URL: https://agentapi.cc2.cx/api/auth/sso/callback
+      QRCODE_SSO_CALLBACK_URL: https://qrcode.cc2.cx/api/auth/sso/callback
+      MODELAUDIT_SSO_CALLBACK_URL: https://modelaudit.cc2.cx/api/auth/sso/callback
+      LINK: https://api.cc2.cx
+      aicut_link: https://aicut.cc2.cx
+      aiexcel_link: https://aiexcel.cc2.cx
+      canvas_link: https://canvas.cc2.cx
+      ju_link: https://ju.cc2.cx
+      livart_link: https://livart.cc2.cx
+      ppt_link: https://ppt.cc2.cx
+      qrcode_link: https://qrcode.cc2.cx
+      screen2code_link: https://screen2code.cc2.cx
+      yibiao_link: https://yibiao.cc2.cx
+      ai3d_link: https://ai3d.cc2.cx
+      aihuoke_link: https://aihuoke.cc2.cx
+      agentapi_link: https://agentapi.cc2.cx
+      modelaudit_link: https://modelaudit.cc2.cx
+    networks: [gateway]
+
+  canvas:
+    build: { context: ./canvas, dockerfile: Dockerfile }
+    image: cc2cx/canvas:talent
+    container_name: sub2api-canvas
+    restart: unless-stopped
+    ports: ["127.0.0.1:3522:3000"]
+    env_file:
+      - path: ./canvas/.env
+        required: false
+    environment:
+      LINK: https://api.cc2.cx
+      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
+      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      CANVAS_CORS_ORIGINS: https://canvas.cc2.cx
+    volumes: ["/opt/cc2cxSub2api_260920/canvas/data:/app/data"]
+    networks: [gateway]
+
+volumes:
+  cc2cx-apps_aicut-data: { external: true }
+  cc2cx-apps_ju-data: { external: true }
+  cc2cx-apps_livart-postgres-data: { external: true }
+  cc2cx-apps_livart-rabbitmq-data: { external: true }
+  cc2cx-apps_livart-minio-data: { external: true }
+  cc2cx-apps_screen2code-data: { external: true }
+  cc2cx-apps_ju-sso-redis-data: { external: true }
+  ai3d_models: { external: true }
+  ai3d_auth: { external: true }
+  yibiao_data: { external: true }
+  aihuoke_data: { external: true }
+  agentapi-data: { external: true }
+
+networks:
+  gateway:
+    external: true
+    name: sub2api-deploy_sub2api-network
+  ju-internal:
+    external: true
+    name: cc2cx-apps_ju-internal
+  livart-internal:
+    external: true
+    name: cc2cx-apps_livart-internal
+  screen2code-internal:
+    external: true
+    name: cc2cx-apps_screen2code-internal

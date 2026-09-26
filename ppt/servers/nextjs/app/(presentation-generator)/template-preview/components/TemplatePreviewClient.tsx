@@ -1237,7 +1237,7 @@ const GroupLayoutPreview = ({
             !activeLayout ||
             !activePreviewLayout ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-sm text-[#696969]">
-              <p>No layouts available for this template.</p>
+              <p>此模板暂无可用布局。</p>
               {canEditTemplate ? (
                 <button
                   className="rounded-[8px] border border-[#D9D6FE] bg-white px-4 py-2 text-[13px] font-medium text-[#7A5AF8] transition-colors hover:bg-[#F8F6FF]"

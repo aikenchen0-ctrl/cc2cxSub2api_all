@@ -14,6 +14,20 @@ import (
 )
 
 func RegisterTaskRoutes(r *gin.RouterGroup, svc *service.Service) {
+	r.GET("/sub2api/balance", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		user, err := currentUser(c, svc)
+		if err != nil {
+			failService(c, err)
+			return
+		}
+		balance, status, err := svc.Sub2APIUserBalance(c.Request.Context(), user.ID)
+		if err != nil {
+			fail(c, status, err)
+			return
+		}
+		ok(c, gin.H{"balance": balance, "recharge_url": svc.Sub2APIPurchaseURL()})
+	})
 	r.GET("/admin/text-replay-stats", func(c *gin.Context) {
 		user, err := currentUser(c, svc)
 		if err != nil {

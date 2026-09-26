@@ -17,7 +17,7 @@ export default function NotFound() {
         <div className="mx-auto mb-6 flex h-48 w-full max-w-[300px] items-center justify-center overflow-hidden sm:h-56 sm:max-w-sm">
           <img
             src="/404.svg"
-            alt="Page not found"
+            alt="页面未找到"
             width={500}
             height={500}
             className="h-full w-full object-contain object-center"
@@ -26,11 +26,11 @@ export default function NotFound() {
           />
         </div>
         <h1 className="mb-4 font-syne text-2xl font-bold text-gray-800 sm:text-3xl">
-          Oops! Page Not Found
+          页面未找到
         </h1>
         <p className="mb-4 text-base text-gray-600 sm:text-lg">
           It seems you&apos;ve found a page that doesn&apos;t exist. But don&apos;t worry, every
-          great presentation starts with a blank slide!
+          一份精彩的演示文稿可以从空白幻灯片开始！
         </p>
 
         <div className="mb-8 flex flex-col justify-center gap-3 sm:flex-row sm:space-x-4">
@@ -41,7 +41,7 @@ export default function NotFound() {
           </Link>
           <Link href="/" className="inline-flex sm:flex-1 sm:justify-center">
             <Button className="w-full rounded-md bg-gray-600 px-6 py-2 text-white hover:bg-gray-700 sm:w-auto">
-              Back to start
+              返回首页
             </Button>
           </Link>
         </div>

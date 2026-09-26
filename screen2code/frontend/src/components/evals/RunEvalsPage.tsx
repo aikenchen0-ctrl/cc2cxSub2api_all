@@ -161,12 +161,15 @@ function RunEvalsPage() {
     }
   };
 
+  const getSiteLogo = () =>
+    (window as Window & { __SUB2API_SITE_LOGO__?: string }).__SUB2API_SITE_LOGO__ || "/project-icon.jpg";
+
   const stopFaviconFlash = () => {
     if (faviconFlashIntervalRef.current !== null) {
       window.clearInterval(faviconFlashIntervalRef.current);
       faviconFlashIntervalRef.current = null;
     }
-    setFavicon("/project-icon.jpg");
+    setFavicon(getSiteLogo());
     window.removeEventListener("visibilitychange", stopWhenTabIsVisible);
     window.removeEventListener("focus", stopWhenTabIsVisible);
   };
@@ -181,7 +184,7 @@ function RunEvalsPage() {
     stopFaviconFlash();
     let useAlertIcon = false;
     faviconFlashIntervalRef.current = window.setInterval(() => {
-      setFavicon(useAlertIcon ? "/favicon/coding.png" : "/project-icon.jpg");
+      setFavicon(useAlertIcon ? "/favicon/coding.png" : getSiteLogo());
       useAlertIcon = !useAlertIcon;
     }, 450);
     window.addEventListener("visibilitychange", stopWhenTabIsVisible);

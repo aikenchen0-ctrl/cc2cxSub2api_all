@@ -79,13 +79,13 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
           "The server could not list models. Check your API key or endpoint and try again."
         );
         console.error('Failed to fetch models');
-        notify.error("Could not load models", message);
+        notify.error("无法加载模型", message);
         setAvailableModels([]);
         setModelsChecked(true);
       }
     } catch (error) {
       console.error('Error fetching models:', error);
-      notify.error("Could not load models", "The server could not list models. Check your API key or endpoint and try again.");
+      notify.error("无法加载模型", "服务器无法列出模型，请检查 API 密钥或地址后重试。 ");
       setAvailableModels([]);
       setModelsChecked(true);
     } finally {
@@ -99,7 +99,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
       <div className="mb-4 flex items-center justify-between bg-white p-10">
         <div className="">
 
-          <h3 className="text-xl font-normal text-[#191919]">OpenAI API key</h3>
+          <h3 className="text-xl font-normal text-[#191919]">OpenAI API 密钥</h3>
           <p className="mt-2 text-sm max-w-[205px] text-gray-500">
             Your API key will be stored locally and never shared
           </p>
@@ -192,7 +192,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
                       <Command>
                         <CommandInput placeholder="Search models..." />
                         <CommandList>
-                          <CommandEmpty>No model found.</CommandEmpty>
+                          <CommandEmpty>未找到模型。</CommandEmpty>
                           <CommandGroup>
                             {availableModels.map((model, index) => (
                               <CommandItem
@@ -242,7 +242,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
       {/* Web Grounding Toggle - show at the end, below models dropdown */}
       <div className="bg-white flex justify-between items-center p-10 rounded-[12px]">
         <div>
-          <h4 className="text-xl font-normal text-[#191919]">Model Controls</h4>
+          <h4 className="text-xl font-normal text-[#191919]">模型控制</h4>
           <p className="mt-2 text-sm max-w-[205px] text-gray-500">
 
             Configure web access, image generation, and advanced AI features.

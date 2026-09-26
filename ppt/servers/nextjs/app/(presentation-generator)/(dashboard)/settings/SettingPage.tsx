@@ -439,7 +439,7 @@ const SettingsPage = () => {
               role="alert"
               className="mb-5 mr-7 rounded-[12px] border border-amber-200 bg-amber-50 px-5 py-4 text-[#713F12]"
             >
-              <p className="text-sm font-semibold">Choose a text provider to continue</p>
+              <p className="text-sm font-semibold">请选择文本服务商以继续</p>
               <p className="mt-1 text-xs leading-5">
                 永恒PPT云端连接已断开。请在下方选择文本提供商并保存配置后再打开其他页面。
               </p>
@@ -457,7 +457,7 @@ const SettingsPage = () => {
           {selectedProvider === "session" && (
             <div className="w-full max-w-lg space-y-5 rounded-[20px] border border-[#EDEEEF] bg-white p-7">
               <div>
-                <h4 className="font-unbounded text-lg font-normal text-black">Sign out</h4>
+                <h4 className="font-unbounded text-lg font-normal text-black">退出登录</h4>
                 <p className="mt-2 font-syne text-sm leading-relaxed text-[#494A4D]">
                   End your session on this deployment. You will need to sign in again to use the app and access the API.
                 </p>

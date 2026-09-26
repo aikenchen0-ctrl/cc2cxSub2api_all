@@ -2,6 +2,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
 import { SystemAnnouncementCenter } from "@/components/layout/system-announcement-center";
+import { Sub2APIBalance } from "@/components/layout/sub2api-balance";
 import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu";
 import { useWorkspaceTopBarContent } from "@/components/layout/workspace-top-bar-extension";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
@@ -47,6 +48,7 @@ export function WorkspaceTopBar({ sidebarOpen, onToggleSidebar }: { sidebarOpen:
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+                <Sub2APIBalance />
                 {user ? <SystemAnnouncementCenter userId={user.id} className="app-workspace-topbar-icon-button" autoOpen /> : null}
                 <AnimatedThemeToggler className="app-workspace-topbar-icon-button" theme={theme} onThemeChange={setTheme} aria-label="切换主题" />
                 <WorkspaceAccountMenu />

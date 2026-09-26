@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
+import Script from "next/script";
 import {
   ArrowLeft, ArrowUpDown, BarChart3, Bot, Check, Clock3, Download, FileSpreadsheet, Filter,
   History, LoaderCircle, Menu, Plus, Redo2, Search, Send,
@@ -768,9 +769,10 @@ export default function Home() {
 
   if (!workbook) return (
     <main className="landing">
+      <Script src="/sub2api-balance-widget.js" strategy="afterInteractive" />
       <header className="landing-nav">
-        <div className="brand"><span className="brand-mark"><img src="/project-icon.jpg" alt="AI表格" /></span><span>AI表格</span></div>
-        <div className="nav-actions"><span className="local-badge"><ShieldCheck size={15}/> 文件仅在本地处理</span><button className="icon-btn" onClick={() => setShowSettings(true)} aria-label="设置"><Settings size={19}/></button></div>
+        <div className="brand"><span className="brand-mark"><img src="/project-icon.jpg" data-sub2api-site-logo alt="AI表格" /></span><span>AI表格</span></div>
+        <div className="nav-actions"><div data-sub2api-balance-widget /><span className="local-badge"><ShieldCheck size={15}/> 文件仅在本地处理</span><button className="icon-btn" onClick={() => setShowSettings(true)} aria-label="设置"><Settings size={19}/></button></div>
       </header>
       <section className="hero">
         <div className="eyebrow"><Sparkles size={15}/> 用一句话，完成复杂表格操作</div>
@@ -793,10 +795,11 @@ export default function Home() {
 
   return (
     <main className="workspace">
+      <Script src="/sub2api-balance-widget.js" strategy="afterInteractive" />
       <header className="topbar">
         <div className="top-left">
           <button className="icon-btn" onClick={() => { if (confirm("返回首页？未导出的修改将丢失。")) { setWorkbook(null); setSheets([]); setDeferredSource(null); } }}><ArrowLeft size={19}/></button>
-          <div className="brand compact"><span className="brand-mark"><img src="/project-icon.jpg" alt="AI表格" /></span><span>AI表格</span></div><span className="divider"/>
+          <div className="brand compact"><span className="brand-mark"><img src="/project-icon.jpg" data-sub2api-site-logo alt="AI表格" /></span><span>AI表格</span></div><span className="divider"/>
           <div className="file-title"><strong>{fileName}</strong><small>{sheets.length} 个工作表 · 已在本地打开</small></div>
         </div>
         <div className="top-actions">
@@ -804,7 +807,7 @@ export default function Home() {
           <button className="tool-btn only-icon" disabled={historyIndex >= history.length - 1} onClick={() => restoreSnapshot(historyIndex + 1)} aria-label="重做"><Redo2/></button>
           <button className="tool-btn" onClick={() => setShowHistory(true)}><History/> 历史</button>
           <button className="export-btn" onClick={download}><Download size={17}/> 导出 Excel</button>
-          <button className="icon-btn" onClick={() => setShowSettings(true)}><Settings size={19}/></button>
+          <div data-sub2api-balance-widget /><button className="icon-btn" onClick={() => setShowSettings(true)}><Settings size={19}/></button>
         </div>
       </header>
       <div className="work-body">

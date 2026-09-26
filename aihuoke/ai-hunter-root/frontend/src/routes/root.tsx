@@ -13,6 +13,7 @@ export function RootLayout() {
           <Link to="/" className="me-8 flex items-center gap-2 text-lg font-bold">
             <img
               src="/project-icon.jpg"
+              data-sub2api-site-logo
               alt="AI获客"
               className="h-5 w-5 rounded object-cover"
             />
@@ -42,6 +43,7 @@ export function RootLayout() {
             </Link>
           </nav>
           <div className="ms-auto flex items-center gap-4">
+            <div data-sub2api-balance-widget />
             <LanguageSwitcher />
             <Link
               to="/settings"

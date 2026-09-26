@@ -95,6 +95,7 @@ export function TopBar({ projectId, projectName, canUndo, canRedo, exporting, ex
       {/* self-contained: trigger + popover, global export history, zero props */}
       <ExportHistory />
       <LocaleToggle />
+      <div data-sub2api-balance-widget />
       <SessionBar />
       <TopBarIconButton icon="layoutPanel" label={t('切换面板布局')} onClick={() => invokeAction('toggle-layout', undefined, 'toolbar')} />
       <button onClick={() => invokeAction('open-export', undefined, 'toolbar')}

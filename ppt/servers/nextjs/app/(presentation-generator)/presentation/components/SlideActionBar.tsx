@@ -328,7 +328,7 @@ const SlideActionBar = ({
                   hasReachedSlideLimit && "cursor-not-allowed opacity-50"
                 )}
               >
-                <span>Blank</span>
+                <span>空白</span>
                 <Plus className="h-4 w-4" strokeWidth={2.4} />
               </button>
 
@@ -344,7 +344,7 @@ const SlideActionBar = ({
                       hasReachedSlideLimit && "cursor-not-allowed opacity-50"
                     )}
                   >
-                    <span>Use Template</span>
+                  <span>使用模板</span>
                     <Plus className="h-4 w-4" strokeWidth={2.4} />
                   </button>
                 </>
@@ -423,7 +423,7 @@ const SlideActionBar = ({
                   onSelect={handleDuplicateSlide}
                 >
                   <Copy className="h-4 w-4 shrink-0 text-current" />
-                  <span>Duplicate Slide</span>
+                  <span>复制幻灯片</span>
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   disabled={currentIndex <= 0}
@@ -431,7 +431,7 @@ const SlideActionBar = ({
                   onSelect={() => handleMoveSlide(currentIndex - 1)}
                 >
                   <ArrowUp className="h-4 w-4 shrink-0 text-current" />
-                  <span>Move Up</span>
+                  <span>上移</span>
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   disabled={currentIndex >= slideCount - 1}
@@ -439,7 +439,7 @@ const SlideActionBar = ({
                   onSelect={() => handleMoveSlide(currentIndex + 1)}
                 >
                   <ArrowDown className="h-4 w-4 shrink-0 text-current" />
-                  <span>Move Down</span>
+                  <span>下移</span>
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator className="my-2 h-px bg-[#EDEEEF]" />
                 <DropdownMenu.Item
@@ -447,7 +447,7 @@ const SlideActionBar = ({
                   onSelect={handleDeleteSlide}
                 >
                   <Trash2 className="h-4 w-4 shrink-0 text-current" />
-                  <span>Delete Slide</span>
+                  <span>删除幻灯片</span>
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>

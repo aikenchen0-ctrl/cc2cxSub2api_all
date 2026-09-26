@@ -1043,7 +1043,7 @@ function FontMenuSection({
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         {families.length === 0 ? (
-          <div style={textToolbarStyles.fontMenuEmpty}>No fonts</div>
+          <div style={textToolbarStyles.fontMenuEmpty}>没有可用字体</div>
         ) : (
           <div
             style={{

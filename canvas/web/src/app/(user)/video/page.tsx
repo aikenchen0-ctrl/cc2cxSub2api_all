@@ -1374,13 +1374,14 @@ function WorkbenchPanel({
     const audioReferenceLimit = amamLimits?.audios ?? referenceLimits.audios;
     const displayResolution = amamLimits && (!config.vquality || config.vquality === "720") ? amamVideoDefaultResolution(model).replace(/p$/i, "") : config.vquality;
     const displaySize = amamLimits && config.size === "1:1" ? seedancePixelLabel(displayResolution, "16:9") : config.size;
+    const autodl = isAutoDLConfig(config, model);
+    const { data: autodlWorkflow } = useAutoDLWorkflow(config, model);
+    const autodlCapabilities = getAutoDLCapabilities(autodlWorkflow);
     const autoDLResolutionRule = autodlCapabilities?.resolution;
     const autoDLResolutionValue = !config.vquality || config.vquality === "720" ? String(autoDLResolutionRule?.default ?? "") : config.vquality;
     const resolutionOptions = autodl && autoDLResolutionRule?.options?.length
         ? autoDLResolutionRule.options.map((option) => ({ value: option.label, label: option.label }))
         : isSeedanceVideoConfig(config) ? videoResolutionOptions.slice(0, 3) : videoResolutionOptions;
-    const autodl = isAutoDLConfig(config, model);
-    const { data: autodlWorkflow } = useAutoDLWorkflow(config, model);
     const cogVideoX3 = isCogVideoX3Model(model);
     const audioGenerationEnabled = supportsVideoAudioGeneration(model, channelProtocolForConfig({ ...config, model, videoModel: model }));
     const generateAudio = boolConfig(config.videoGenerateAudio, false);

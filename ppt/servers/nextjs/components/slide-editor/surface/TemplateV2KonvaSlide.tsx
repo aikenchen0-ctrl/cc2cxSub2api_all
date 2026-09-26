@@ -2318,7 +2318,7 @@ function TemplateV2KonvaSlideComponent({
             error_message: "Invalid image file type",
           }),
         });
-        notify.warning("Invalid file", "Please upload an image file.");
+        notify.warning("文件无效", "请上传图片文件。 ");
         return;
       }
       if (file.size > 5 * 1024 * 1024) {
@@ -2328,7 +2328,7 @@ function TemplateV2KonvaSlideComponent({
             error_message: "Image file too large",
           }),
         });
-        notify.warning("File too large", "Image files must be smaller than 5MB.");
+        notify.warning("文件过大", "图片文件必须小于 5MB。 ");
         return;
       }
 
@@ -2350,7 +2350,7 @@ function TemplateV2KonvaSlideComponent({
             file_size_bucket: bucketFileSize(file.size),
           }),
         });
-        notify.success("Image updated", "The selected image was replaced.");
+        notify.success("图片已更新", "已替换所选图片。 ");
       } catch (error) {
         trackEvent(MixpanelEvent.Editor_Image_Replace_Failed, {
           ...editorAnalyticsProps({
@@ -2563,7 +2563,7 @@ function TemplateV2KonvaSlideComponent({
     return (
       <div className="flex h-full aspect-video flex-col items-center justify-center rounded-lg bg-gray-100">
         <Loader2 className="mb-2 h-4 w-4 animate-spin" />
-        <p className="text-center text-sm text-gray-600">Loading slide layout...</p>
+        <p className="text-center text-sm text-gray-600">正在加载幻灯片布局...</p>
       </div>
     );
   }

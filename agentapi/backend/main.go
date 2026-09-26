@@ -40,8 +40,15 @@ type Server struct {
 
 	// Balance-delta settlement is serialized per main user. Without this lock,
 	// two concurrent requests could both observe the same before/after balance.
-	settleMu     sync.Mutex
-	settleByUser map[string]*sync.Mutex
+	settleMu      sync.Mutex
+	settleByUser  map[string]*sync.Mutex
+	userStatusMu  sync.Mutex
+	userStatusBy  map[string]*sync.Mutex
+	modelPolicyMu sync.Mutex
+
+	provisioningMu        sync.RWMutex
+	provisioningStatus    string
+	provisioningCheckedAt time.Time
 }
 
 type apiResponse struct {
@@ -84,6 +91,9 @@ func main() {
 	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	go server.runSettlementReconciler(shutdownCtx)
+	if cfg.ProvisioningControlEnabled {
+		go server.runProvisioningControl(shutdownCtx)
+	}
 	go func() {
 		<-shutdownCtx.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -116,6 +126,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if r.URL.Path != "/healthz" && r.URL.Path != "/readyz" {
+		if status, available := s.provisioningState(time.Now().UTC()); !available {
+			s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_CONTROL_UNAVAILABLE", "main-site agent status is unavailable or stale")
+			return
+		} else if status != "active" {
+			switch status {
+			case "suspended":
+				s.writeError(w, http.StatusLocked, requestID, "AGENT_SUSPENDED", "agent is suspended")
+			case "revoked":
+				s.writeError(w, http.StatusGone, requestID, "AGENT_REVOKED", "agent has been revoked")
+			default:
+				s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_NOT_ACTIVE", "agent is not active")
+			}
+			return
+		}
+	}
 
 	switch {
 	case r.URL.Path == "/healthz":
@@ -135,12 +161,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handlePaymentWebhook(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/context":
 		s.handleAgentContext(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/profile":
+		s.handleAgentProfile(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/password":
+		s.handleAgentPassword(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/wallet":
 		s.handleAgentWallet(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/users":
 		s.handleAgentUsers(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/usage":
 		s.handleAgentUsage(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/tasks":
+		s.handleAgentTasks(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/recharge/orders":
 		s.handleAgentRecharge(w, r, requestID)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/"):
@@ -193,7 +225,7 @@ func (s *Server) runSettlementReconciler(ctx context.Context) {
 }
 
 func (s *Server) reconcilePendingInBackground(parent context.Context) {
-	if strings.TrimSpace(s.cfg.AdminKey) == "" || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" {
+	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(parent, s.cfg.MainRequestTimeout)
@@ -206,10 +238,11 @@ func (s *Server) reconcilePendingInBackground(parent context.Context) {
 	}
 	s.reconcilePaidRechargeOrders(ctx)
 	s.reconcileStaleVideoTasks(ctx)
+	s.reconcileStaleImageTasks(ctx)
 }
 
 func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
-	if s.cfg.VideoTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
+	if s.cfg.VideoTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
 		return
 	}
 	tasks, err := s.store.PendingVideoTasks(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
@@ -226,14 +259,29 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 		mu := s.userSettlementMutex(ownerID)
 		mu.Lock()
-		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, ownerID, task.RequestID)
+		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, task.MainUserID, task.RequestID)
 		shouldReconcile := false
 		if relayErr == nil && status >= 200 && status < 300 {
 			_, upstreamStatus := videoTaskIdentity(body)
 			if upstreamStatus != "" {
 				_ = s.store.UpdateVideoTaskStatus(s.cfg.AgentID, task.TaskID, upstreamStatus)
 				if videoTaskFailed(upstreamStatus) {
-					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task expired without a charge: "+upstreamStatus)
+					settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID)
+					if settlementErr == nil && settlement.Status == "pending" {
+						usage, available, usageErr := s.mainUsageForRequest(ctx, task.RequestID)
+						switch {
+						case !available:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed video task requires authoritative usage lookup; legacy usage API is unavailable")
+						case usageErr != nil:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed video task usage lookup failed: "+usageErr.Error())
+						case usage == nil:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task ended without a main-site usage record: "+upstreamStatus)
+						case usage.ActualCents > settlement.ReservedCents:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", usage.ActualCents, "authoritative video usage exceeds local reservation", usage.Snapshot)
+						default:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", usage.ActualCents, "", usage.Snapshot)
+						}
+					}
 				} else {
 					shouldReconcile = true
 				}
@@ -249,8 +297,64 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 	}
 }
 
+func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
+	if s.cfg.ImageTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
+		return
+	}
+	tasks, err := s.store.PendingImageTasks(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
+	if err != nil {
+		slog.Warn("image task reconciliation lookup failed", "agent_id", s.cfg.AgentID, "error", err)
+		return
+	}
+	cutoff := time.Now().UTC().Add(-s.cfg.ImageTaskReconcileAge)
+	for _, task := range tasks {
+		createdAt, parseErr := time.Parse(time.RFC3339, task.CreatedAt)
+		if parseErr != nil || createdAt.After(cutoff) {
+			continue
+		}
+		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
+		mu := s.userSettlementMutex(ownerID)
+		mu.Lock()
+		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, task.MainUserID, task.RequestID)
+		shouldReconcile := false
+		if relayErr == nil && status >= 200 && status < 300 {
+			_, imageStatus := imageTaskIdentity(body)
+			if imageStatus != "" {
+				_ = s.store.UpdateImageTaskStatus(s.cfg.AgentID, task.TaskID, imageStatus)
+				if imageTaskFailed(imageStatus) {
+					settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID)
+					if settlementErr == nil && settlement.Status == "pending" {
+						usage, available, usageErr := s.mainUsageForRequest(ctx, task.RequestID)
+						switch {
+						case !available:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed image task requires authoritative usage lookup; legacy usage API is unavailable")
+						case usageErr != nil:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed image task usage lookup failed: "+usageErr.Error())
+						case usage == nil:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "image task ended without a main-site usage record: "+imageStatus)
+						case usage.ActualCents > settlement.ReservedCents:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", usage.ActualCents, "authoritative image usage exceeds local reservation", usage.Snapshot)
+						default:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", usage.ActualCents, "", usage.Snapshot)
+						}
+					}
+				} else {
+					shouldReconcile = true
+				}
+			}
+		}
+		mu.Unlock()
+		if shouldReconcile {
+			_, _ = s.reconcileSettlements(ctx, task.RequestID)
+		}
+		if relayErr != nil {
+			slog.Warn("stale image task probe failed", "agent_id", s.cfg.AgentID, "task_id", task.TaskID, "error", relayErr)
+		}
+	}
+}
+
 func (s *Server) reconcilePaidRechargeOrders(ctx context.Context) {
-	if !s.cfg.PaymentEnabled || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AdminKey) == "" {
+	if !s.cfg.PaymentEnabled || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
 		return
 	}
 	orders, err := s.store.PaidPendingRechargeOrders(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
@@ -294,8 +398,8 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request, requestID s
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_OWNER_MISSING", "billing owner is not configured")
 		return
 	}
-	if strings.TrimSpace(s.cfg.AdminKey) == "" {
-		s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_ADMIN_KEY_MISSING", "main administrator credential is not configured")
+	if s.cfg.ProvisioningControlEnabled && strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", "per-Agent control credential is not configured")
 		return
 	}
 	if s.cfg.SessionSecretWeak {
@@ -384,7 +488,8 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request, reque
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "SSO_NOT_CONFIGURED", "SSO is not configured")
 		return
 	}
-	ticket, err := verifySSOTicket(r.URL.Query().Get("ticket"), secret, s.cfg.SSOAudience, time.Now().UTC())
+	rawTicket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	ticket, err := verifySSOTicket(rawTicket, secret, s.cfg.SSOAudience, time.Now().UTC())
 	if err != nil {
 		status := http.StatusUnauthorized
 		if errors.Is(err, errIdempotencyConflict) {
@@ -424,6 +529,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request, reque
 	} else {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load SSO user mapping")
 		return
+	}
+	if s.cfg.ProvisioningControlEnabled {
+		if err := s.main.MapRuntimeUserWithSSOTicket(r.Context(), ticket.Subject, rawTicket); err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
 	}
 	sessionID, err := s.store.CreateSession(ticket.Subject, userJSON, "", "", time.Now().UTC().Add(sessionTTL))
 	if err != nil {
@@ -549,33 +660,10 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request, requestID 
 		return
 	}
 
-	var auth MainAuthResult
-	var err error
-	if s.cfg.AdminKey != "" {
-		// Provisioning-created users use the admin endpoint so registration does
-		// not depend on a captcha/email worker being configured on the main site.
-		// The browser still receives only the resulting AgentAPI cookie.
-		adminPayload := map[string]any{
-			"email": email, "password": password, "role": "user",
-		}
-		if username := strings.TrimSpace(stringValue(payload["username"])); username != "" {
-			adminPayload["username"] = username
-		}
-		if _, err := s.main.AdminCreateUser(r.Context(), adminPayload); err != nil {
-			var apiErr *MainAPIError
-			if !errors.As(err, &apiErr) || (apiErr.Status != http.StatusConflict && !strings.Contains(strings.ToUpper(apiErr.Code), "EXISTS")) {
-				s.writeMainError(w, requestID, err)
-				return
-			}
-			// Existing account: let the normal registration endpoint decide whether
-			// it can be reused; normally it returns a conflict.
-		}
-		auth, err = s.main.Login(r.Context(), email, password)
-	} else {
-		// Without the server-side admin credential, use the public registration
-		// contract directly so captcha/email verification semantics are preserved.
-		auth, err = s.main.Register(r.Context(), payload)
-	}
+	// Use Sub2API's public registration contract so captcha, verification,
+	// invitation and signup policy remain authoritative. The per-Agent control
+	// credential cannot create or elevate main-site accounts.
+	auth, err := s.main.Register(r.Context(), payload)
 	if err != nil {
 		s.writeMainError(w, requestID, err)
 		return
@@ -649,7 +737,7 @@ func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	email, displayName, _ := userJSONFields(userJSON)
-	_, mapErr := s.store.User(s.cfg.AgentID, mainUserID)
+	mappedUser, mapErr := s.store.User(s.cfg.AgentID, mainUserID)
 	if errors.Is(mapErr, errNotFound) {
 		allowed := createMapping || s.cfg.AutoBindExistingUsers || mainUserID == s.cfg.OwnerMainUserID
 		if !allowed {
@@ -663,6 +751,15 @@ func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, reques
 	} else if mapErr != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load agent user mapping")
 		return
+	} else if mappedUser.Status != "active" {
+		s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_DISABLED", "agent user is disabled")
+		return
+	}
+	if s.cfg.ProvisioningControlEnabled {
+		if err := s.main.MapRuntimeUser(r.Context(), mainUserID, auth.AccessToken); err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
 	}
 
 	expiresAt := time.Now().UTC().Add(sessionTTL)
@@ -710,6 +807,12 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request, requestID s
 		s.writeMainError(w, requestID, err)
 		return
 	}
+	if strings.TrimSpace(auth.AccessToken) == "" {
+		_ = s.store.DeleteSession(session.ID)
+		s.clearSessionCookie(w)
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_AUTH_INVALID", "main site did not return an access token")
+		return
+	}
 	current := auth.User
 	if len(current) == 0 || mainUserIDFromJSON(current) == "" {
 		current, err = s.main.CurrentUser(r.Context(), auth.AccessToken)
@@ -717,6 +820,15 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request, requestID s
 			s.writeMainError(w, requestID, err)
 			return
 		}
+	}
+	if err := validateMainSessionIdentity(current, session.MainUserID); err != nil {
+		// A rotated credential must never replace the identity bound to this
+		// AgentAPI session. Revoke the local session rather than returning a
+		// profile for a different Sub2API user.
+		_ = s.store.DeleteSession(session.ID)
+		s.clearSessionCookie(w)
+		s.writeMainError(w, requestID, err)
+		return
 	}
 	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, time.Now().UTC().Add(sessionTTL)); err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "SESSION_UPDATE_FAILED", "failed to refresh session")
@@ -748,6 +860,9 @@ func (s *Server) currentSessionUser(ctx context.Context, session Session) (json.
 	}
 	current, err := s.main.CurrentUser(ctx, session.AccessToken)
 	if err == nil {
+		if err := validateMainSessionIdentity(current, session.MainUserID); err != nil {
+			return nil, err
+		}
 		return current, nil
 	}
 	var apiErr *MainAPIError
@@ -758,12 +873,28 @@ func (s *Server) currentSessionUser(ctx context.Context, session Session) (json.
 	if refreshErr != nil {
 		return nil, refreshErr
 	}
+	if strings.TrimSpace(auth.AccessToken) == "" {
+		return nil, &MainAPIError{Status: http.StatusBadGateway, Code: "UPSTREAM_AUTH_INVALID", Message: "main site did not return an access token"}
+	}
 	current, currentErr := s.main.CurrentUser(ctx, auth.AccessToken)
 	if currentErr != nil {
 		return nil, currentErr
 	}
-	_ = s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, time.Now().UTC().Add(sessionTTL))
+	if err := validateMainSessionIdentity(current, session.MainUserID); err != nil {
+		return nil, err
+	}
+	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, time.Now().UTC().Add(sessionTTL)); err != nil {
+		return nil, fmt.Errorf("refresh AgentAPI session credentials: %w", err)
+	}
 	return current, nil
+}
+
+func validateMainSessionIdentity(userJSON []byte, expectedMainUserID string) error {
+	actualMainUserID := mainUserIDFromJSON(userJSON)
+	if strings.TrimSpace(expectedMainUserID) == "" || actualMainUserID == "" || actualMainUserID != expectedMainUserID {
+		return &MainAPIError{Status: http.StatusUnauthorized, Code: "SESSION_IDENTITY_MISMATCH", Message: "main-site session identity no longer matches this AgentAPI session"}
+	}
+	return nil
 }
 
 func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -843,6 +974,173 @@ func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requ
 	s.writeData(w, http.StatusOK, requestID, result)
 }
 
+func (s *Server) handleAgentProfile(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	session, _, ok := s.requireSession(w, r, requestID)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		// SSO-created sessions intentionally carry identity only. They can view
+		// the profile claims stored at sign-in, but need an authenticated main-
+		// site session to edit account details.
+		profile := append(json.RawMessage(nil), session.UserJSON...)
+		if strings.TrimSpace(session.AccessToken) != "" {
+			if _, err := s.currentSessionUser(r.Context(), session); err != nil {
+				s.writeMainError(w, requestID, err)
+				return
+			}
+			refreshedSession, err := s.store.LoadSession(session.ID)
+			if err != nil {
+				s.writeError(w, http.StatusUnauthorized, requestID, "UNAUTHORIZED", "AgentAPI session is no longer valid")
+				return
+			}
+			session = refreshedSession
+			current, err := s.main.UserProfile(r.Context(), session.AccessToken)
+			if err != nil {
+				s.writeMainError(w, requestID, err)
+				return
+			}
+			profile = current
+		}
+		email, username, _ := userJSONFields(profile)
+		if email != "" || username != "" {
+			_, _ = s.store.UpsertUser(s.cfg.AgentID, session.MainUserID, email, username)
+		}
+		s.writeData(w, http.StatusOK, requestID, safeAgentProfile(profile, session.MainUserID, strings.TrimSpace(session.AccessToken) != ""))
+	case http.MethodPut:
+		if !sameOrigin(r) {
+			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
+			return
+		}
+		if strings.TrimSpace(session.AccessToken) == "" {
+			s.writeError(w, http.StatusForbidden, requestID, "MAIN_SESSION_REQUIRED", "sign in with your main-site account to edit your profile")
+			return
+		}
+		var payload struct {
+			Username string `json:"username"`
+		}
+		if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+			return
+		}
+		payload.Username = strings.TrimSpace(payload.Username)
+		if payload.Username == "" || len(payload.Username) > 128 || strings.ContainsAny(payload.Username, "\r\n\x00") {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_USERNAME", "username must be non-empty, at most 128 bytes and contain no line breaks")
+			return
+		}
+		if _, err := s.currentSessionUser(r.Context(), session); err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		refreshedSession, err := s.store.LoadSession(session.ID)
+		if err != nil {
+			s.writeError(w, http.StatusUnauthorized, requestID, "UNAUTHORIZED", "AgentAPI session is no longer valid")
+			return
+		}
+		session = refreshedSession
+		profile, err := s.main.UpdateUserProfile(r.Context(), session.AccessToken, payload.Username)
+		if err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		email, username, _ := userJSONFields(profile)
+		if current, loadErr := s.store.User(s.cfg.AgentID, session.MainUserID); loadErr == nil {
+			if email == "" {
+				email = current.Email
+			}
+			if username == "" {
+				username = payload.Username
+			}
+		}
+		if _, err := s.store.UpsertUser(s.cfg.AgentID, session.MainUserID, email, username); err != nil {
+			// Sub2API is authoritative for profile data. A local display-name
+			// mirror failure must not turn a committed upstream update into an
+			// apparent failure that encourages a misleading retry.
+			slog.Error("failed to refresh Agent user display name after main profile update", "agent_id", s.cfg.AgentID, "main_user_id", session.MainUserID, "request_id", requestID, "error", err)
+		}
+		s.writeData(w, http.StatusOK, requestID, safeAgentProfile(profile, session.MainUserID, true))
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+	}
+}
+
+func (s *Server) handleAgentPassword(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+		return
+	}
+	if !sameOrigin(r) {
+		s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
+		return
+	}
+	session, _, ok := s.requireSession(w, r, requestID)
+	if !ok {
+		return
+	}
+	if strings.TrimSpace(session.AccessToken) == "" {
+		s.writeError(w, http.StatusForbidden, requestID, "MAIN_SESSION_REQUIRED", "sign in with your main-site account to change your password")
+		return
+	}
+	var payload struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if payload.OldPassword == "" || len(payload.NewPassword) < 6 || len(payload.NewPassword) > 1024 {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PASSWORD", "current password is required and new password must contain at least 6 bytes")
+		return
+	}
+	if _, err := s.currentSessionUser(r.Context(), session); err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	refreshedSession, err := s.store.LoadSession(session.ID)
+	if err != nil {
+		s.writeError(w, http.StatusUnauthorized, requestID, "UNAUTHORIZED", "AgentAPI session is no longer valid")
+		return
+	}
+	session = refreshedSession
+	if err := s.main.ChangeUserPassword(r.Context(), session.AccessToken, payload.OldPassword, payload.NewPassword); err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	_ = s.store.DeleteSession(session.ID)
+	s.clearSessionCookie(w)
+	s.recordAudit("user", session.MainUserID, "password_change", "user", session.MainUserID, requestID, "success", "")
+	s.writeData(w, http.StatusOK, requestID, map[string]string{"message": "password changed; sign in again"})
+}
+
+func safeAgentProfile(raw []byte, mainUserID string, canEdit bool) map[string]any {
+	profile := map[string]any{
+		"id":       mainUserID,
+		"email":    "",
+		"username": "",
+		"can_edit": canEdit,
+	}
+	var upstream map[string]json.RawMessage
+	if json.Unmarshal(raw, &upstream) == nil {
+		for _, key := range []string{"email", "username", "avatar_url"} {
+			var value string
+			if json.Unmarshal(upstream[key], &value) == nil {
+				profile[key] = value
+			}
+		}
+		if profile["username"] == "" {
+			var displayName string
+			if json.Unmarshal(upstream["display_name"], &displayName) == nil {
+				profile["username"] = displayName
+			}
+		}
+	}
+	return profile
+}
+
 func (s *Server) handleAgentWallet(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
@@ -873,15 +1171,52 @@ func (s *Server) handleAgentUsers(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	if s.isAgentAdmin(session) {
-		users, err := s.store.Users(s.cfg.AgentID, 500)
+		page, pageSize, err := agentPagination(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", err.Error())
+			return
+		}
+		search, err := agentUserSearch(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_SEARCH", err.Error())
+			return
+		}
+		users, total, err := s.store.UsersPage(s.cfg.AgentID, pageSize, (page-1)*pageSize, search)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list agent users")
 			return
 		}
-		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": len(users)})
+		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": total, "page": page, "page_size": pageSize})
 		return
 	}
-	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": []AgentUserView{user}, "total": 1})
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": []AgentUserView{user}, "total": 1, "page": 1, "page_size": 25})
+}
+
+func agentPagination(r *http.Request) (int, int, error) {
+	page, pageSize := 1, 25
+	if raw := strings.TrimSpace(r.URL.Query().Get("page")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 1_000_000_000 {
+			return 0, 0, fmt.Errorf("page must be between 1 and 1000000000")
+		}
+		page = parsed
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("page_size")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 200 {
+			return 0, 0, fmt.Errorf("page_size must be between 1 and 200")
+		}
+		pageSize = parsed
+	}
+	return page, pageSize, nil
+}
+
+func agentUserSearch(r *http.Request) (string, error) {
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(search) > 512 || strings.ContainsAny(search, "\r\n\x00") {
+		return "", fmt.Errorf("q must be at most 512 bytes and contain no line breaks")
+	}
+	return search, nil
 }
 
 func (s *Server) handleAgentUsage(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -897,12 +1232,55 @@ func (s *Server) handleAgentUsage(w http.ResponseWriter, r *http.Request, reques
 	if s.isAgentAdmin(session) {
 		mainUserID = ""
 	}
-	items, err := s.store.Usage(s.cfg.AgentID, mainUserID, 500)
+	page, pageSize := 1, 25
+	if raw := strings.TrimSpace(r.URL.Query().Get("page")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 1_000_000_000 {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", "page must be between 1 and 1000000000")
+			return
+		}
+		page = parsed
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("page_size")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 200 {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", "page_size must be between 1 and 200")
+			return
+		}
+		pageSize = parsed
+	}
+	items, total, err := s.store.UsagePage(s.cfg.AgentID, mainUserID, pageSize, (page-1)*pageSize)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load usage")
 		return
 	}
-	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": items, "total": len(items)})
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+// handleAgentTasks exposes only the current Session user's persisted image and
+// video task identities. The task result itself is re-read through the normal
+// authenticated /v1 task route when the user resumes it.
+func (s *Server) handleAgentTasks(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+		return
+	}
+	session, _, ok := s.requireSession(w, r, requestID)
+	if !ok {
+		return
+	}
+	page, pageSize, err := agentPagination(r)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", err.Error())
+		return
+	}
+	items, total, err := s.store.TaskHistoryPage(s.cfg.AgentID, session.MainUserID, pageSize, (page-1)*pageSize)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load model task history")
+		return
+	}
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
 // handleAgentRecharge owns the user-facing order lifecycle. It deliberately
@@ -1349,6 +1727,79 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 			return
 		}
 	}
+	if r.URL.Path == "/api/v1/agent/admin/model-policy" {
+		switch r.Method {
+		case http.MethodGet:
+			policy, err := s.store.AgentModelPolicy(s.cfg.AgentID)
+			if err != nil {
+				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load model access policy")
+				return
+			}
+			s.writeData(w, http.StatusOK, requestID, policy)
+			return
+		case http.MethodPut:
+			if !sameOrigin(r) {
+				s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
+				return
+			}
+			var payload struct {
+				Enabled []string `json:"enabled"`
+			}
+			if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+				return
+			}
+			if payload.Enabled == nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_MODEL_POLICY", "enabled must be an array")
+				return
+			}
+			// Keep the local policy, main-site scope update, and rollback as one
+			// serialized operation. Otherwise an earlier failed request could
+			// roll back over a later update that Sub2API already confirmed.
+			s.modelPolicyMu.Lock()
+			defer s.modelPolicyMu.Unlock()
+			prior, err := s.store.AgentModelPolicy(s.cfg.AgentID)
+			if err != nil {
+				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load current model access policy")
+				return
+			}
+			policy, err := s.store.UpdateAgentModelPolicy(s.cfg.AgentID, payload.Enabled)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_MODEL_POLICY", err.Error())
+				return
+			}
+			if s.cfg.ProvisioningControlEnabled || strings.HasPrefix(strings.TrimSpace(s.cfg.RuntimeControlCredential), "agt_ctl_") {
+				if s.main == nil {
+					if prior.Customized {
+						_, _ = s.store.UpdateAgentModelPolicy(s.cfg.AgentID, prior.Enabled)
+					} else {
+						_ = s.store.ResetAgentModelPolicy(s.cfg.AgentID)
+					}
+					s.writeError(w, http.StatusServiceUnavailable, requestID, "MODEL_SCOPE_SYNC_UNAVAILABLE", "main-site model scope control is unavailable")
+					return
+				}
+				if err := s.main.RuntimeUpdateModelAllowlist(r.Context(), policy.Enabled); err != nil {
+					var rollbackErr error
+					if prior.Customized {
+						_, rollbackErr = s.store.UpdateAgentModelPolicy(s.cfg.AgentID, prior.Enabled)
+					} else {
+						rollbackErr = s.store.ResetAgentModelPolicy(s.cfg.AgentID)
+					}
+					if rollbackErr != nil {
+						slog.Error("failed to restore local model policy after main-site scope sync failure", "agent_id", s.cfg.AgentID, "error", rollbackErr)
+					}
+					s.writeError(w, http.StatusBadGateway, requestID, "MODEL_SCOPE_SYNC_FAILED", "main site did not confirm the Agent model scope")
+					return
+				}
+			}
+			s.recordAudit("agent_admin", session.MainUserID, "models.update", "agent_model_policy", s.cfg.AgentID, requestID, "success", "")
+			s.writeData(w, http.StatusOK, requestID, policy)
+			return
+		default:
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported model policy operation")
+			return
+		}
+	}
 	if r.URL.Path == "/api/v1/agent/admin/audit-events" && r.Method == http.MethodGet {
 		limit := 100
 		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
@@ -1430,15 +1881,29 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/users" && r.Method == http.MethodGet {
-		users, err := s.store.Users(s.cfg.AgentID, 500)
+		page, pageSize, err := agentPagination(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", err.Error())
+			return
+		}
+		search, err := agentUserSearch(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_SEARCH", err.Error())
+			return
+		}
+		users, total, err := s.store.UsersPage(s.cfg.AgentID, pageSize, (page-1)*pageSize, search)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list users")
 			return
 		}
-		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": len(users)})
+		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": total, "page": page, "page_size": pageSize})
 		return
 	}
 	const prefix = "/api/v1/agent/admin/users/"
+	if strings.HasPrefix(r.URL.Path, prefix) && strings.HasSuffix(r.URL.Path, "/status") {
+		s.updateMappedUserStatus(w, r, requestID, session, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), "/status"))
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, prefix) && strings.HasSuffix(r.URL.Path, "/allocate") && r.Method == http.MethodPost {
 		if !sameOrigin(r) {
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
@@ -1494,6 +1959,99 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	s.writeError(w, http.StatusNotFound, requestID, "NOT_FOUND", "agent admin endpoint not found")
+}
+
+func (s *Server) updateMappedUserStatus(w http.ResponseWriter, r *http.Request, requestID string, actor Session, rawMainUserID string) {
+	if r.Method != http.MethodPatch {
+		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "user status must be updated with PATCH")
+		return
+	}
+	if !sameOrigin(r) {
+		s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
+		return
+	}
+	mainUserID, err := url.PathUnescape(rawMainUserID)
+	mainUserID = strings.TrimSpace(mainUserID)
+	if err != nil || mainUserID == "" || strings.ContainsAny(mainUserID, "/\\\x00\r\n") {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_USER", "main user id is invalid")
+		return
+	}
+	var payload struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+		return
+	}
+	status := strings.TrimSpace(payload.Status)
+	if status != "active" && status != "disabled" {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_USER_STATUS", "status must be active or disabled")
+		return
+	}
+	if status == "disabled" && mainUserID == strings.TrimSpace(s.cfg.OwnerMainUserID) {
+		s.recordAudit("agent_admin", actor.MainUserID, "user.status.update", "agent_user", mainUserID, requestID, "rejected", "agent_owner_protected")
+		s.writeError(w, http.StatusConflict, requestID, "OWNER_STATUS_PROTECTED", "the Agent owner cannot be disabled from this console")
+		return
+	}
+	if _, err := s.store.User(s.cfg.AgentID, mainUserID); err != nil {
+		if errors.Is(err, errNotFound) {
+			s.writeError(w, http.StatusNotFound, requestID, "AGENT_USER_NOT_FOUND", "user is not mapped to this agent")
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load mapped user")
+		return
+	}
+
+	// Serialize status operations for this mapping, while using the Owner lock
+	// only around local state changes. Model requests re-check this gate under
+	// the same Owner lock, so disabling stops new requests without holding up
+	// every user's traffic while Sub2API processes the admin API request.
+	statusMu := s.userStatusMutex(s.cfg.AgentID + ":" + mainUserID)
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	ownerMu := s.userSettlementMutex(strings.TrimSpace(s.cfg.OwnerMainUserID))
+	updateLocalStatus := func() (AgentUserView, error) {
+		ownerMu.Lock()
+		defer ownerMu.Unlock()
+		return s.store.SetUserStatus(s.cfg.AgentID, mainUserID, status)
+	}
+
+	var updated AgentUserView
+	if status == "disabled" {
+		updated, err = updateLocalStatus()
+		if err != nil {
+			s.writeMappedUserStatusError(w, requestID, actor.MainUserID, mainUserID, err)
+			return
+		}
+	}
+	if err := s.main.AdminUpdateUserStatus(r.Context(), mainUserID, status); err != nil {
+		s.recordAudit("agent_admin", actor.MainUserID, "user.status.update", "agent_user", mainUserID, requestID, "failed", "main_user_status_update_failed")
+		s.writeError(w, http.StatusBadGateway, requestID, "MAIN_USER_STATUS_UPDATE_FAILED", "Sub2API did not confirm the requested account status; AgentAPI access remains fail-closed until retried")
+		return
+	}
+	if status == "active" {
+		updated, err = updateLocalStatus()
+		if err != nil {
+			s.writeMappedUserStatusError(w, requestID, actor.MainUserID, mainUserID, err)
+			return
+		}
+	}
+	s.recordAudit("agent_admin", actor.MainUserID, "user.status.update", "agent_user", mainUserID, requestID, "success", status)
+	s.writeData(w, http.StatusOK, requestID, updated)
+}
+
+func (s *Server) writeMappedUserStatusError(w http.ResponseWriter, requestID, actorID, mainUserID string, err error) {
+	if errors.Is(err, errNotFound) {
+		s.writeError(w, http.StatusNotFound, requestID, "AGENT_USER_NOT_FOUND", "user is not mapped to this agent")
+		return
+	}
+	if errors.Is(err, errAgentUserStatusConflict) {
+		s.recordAudit("agent_admin", actorID, "user.status.update", "agent_user", mainUserID, requestID, "failed", "local_user_status_conflict")
+		s.writeError(w, http.StatusConflict, requestID, "AGENT_USER_STATUS_CONFLICT", "mapped user is not in a changeable state")
+		return
+	}
+	s.recordAudit("agent_admin", actorID, "user.status.update", "agent_user", mainUserID, requestID, "failed", "local_user_status_update_failed")
+	s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_USER_STATUS_UPDATE_FAILED", "failed to synchronize local Agent access; the user remains blocked until retried")
 }
 
 // handleAPIKeys manages AgentAPI-local gateway credentials. These keys are
@@ -1676,15 +2234,19 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		// Do not proxy the main site's complete model inventory. It may contain
 		// private/provider-specific names that are outside the satellite public
 		// catalog and would let clients discover an unintended route.
-		s.writePublicModels(w)
+		s.writePublicModels(w, requestID)
 		return
 	}
 	if r.Method == http.MethodGet {
+		if strings.HasPrefix(r.URL.Path, "/v1/images/tasks/") {
+			s.handleImageTaskPoll(w, r, requestID, principal)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/v1/videos/") {
 			s.handleVideoPoll(w, r, requestID, principal)
 			return
 		}
-		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, s.cfg.OwnerMainUserID, requestID)
+		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, principal.ProxyMainUserID, requestID)
 		if err != nil {
 			s.writeMainError(w, requestID, err)
 			return
@@ -1697,8 +2259,16 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		s.writeError(w, http.StatusRequestEntityTooLarge, requestID, "REQUEST_TOO_LARGE", "model request body is too large")
 		return
 	}
-	if err := validatePublicModel(r.Header.Get("Content-Type"), body); err != nil {
-		s.writeError(w, http.StatusBadRequest, requestID, "MODEL_NOT_ALLOWED", err.Error())
+	if err := s.validateAgentModelRequest(r.Header.Get("Content-Type"), body); err != nil {
+		code := "MODEL_NOT_ALLOWED"
+		status := http.StatusBadRequest
+		if errors.Is(err, errModelRequiredByPolicy) {
+			code = "MODEL_REQUIRED"
+		} else if strings.HasPrefix(err.Error(), "load Agent model policy:") {
+			code = "MODEL_POLICY_UNAVAILABLE"
+			status = http.StatusServiceUnavailable
+		}
+		s.writeError(w, status, requestID, code, err.Error())
 		return
 	}
 	if principal.User.Status != "active" {
@@ -1707,7 +2277,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	}
 	chargeID := requestIDFrom(r, nil)
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.AdminKey) == "" {
+	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
 		return
 	}
@@ -1717,6 +2287,20 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	ownerMu := s.userSettlementMutex(ownerID)
 	ownerMu.Lock()
 	defer ownerMu.Unlock()
+	currentUser, userErr := s.store.User(s.cfg.AgentID, principal.ProxyMainUserID)
+	if userErr != nil {
+		if errors.Is(userErr, errNotFound) {
+			s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_NOT_FOUND", "Agent user mapping is unavailable")
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to verify mapped user status")
+		return
+	}
+	if currentUser.Status != "active" {
+		s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_DISABLED", "agent user is disabled")
+		return
+	}
+	principal.User = currentUser
 	// The settlement row is the durable request idempotency record. A retry
 	// must never send the same model operation to the main site a second time,
 	// even if the first process died after the upstream call.
@@ -1762,13 +2346,14 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		s.writeSettlementReplay(w, requestID, settlement)
 		return
 	}
+	_ = s.store.SetSettlementModel(s.cfg.AgentID, chargeID, requestModelName(r.Header.Get("Content-Type"), body))
 
 	if modelRequestWantsStream(r.Header.Get("Accept"), r.Header.Get("Content-Type"), body) {
-		s.relayStreamingModel(w, r, requestID, ownerID, chargeID, before, body, r.Header.Get("Content-Type"))
+		s.relayStreamingModel(w, r, requestID, ownerID, principal.ProxyMainUserID, chargeID, before, body, r.Header.Get("Content-Type"))
 		return
 	}
 
-	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), ownerID, chargeID)
+	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), principal.ProxyMainUserID, chargeID)
 	if relayErr != nil {
 		// A transport failure does not tell us whether Sub2API received and
 		// charged the request. Keep the reservation and reconcile it later.
@@ -1808,6 +2393,46 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			return
 		}
 	}
+	if r.URL.Path == "/v1/images/generations/async" || r.URL.Path == "/v1/images/edits/async" {
+		taskID, taskStatus := imageTaskIdentity(responseBody)
+		if taskID == "" {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "async image response did not contain a task id")
+			s.writeJSON(w, http.StatusBadGateway, apiResponse{Code: http.StatusBadGateway, Message: "image task was accepted but its id could not be tracked", Reason: "IMAGE_TASK_ID_MISSING", RequestID: requestID})
+			return
+		}
+		if _, err := s.store.RecordImageTask(s.cfg.AgentID, principal.ProxyMainUserID, taskID, chargeID, taskStatus); err != nil {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "image task mapping could not be persisted")
+			s.writeJSON(w, http.StatusServiceUnavailable, apiResponse{Code: http.StatusServiceUnavailable, Message: "image task was accepted but local tracking failed", Reason: "IMAGE_TASK_TRACKING_FAILED", RequestID: requestID, Data: map[string]string{"task_id": taskID}})
+			return
+		}
+	}
+	// The main usage log is the authoritative source for a request charge. A
+	// balance delta is only a compatibility fallback for older Sub2API builds
+	// that do not expose the per-Agent runtime usage endpoint; it must never override a usage row.
+	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), chargeID); available {
+		if usageErr != nil {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, usageErr.Error())
+			copyResponse(w, status, headers, responseBody)
+			return
+		}
+		if usage == nil {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "main-site usage is not visible yet")
+			copyResponse(w, status, headers, responseBody)
+			return
+		}
+		actual := usage.ActualCents
+		if actual > s.cfg.MaxRequestCostCents {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
+			copyResponse(w, status, headers, responseBody)
+			return
+		}
+		if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "confirmed", actual, "", usage.Snapshot); err != nil {
+			s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be finalized")
+			return
+		}
+		copyResponse(w, status, headers, responseBody)
+		return
+	}
 
 	after, hasAfter := s.readMainBalance(r.Context(), ownerID)
 	if !hasAfter {
@@ -1842,7 +2467,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		copyResponse(w, status, headers, responseBody)
 		return
 	}
-	if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, ""); err != nil {
+	if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "owner_balance_delta_fallback"}); err != nil {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be finalized")
 		return
 	}
@@ -1850,10 +2475,83 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	copyResponse(w, status, headers, responseBody)
 }
 
+// mainUsageForRequest returns (usage, available, err). available is false
+// only when the connected main site predates the per-Agent runtime usage endpoint (404),
+// allowing the legacy compatibility path to run. Any other admin API error is
+// treated as an uncertain charge and kept pending.
+func (s *Server) mainUsageForRequest(ctx context.Context, requestID string) (*MainUsageResult, bool, error) {
+	if !s.cfg.MainUsageAPI {
+		return nil, false, nil
+	}
+	items, err := s.main.AdminFindUsage(ctx, requestID)
+	if err != nil {
+		var apiErr *MainAPIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return nil, false, nil
+		}
+		return nil, true, err
+	}
+	for i := range items {
+		if items[i].RequestID == requestID {
+			return &items[i], true, nil
+		}
+	}
+	return nil, true, nil
+}
+
 // relayStreamingModel forwards an explicitly streaming request while keeping
 // the local reservation until EOF. If the client disconnects or the upstream
 // transport fails, the reservation remains pending for usage reconciliation;
 // it is never guessed or silently refunded after partial output.
+func (s *Server) handleImageTaskPoll(w http.ResponseWriter, r *http.Request, requestID string, principal modelPrincipal) {
+	taskID := strings.TrimPrefix(r.URL.Path, "/v1/images/tasks/")
+	task, err := s.store.ImageTask(s.cfg.AgentID, taskID)
+	if err != nil || task.MainUserID != principal.ProxyMainUserID {
+		s.writeError(w, http.StatusNotFound, requestID, "IMAGE_TASK_NOT_FOUND", "image task was not found for this agent user")
+		return
+	}
+	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
+	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
+		return
+	}
+	ownerMu := s.userSettlementMutex(ownerID)
+	ownerMu.Lock()
+	defer ownerMu.Unlock()
+	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, task.MainUserID, task.RequestID)
+	if relayErr != nil {
+		s.writeMainError(w, requestID, relayErr)
+		return
+	}
+	if status >= 200 && status < 300 {
+		_, imageStatus := imageTaskIdentity(data)
+		if imageStatus != "" {
+			_ = s.store.UpdateImageTaskStatus(s.cfg.AgentID, taskID, imageStatus)
+		}
+		if settlement, lookupErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); lookupErr == nil && settlement.Status == "pending" {
+			usage, available, usageErr := s.mainUsageForRequest(r.Context(), task.RequestID)
+			switch {
+			case !available:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "async image settlement requires authoritative main-site usage; legacy usage API is unavailable")
+			case usageErr != nil:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, usageErr.Error())
+			case usage == nil && imageTaskFailed(imageStatus):
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "image task ended without a charge: "+imageStatus)
+			case usage == nil:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "main-site usage is not visible yet")
+			default:
+				actual := usage.ActualCents
+				if actual > settlement.ReservedCents {
+					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
+				} else {
+					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot)
+				}
+			}
+		}
+	}
+	copyResponse(w, status, headers, data)
+}
+
 func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, requestID string, principal modelPrincipal) {
 	taskID := strings.TrimPrefix(r.URL.Path, "/v1/videos/")
 	task, err := s.store.VideoTask(s.cfg.AgentID, taskID)
@@ -1862,15 +2560,14 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.AdminKey) == "" {
+	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
 		return
 	}
 	ownerMu := s.userSettlementMutex(ownerID)
 	ownerMu.Lock()
 	defer ownerMu.Unlock()
-	before, hasBefore := s.readMainBalance(r.Context(), ownerID)
-	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, ownerID, task.RequestID)
+	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, task.MainUserID, task.RequestID)
 	if relayErr != nil {
 		s.writeMainError(w, requestID, relayErr)
 		return
@@ -1881,20 +2578,22 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 			_ = s.store.UpdateVideoTaskStatus(s.cfg.AgentID, taskID, upstreamStatus)
 		}
 		if settlement, lookupErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); lookupErr == nil && settlement.Status == "pending" {
-			after, hasAfter := s.readMainBalance(r.Context(), ownerID)
-			if hasBefore && hasAfter {
-				delta := before - after
-				if delta < 0 {
-					delta = 0
-				}
-				switch {
-				case delta > settlement.ReservedCents:
-					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", delta, "video charge exceeds local reservation")
-				case delta > 0:
-					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "confirmed", delta, "")
-					_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-video:"+task.RequestID)
-				case videoTaskFailed(upstreamStatus):
-					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task ended without a charge: "+upstreamStatus)
+			usage, available, usageErr := s.mainUsageForRequest(r.Context(), task.RequestID)
+			switch {
+			case !available:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "video task settlement requires authoritative main-site usage; legacy usage API is unavailable")
+			case usageErr != nil:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, usageErr.Error())
+			case usage == nil && videoTaskFailed(upstreamStatus):
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task ended without a charge: "+upstreamStatus)
+			case usage == nil:
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "main-site usage is not visible yet")
+			default:
+				actual := usage.ActualCents
+				if actual > settlement.ReservedCents {
+					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
+				} else {
+					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot)
 				}
 			}
 		}
@@ -1908,7 +2607,7 @@ func videoTaskIdentity(data []byte) (string, string) {
 		return "", ""
 	}
 	read := func(value map[string]any) (string, string) {
-		id := firstNonEmpty(stringValue(value["id"]), stringValue(value["task_id"]), stringValue(value["video_id"]))
+		id := firstNonEmpty(stringValue(value["id"]), stringValue(value["request_id"]), stringValue(value["task_id"]), stringValue(value["video_id"]))
 		status := strings.ToLower(firstNonEmpty(stringValue(value["status"]), stringValue(value["state"])))
 		return id, status
 	}
@@ -1928,6 +2627,41 @@ func videoTaskIdentity(data []byte) (string, string) {
 	return id, status
 }
 
+func imageTaskIdentity(data []byte) (string, string) {
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		return "", ""
+	}
+	read := func(value map[string]any) (string, string) {
+		id := firstNonEmpty(stringValue(value["task_id"]), stringValue(value["id"]))
+		status := strings.ToLower(firstNonEmpty(stringValue(value["status"]), stringValue(value["state"])))
+		return id, status
+	}
+	id, status := read(payload)
+	if nested, ok := payload["data"].(map[string]any); ok {
+		nestedID, nestedStatus := read(nested)
+		if id == "" {
+			id = nestedID
+		}
+		if status == "" {
+			status = nestedStatus
+		}
+	}
+	if status == "" {
+		status = "processing"
+	}
+	return id, status
+}
+
+func imageTaskFailed(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "error", "cancelled", "canceled", "rejected", "expired":
+		return true
+	default:
+		return false
+	}
+}
+
 func videoTaskFailed(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "failed", "error", "cancelled", "canceled", "rejected", "expired":
@@ -1937,8 +2671,8 @@ func videoTaskFailed(status string) bool {
 	}
 }
 
-func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, requestID, ownerID, chargeID string, before int64, body []byte, contentType string) {
-	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, ownerID, chargeID)
+func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, requestID, ownerID, sessionMainUserID, chargeID string, before int64, body []byte, contentType string) {
+	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, sessionMainUserID, chargeID)
 	if err != nil {
 		if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, err.Error()); finalizeErr != nil {
 			slog.Error("failed to persist streaming pending settlement", "request_id", requestID, "error", finalizeErr)
@@ -1984,6 +2718,25 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 
+	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), chargeID); available {
+		if usageErr != nil {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, usageErr.Error())
+			return
+		}
+		if usage == nil {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "main-site usage is not visible yet")
+			return
+		}
+		actual := usage.ActualCents
+		if actual > s.cfg.MaxRequestCostCents {
+			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
+			return
+		}
+		if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "confirmed", actual, "", usage.Snapshot); finalizeErr != nil {
+			slog.Error("failed to finalize streaming usage settlement", "request_id", requestID, "error", finalizeErr)
+		}
+		return
+	}
 	after, hasAfter := s.readMainBalance(r.Context(), ownerID)
 	if !hasAfter {
 		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "owner balance could not be read after streaming relay")
@@ -2003,7 +2756,7 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 		_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-pending:"+chargeID)
 		return
 	}
-	if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, ""); finalizeErr != nil {
+	if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "owner_balance_delta_fallback"}); finalizeErr != nil {
 		slog.Error("failed to finalize streaming settlement", "request_id", requestID, "error", finalizeErr)
 		return
 	}
@@ -2070,13 +2823,10 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 			continue
 		}
 		actual := usage.ActualCents
-		if actual == 0 && usage.TotalCents > 0 {
-			actual = usage.TotalCents
-		}
 		item.ActualCents = actual
 		item.UsageID = usage.ID
 		if actual > record.ReservedCents {
-			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation"); err != nil {
+			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot); err != nil {
 				return nil, err
 			}
 			item.Status = "pending"
@@ -2085,7 +2835,7 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 			continue
 		}
 		if record.Status == "pending" {
-			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "confirmed", actual, ""); err != nil && !errors.Is(err, errSettlementStateConflict) {
+			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot); err != nil && !errors.Is(err, errSettlementStateConflict) {
 				return nil, err
 			}
 		}
@@ -2157,7 +2907,7 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 }
 
 func (s *Server) readMainBalance(ctx context.Context, mainUserID string) (int64, bool) {
-	if s.cfg.AdminKey == "" {
+	if s.cfg.RuntimeControlCredential == "" {
 		return 0, false
 	}
 	user, err := s.main.AdminGetUser(ctx, mainUserID)
@@ -2179,8 +2929,8 @@ func (s *Server) syncOwnerBalance(ctx context.Context, requestID string) (AgentV
 	if ownerID == "" {
 		return AgentView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
 	}
-	if strings.TrimSpace(s.cfg.AdminKey) == "" {
-		return AgentView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_ADMIN_KEY_MISSING", Message: "main administrator credential is not configured"}
+	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+		return AgentView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()
@@ -2201,8 +2951,8 @@ func (s *Server) syncAndAllocateRechargeOrder(ctx context.Context, requestID, or
 	if ownerID == "" {
 		return RechargeOrder{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
 	}
-	if strings.TrimSpace(s.cfg.AdminKey) == "" {
-		return RechargeOrder{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_ADMIN_KEY_MISSING", Message: "main admin key is not configured"}
+	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+		return RechargeOrder{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()
@@ -2227,8 +2977,8 @@ func (s *Server) syncAndAllocateUser(ctx context.Context, requestID, mainUserID 
 	if ownerID == "" {
 		return AgentUserView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
 	}
-	if strings.TrimSpace(s.cfg.AdminKey) == "" {
-		return AgentUserView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_ADMIN_KEY_MISSING", Message: "main administrator credential is not configured"}
+	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+		return AgentUserView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()
@@ -2258,6 +3008,20 @@ func (s *Server) userSettlementMutex(id string) *sync.Mutex {
 	}
 	mu := &sync.Mutex{}
 	s.settleByUser[id] = mu
+	return mu
+}
+
+func (s *Server) userStatusMutex(id string) *sync.Mutex {
+	s.userStatusMu.Lock()
+	defer s.userStatusMu.Unlock()
+	if s.userStatusBy == nil {
+		s.userStatusBy = make(map[string]*sync.Mutex)
+	}
+	if mu := s.userStatusBy[id]; mu != nil {
+		return mu
+	}
+	mu := &sync.Mutex{}
+	s.userStatusBy[id] = mu
 	return mu
 }
 
@@ -2439,12 +3203,19 @@ func isAllowedModelPath(rawPath, method string) bool {
 	if method != http.MethodGet && method != http.MethodPost {
 		return false
 	}
+	if rawPath == "/v1/images/generations/async" || rawPath == "/v1/images/edits/async" {
+		return method == http.MethodPost
+	}
 	switch rawPath {
 	case "/v1/models", "/v1/chat/completions", "/v1/responses", "/v1/images/generations", "/v1/images/edits", "/v1/videos":
 		return true
 	default:
 		videoID := strings.TrimPrefix(rawPath, "/v1/videos/")
-		return method == http.MethodGet && strings.HasPrefix(rawPath, "/v1/videos/") && videoID != "" && videoID != "." && videoID != ".." && !strings.Contains(videoID, "/")
+		if method == http.MethodGet && strings.HasPrefix(rawPath, "/v1/videos/") && videoID != "" && videoID != "." && videoID != ".." && !strings.Contains(videoID, "/") {
+			return true
+		}
+		imageTaskID := strings.TrimPrefix(rawPath, "/v1/images/tasks/")
+		return method == http.MethodGet && strings.HasPrefix(rawPath, "/v1/images/tasks/") && imageTaskID != "" && imageTaskID != "." && imageTaskID != ".." && !strings.Contains(imageTaskID, "/")
 	}
 }
 
@@ -2509,14 +3280,44 @@ var publicModelCatalog = []string{
 	"kling-v1-6", "kling-v1-5", "kling-v1",
 }
 
-func (s *Server) writePublicModels(w http.ResponseWriter) {
-	models := make([]map[string]any, 0, len(publicModelCatalog))
-	for _, name := range publicModelCatalog {
+func (s *Server) writePublicModels(w http.ResponseWriter, requestID string) {
+	policy, err := s.store.AgentModelPolicy(s.cfg.AgentID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, requestID, "MODEL_POLICY_UNAVAILABLE", "failed to load model access policy")
+		return
+	}
+	models := make([]map[string]any, 0, len(policy.Enabled))
+	for _, name := range policy.Enabled {
 		models = append(models, map[string]any{
 			"id": name, "object": "model", "created": 0, "owned_by": "agentapi",
 		})
 	}
 	writeModelJSON(w, http.StatusOK, map[string]any{"object": "list", "data": models})
+}
+
+var errModelRequiredByPolicy = errors.New("model must be explicit when an agent model policy is configured")
+
+func (s *Server) validateAgentModelRequest(contentType string, body []byte) error {
+	if err := validatePublicModel(contentType, body); err != nil {
+		return err
+	}
+	policy, err := s.store.AgentModelPolicy(s.cfg.AgentID)
+	if err != nil {
+		return fmt.Errorf("load Agent model policy: %w", err)
+	}
+	model := requestModelName(contentType, body)
+	if model == "" && policy.Customized {
+		return errModelRequiredByPolicy
+	}
+	if model == "" {
+		return nil
+	}
+	for _, enabled := range policy.Enabled {
+		if model == enabled {
+			return nil
+		}
+	}
+	return fmt.Errorf("model %q is disabled by this Agent's access policy", model)
 }
 
 func writeModelJSON(w http.ResponseWriter, status int, payload any) {
@@ -2529,34 +3330,39 @@ func validatePublicModel(contentType string, body []byte) error {
 	if strings.Contains(strings.ToLower(contentType), "multipart/") {
 		mediaType, params, err := mime.ParseMediaType(contentType)
 		if err != nil || mediaType != "multipart/form-data" || params["boundary"] == "" {
-			// Leave malformed multipart bodies to the upstream protocol parser.
-			return nil
+			return fmt.Errorf("invalid multipart form content type")
 		}
 		reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+		modelFieldSeen := false
 		for {
 			part, nextErr := reader.NextPart()
 			if errors.Is(nextErr, io.EOF) {
 				return nil
 			}
 			if nextErr != nil {
-				// Preserve the upstream's normal malformed-multipart error.
-				return nil
+				return fmt.Errorf("invalid multipart form body")
 			}
 			if part.FormName() != "model" {
 				continue
 			}
-			modelBytes, readErr := io.ReadAll(io.LimitReader(part, 256))
+			if modelFieldSeen {
+				return fmt.Errorf("multipart form must not contain duplicate model fields")
+			}
+			modelFieldSeen = true
+			modelBytes, readErr := io.ReadAll(io.LimitReader(part, 129))
 			if readErr != nil {
-				return nil
+				return fmt.Errorf("failed to read multipart model field")
+			}
+			if len(modelBytes) > 128 {
+				return fmt.Errorf("multipart model field is too long")
 			}
 			model := strings.TrimSpace(string(modelBytes))
 			if model == "" {
-				return nil
+				continue
 			}
 			if _, ok := publicModelNames[model]; !ok {
 				return fmt.Errorf("model %q is not in the AgentAPI public model catalog", model)
 			}
-			return nil
 		}
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
@@ -2577,6 +3383,34 @@ func validatePublicModel(contentType string, body []byte) error {
 		return fmt.Errorf("model %q is not in the AgentAPI public model catalog", model)
 	}
 	return nil
+}
+
+func requestModelName(contentType string, body []byte) string {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err == nil && mediaType == "multipart/form-data" && params["boundary"] != "" {
+		reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+		for {
+			part, nextErr := reader.NextPart()
+			if errors.Is(nextErr, io.EOF) || nextErr != nil {
+				return ""
+			}
+			if part.FormName() != "model" {
+				continue
+			}
+			value, readErr := io.ReadAll(io.LimitReader(part, 256))
+			if readErr != nil {
+				return ""
+			}
+			return strings.TrimSpace(string(value))
+		}
+	}
+	var payload struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Model)
 }
 
 func modelRequestWantsStream(accept, contentType string, body []byte) bool {

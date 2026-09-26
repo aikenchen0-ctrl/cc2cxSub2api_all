@@ -121,7 +121,7 @@ export default function OpenAICompatibleImageFields({
       <div className="flex shrink-0 flex-col items-end gap-4">
         <div className="relative flex w-[222px] min-w-0 max-w-full shrink-0 flex-col items-end justify-end">
           <div className="flex w-full flex-col justify-start">
-            <label className="mb-2 block text-sm font-medium text-gray-700">Image API key</label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">图片 API 密钥</label>
             <div className="relative">
               <input
                 type={showApiKey ? "text" : "password"}
@@ -172,7 +172,7 @@ export default function OpenAICompatibleImageFields({
         {modelsChecked && models.length > 0 ? (
           <div className="w-[222px]">
             <div>
-              <label className="mb-3 block text-sm font-medium text-gray-700">Select image model</label>
+              <label className="mb-3 block text-sm font-medium text-gray-700">选择图片模型</label>
               <div className="w-full">
                 <Popover open={openModelSelect} onOpenChange={setOpenModelSelect}>
                   <PopoverTrigger asChild>
@@ -192,7 +192,7 @@ export default function OpenAICompatibleImageFields({
                     <Command>
                       <CommandInput placeholder="Search models..." />
                       <CommandList>
-                        <CommandEmpty>No model found.</CommandEmpty>
+                        <CommandEmpty>未找到模型。</CommandEmpty>
                         <CommandGroup>
                           {models.map((m) => (
                             <CommandItem
@@ -230,12 +230,12 @@ export default function OpenAICompatibleImageFields({
       <p className="-mt-2 mb-2 flex items-center gap-2 text-sm text-gray-500">
         <span className="block h-1 w-1 rounded-full bg-gray-400" />
         Use an endpoint that supports OpenAI-style{" "}
-        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1/images/generations</code>. Include{" "}
-        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1</code> in the URL.
+        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1/images/generations</code>。地址中请包含{" "}
+        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1</code>。
       </p>
 
       <div className="mb-4">
-        <label className="mb-2 block text-sm font-medium text-gray-700">OpenAI Compatible URL</label>
+        <label className="mb-2 block text-sm font-medium text-gray-700">OpenAI 兼容地址</label>
         <div className="relative">
           <input
             type="text"
@@ -249,7 +249,7 @@ export default function OpenAICompatibleImageFields({
       </div>
 
       <div className="mb-4">
-        <label className="mb-2 block text-sm font-medium text-gray-700">OpenAI Compatible API Key</label>
+        <label className="mb-2 block text-sm font-medium text-gray-700">OpenAI 兼容 API 密钥</label>
         <div className="relative">
           <input
             type="text"
@@ -296,7 +296,7 @@ export default function OpenAICompatibleImageFields({
 
       {modelsChecked && models.length === 0 && (
         <div className="mb-4">
-          <label className="mb-2 block text-sm font-medium text-gray-700">Image model id</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">图片模型 ID</label>
           <div className="relative">
             <input
               type="text"
@@ -314,10 +314,10 @@ export default function OpenAICompatibleImageFields({
         <div className="mb-4">
           <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm text-amber-800">
-              <strong>Important:</strong> Choose a model your server exposes for image generation.
+              <strong>重要提示：</strong>请选择服务器提供的图片生成模型。
             </p>
           </div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">Select image model</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">选择图片模型</label>
           <div className="w-full">
             <Popover open={openModelSelect} onOpenChange={setOpenModelSelect}>
               <PopoverTrigger asChild>
@@ -333,9 +333,9 @@ export default function OpenAICompatibleImageFields({
               </PopoverTrigger>
               <PopoverContent className="p-0" align="start" style={{ width: "var(--radix-popover-trigger-width)" }}>
                 <Command>
-                  <CommandInput placeholder="Search model..." />
+                  <CommandInput placeholder="搜索模型..." />
                   <CommandList>
-                    <CommandEmpty>No model found.</CommandEmpty>
+                    <CommandEmpty>未找到模型。</CommandEmpty>
                     <CommandGroup>
                       {models.map((m, index) => (
                         <CommandItem

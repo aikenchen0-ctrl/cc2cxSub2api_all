@@ -118,6 +118,7 @@ function StudioTopBar({ activeStep }: { activeStep: StudioStep }) {
         >
           <img
             src="/project-icon.jpg"
+            data-sub2api-site-logo
             alt="永恒PPT"
             className="h-full w-full"
             draggable={false}
@@ -863,7 +864,7 @@ function AnalyzePanel({
 
                 <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                   <span className="h-px bg-[#EEF0F5]" />
-                  <span className="text-xs font-medium text-[#686C78]">or</span>
+                  <span className="text-xs font-medium text-[#686C78]">或</span>
                   <span className="h-px bg-[#EEF0F5]" />
                 </div>
 

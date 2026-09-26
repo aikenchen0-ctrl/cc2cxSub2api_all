@@ -170,7 +170,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
                     }`}
                 >
                   <Edit className="w-3.5 h-3.5" />
-                  <span>Schema</span>
+                  <span>结构</span>
                 </button>
               </ToolTip>
 
@@ -265,7 +265,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
           <div className="mt-4">
             <div className="flex items-center gap-2 mb-2">
               <Loader2 className="w-4 h-4 animate-spin text-[#7A5AF8]" />
-              <span className="text-sm font-medium text-[#7A5AF8]">Generating slide layout...</span>
+                  <span className="text-sm font-medium text-[#7A5AF8]">正在生成幻灯片布局...</span>
             </div>
             <Timer duration={120} />
           </div>

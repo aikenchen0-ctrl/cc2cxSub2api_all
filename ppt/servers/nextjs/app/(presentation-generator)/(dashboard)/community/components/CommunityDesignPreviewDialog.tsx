@@ -248,7 +248,7 @@ export default function CommunityDesignPreviewDialog({
 
                 <aside className="shrink-0 overflow-visible border-t border-[#EDEEEF] bg-white p-4 font-syne sm:flex sm:min-h-0 sm:flex-col sm:overflow-hidden sm:border-l sm:border-t-0 sm:p-5">
                   <section className="shrink-0">
-                    <h3 className="text-base font-medium text-black">AI Setup</h3>
+                    <h3 className="text-base font-medium text-black">AI 设置</h3>
 
                     <div className="mt-2.5 flex h-[22px] items-center">
                       {setupProviders.map((provider, index) => (
@@ -329,7 +329,7 @@ export default function CommunityDesignPreviewDialog({
                   <section className="sm:flex sm:min-h-0 sm:flex-1 sm:flex-col">
                     <div className="flex items-start gap-1.5">
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-base font-medium text-black">Prompt</h3>
+                        <h3 className="text-base font-medium text-black">提示词</h3>
                         <p className="mt-1 font-manrope text-xs font-normal text-[#4C4C4C]">
                           Paste into the prompt field.
                         </p>
@@ -354,7 +354,7 @@ export default function CommunityDesignPreviewDialog({
 
                   <div className="mt-4 shrink-0 sm:mt-7">
                     <section className="min-w-0">
-                      <h3 className="text-base font-medium text-black">Creator</h3>
+                      <h3 className="text-base font-medium text-black">创建者</h3>
                       <p className="mt-1 break-all text-xs font-normal leading-4 text-[#4C4C4C]">
                         by {author}
                       </p>
@@ -390,7 +390,7 @@ export default function CommunityDesignPreviewDialog({
                 className="h-5 w-5 min-[1100px]:h-6 min-[1100px]:w-6"
                 strokeWidth={1.5}
               />
-              <span className="sr-only">Close preview</span>
+              <span className="sr-only">关闭预览</span>
             </DialogClose>
           </>
         )}

@@ -162,6 +162,25 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 	return h
 }
 
+// ProvideAuthHandler attaches the relay-key issuer after constructing the auth
+// handler. Keep this setter wiring in the provider graph so Wire regeneration
+// cannot silently drop the dependency.
+func ProvideAuthHandler(
+	cfg *config.Config,
+	authService *service.AuthService,
+	userService *service.UserService,
+	settingService *service.SettingService,
+	promoService *service.PromoService,
+	redeemService *service.RedeemService,
+	totpService *service.TotpService,
+	userAttributeService *service.UserAttributeService,
+	apiKeyService *service.APIKeyService,
+) *AuthHandler {
+	h := NewAuthHandler(cfg, authService, userService, settingService, promoService, redeemService, totpService, userAttributeService)
+	h.SetAPIKeyService(apiKeyService)
+	return h
+}
+
 // ProvideAdminSettingHandler creates admin.SettingHandler with notification template APIs.
 func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, aliyunCaptchaService *service.AliyunCaptchaService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService, totpService *service.TotpService, userService *service.UserService) *admin.SettingHandler {
 	h := admin.NewSettingHandler(settingService, emailService, turnstileService, opsService, paymentConfigService, paymentService, userAttributeService)
@@ -173,6 +192,8 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
 
 // ProvideHandlers creates the Handlers struct
 func ProvideHandlers(
+	agentRuntimeHandler *AgentRuntimeHandler,
+	agentProvisioningHandler *AgentProvisioningHandler,
 	authHandler *AuthHandler,
 	userHandler *UserHandler,
 	apiKeyHandler *APIKeyHandler,
@@ -199,34 +220,38 @@ func ProvideHandlers(
 	_ *service.OpenAIQuotaAutoResetService,
 ) *Handlers {
 	return &Handlers{
-		Auth:             authHandler,
-		User:             userHandler,
-		APIKey:           apiKeyHandler,
-		Usage:            usageHandler,
-		Redeem:           redeemHandler,
-		Subscription:     subscriptionHandler,
-		Announcement:     announcementHandler,
-		ChannelMonitor:   channelMonitorUserHandler,
-		ChannelMonitorV2: channelMonitorV2Handler,
-		Admin:            adminHandlers,
-		Gateway:          gatewayHandler,
-		OpenAIGateway:    openaiGatewayHandler,
-		Setting:          settingHandler,
-		Totp:             totpHandler,
-		Passkey:          passkeyHandler,
-		Payment:          paymentHandler,
-		PaymentWebhook:   paymentWebhookHandler,
-		AvailableChannel: availableChannelHandler,
-		ModelPlaza:       modelPlazaHandler,
-		AsyncImage:       asyncImageHandler,
-		BatchImage:       batchImageHandler,
+		AgentRuntime:      agentRuntimeHandler,
+		AgentProvisioning: agentProvisioningHandler,
+		Auth:              authHandler,
+		User:              userHandler,
+		APIKey:            apiKeyHandler,
+		Usage:             usageHandler,
+		Redeem:            redeemHandler,
+		Subscription:      subscriptionHandler,
+		Announcement:      announcementHandler,
+		ChannelMonitor:    channelMonitorUserHandler,
+		ChannelMonitorV2:  channelMonitorV2Handler,
+		Admin:             adminHandlers,
+		Gateway:           gatewayHandler,
+		OpenAIGateway:     openaiGatewayHandler,
+		Setting:           settingHandler,
+		Totp:              totpHandler,
+		Passkey:           passkeyHandler,
+		Payment:           paymentHandler,
+		PaymentWebhook:    paymentWebhookHandler,
+		AvailableChannel:  availableChannelHandler,
+		ModelPlaza:        modelPlazaHandler,
+		AsyncImage:        asyncImageHandler,
+		BatchImage:        batchImageHandler,
 	}
 }
 
 // ProviderSet is the Wire provider set for all handlers
 var ProviderSet = wire.NewSet(
 	// Top-level handlers
-	NewAuthHandler,
+	NewAgentRuntimeHandler,
+	NewAgentProvisioningHandler,
+	ProvideAuthHandler,
 	NewUserHandler,
 	NewAPIKeyHandler,
 	NewUsageHandler,

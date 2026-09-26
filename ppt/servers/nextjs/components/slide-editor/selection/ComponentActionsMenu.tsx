@@ -142,7 +142,7 @@ export function ComponentUngroupButton({
       onClick={actions.onUngroup}
       className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[6px] px-2 font-manrope text-[14px] font-medium leading-4 text-[#191919] hover:bg-[#F6F6F9]"
     >
-      <span>Ungroup</span>
+      <span>取消组合</span>
     </button>
   );
 }

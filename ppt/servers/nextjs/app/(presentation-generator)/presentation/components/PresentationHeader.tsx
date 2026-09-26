@@ -453,7 +453,7 @@ const PresentationHeader = ({
     <div
       className={` rounded-[18px] max-md:mt-4 ${mobile ? "" : "bg-white"}  p-5`}
     >
-      <p className="text-sm font-medium text-[#19001F]">Export as</p>
+      <p className="text-sm font-medium text-[#19001F]">导出为</p>
       <div className="my-[18px] h-[1px] bg-[#E8E8E8]" />
       <div className="space-y-3">
         <Button
@@ -575,6 +575,7 @@ const PresentationHeader = ({
               router.push("/dashboard");
             }}
             src="/project-icon.jpg"
+            data-sub2api-site-logo
             alt="永恒PPT"
             className="w-10 h-10 cursor-pointer rounded-lg object-cover"
           />
@@ -626,7 +627,7 @@ const PresentationHeader = ({
                 >
                   <MousePointer2 className="h-3.5 w-3.5" strokeWidth={2} />
                 </span>
-                <span className="whitespace-nowrap">Select to edit</span>
+                <span className="whitespace-nowrap">选择后编辑</span>
                 <span
                   aria-hidden="true"
                   className={cn(

@@ -519,8 +519,8 @@ export function ImagePickerModal({
                   <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-[16px] border-2 border-dashed border-[#191919] bg-white/95 text-center">
                     <div>
                       <Upload className="mx-auto mb-2 size-6" aria-hidden="true" />
-                      <p className="text-[14px] font-medium">Drop image to upload</p>
-                      <p className="mt-1 text-[12px] text-[#808080]">Maximum file size: 5MB</p>
+                      <p className="text-[14px] font-medium">拖放图片以上传</p>
+                      <p className="mt-1 text-[12px] text-[#808080]">最大文件大小：5MB</p>
                     </div>
                   </div>
                 ) : null}
@@ -733,7 +733,7 @@ function ImageResults({
               className="object-cover transition duration-300 group-hover:scale-[1.025]"
             />
             <span className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/45 via-transparent to-transparent p-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-              <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-medium text-[#191919]">Use image</span>
+              <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-medium text-[#191919]">使用图片</span>
             </span>
           </button>
           {onDelete && image.deletable && image.id ? (

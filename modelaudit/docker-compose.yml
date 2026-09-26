@@ -1,0 +1,29 @@
+services:
+  modelaudit:
+    build: .
+    container_name: modelaudit
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      MODELAUDIT_DB_PATH: /app/data/modelaudit.sqlite3
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8077:8077"
+    networks:
+      sub2api:
+        aliases:
+          - modelaudit
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8077/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  sub2api:
+    name: ${MODELAUDIT_SUB2API_NETWORK:-deploy_sub2api-network}
+    external: true

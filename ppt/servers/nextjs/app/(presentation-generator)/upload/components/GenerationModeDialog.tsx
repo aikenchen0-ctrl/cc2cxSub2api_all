@@ -77,7 +77,7 @@ export default function GenerationModeDialog({
               </div>
               <div className="rounded-[20px] border border-[#EBE9FE] bg-[#F4F3FF] px-3.5 pb-5 pt-3.5">
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
-                  <p className="text-xl font-medium text-[#333333]">Standard</p>
+                  <p className="text-xl font-medium text-[#333333]">标准模式</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
                     Fixed layout
                   </p>
@@ -111,7 +111,7 @@ export default function GenerationModeDialog({
               </div>
               <div className="rounded-[20px] border border-[#EBE9FE] bg-[#F4F3FF] px-3.5 pb-5 pt-3.5">
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
-                  <p className="text-xl font-medium text-[#333333]">Smart</p>
+                  <p className="text-xl font-medium text-[#333333]">智能模式</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
                     Flexible layout
                   </p>

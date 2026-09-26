@@ -14,6 +14,7 @@ import {
   setSessionCookie,
 } from './session.ts';
 import { listModels } from './sub2api-client.ts';
+import { satelliteHeadersForUser, satellitePurchaseUrl, satelliteV1Base } from './satellite.ts';
 import { runWithTenant } from './tenant-context.ts';
 import { verifyAicutSSOTicket } from './sso.ts';
 
@@ -21,6 +22,7 @@ function isAuthPath(pathname: string): boolean {
   return pathname === '/api/auth/login'
     || pathname === '/api/auth/logout'
     || pathname === '/api/auth/me'
+    || pathname === '/api/sub2api/balance'
     || pathname === '/api/auth/models'
     || pathname === '/api/auth/register'
     || pathname === '/api/auth/config'
@@ -61,6 +63,38 @@ async function handleMe(req: IncomingMessage, res: ServerResponse): Promise<void
   sendJson(res, 200, { user: { id: session.userId, email: session.email } });
 }
 
+async function handleBalance(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 401, { error: '未登录' });
+    return;
+  }
+  const headers = satelliteHeadersForUser(session.userId);
+  const base = satelliteV1Base();
+  if (!headers || !base) {
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 503, { error: 'Sub2API satellite credential is unavailable' });
+    return;
+  }
+  try {
+    const upstream = await fetch(`${base}/sub2api/balance`, { headers, cache: 'no-store' });
+    if (!upstream.ok) {
+      res.setHeader('Cache-Control', 'no-store');
+      sendJson(res, upstream.status === 401 ? 401 : upstream.status === 503 ? 503 : 502, { error: '余额暂时不可用' });
+      return;
+    }
+    const body = await upstream.json() as { balance?: unknown };
+    const balance = Number(body.balance);
+    if (!Number.isFinite(balance)) throw new Error('Invalid balance response');
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 200, { balance, recharge_url: satellitePurchaseUrl() });
+  } catch {
+    res.setHeader('Cache-Control', 'no-store');
+    sendJson(res, 502, { error: '余额暂时不可用' });
+  }
+}
+
 async function handleModels(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const session = sessionFromRequest(req);
   if (!session) {
@@ -83,6 +117,7 @@ export function gatewayPlugin(): Plugin {
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const pathname = requestPath(req);
         if (gatewayEnabled() && isAuthPath(pathname)) {
+          if (pathname === '/api/sub2api/balance') res.setHeader('Cache-Control', 'no-store');
           try {
             if (pathname === '/api/auth/sso/callback' && req.method === 'GET') {
               await handleSSOCallback(req, res);
@@ -105,6 +140,10 @@ export function gatewayPlugin(): Plugin {
             }
             if (pathname === '/api/auth/me' && (req.method === 'GET' || req.method === 'HEAD')) {
               await handleMe(req, res);
+              return;
+            }
+            if (pathname === '/api/sub2api/balance' && req.method === 'GET') {
+              await handleBalance(req, res);
               return;
             }
             if (pathname === '/api/auth/models' && req.method === 'GET') {

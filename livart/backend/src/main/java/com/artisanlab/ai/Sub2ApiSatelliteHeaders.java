@@ -12,7 +12,7 @@ import java.util.function.BiConsumer;
  * subject, never an API key; the application credential is the only bearer
  * credential sent upstream.
  */
-final class Sub2ApiSatelliteHeaders {
+public final class Sub2ApiSatelliteHeaders {
     private Sub2ApiSatelliteHeaders() {
     }
 
@@ -42,7 +42,7 @@ final class Sub2ApiSatelliteHeaders {
      * OpenAI-compatible client so RestClient and WebClient share the same
      * Sub2API contract.
      */
-    static void applyIdentityHeaders(BiConsumer<String, String> headerSetter, String apiKeyOrSubject) {
+    public static void applyIdentityHeaders(BiConsumer<String, String> headerSetter, String apiKeyOrSubject) {
         if (headerSetter == null) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUB2API_REQUEST_INVALID", "无法创建 Sub2API 请求");
         }

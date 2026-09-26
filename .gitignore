@@ -77,6 +77,7 @@ sub2api/backend/bin/from025-server
 sub2api/backend/bin/from025-server.new
 sub2api/backend/handler-target.test.exe
 docs/sub2api-local-http.new
+/canvas-260917.zip
 
 # Keep documents and ordinary backup archives versionable; only the oversized
 # paths listed above are excluded.

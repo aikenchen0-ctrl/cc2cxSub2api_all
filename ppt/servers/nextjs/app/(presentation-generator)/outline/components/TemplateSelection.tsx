@@ -140,7 +140,7 @@ const TemplateSelection: React.FC<TemplateSelectionProps> = memo(
 
     const suggestionNotice = suggestedTemplate && selectedTemplateId && (
       <div className="mb-5 rounded-xl border border-[#E4E0FF] bg-[#F7F5FF] px-4 py-3 font-syne text-xs font-medium text-[#5141E5]">
-        <strong className="font-semibold">Suggested template selected.</strong>{" "}
+        <strong className="font-semibold">已选择推荐模板。</strong>{" "}
         Click the highlighted template to continue.
       </div>
     );

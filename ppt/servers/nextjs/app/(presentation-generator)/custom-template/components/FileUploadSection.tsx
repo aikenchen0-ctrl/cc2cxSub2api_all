@@ -70,7 +70,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             }}
           >
             <UploadIcon className={`w-4 h-4 text-black`} />
-            <p className='text-xs font-medium text-black'>Upload PPTX File</p>
+            <p className='text-xs font-medium text-black'>上传 PPTX 文件</p>
           </div>
         </div>
         <div className=" w-full bg-[#FAFAFF] rounded-[28px] p-2.5 "
@@ -98,7 +98,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                       </div>
                     </div>
                     <p className='pt-3 text-xs font-normal text-[#808080] tracking-[-0.12px] text-center'>
-                      <span className='text-[#808080] underline underline-offset-4'>Click to Upload</span> or drag &amp; drop.
+                      <span className='text-[#808080] underline underline-offset-4'>点击上传</span> 或拖放文件。
                     </p>
                   </div>
                 </> : <div className="flex gap-2 items-center justify-center h-full w-fit mx-auto">
@@ -141,7 +141,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                       >
                         <div className="h-full w-full rounded-full processing-stripes" />
                       </div>
-                      <p className="text-sm font-medium text-[#9A9AA6] tracking-[-0.1px]">Processing</p>
+                      <p className="text-sm font-medium text-[#9A9AA6] tracking-[-0.1px]">处理中</p>
                       {slides.length > 0 ? (
                         <p className="text-sm font-medium text-[#9A9AA6] tracking-[-0.1px]">
                           {completedSlides}/{slides.length} Slides
@@ -205,13 +205,13 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8.5" cy="8.17041" r="4.5" fill="#EBE9FE" />
             </svg>
-            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">PPTX. Only</p>
+            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">仅支持 PPTX</p>
           </li>
           <li className="flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8.5" cy="8.17041" r="4.5" fill="#EBE9FE" />
             </svg>
-            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">Max 100MB</p>
+            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">最大 100MB</p>
           </li>
           <li className="flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">

@@ -82,11 +82,11 @@ export default function CustomConfig({
         console.error('Failed to fetch custom models');
         setCustomModels([]);
         setCustomModelsChecked(true);
-        notify.error("Could not load models", message);
+        notify.error("无法加载模型", message);
       }
     } catch (error) {
       console.error('Error fetching custom models:', error);
-      notify.error("Could not load models", "The server could not list models. Check your API key or endpoint and try again.");
+      notify.error("无法加载模型", "服务器无法列出模型，请检查 API 密钥或地址后重试。 ");
       setCustomModels([]);
       setCustomModelsChecked(true);
     } finally {
@@ -167,7 +167,7 @@ export default function CustomConfig({
         <div className="mb-4">
           <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-800">
-              <strong>Important:</strong> Only models with structured
+              <strong>重要提示：</strong> 仅支持具有结构化
               JSON schema output support will work reliably.
             </p>
           </div>
@@ -200,7 +200,7 @@ export default function CustomConfig({
                 <Command>
                   <CommandInput placeholder="Search model..." />
                   <CommandList>
-                    <CommandEmpty>No model found.</CommandEmpty>
+                    <CommandEmpty>未找到模型。</CommandEmpty>
                     <CommandGroup>
                       {customModels.map((model, index) => (
                         <CommandItem

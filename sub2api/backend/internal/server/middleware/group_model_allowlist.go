@@ -31,20 +31,47 @@ import (
 //     local_model_configuration 与 ingress 拒绝原因 model_not_allowed。
 func GroupModelAllowlist() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		apiKey, ok := GetAPIKeyFromContext(c)
-		if !ok || apiKey == nil || apiKey.IsSuper() || apiKey.Group == nil || !apiKey.Group.ModelAllowlistEnabled() {
-			c.Next()
-			return
+		apiKey, _ := GetAPIKeyFromContext(c)
+		runtimeValue, runtimeScoped := c.Get(ContextKeyAgentRuntimeModelAllowlist)
+		var allowlist service.GroupModelAllowlist
+		if runtimeScoped {
+			models, valid := runtimeValue.([]string)
+			if !valid {
+				rejectAgentRuntimeModel(c, "invalid Agent runtime model scope")
+				return
+			}
+			allowlist = service.GroupModelAllowlist{Enabled: true, Models: models}
+		} else {
+			if apiKey == nil || apiKey.IsSuper() || apiKey.Group == nil || !apiKey.Group.ModelAllowlistEnabled() {
+				c.Next()
+				return
+			}
+			allowlist = apiKey.Group.ModelAllowlist
 		}
-		allowlist := apiKey.Group.ModelAllowlist
 		if c.Request == nil {
 			c.Next()
 			return
 		}
 
 		if isResponsesWebSocketRoute(c) {
+			if runtimeScoped {
+				scoped, _ := c.Get(ContextKeyAgentRuntimeModelScoped)
+				if configured, _ := scoped.(bool); configured {
+					rejectAgentRuntimeModel(c, "Responses WebSocket is unavailable for a scoped Agent runtime credential")
+					return
+				}
+			}
 			// Responses WS 长连接由 ResponsesWebSocket 校验首帧与每个 response.create。
 			c.Next()
+			return
+		}
+		if runtimeScoped && c.Request.Method == http.MethodGet && c.Request.URL.Path == "/v1/models" {
+			data := make([]gin.H, 0, len(allowlist.Models))
+			for _, model := range allowlist.Models {
+				data = append(data, gin.H{"id": model, "object": "model", "created": 0, "owned_by": "agentapi"})
+			}
+			c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
+			c.Abort()
 			return
 		}
 		// models 收集该请求全部可被下游解析器绑定到的模型值（路径参数/查询参数
@@ -69,6 +96,13 @@ func GroupModelAllowlist() gin.HandlerFunc {
 				}
 			}
 		}
+		if runtimeScoped && len(models) == 0 && isAgentRuntimeModelRequest(c) {
+			scoped, _ := c.Get(ContextKeyAgentRuntimeModelScoped)
+			if configured, _ := scoped.(bool); configured {
+				rejectAgentRuntimeModel(c, "a model is required when Agent runtime model scope is configured")
+				return
+			}
+		}
 
 		blocked := ""
 		for _, candidate := range models {
@@ -81,12 +115,36 @@ func GroupModelAllowlist() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-
+		if runtimeScoped {
+			rejectAgentRuntimeModel(c, fmt.Sprintf("Model %q is not available for this Agent", blocked))
+			return
+		}
 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
 		MarkIngressRejected(c, IngressRejectModelNotAllowed)
 		groupModelAllowlistErrorWriter(c)(c, http.StatusNotFound, fmt.Sprintf("Model %q is not available for this group", blocked))
 		c.Abort()
 	}
+}
+
+func isAgentRuntimeModelRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.Method != http.MethodPost {
+		return false
+	}
+	switch c.Request.URL.Path {
+	case "/v1/chat/completions", "/chat/completions", "/v1/responses", "/responses",
+		"/v1/images/generations", "/images/generations", "/v1/images/edits", "/images/edits",
+		"/v1/videos", "/videos":
+		return true
+	default:
+		return false
+	}
+}
+
+func rejectAgentRuntimeModel(c *gin.Context, message string) {
+	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
+	MarkIngressRejected(c, IngressRejectModelNotAllowed)
+	groupModelAllowlistErrorWriter(c)(c, http.StatusNotFound, message)
+	c.Abort()
 }
 
 // isResponsesWebSocketRoute 判断当前请求是否命中 OpenAI Responses WebSocket

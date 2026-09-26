@@ -344,10 +344,10 @@ function CountFilter({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="font-manrope">
-            <SelectItem value="any">Any</SelectItem>
-            <SelectItem value="exact">Exactly</SelectItem>
-            <SelectItem value="gt">More than</SelectItem>
-            <SelectItem value="lt">Fewer than</SelectItem>
+            <SelectItem value="any">任意</SelectItem>
+            <SelectItem value="exact">正好</SelectItem>
+            <SelectItem value="gt">多于</SelectItem>
+            <SelectItem value="lt">少于</SelectItem>
           </SelectContent>
         </Select>
         <input

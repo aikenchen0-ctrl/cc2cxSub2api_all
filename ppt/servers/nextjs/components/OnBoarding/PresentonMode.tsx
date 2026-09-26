@@ -1124,7 +1124,7 @@ const PresentonMode = ({
                 providerStep === 1 ? 'mb-6' : 'my-[54px]'
             )}>
                 <Info className='w-4 h-4 shrink-0 fill-[#003399] stroke-white' />
-                <p className='text-sm text-[#5F6062] font-medium'>Your own provider keys and local generation setup stay on this machine.</p>
+                <p className='text-sm text-[#5F6062] font-medium'>你的服务商密钥和本地生成配置仅保存在此设备上。</p>
             </div>
 
             {providerStep === 1 && <>
@@ -1142,7 +1142,7 @@ const PresentonMode = ({
                     </div>
                     <div className='w-full'>
 
-                        <h3 className="text-xl font-normal text-[#191919] pb-1.5">Text Generation Settings</h3>
+                        <h3 className="text-xl font-normal text-[#191919] pb-1.5">文本生成设置</h3>
                         <p className=" text-sm  text-gray-500">
                             Choosing where text content comes from
                         </p>
@@ -1188,7 +1188,7 @@ const PresentonMode = ({
                         />
                         {chatGptAuthenticated && (llmConfig.LLM === "codex" || llmConfig.LLM === "chatgpt") && (
                             <div className="mt-5">
-                                <label className="mb-2 block text-sm font-medium text-gray-700">ChatGPT model</label>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">ChatGPT 模型</label>
                                 <Select
                                     value={llmConfig.CODEX_MODEL || ""}
                                     onValueChange={(value) => {
@@ -1275,7 +1275,7 @@ const PresentonMode = ({
                                 <Command>
                                     <CommandInput placeholder="Search provider..." />
                                     <CommandList className='hide-scrollbar'>
-                                        <CommandEmpty>No provider found.</CommandEmpty>
+                                        <CommandEmpty>未找到服务商。</CommandEmpty>
                                         <CommandGroup >
                                             {OTHER_PROVIDERS.map(
                                                 (provider, index) => (
@@ -1352,7 +1352,7 @@ const PresentonMode = ({
                                         <label className="block text-sm font-medium capitalize text-gray-700 ">
                                             {providerApiKeyLabel}
                                         </label>
-                                        {llmConfig.LLM && LLM_PROVIDERS[llmConfig.LLM!]?.getApiKeyUrl && <a href={LLM_PROVIDERS[llmConfig.LLM!]?.getApiKeyUrl || ""} target='_blank' className='text-[#666666] text-xs font-normal flex items-center gap-1'>Get API Key <ArrowUpRight className='w-3.5 h-3.5' /></a>}
+                                        {llmConfig.LLM && LLM_PROVIDERS[llmConfig.LLM!]?.getApiKeyUrl && <a href={LLM_PROVIDERS[llmConfig.LLM!]?.getApiKeyUrl || ""} target='_blank' className='text-[#666666] text-xs font-normal flex items-center gap-1'>获取 API 密钥 <ArrowUpRight className='w-3.5 h-3.5' /></a>}
                                     </div>
 
                                     <div className="grid">
@@ -1399,7 +1399,7 @@ const PresentonMode = ({
                                             type="button"
                                             className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-[#F9F9FA] px-3 py-2.5 text-left text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
                                         >
-                                            <span>Advanced settings</span>
+                                            <span>高级设置</span>
                                             <ChevronDown
                                                 className={cn(
                                                     "h-4 w-4 shrink-0 text-gray-600 transition-transform duration-200",
@@ -1611,7 +1611,7 @@ const PresentonMode = ({
                     </div>
                     <div>
 
-                        <h3 className="text-xl font-normal text-[#191919] ">Image Generation Settings</h3>
+                        <h3 className="text-xl font-normal text-[#191919] ">图片生成设置</h3>
                         <p className=" text-sm  text-gray-500">
                             Choosing where images come from
                         </p>
@@ -1695,13 +1695,13 @@ const PresentonMode = ({
                             <Search className="h-9 w-9 text-[#5146E5]" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-normal text-[#191919]">Web Search Settings</h3>
-                            <p className="text-sm text-gray-500">Bring current information into generated presentations</p>
+                            <h3 className="text-xl font-normal text-[#191919]">网页搜索设置</h3>
+                            <p className="text-sm text-gray-500">将最新信息加入生成的演示文稿</p>
                         </div>
                     </div>
                     {llmConfig.WEB_GROUNDING && <div className="space-y-4">
                             <div>
-                                <label className="mb-2 block text-sm font-medium text-gray-700">Select Web Search Provider</label>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">选择网页搜索服务商</label>
                                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                                     {webSearchProviderRows.map((row, rowIndex) => (
                                         <React.Fragment key={`web-search-provider-row-${rowIndex}`}>

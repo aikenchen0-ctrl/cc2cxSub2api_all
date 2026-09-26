@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,53 +15,63 @@ import (
 
 const sessionTTL = 3 * 24 * time.Hour
 
+var managedAgentDomainPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+
 type Config struct {
-	Addr                        string
-	WebDir                      string
-	DatabasePath                string
-	MainAPIBaseURL              string
-	MainModelBaseURL            string
-	AdminKey                    string
-	AppCredential               string
-	SatelliteSlug               string
-	SSOSecret                   string
-	SSOAudience                 string
-	SessionSecret               string
-	SessionSecretWeak           bool
-	CookieName                  string
-	CookieSecure                bool
-	AgentID                     string
-	AgentDomain                 string
-	AgentName                   string
-	SiteName                    string
-	SiteLogo                    string
-	BrandSync                   bool
-	AgentDisabled               bool
-	BillingMode                 string
-	OwnerMainUserID             string
-	InitialBalanceCents         int64
-	MaxRequestCostCents         int64
-	MainRequestTimeout          time.Duration
-	ModelStreamTimeout          time.Duration
-	HTTPWriteTimeout            time.Duration
-	AutoBindExistingUsers       bool
-	SettlementReconcileInterval time.Duration
-	SettlementReconcileBatch    int
-	VideoTaskReconcileAge       time.Duration
-	PaymentEnabled              bool
-	PaymentProvider             string
-	PaymentCurrency             string
-	PaymentWebhookSecret        string
-	PaymentMinCents             int64
-	PaymentMaxCents             int64
-	PaymentOrderTTL             time.Duration
-	PaymentCheckoutURLTemplate  string
+	Addr                          string
+	WebDir                        string
+	DatabasePath                  string
+	MainAPIBaseURL                string
+	MainModelBaseURL              string
+	RuntimeControlCredential      string
+	AppCredential                 string
+	SatelliteSlug                 string
+	SSOSecret                     string
+	SSOAudience                   string
+	SessionSecret                 string
+	SessionSecretWeak             bool
+	CookieName                    string
+	CookieSecure                  bool
+	AgentID                       string
+	AgentDomain                   string
+	AgentName                     string
+	SiteName                      string
+	SiteLogo                      string
+	BrandSync                     bool
+	AgentDisabled                 bool
+	ProvisioningControlEnabled    bool
+	ProvisioningControlStaleAfter time.Duration
+	BillingMode                   string
+	OwnerMainUserID               string
+	InitialBalanceCents           int64
+	MaxRequestCostCents           int64
+	MainRequestTimeout            time.Duration
+	MainUsageAPI                  bool
+	ModelStreamTimeout            time.Duration
+	HTTPWriteTimeout              time.Duration
+	AutoBindExistingUsers         bool
+	SettlementReconcileInterval   time.Duration
+	SettlementReconcileBatch      int
+	VideoTaskReconcileAge         time.Duration
+	ImageTaskReconcileAge         time.Duration
+	PaymentEnabled                bool
+	PaymentProvider               string
+	PaymentCurrency               string
+	PaymentWebhookSecret          string
+	PaymentMinCents               int64
+	PaymentMaxCents               int64
+	PaymentOrderTTL               time.Duration
+	PaymentCheckoutURLTemplate    string
 }
 
 func LoadConfig() (Config, error) {
 	mainURL := firstNonEmpty(os.Getenv("MAIN_API_URL"), os.Getenv("LINK"), "http://localhost:18080")
 	apiBase := normalizeAPIBase(mainURL)
-	modelBase := firstNonEmpty(os.Getenv("MAIN_MODEL_URL"), mainURL)
+	// Keep control-plane traffic on MAIN_API_URL. Model traffic can use the
+	// Docker-internal relay endpoint without changing LINK (the public model
+	// origin) or the management API address.
+	modelURL := firstNonEmpty(os.Getenv("SUB2API_RELAY_BASE_URL"), os.Getenv("MAIN_MODEL_URL"), os.Getenv("LINK"), mainURL)
+	modelBase := modelURL
 	modelBase = normalizeModelBase(modelBase)
 
 	secret := secretEnv("SESSION_SECRET")
@@ -83,47 +95,58 @@ func LoadConfig() (Config, error) {
 		cookieSecure = false
 	}
 
+	agentID := firstNonEmpty(os.Getenv("AGENT_ID"), "agent-local")
 	cfg := Config{
-		Addr:                        firstNonEmpty(os.Getenv("AGENTAPI_ADDR"), ":8080"),
-		WebDir:                      firstNonEmpty(os.Getenv("AGENTAPI_WEB_DIR"), "./web"),
-		DatabasePath:                firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
-		MainAPIBaseURL:              apiBase,
-		MainModelBaseURL:            modelBase,
-		AdminKey:                    secretEnv("SUB2API_ADMIN_KEY"),
-		AppCredential:               secretEnv("SUB2API_APP_CREDENTIAL"),
-		SatelliteSlug:               firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi"),
-		SSOSecret:                   secretEnv("SUB2API_SSO_SECRET"),
-		SSOAudience:                 firstNonEmpty(os.Getenv("AGENTAPI_SSO_AUDIENCE"), firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi")),
-		SessionSecret:               secret,
-		SessionSecretWeak:           secretWeak,
-		CookieName:                  firstNonEmpty(os.Getenv("AGENTAPI_COOKIE_NAME"), "agentapi_session"),
-		CookieSecure:                cookieSecure,
-		AgentID:                     firstNonEmpty(os.Getenv("AGENT_ID"), "agent-local"),
-		AgentDomain:                 strings.TrimSpace(os.Getenv("AGENT_DOMAIN")),
-		AgentName:                   firstNonEmpty(os.Getenv("AGENT_NAME"), "AgentAPI"),
-		SiteName:                    firstNonEmpty(os.Getenv("AGENT_SITE_NAME"), "AgentAPI"),
-		SiteLogo:                    strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
-		BrandSync:                   envBool("AGENT_BRAND_SYNC", false),
-		AgentDisabled:               !envBool("AGENT_ENABLED", true),
-		BillingMode:                 firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "owner_upstream"),
-		OwnerMainUserID:             strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
-		InitialBalanceCents:         envCents("AGENT_INITIAL_BALANCE", 0),
-		MaxRequestCostCents:         envCents("AGENT_MAX_REQUEST_COST", 100),
-		MainRequestTimeout:          envDuration("MAIN_REQUEST_TIMEOUT", 90*time.Second),
-		ModelStreamTimeout:          envDurationAllowZero("MODEL_STREAM_TIMEOUT", 10*time.Minute),
-		HTTPWriteTimeout:            envDurationAllowZero("AGENTAPI_WRITE_TIMEOUT", 10*time.Minute),
-		AutoBindExistingUsers:       envBool("AGENT_AUTO_BIND_EXISTING_USERS", false),
-		SettlementReconcileInterval: envDurationAllowZero("AGENT_SETTLEMENT_RECONCILE_INTERVAL", 5*time.Minute),
-		SettlementReconcileBatch:    envInt("AGENT_SETTLEMENT_RECONCILE_BATCH", 50, 1, 500),
-		VideoTaskReconcileAge:       envDuration("AGENT_VIDEO_TASK_RECONCILE_AGE", 30*time.Minute),
-		PaymentEnabled:              envBool("AGENT_PAYMENT_ENABLED", false),
-		PaymentProvider:             firstNonEmpty(os.Getenv("AGENT_PAYMENT_PROVIDER"), "manual"),
-		PaymentCurrency:             strings.ToUpper(firstNonEmpty(os.Getenv("AGENT_PAYMENT_CURRENCY"), "CNY")),
-		PaymentWebhookSecret:        secretEnv("AGENT_PAYMENT_WEBHOOK_SECRET"),
-		PaymentMinCents:             envCents("AGENT_PAYMENT_MIN_AMOUNT", 100),
-		PaymentMaxCents:             envCents("AGENT_PAYMENT_MAX_AMOUNT", 1000000),
-		PaymentOrderTTL:             envDuration("AGENT_PAYMENT_ORDER_TTL", 30*time.Minute),
-		PaymentCheckoutURLTemplate:  strings.TrimSpace(os.Getenv("AGENT_PAYMENT_CHECKOUT_URL_TEMPLATE")),
+		Addr:                          firstNonEmpty(os.Getenv("AGENTAPI_ADDR"), ":8080"),
+		WebDir:                        firstNonEmpty(os.Getenv("AGENTAPI_WEB_DIR"), "./web"),
+		DatabasePath:                  firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
+		MainAPIBaseURL:                apiBase,
+		MainModelBaseURL:              modelBase,
+		RuntimeControlCredential:      secretEnv("AGENT_RUNTIME_CONTROL_CREDENTIAL"),
+		AppCredential:                 secretEnv("SUB2API_APP_CREDENTIAL"),
+		SatelliteSlug:                 firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi"),
+		SSOSecret:                     secretEnv("SUB2API_SSO_SECRET"),
+		SSOAudience:                   firstNonEmpty(os.Getenv("AGENTAPI_SSO_AUDIENCE"), firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi")),
+		SessionSecret:                 secret,
+		SessionSecretWeak:             secretWeak,
+		CookieName:                    firstNonEmpty(os.Getenv("AGENTAPI_COOKIE_NAME"), "agentapi_session"),
+		CookieSecure:                  cookieSecure,
+		AgentID:                       agentID,
+		AgentDomain:                   strings.TrimSpace(os.Getenv("AGENT_DOMAIN")),
+		AgentName:                     firstNonEmpty(os.Getenv("AGENT_NAME"), "AgentAPI"),
+		SiteName:                      firstNonEmpty(os.Getenv("AGENT_SITE_NAME"), "AgentAPI"),
+		SiteLogo:                      strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
+		BrandSync:                     envBool("AGENT_BRAND_SYNC", false),
+		AgentDisabled:                 !envBool("AGENT_ENABLED", true),
+		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", strings.HasPrefix(agentID, "agt_")),
+		ProvisioningControlStaleAfter: envDuration("AGENT_PROVISIONING_CONTROL_STALE_AFTER", 90*time.Second),
+		BillingMode:                   firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "owner_upstream"),
+		OwnerMainUserID:               strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
+		InitialBalanceCents:           envCents("AGENT_INITIAL_BALANCE", 0),
+		MaxRequestCostCents:           envCents("AGENT_MAX_REQUEST_COST", 100),
+		MainRequestTimeout:            envDuration("MAIN_REQUEST_TIMEOUT", 90*time.Second),
+		MainUsageAPI:                  envBool("AGENT_MAIN_USAGE_API", true),
+		ModelStreamTimeout:            envDurationAllowZero("MODEL_STREAM_TIMEOUT", 10*time.Minute),
+		HTTPWriteTimeout:              envDurationAllowZero("AGENTAPI_WRITE_TIMEOUT", 10*time.Minute),
+		AutoBindExistingUsers:         envBool("AGENT_AUTO_BIND_EXISTING_USERS", false),
+		SettlementReconcileInterval:   envDurationAllowZero("AGENT_SETTLEMENT_RECONCILE_INTERVAL", 5*time.Minute),
+		SettlementReconcileBatch:      envInt("AGENT_SETTLEMENT_RECONCILE_BATCH", 50, 1, 500),
+		VideoTaskReconcileAge:         envDuration("AGENT_VIDEO_TASK_RECONCILE_AGE", 30*time.Minute),
+		ImageTaskReconcileAge:         envDuration("AGENT_IMAGE_TASK_RECONCILE_AGE", 30*time.Minute),
+		PaymentEnabled:                envBool("AGENT_PAYMENT_ENABLED", false),
+		PaymentProvider:               firstNonEmpty(os.Getenv("AGENT_PAYMENT_PROVIDER"), "manual"),
+		PaymentCurrency:               strings.ToUpper(firstNonEmpty(os.Getenv("AGENT_PAYMENT_CURRENCY"), "CNY")),
+		PaymentWebhookSecret:          secretEnv("AGENT_PAYMENT_WEBHOOK_SECRET"),
+		PaymentMinCents:               envCents("AGENT_PAYMENT_MIN_AMOUNT", 100),
+		PaymentMaxCents:               envCents("AGENT_PAYMENT_MAX_AMOUNT", 1000000),
+		PaymentOrderTTL:               envDuration("AGENT_PAYMENT_ORDER_TTL", 30*time.Minute),
+		PaymentCheckoutURLTemplate:    strings.TrimSpace(os.Getenv("AGENT_PAYMENT_CHECKOUT_URL_TEMPLATE")),
+	}
+	if cfg.SatelliteSlug != "agentapi" {
+		return Config{}, fmt.Errorf("SUB2API_SATELLITE must be the registered slug agentapi")
+	}
+	if cfg.SSOAudience != "agentapi" {
+		return Config{}, fmt.Errorf("AGENTAPI_SSO_AUDIENCE must match the registered audience agentapi")
 	}
 	if cfg.MaxRequestCostCents <= 0 {
 		return Config{}, fmt.Errorf("AGENT_MAX_REQUEST_COST must be greater than zero")
@@ -147,8 +170,25 @@ func LoadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("AGENT_PAYMENT_WEBHOOK_SECRET is required when AGENT_PAYMENT_ENABLED=true")
 	}
 
+	if strings.HasPrefix(cfg.AgentID, "agt_") {
+		if strings.TrimSpace(cfg.AgentDomain) == "" {
+			return Config{}, fmt.Errorf("AGENT_DOMAIN is required for managed Agent IDs")
+		}
+		if !managedAgentDomainPattern.MatchString(strings.ToLower(cfg.AgentDomain)) {
+			return Config{}, fmt.Errorf("AGENT_DOMAIN must be a valid DNS hostname for managed Agent IDs")
+		}
+		if !cfg.ProvisioningControlEnabled {
+			return Config{}, fmt.Errorf("AGENT_PROVISIONING_CONTROL_ENABLED cannot be disabled for a managed Agent ID")
+		}
+	}
 	if cfg.AppCredential == "" {
 		slog.Warn("SUB2API_APP_CREDENTIAL is not set; model relay requests will be rejected")
+	}
+	if cfg.ProvisioningControlEnabled && !strings.HasPrefix(cfg.RuntimeControlCredential, "agt_ctl_") {
+		return Config{}, fmt.Errorf("AGENT_RUNTIME_CONTROL_CREDENTIAL must be a per-Agent agt_ctl_ credential")
+	}
+	if cfg.ProvisioningControlEnabled && !strings.HasPrefix(cfg.AppCredential, "agt_model_") {
+		return Config{}, fmt.Errorf("SUB2API_APP_CREDENTIAL must be a per-Agent agt_model_ credential")
 	}
 	return cfg, nil
 }
@@ -158,6 +198,7 @@ func normalizeAPIBase(value string) string {
 	if base == "" {
 		base = "http://localhost:18080"
 	}
+	base = addLocalHTTPForSchemeLessURL(base)
 	if strings.HasSuffix(base, "/api/v1") {
 		return base
 	}
@@ -169,6 +210,7 @@ func normalizeModelBase(value string) string {
 	if base == "" {
 		base = "http://localhost:18080"
 	}
+	base = addLocalHTTPForSchemeLessURL(base)
 	if strings.HasSuffix(base, "/api/v1") {
 		base = strings.TrimSuffix(base, "/api/v1")
 	}
@@ -176,6 +218,20 @@ func normalizeModelBase(value string) string {
 		return base
 	}
 	return base + "/v1"
+}
+
+// The public satellite contract permits a scheme-less local LINK such as
+// localhost:18080. Add HTTP only for loopback hosts; remote origins must
+// explicitly select HTTPS rather than silently downgrading transport.
+func addLocalHTTPForSchemeLessURL(value string) string {
+	if strings.Contains(value, "://") {
+		return value
+	}
+	parsed, err := url.Parse("//" + value)
+	if err == nil && parsed.Host != "" && isLoopbackHost(parsed.Hostname()) {
+		return "http://" + value
+	}
+	return value
 }
 
 func firstNonEmpty(values ...string) string {

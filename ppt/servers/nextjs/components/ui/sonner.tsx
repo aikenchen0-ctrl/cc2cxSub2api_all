@@ -15,12 +15,59 @@ type NotifyOptions = Pick<
   | "className"
 >
 
+const UI_TEXT_ZH: Record<string, string> = {
+  "Could not load models": "无法加载模型",
+  "The server could not list models. Check your API key or endpoint and try again.": "服务器无法列出模型，请检查 API 密钥或地址后重试。",
+  "Upload failed": "上传失败",
+  "Please choose a valid image file.": "请选择有效的图片文件。",
+  "Image files must be smaller than 5MB.": "图片文件必须小于 5MB。",
+  "Image uploaded": "图片已上传",
+  "The selected image was replaced.": "已替换所选图片。",
+  "Image generation failed": "图片生成失败",
+  "Image deleted": "图片已删除",
+  "Could not delete image": "无法删除图片",
+  "Presentation streaming failed": "演示文稿生成失败",
+  "Failed to load presentation": "无法加载演示文稿",
+  "The presentation could not be loaded. Please try again.": "演示文稿加载失败，请重试。",
+  "Could not add slide": "无法添加幻灯片",
+  "Something went wrong while adding the new slide.": "添加新幻灯片时出现问题。",
+  "Select a slide": "请选择幻灯片",
+  "Choose a slide before adding content.": "请先选择幻灯片再添加内容。",
+  "Preview unavailable": "预览不可用",
+  "Refresh failed": "刷新失败",
+  "Chat error": "聊天错误",
+  "Conversation deleted": "对话已删除",
+  "Drop unavailable": "暂不支持拖放",
+  "Use the attach button for this file.": "请使用附件按钮添加此文件。",
+  "Font check failed": "字体检查失败",
+  "Invalid font file": "字体文件无效",
+  "File too large": "文件过大",
+  "Font added": "字体已添加",
+  "Font removed": "字体已移除",
+  "Generation failed": "生成失败",
+  "Template unavailable": "模板不可用",
+  "Configuration saved": "配置已保存",
+  "Your configuration was saved successfully.": "配置已成功保存。",
+  "Could not save configuration": "无法保存配置",
+  "Sign in required": "需要登录",
+  "Please sign in to ChatGPT to continue.": "请登录 ChatGPT 后继续。",
+  "Cannot continue yet": "暂时无法继续",
+  "Cannot save yet": "暂时无法保存",
+  "Could not load chat": "无法加载聊天",
+  "Attachments are available in Template V2 chat.": "附件可在模板 V2 聊天中使用。",
+};
+
+function translateUiText(value?: string): string | undefined {
+  if (!value) return value;
+  return UI_TEXT_ZH[value] ?? value;
+}
+
 function toastOptions(
   description?: string,
   options?: NotifyOptions
 ): ExternalToast | undefined {
   const merged: ExternalToast = { ...options }
-  if (description) merged.description = description
+  if (description) merged.description = translateUiText(description)
   return Object.keys(merged).length > 0 ? merged : undefined
 }
 
@@ -43,15 +90,15 @@ function NeutralToastIcon() {
 /** Standard toast API — title plus optional description (matches styled [data-title] / [data-description]). */
 export const notify = {
   error: (title: string, description?: string, options?: NotifyOptions) =>
-    sonnerToast.error(title, toastOptions(description, options)),
+    sonnerToast.error(translateUiText(title), toastOptions(description, options)),
   success: (title: string, description?: string, options?: NotifyOptions) =>
-    sonnerToast.success(title, toastOptions(description, options)),
+    sonnerToast.success(translateUiText(title), toastOptions(description, options)),
   info: (title: string, description?: string, options?: NotifyOptions) =>
-    sonnerToast.info(title, toastOptions(description, options)),
+    sonnerToast.info(translateUiText(title), toastOptions(description, options)),
   warning: (title: string, description?: string, options?: NotifyOptions) =>
-    sonnerToast.warning(title, toastOptions(description, options)),
+    sonnerToast.warning(translateUiText(title), toastOptions(description, options)),
   loading: (title: string, description?: string, options?: NotifyOptions) =>
-    sonnerToast.loading(title, toastOptions(description, options)),
+    sonnerToast.loading(translateUiText(title), toastOptions(description, options)),
   dismiss: (id?: string | number) => sonnerToast.dismiss(id),
 } as const
 
@@ -64,7 +111,7 @@ const Toaster = ({ icons, ...props }: ToasterProps) => {
     info: <NeutralToastIcon />,
     warning: <TriangleAlert aria-hidden="true" />,
     loading: <Loader2 aria-hidden="true" className="animate-spin" />,
-    close: <span aria-hidden="true">Got it!</span>,
+    close: <span aria-hidden="true">知道了</span>,
   }
 
   return (

@@ -14,7 +14,8 @@ services:
       QR_CORS_ORIGIN: ${QR_CORS_ORIGIN:-http://localhost:5221}
       QR_API_BASE_URL: ${QR_API_BASE_URL:-}
       QR_SECURE_COOKIE: ${QR_SECURE_COOKIE:-0}
-      LINK: ${LINK:-http://sub2api:8080}
+      LINK: ${LINK:-}
+      SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
       # Managed satellite deployments must fail fast when either shared
       # credential is missing; otherwise every SSO callback becomes a generic
       # 401 "SSO login failed" after the container has already started.

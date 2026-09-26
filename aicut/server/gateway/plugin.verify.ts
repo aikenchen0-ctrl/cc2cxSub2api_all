@@ -30,6 +30,7 @@ assert.equal(maxQueuedExportsPerUser(), 4);
 assert.equal(r2UploadObjectKey('clip.mp4'), 'uploads/clip.mp4');
 assert.equal(isProtectedGatewayPath('/api/project-store'), true);
 assert.equal(isAnonymousGatewayPath('/api/auth/login'), true);
+assert.equal(isAnonymousGatewayPath('/api/sub2api/balance'), true);
 assert.equal(isProtectedGatewayPath('/api/auth/login'), false);
 assert.equal(isProtectedGatewayPath('/src/App.tsx'), false);
 assert.equal(consumeAuthAttempt('127.0.0.1'), true, 'rate limit idle when gateway is off');

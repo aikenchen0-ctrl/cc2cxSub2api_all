@@ -138,7 +138,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                         >
                             <img src="/image-markup.svg" className='w-full h-full object-cover' alt='image-markup' />
                         </div>
-                        <h3 className="text-xl font-normal text-[#191919] py-2.5">Image Generation Settings</h3>
+                        <h3 className="text-xl font-normal text-[#191919] py-2.5">图片生成设置</h3>
                         <p className=" text-sm  text-gray-500">
                             Choosing where images come from
                         </p>
@@ -184,7 +184,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                     <Command>
                                                         <CommandInput placeholder="Search provider..." />
                                                         <CommandList>
-                                                            <CommandEmpty>No provider found.</CommandEmpty>
+                                                            <CommandEmpty>未找到服务商。</CommandEmpty>
                                                             <CommandGroup>
                                                                 {Object.values(IMAGE_PROVIDERS).map((provider) => (
                                                                     <CommandItem
@@ -415,7 +415,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                         </div>
                         <div className="flex w-full justify-end">
                             <div className="w-[205px]">
-                                <label className="mb-2 block text-sm font-medium text-gray-700">Image model id</label>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">图片模型 ID</label>
                                 <input
                                     type="text"
                                     placeholder="e.g. dall-e-3, gpt-image-1"
@@ -438,7 +438,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
             {/* <div className="bg-white flex justify-between items-center p-10 rounded-[12px]">
                 <div className=' max-w-[290px]'>
 
-                    <h4 className="text-xl font-normal text-[#191919]">Advanced</h4>
+                    <h4 className="text-xl font-normal text-[#191919]">高级设置</h4>
                     <p className="mt-2.5 text-sm  text-gray-500">
                         Configure advanced AI features.
                     </p>

@@ -141,7 +141,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
         <div className='mt-7'>
             <div className="p-10 flex justify-between items-center bg-white rounded-[12px]">
                 <div>
-                    <h4 className="text-xl font-normal text-[#191919]">Image Generation Settings</h4>
+                    <h4 className="text-xl font-normal text-[#191919]">图片生成设置</h4>
                     <p className="mt-2 text-sm max-w-[205px] text-gray-500">
                         Choosing where images come from.
                     </p>
@@ -187,7 +187,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                             <Command>
                                                 <CommandInput placeholder="Search provider..." />
                                                 <CommandList>
-                                                    <CommandEmpty>No provider found.</CommandEmpty>
+                                                    <CommandEmpty>未找到服务商。</CommandEmpty>
                                                     <CommandGroup>
                                                         {Object.values(IMAGE_PROVIDERS).map(
                                                             (provider, index) => (

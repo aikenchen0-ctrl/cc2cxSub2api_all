@@ -879,7 +879,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                     ) : fields.length === 0 ? (
                         <div className="text-center py-8 text-gray-400">
                             <Box className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                            <p className="text-xs">No editable fields</p>
+                            <p className="text-xs">没有可编辑字段</p>
                         </div>
                     ) : (
                         <div className="space-y-1 px-2 ">
@@ -953,7 +953,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                     {(f.originalType === 'string' || f.originalType === 'number') && (
                                                         <div className="mb-2">
                                                             <div className="flex items-center gap-2">
-                                                                <Label className="text-xs text-gray-600">Type:</Label>
+                                                                <Label className="text-xs text-gray-600">类型：</Label>
                                                                 <Select
                                                                     value={f.type}
                                                                     onValueChange={(value) => handleTypeChange(f.path, value as 'string' | 'number')}
@@ -962,12 +962,12 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                                         <SelectValue />
                                                                     </SelectTrigger>
                                                                     <SelectContent>
-                                                                        <SelectItem value="string">String</SelectItem>
-                                                                        <SelectItem value="number">Number</SelectItem>
+                                                                        <SelectItem value="string">字符串</SelectItem>
+                                                                        <SelectItem value="number">数字</SelectItem>
                                                                     </SelectContent>
                                                                 </Select>
                                                                 {isTypeChanged(f) && (
-                                                                    <span className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-500 rounded">changed</span>
+                                                                    <span className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-500 rounded">已修改</span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -977,7 +977,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                     {f.type === 'string' && (
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Min chars</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最少字符</Label>
                                                                 <Input
                                                                     type="number"
                                                                     min={0}
@@ -988,7 +988,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                                 />
                                                             </div>
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Max chars</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最多字符</Label>
                                                                 <Input
                                                                     type="number"
                                                                     min={0}
@@ -1004,7 +1004,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                     {f.type === 'number' && (
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Min value</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最小值</Label>
                                                                 <Input
                                                                     type="number"
                                                                     value={f.minimum ?? ''}
@@ -1014,7 +1014,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                                 />
                                                             </div>
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Max value</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最大值</Label>
                                                                 <Input
                                                                     type="number"
                                                                     value={f.maximum ?? ''}
@@ -1029,7 +1029,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                     {f.type === 'array' && (
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Min items</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最少项目数</Label>
                                                                 <Input
                                                                     type="number"
                                                                     min={0}
@@ -1040,7 +1040,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                                 />
                                                             </div>
                                                             <div>
-                                                                <Label className="text-xs text-gray-600 mb-1 block">Max items</Label>
+                                                                <Label className="text-xs text-gray-600 mb-1 block">最多项目数</Label>
                                                                 <Input
                                                                     type="number"
                                                                     min={0}
@@ -1055,7 +1055,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
 
                                                     {f.default !== undefined && typeof f.default !== 'object' && (
                                                         <div className="mt-3">
-                                                            <Label className="text-xs text-gray-600 mb-1 block">Current value</Label>
+                                                            <Label className="text-xs text-gray-600 mb-1 block">当前值</Label>
                                                             <div className="text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded border border-gray-100 truncate font-mono">
                                                                 {String(f.default)}
                                                             </div>

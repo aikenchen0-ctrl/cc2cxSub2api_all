@@ -583,11 +583,11 @@ function SchemaFieldRow({
         <div className="ml-[28.5px] flex flex-col gap-[2px]">
           <div className="flex h-[30px] items-center gap-[8px] rounded-[4px] border border-[#E7E8EC] bg-[#FEFEFF] px-[10px] text-[14px] font-normal tracking-[0.56px] text-[#17181E]">
             <span className="text-[16px] leading-none text-[#808080]">#</span>
-            <span>Type</span>
+            <span>类型</span>
             <span className="ml-auto text-[#191919]">{typeLabel}</span>
           </div>
           <div className="flex h-[36px] items-center rounded-[4px] border border-[#E7E8EC] bg-[#FEFEFF] px-[10px] text-[14px] font-normal tracking-[0.56px] text-[#17181E]">
-            <span>Decorative</span>
+            <span>装饰性</span>
             <Switch
               aria-label={`Set ${field.label} decorative`}
               checked={field.decorative}
@@ -604,7 +604,7 @@ function SchemaFieldRow({
           {field.type === "text" || field.type === "text-list" ? (
             <>
               <label className="flex h-[30px] items-center rounded-[4px] border border-[#E7E8EC] bg-[#FEFEFF] px-[10px] text-[14px] font-normal tracking-[0.56px] text-[#17181E]">
-                <span>Min Chars</span>
+                <span>最少字符</span>
                 <input
                   className={cn(
                     "ml-auto h-[24px] w-[76px] rounded-[4px] border border-transparent bg-transparent text-right text-[#191919] outline-none transition-colors focus:border-[#D9D6FE] focus:bg-[#F8F6FF]",
@@ -621,7 +621,7 @@ function SchemaFieldRow({
                 />
               </label>
               <label className="flex h-[30px] items-center rounded-[4px] border border-[#E7E8EC] bg-[#FEFEFF] px-[10px] text-[14px] font-normal tracking-[0.56px] text-[#17181E]">
-                <span>Max Chars</span>
+                <span>最多字符</span>
                 <input
                   className={cn(
                     "ml-auto h-[24px] w-[76px] rounded-[4px] border border-transparent bg-transparent text-right text-[#191919] outline-none transition-colors focus:border-[#D9D6FE] focus:bg-[#F8F6FF]",

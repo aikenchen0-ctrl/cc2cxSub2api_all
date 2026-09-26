@@ -25,8 +25,8 @@ describe("DialogContent", () => {
     cy.mount(
       <Dialog open>
         <DialogContent data-cy="dialog-content">
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogDescription>Dialog positioning regression test.</DialogDescription>
+          <DialogTitle>键盘快捷键</DialogTitle>
+          <DialogDescription>对话框定位回归测试。</DialogDescription>
         </DialogContent>
       </Dialog>,
     );

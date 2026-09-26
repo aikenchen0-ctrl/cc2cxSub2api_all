@@ -4,12 +4,18 @@ package middleware
 import (
 	"crypto/subtle"
 	"errors"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+const agentProvisioningWorkerCredentialHeader = "X-AgentAPI-Provisioning-Credential"
 
 // NewAdminAuthMiddleware 创建管理员认证中间件
 func NewAdminAuthMiddleware(
@@ -18,18 +24,17 @@ func NewAdminAuthMiddleware(
 	settingService *service.SettingService,
 	auditService *service.AuditLogService,
 ) AdminAuthMiddleware {
-	return AdminAuthMiddleware(adminAuth(authService, userService, settingService, auditService))
+	return AdminAuthMiddleware(adminAuth(authService, userService, settingService, auditService, loadAgentProvisioningWorkerCredential()))
 }
 
-// adminAuth 管理员认证中间件实现
-// 支持两种认证方式（通过不同的 header 区分）：
-// 1. Admin API Key: x-api-key: <admin-api-key>
-// 2. JWT Token: Authorization: Bearer <jwt-token> (需要管理员角色)
+// adminAuth 管理员认证中间件实现。
+// 支持 Admin API Key、管理员 JWT，以及只允许调用开站 worker 路由的专用凭据。
 func adminAuth(
 	authService *service.AuthService,
 	userService *service.UserService,
 	settingService *service.SettingService,
 	auditService *service.AuditLogService,
+	provisioningWorkerCredential string,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// WebSocket upgrade requests cannot set Authorization headers in browsers.
@@ -44,6 +49,32 @@ func adminAuth(
 				c.Next()
 				return
 			}
+		}
+
+		if credential := strings.TrimSpace(c.GetHeader(agentProvisioningWorkerCredentialHeader)); credential != "" {
+			if len(provisioningWorkerCredential) < 32 {
+				AbortWithError(c, 503, "AGENT_PROVISIONING_WORKER_AUTH_UNAVAILABLE", "Provisioning worker authentication is not configured")
+				return
+			}
+			if subtle.ConstantTimeCompare([]byte(credential), []byte(provisioningWorkerCredential)) != 1 {
+				AbortWithError(c, 401, "UNAUTHORIZED", "Invalid provisioning worker credential")
+				return
+			}
+			if !isAgentProvisioningWorkerRequest(c) {
+				AbortWithError(c, 403, "FORBIDDEN", "Provisioning worker credential is not allowed for this operation")
+				return
+			}
+			admin, err := userService.GetFirstAdmin(c.Request.Context())
+			if err != nil {
+				AbortWithError(c, 500, "INTERNAL_ERROR", "No admin user found")
+				return
+			}
+			c.Set(string(ContextKeyUser), AuthSubject{UserID: admin.ID, Concurrency: admin.Concurrency})
+			c.Set(string(ContextKeyUserRole), admin.Role)
+			c.Set(ContextKeyAuthEmail, admin.Email)
+			c.Set("auth_method", "agent_provisioning_worker")
+			c.Next()
+			return
 		}
 
 		// 检查 x-api-key header（Admin API Key 认证）
@@ -77,6 +108,98 @@ func adminAuth(
 		// 无有效认证信息
 		AbortWithError(c, 401, "UNAUTHORIZED", "Authorization required")
 	}
+}
+
+func loadAgentProvisioningWorkerCredential() string {
+	if path := strings.TrimSpace(os.Getenv("AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE")); path != "" {
+		if !filepath.IsAbs(path) {
+			return ""
+		}
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			return ""
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(data))
+	}
+	return strings.TrimSpace(os.Getenv("AGENT_PROVISIONING_WORKER_CREDENTIAL"))
+}
+
+func isAgentProvisioningWorkerRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	const agentsPath = "/api/v1/agent-provisioning/agents"
+	path := c.Request.URL.Path
+	if c.Request.Method == "GET" && path == agentsPath+"/stream" {
+		return c.Request.URL.RawQuery == ""
+	}
+	if c.Request.Method == "GET" && path == agentsPath {
+		query, err := url.ParseQuery(c.Request.URL.RawQuery)
+		if err != nil {
+			return false
+		}
+		for key, values := range query {
+			if len(values) != 1 {
+				return false
+			}
+			switch key {
+			case "status":
+				if values[0] != "pending" && values[0] != "provisioning" {
+					return false
+				}
+			case "page", "page_size":
+				value, err := strconv.Atoi(values[0])
+				if err != nil || value < 1 || (key == "page" && value > 1_000_000) || (key == "page_size" && value > 100) {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		return query.Get("status") == "pending" || query.Get("status") == "provisioning"
+	}
+	if !strings.HasPrefix(path, agentsPath+"/") {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(path, agentsPath+"/"), "/")
+	if len(parts) == 1 && isProvisioningAgentID(parts[0]) {
+		return c.Request.Method == "GET" && c.Request.URL.RawQuery == ""
+	}
+	if len(parts) != 2 || !isProvisioningAgentID(parts[0]) || c.Request.URL.RawQuery != "" {
+		return false
+	}
+	return c.Request.Method == "POST" && (parts[1] == "claim" || parts[1] == "lease" || parts[1] == "runtime-credentials") ||
+		(c.Request.Method == "PATCH" && parts[1] == "progress") ||
+		(c.Request.Method == "POST" && parts[1] == "activate")
+}
+
+func isProvisioningAgentID(value string) bool {
+	if len(value) != 36 || !strings.HasPrefix(value, "agt_") {
+		return false
+	}
+	for _, char := range value[4:] {
+		if !(char >= '0' && char <= '9') && !(char >= 'a' && char <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// MaskedRequestCredential keeps the dedicated provisioning credential out of
+// raw audit metadata if this middleware is used for one of its allowed routes.
+func maskedAgentProvisioningWorkerCredential(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	credential := strings.TrimSpace(c.GetHeader(agentProvisioningWorkerCredentialHeader))
+	if credential == "" {
+		return ""
+	}
+	return "agent_provisioning_worker " + service.MaskAuditCredential(credential)
 }
 
 func isWebSocketUpgradeRequest(c *gin.Context) bool {

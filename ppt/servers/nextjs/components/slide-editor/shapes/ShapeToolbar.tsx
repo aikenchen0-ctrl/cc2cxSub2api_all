@@ -458,7 +458,7 @@ export function ShapeToolbar({
                     onClick={() => updateVector({ closed: !vectorClosed })}
                     className="flex w-full items-center justify-between rounded-md border border-[#EDEEEF] px-3 py-2 text-left text-xs text-[#4B5563] hover:bg-[#F8F8FA]"
                   >
-                    <span className="font-medium text-[#191919]">Closed path</span>
+                    <span className="font-medium text-[#191919]">闭合路径</span>
                     <span className="flex items-center gap-1 text-[#7A5AF8]">
                       {vectorClosed ? (
                         <ToggleRight size={17} aria-hidden="true" />
@@ -681,7 +681,7 @@ export function ShadowPanel({
       {enabled ? (
         <>
           <div className="space-y-2">
-            <div className="text-[12px] font-medium text-[#4B5563]">Position</div>
+            <div className="text-[12px] font-medium text-[#4B5563]">位置</div>
             <div className="grid grid-cols-2 gap-2">
               <NumberField
                 label="X"
@@ -705,7 +705,7 @@ export function ShadowPanel({
           </div>
 
           <div className="space-y-2">
-            <div className="text-[12px] font-medium text-[#4B5563]">Blur</div>
+            <div className="text-[12px] font-medium text-[#4B5563]">模糊</div>
             <NumberField
               label="Amount"
               value={shadow.blur ?? fallback.blur}
@@ -717,7 +717,7 @@ export function ShadowPanel({
           </div>
 
           <div className="space-y-2">
-            <div className="text-[12px] font-medium text-[#4B5563]">Color</div>
+            <div className="text-[12px] font-medium text-[#4B5563]">颜色</div>
             <ColorField
               label="Color"
               color={shadow.color ?? fallback.color}

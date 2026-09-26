@@ -212,4 +212,25 @@ export function satelliteHeaders(subject, { required = true } = {}) {
   }
 }
 
+export function sub2apiV1Base() {
+  let base = String(process.env.SUB2API_RELAY_BASE_URL || process.env.LINK || '').trim().replace(/\/+$/, '')
+  if (base && !/^https?:\/\//i.test(base)) base = `http://${base}`
+  return base ? (base.endsWith('/v1') ? base : `${base}/v1`) : ''
+}
+
+export function sub2apiPurchaseUrl() {
+  const raw = String(process.env.LINK || '').trim()
+  if (!raw) return null
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null
+    url.pathname = '/purchase'
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
 export { encodePart }

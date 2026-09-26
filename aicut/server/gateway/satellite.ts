@@ -14,6 +14,21 @@ export function satelliteV1Base(): string {
   return origin ? `${origin}/v1` : '';
 }
 
+export function satellitePurchaseUrl(): string | null {
+  const raw = (process.env.LINK ?? '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`);
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) return null;
+    url.pathname = '/purchase';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
 export function satelliteHeadersForUser(userId?: string): Record<string, string> | null {
   const credential = satelliteCredential();
   const subject = (userId ?? currentTenant()?.userId ?? '').trim();

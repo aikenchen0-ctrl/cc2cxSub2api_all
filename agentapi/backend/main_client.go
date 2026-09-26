@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,12 +16,13 @@ import (
 )
 
 // MainClient is the only component allowed to talk to the Sub2API process. It
-// deliberately has no database access and keeps the administrator key in the
-// process environment, so it can never be serialized into a browser response.
+// deliberately has no database access and keeps per-Agent credentials server-
+// side, so they can never be serialized into a browser response.
 type MainClient struct {
-	cfg        Config
-	http       *http.Client
-	streamHTTP *http.Client
+	cfg         Config
+	http        *http.Client
+	streamHTTP  *http.Client
+	controlHTTP *http.Client
 }
 
 type MainAPIError struct {
@@ -64,20 +67,87 @@ type MainUserResult struct {
 	Raw     json.RawMessage
 }
 
+type MainProvisioningAgent struct {
+	AgentID string `json:"agent_id"`
+	Status  string `json:"status"`
+}
+
 type MainUsageResult struct {
-	ID          string
-	RequestID   string
-	TotalCents  int64
-	ActualCents int64
-	Model       string
-	Raw         json.RawMessage
+	ID            string
+	RequestID     string
+	TotalCents    int64
+	ActualCents   int64
+	HasActualCost bool
+	Model         string
+	Snapshot      MainUsageSnapshot
+	Raw           json.RawMessage
+}
+
+// MainUsageSnapshot contains only user-safe facts from Sub2API's admin usage
+// DTO. Keep credentials, IP addresses, user/account objects, and other admin
+// metadata out of the AgentAPI usage response.
+type MainUsageSnapshot struct {
+	Source                    string           `json:"usage_source,omitempty"`
+	ServiceTier               string           `json:"service_tier,omitempty"`
+	ReasoningEffort           string           `json:"reasoning_effort,omitempty"`
+	InboundEndpoint           string           `json:"inbound_endpoint,omitempty"`
+	InputTokens               int64            `json:"input_tokens"`
+	OutputTokens              int64            `json:"output_tokens"`
+	CacheCreationTokens       int64            `json:"cache_creation_tokens"`
+	CacheReadTokens           int64            `json:"cache_read_tokens"`
+	CacheCreation5mTokens     int64            `json:"cache_creation_5m_tokens"`
+	CacheCreation1hTokens     int64            `json:"cache_creation_1h_tokens"`
+	InputCostNanos            int64            `json:"input_cost_usd_nanos"`
+	OutputCostNanos           int64            `json:"output_cost_usd_nanos"`
+	CacheCreationCostNanos    int64            `json:"cache_creation_cost_usd_nanos"`
+	CacheReadCostNanos        int64            `json:"cache_read_cost_usd_nanos"`
+	TotalCostNanos            int64            `json:"total_cost_usd_nanos"`
+	ActualCostNanos           int64            `json:"actual_cost_usd_nanos"`
+	ActualCostReported        bool             `json:"actual_cost_reported"`
+	RateMultiplier            float64          `json:"rate_multiplier"`
+	LongContextBillingApplied bool             `json:"long_context_billing_applied"`
+	ImageCount                int64            `json:"image_count"`
+	ImageInputTokens          int64            `json:"image_input_tokens"`
+	ImageInputCostNanos       int64            `json:"image_input_cost_usd_nanos"`
+	ImageOutputTokens         int64            `json:"image_output_tokens"`
+	ImageOutputCostNanos      int64            `json:"image_output_cost_usd_nanos"`
+	RequestedModel            string           `json:"-"`
+	UpstreamModel             string           `json:"upstream_model,omitempty"`
+	UpstreamResponseModel     string           `json:"upstream_response_model,omitempty"`
+	UpstreamModelMismatch     *bool            `json:"upstream_model_mismatch,omitempty"`
+	RequestType               string           `json:"request_type,omitempty"`
+	BillingMode               string           `json:"billing_mode,omitempty"`
+	BillingType               int64            `json:"billing_type"`
+	OpenAIWSMode              bool             `json:"openai_ws_mode"`
+	NativeCompactionV2        bool             `json:"native_compaction_v2"`
+	DurationMs                int64            `json:"duration_ms"`
+	FirstTokenMs              int64            `json:"first_token_ms"`
+	Stream                    bool             `json:"stream"`
+	ImageSize                 string           `json:"image_size,omitempty"`
+	ImageInputSize            string           `json:"image_input_size,omitempty"`
+	ImageOutputSize           string           `json:"image_output_size,omitempty"`
+	ImageSizeSource           string           `json:"image_size_source,omitempty"`
+	ImageSizeBreakdown        map[string]int64 `json:"image_size_breakdown,omitempty"`
+	MediaType                 string           `json:"media_type,omitempty"`
+	CacheTTLOverridden        bool             `json:"cache_ttl_overridden"`
 }
 
 func NewMainClient(cfg Config) *MainClient {
+	// All of these clients carry credentials or identity-scoping headers. Do
+	// not let a server redirect a request to a different origin (or even to a
+	// different endpoint) with those headers attached.
+	rejectRedirects := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	var controlTransport http.RoundTripper = http.DefaultTransport
+	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport := defaultTransport.Clone()
+		transport.ResponseHeaderTimeout = cfg.MainRequestTimeout
+		controlTransport = transport
+	}
 	return &MainClient{
-		cfg:        cfg,
-		http:       &http.Client{Timeout: cfg.MainRequestTimeout},
-		streamHTTP: &http.Client{Timeout: cfg.ModelStreamTimeout},
+		cfg:         cfg,
+		http:        &http.Client{Timeout: cfg.MainRequestTimeout, CheckRedirect: rejectRedirects},
+		streamHTTP:  &http.Client{Timeout: cfg.ModelStreamTimeout, CheckRedirect: rejectRedirects},
+		controlHTTP: &http.Client{Transport: controlTransport, CheckRedirect: rejectRedirects},
 	}
 }
 
@@ -110,7 +180,7 @@ func (c *MainClient) request(ctx context.Context, method, target string, body []
 	return resp, data, nil
 }
 
-func (c *MainClient) jsonRequest(ctx context.Context, method, path string, payload any, token string, admin bool) (json.RawMessage, error) {
+func (c *MainClient) jsonRequest(ctx context.Context, method, path string, payload any, token string) (json.RawMessage, error) {
 	var body []byte
 	var err error
 	if payload != nil {
@@ -126,12 +196,6 @@ func (c *MainClient) jsonRequest(ctx context.Context, method, path string, paylo
 	}
 	if token != "" {
 		headers.Set("Authorization", "Bearer "+token)
-	}
-	if admin {
-		if strings.TrimSpace(c.cfg.AdminKey) == "" {
-			return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_ADMIN_KEY_MISSING", Message: "main admin key is not configured"}
-		}
-		headers.Set("x-api-key", c.cfg.AdminKey)
 	}
 	resp, data, err := c.request(ctx, method, c.endpoint(path), body, headers)
 	if err != nil {
@@ -170,7 +234,7 @@ func unwrapMainResponse(status int, body []byte) (json.RawMessage, error) {
 func (c *MainClient) Login(ctx context.Context, email, password string) (MainAuthResult, error) {
 	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/login", map[string]any{
 		"email": email, "password": password,
-	}, "", false)
+	}, "")
 	if err != nil {
 		return MainAuthResult{}, err
 	}
@@ -178,7 +242,7 @@ func (c *MainClient) Login(ctx context.Context, email, password string) (MainAut
 }
 
 func (c *MainClient) Register(ctx context.Context, payload map[string]any) (MainAuthResult, error) {
-	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/register", payload, "", false)
+	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/register", payload, "")
 	if err != nil {
 		return MainAuthResult{}, err
 	}
@@ -188,7 +252,7 @@ func (c *MainClient) Register(ctx context.Context, payload map[string]any) (Main
 func (c *MainClient) Login2FA(ctx context.Context, tempToken, code string) (MainAuthResult, error) {
 	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/login/2fa", map[string]any{
 		"temp_token": tempToken, "totp_code": code,
-	}, "", false)
+	}, "")
 	if err != nil {
 		return MainAuthResult{}, err
 	}
@@ -198,7 +262,7 @@ func (c *MainClient) Login2FA(ctx context.Context, tempToken, code string) (Main
 func (c *MainClient) Refresh(ctx context.Context, refreshToken string) (MainAuthResult, error) {
 	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/refresh", map[string]any{
 		"refresh_token": refreshToken,
-	}, "", false)
+	}, "")
 	if err != nil {
 		return MainAuthResult{}, err
 	}
@@ -206,7 +270,27 @@ func (c *MainClient) Refresh(ctx context.Context, refreshToken string) (MainAuth
 }
 
 func (c *MainClient) CurrentUser(ctx context.Context, accessToken string) (json.RawMessage, error) {
-	return c.jsonRequest(ctx, http.MethodGet, "/auth/me", nil, accessToken, false)
+	return c.jsonRequest(ctx, http.MethodGet, "/auth/me", nil, accessToken)
+}
+
+// UserProfile reads the authenticated user's public profile from Sub2API.
+// The caller must filter the response before returning it to an AgentAPI
+// browser; the upstream profile DTO contains fields that do not belong in the
+// satellite UI.
+func (c *MainClient) UserProfile(ctx context.Context, accessToken string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodGet, "/user/profile", nil, accessToken)
+}
+
+func (c *MainClient) UpdateUserProfile(ctx context.Context, accessToken, username string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPut, "/user", map[string]string{"username": username}, accessToken)
+}
+
+func (c *MainClient) ChangeUserPassword(ctx context.Context, accessToken, oldPassword, newPassword string) error {
+	_, err := c.jsonRequest(ctx, http.MethodPut, "/user/password", map[string]string{
+		"old_password": oldPassword,
+		"new_password": newPassword,
+	}, accessToken)
+	return err
 }
 
 func (c *MainClient) Logout(ctx context.Context, refreshToken string) error {
@@ -215,16 +299,59 @@ func (c *MainClient) Logout(ctx context.Context, refreshToken string) error {
 	}
 	_, err := c.jsonRequest(ctx, http.MethodPost, "/auth/logout", map[string]any{
 		"refresh_token": refreshToken,
-	}, "", false)
+	}, "")
 	return err
 }
 
-func (c *MainClient) AdminCreateUser(ctx context.Context, payload map[string]any) (json.RawMessage, error) {
-	return c.jsonRequest(ctx, http.MethodPost, "/admin/users", payload, "", true)
+func (c *MainClient) runtimeJSON(ctx context.Context, method, path string, payload any) (json.RawMessage, error) {
+	return c.runtimeJSONWithIdentityProof(ctx, method, path, payload, "", "")
 }
 
-func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainUserResult, error) {
-	data, err := c.jsonRequest(ctx, http.MethodGet, "/admin/users/"+url.PathEscape(mainUserID), nil, "", true)
+func (c *MainClient) runtimeJSONWithIdentityProof(ctx context.Context, method, path string, payload any, userAccessToken, ssoTicket string) (json.RawMessage, error) {
+	credential := strings.TrimSpace(c.cfg.RuntimeControlCredential)
+	if !strings.HasPrefix(credential, "agt_ctl_") || len(credential) < 40 || len(credential) > 256 {
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
+	}
+	userAccessToken = strings.TrimSpace(userAccessToken)
+	ssoTicket = strings.TrimSpace(ssoTicket)
+	if userAccessToken != "" && (len(userAccessToken) > 8192 || strings.ContainsAny(userAccessToken, "\r\n")) {
+		return nil, fmt.Errorf("main user access token is invalid")
+	}
+	if ssoTicket != "" && (len(ssoTicket) > 8192 || strings.ContainsAny(ssoTicket, "\r\n")) {
+		return nil, fmt.Errorf("main SSO identity ticket is invalid")
+	}
+	if userAccessToken != "" && ssoTicket != "" {
+		return nil, fmt.Errorf("multiple main user identity proofs are not allowed")
+	}
+	var body []byte
+	var err error
+	if payload != nil {
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	headers := make(http.Header)
+	headers.Set("Accept", "application/json")
+	headers.Set("X-AgentAPI-Runtime-Control", credential)
+	if userAccessToken != "" {
+		headers.Set("Authorization", "Bearer "+userAccessToken)
+	}
+	if ssoTicket != "" {
+		headers.Set("X-AgentAPI-SSO-Ticket", ssoTicket)
+	}
+	if payload != nil {
+		headers.Set("Content-Type", "application/json")
+	}
+	resp, data, err := c.request(ctx, method, c.endpoint(path), body, headers)
+	if err != nil {
+		return nil, err
+	}
+	return unwrapMainResponse(resp.StatusCode, data)
+}
+
+func (c *MainClient) RuntimeGetOwner(ctx context.Context) (MainUserResult, error) {
+	data, err := c.runtimeJSON(ctx, http.MethodGet, "/agent-runtime/owner", nil)
 	if err != nil {
 		return MainUserResult{}, err
 	}
@@ -232,63 +359,415 @@ func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainU
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return MainUserResult{}, err
 	}
-	return MainUserResult{
-		ID:      jsonID(raw["id"]),
-		Email:   stringValue(raw["email"]),
-		Balance: moneyValue(raw["balance"]),
-		Raw:     data,
-	}, nil
+	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: moneyValue(raw["balance"]), Raw: data}, nil
 }
 
-func (c *MainClient) AdminUpdateBalance(ctx context.Context, mainUserID string, balance float64, operation, notes string) (json.RawMessage, error) {
-	return c.jsonRequest(ctx, http.MethodPost, "/admin/users/"+url.PathEscape(mainUserID)+"/balance", map[string]any{
-		"balance": balance, "operation": operation, "notes": notes,
-	}, "", true)
+func (c *MainClient) MapRuntimeUser(ctx context.Context, mainUserID, userAccessToken string) error {
+	mainUserID = strings.TrimSpace(mainUserID)
+	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
+		return fmt.Errorf("main user id is invalid")
+	}
+	if strings.TrimSpace(userAccessToken) == "" {
+		return fmt.Errorf("main user access token is required")
+	}
+	_, err := c.runtimeJSONWithIdentityProof(ctx, http.MethodPost, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/map", map[string]any{}, userAccessToken, "")
+	return err
 }
 
-// AdminFindUsage looks up authoritative main-site usage by the request id that
-// AgentAPI sent on the model relay. It intentionally returns only billing
-// fields needed for local reconciliation; the raw DTO is retained for audit.
+func (c *MainClient) MapRuntimeUserWithSSOTicket(ctx context.Context, mainUserID, ticket string) error {
+	mainUserID = strings.TrimSpace(mainUserID)
+	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
+		return fmt.Errorf("main user id is invalid")
+	}
+	if strings.TrimSpace(ticket) == "" {
+		return fmt.Errorf("main SSO identity ticket is required")
+	}
+	_, err := c.runtimeJSONWithIdentityProof(ctx, http.MethodPost, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/map", map[string]any{}, "", ticket)
+	return err
+}
+
+// AdminGetUser is a compatibility wrapper; the runtime API can return only
+// the configured Owner, never an arbitrary main-site user.
+func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainUserResult, error) {
+	if strings.TrimSpace(mainUserID) != strings.TrimSpace(c.cfg.OwnerMainUserID) {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "runtime credential is restricted to its configured Owner"}
+	}
+	return c.RuntimeGetOwner(ctx)
+}
+
+func (c *MainClient) RuntimeUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
+	mainUserID, status = strings.TrimSpace(mainUserID), strings.TrimSpace(status)
+	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
+		return fmt.Errorf("main user id is invalid")
+	}
+	if status != "active" && status != "disabled" {
+		return fmt.Errorf("unsupported main user status")
+	}
+	data, err := c.runtimeJSON(ctx, http.MethodPatch, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/status", map[string]string{"status": status})
+	if err != nil {
+		return err
+	}
+	var updated struct {
+		UserID json.RawMessage `json:"user_id"`
+		Status string          `json:"status"`
+	}
+	if err := json.Unmarshal(data, &updated); err != nil {
+		return fmt.Errorf("decode updated Agent user status: %w", err)
+	}
+	updatedUserID := strings.TrimSpace(string(updated.UserID))
+	if err := json.Unmarshal(updated.UserID, &updatedUserID); err != nil {
+		// Sub2API returns its numeric user ID as a JSON number, while some
+		// compatible deployments serialize IDs as strings.
+		updatedUserID = strings.TrimSpace(string(updated.UserID))
+	}
+	if strings.TrimSpace(updatedUserID) != mainUserID || strings.TrimSpace(updated.Status) != status {
+		return fmt.Errorf("main site did not confirm the requested user status")
+	}
+	return nil
+}
+
+func (c *MainClient) RuntimeUpdateModelAllowlist(ctx context.Context, enabled []string) error {
+	models := make([]string, len(enabled))
+	copy(models, enabled)
+	data, err := c.runtimeJSON(ctx, http.MethodPut, "/agent-runtime/model-policy", map[string][]string{"enabled": models})
+	if err != nil {
+		return err
+	}
+	var result struct {
+		AgentID string   `json:"agent_id"`
+		Enabled []string `json:"enabled"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return fmt.Errorf("decode main-site model scope confirmation: %w", err)
+	}
+	if strings.TrimSpace(c.cfg.AgentID) == "" || strings.TrimSpace(result.AgentID) != strings.TrimSpace(c.cfg.AgentID) || !sameStringSet(result.Enabled, models) {
+		return fmt.Errorf("main site did not confirm the requested per-Agent model scope")
+	}
+	return nil
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[string]int, len(left))
+	for _, value := range left {
+		counts[value]++
+	}
+	for _, value := range right {
+		if counts[value] == 0 {
+			return false
+		}
+		counts[value]--
+	}
+	return true
+}
+
+func sameStringSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *MainClient) AdminUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
+	return c.RuntimeUpdateUserStatus(ctx, mainUserID, status)
+}
+
+func (c *MainClient) RuntimeGetProvisioningAgent(ctx context.Context, agentID string) (MainProvisioningAgent, error) {
+	if strings.TrimSpace(agentID) != strings.TrimSpace(c.cfg.AgentID) {
+		return MainProvisioningAgent{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "runtime credential is restricted to its own Agent"}
+	}
+	data, err := c.runtimeJSON(ctx, http.MethodGet, "/agent-runtime/agent", nil)
+	if err != nil {
+		return MainProvisioningAgent{}, err
+	}
+	var result MainProvisioningAgent
+	if err := json.Unmarshal(data, &result); err != nil {
+		return MainProvisioningAgent{}, err
+	}
+	if result.AgentID != strings.TrimSpace(agentID) || strings.TrimSpace(result.Status) == "" {
+		return MainProvisioningAgent{}, fmt.Errorf("main site returned an invalid Agent runtime record")
+	}
+	return result, nil
+}
+
+// RuntimeAgentUpdates subscribes to ID-only wake-up events for this Agent.
+// Every event requires a fresh GET /agent; the event stream is never treated
+// as an authoritative state source.
+func (c *MainClient) RuntimeAgentUpdates(ctx context.Context) (<-chan struct{}, error) {
+	credential := strings.TrimSpace(c.cfg.RuntimeControlCredential)
+	if !strings.HasPrefix(credential, "agt_ctl_") || len(credential) < 40 || len(credential) > 256 {
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint("/agent-runtime/agent/stream"), nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Accept", "text/event-stream")
+	request.Header.Set("X-AgentAPI-Runtime-Control", credential)
+	client := c.controlHTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	safeClient := *client
+	safeClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := safeClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		_ = response.Body.Close()
+		_, apiErr := unwrapMainResponse(response.StatusCode, body)
+		return nil, apiErr
+	}
+	if !strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+		_ = response.Body.Close()
+		return nil, &MainAPIError{Status: response.StatusCode, Code: "AGENT_RUNTIME_STREAM_INVALID", Message: "main site did not return an event stream"}
+	}
+	updates := make(chan struct{}, 1)
+	go func() {
+		defer close(updates)
+		defer response.Body.Close()
+		scanner := bufio.NewScanner(response.Body)
+		scanner.Buffer(make([]byte, 4096), 256<<10)
+		eventName := ""
+		for scanner.Scan() {
+			line := strings.TrimSuffix(scanner.Text(), "\r")
+			if line == "" {
+				if eventName == "agent" || eventName == "resync" {
+					select {
+					case updates <- struct{}{}:
+					default:
+					}
+				}
+				eventName = ""
+				continue
+			}
+			if strings.HasPrefix(line, "event:") {
+				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			}
+		}
+	}()
+	return updates, nil
+}
+
+func (c *MainClient) AdminGetProvisioningAgent(ctx context.Context, agentID string) (MainProvisioningAgent, error) {
+	return c.RuntimeGetProvisioningAgent(ctx, agentID)
+}
+
+// AdminFindUsage is a compatibility wrapper around the Owner-scoped runtime
+// usage query. Sub2API applies the Owner filter again server-side.
 func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]MainUsageResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return nil, fmt.Errorf("request id is required")
 	}
-	path := "/admin/usage?request_id=" + url.QueryEscape(requestID) + "&page=1&page_size=20"
-	data, err := c.jsonRequest(ctx, http.MethodGet, path, nil, "", true)
+	path := "/agent-runtime/usage?request_id=" + url.QueryEscape(requestID)
+	data, err := c.runtimeJSON(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
 	var envelope struct {
-		Items []map[string]any `json:"items"`
+		Items []json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Items != nil {
-		return decodeMainUsageItems(envelope.Items), nil
+		return decodeMainUsageItems(envelope.Items)
 	}
-	var items []map[string]any
+	var items []json.RawMessage
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, err
 	}
-	return decodeMainUsageItems(items), nil
+	return decodeMainUsageItems(items)
 }
 
-func decodeMainUsageItems(items []map[string]any) []MainUsageResult {
+func decodeMainUsageItems(items []json.RawMessage) ([]MainUsageResult, error) {
 	result := make([]MainUsageResult, 0, len(items))
-	for _, item := range items {
-		requestID := stringValue(item["request_id"])
+	for _, rawItem := range items {
+		var item map[string]json.RawMessage
+		if err := json.Unmarshal(rawItem, &item); err != nil {
+			return nil, err
+		}
+		requestID := rawString(item["request_id"])
 		if requestID == "" {
 			continue
 		}
+		actualCostRaw, actualCostPresent := item["actual_cost"]
+		actualCost, actualCostValid := decimalNanos(actualCostRaw)
+		totalCostRaw, totalCostPresent := item["total_cost"]
+		totalCost, totalCostValid := decimalNanos(totalCostRaw)
+		if actualCostPresent && !actualCostValid {
+			return nil, fmt.Errorf("main usage %q has an invalid actual_cost", requestID)
+		}
+		if !actualCostPresent && (!totalCostPresent || !totalCostValid) {
+			return nil, fmt.Errorf("main usage %q has neither a valid actual_cost nor a fallback total_cost", requestID)
+		}
+		var snapshot MainUsageSnapshot
+		snapshot.Source = "sub2api_owner_runtime_usage"
+		snapshot.ServiceTier = rawString(item["service_tier"])
+		snapshot.ReasoningEffort = rawString(item["reasoning_effort"])
+		snapshot.InboundEndpoint = rawString(item["inbound_endpoint"])
+		snapshot.RequestedModel = rawString(item["model"])
+		snapshot.InputTokens = rawInt64(item["input_tokens"])
+		snapshot.OutputTokens = rawInt64(item["output_tokens"])
+		snapshot.CacheCreationTokens = rawInt64(item["cache_creation_tokens"])
+		snapshot.CacheReadTokens = rawInt64(item["cache_read_tokens"])
+		snapshot.CacheCreation5mTokens = rawInt64(item["cache_creation_5m_tokens"])
+		snapshot.CacheCreation1hTokens = rawInt64(item["cache_creation_1h_tokens"])
+		snapshot.InputCostNanos, _ = decimalNanos(item["input_cost"])
+		snapshot.OutputCostNanos, _ = decimalNanos(item["output_cost"])
+		snapshot.CacheCreationCostNanos, _ = decimalNanos(item["cache_creation_cost"])
+		snapshot.CacheReadCostNanos, _ = decimalNanos(item["cache_read_cost"])
+		snapshot.TotalCostNanos = totalCost
+		snapshot.ActualCostNanos = actualCost
+		snapshot.ActualCostReported = actualCostPresent
+		snapshot.RateMultiplier = rawFloat64(item["rate_multiplier"])
+		snapshot.LongContextBillingApplied = rawBool(item["long_context_billing_applied"])
+		snapshot.ImageCount = rawInt64(item["image_count"])
+		snapshot.ImageInputTokens = rawInt64(item["image_input_tokens"])
+		snapshot.ImageInputCostNanos, _ = decimalNanos(item["image_input_cost"])
+		snapshot.ImageOutputTokens = rawInt64(item["image_output_tokens"])
+		snapshot.ImageOutputCostNanos, _ = decimalNanos(item["image_output_cost"])
+		snapshot.UpstreamModel = rawString(item["upstream_model"])
+		snapshot.UpstreamResponseModel = rawString(item["upstream_response_model"])
+		snapshot.UpstreamModelMismatch = rawBoolPointer(item["upstream_model_mismatch"])
+		snapshot.RequestType = rawString(item["request_type"])
+		snapshot.BillingMode = rawString(item["billing_mode"])
+		snapshot.BillingType = rawInt64(item["billing_type"])
+		snapshot.OpenAIWSMode = rawBool(item["openai_ws_mode"])
+		snapshot.NativeCompactionV2 = rawBool(item["native_compaction_v2"])
+		snapshot.DurationMs = rawInt64(item["duration_ms"])
+		snapshot.FirstTokenMs = rawInt64(item["first_token_ms"])
+		snapshot.Stream = rawBool(item["stream"])
+		snapshot.ImageSize = rawString(item["image_size"])
+		snapshot.ImageInputSize = rawString(item["image_input_size"])
+		snapshot.ImageOutputSize = rawString(item["image_output_size"])
+		snapshot.ImageSizeSource = rawString(item["image_size_source"])
+		snapshot.ImageSizeBreakdown = rawInt64Map(item["image_size_breakdown"])
+		snapshot.MediaType = rawString(item["media_type"])
+		snapshot.CacheTTLOverridden = rawBool(item["cache_ttl_overridden"])
+		settlementNanos := actualCost
+		if !actualCostPresent {
+			settlementNanos = totalCost
+		}
 		result = append(result, MainUsageResult{
-			ID:          jsonID(item["id"]),
-			RequestID:   requestID,
-			TotalCents:  moneyValue(item["total_cost"]),
-			ActualCents: moneyValue(item["actual_cost"]),
-			Model:       stringValue(item["model"]),
-			Raw:         mustJSON(item),
+			ID:            jsonID(rawJSONAny(item["id"])),
+			RequestID:     requestID,
+			TotalCents:    nanosToCents(totalCost),
+			ActualCents:   nanosToCents(settlementNanos),
+			HasActualCost: actualCostPresent,
+			Model:         snapshot.RequestedModel,
+			Snapshot:      snapshot,
+			Raw:           append(json.RawMessage(nil), rawItem...),
 		})
 	}
+	return result, nil
+}
+
+func rawJSONAny(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if decoder.Decode(&value) != nil {
+		return nil
+	}
+	return value
+}
+
+func rawInt64(raw json.RawMessage) int64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var value json.Number
+	if json.Unmarshal(raw, &value) == nil {
+		parsed, _ := strconv.ParseInt(value.String(), 10, 64)
+		if parsed != 0 {
+			return parsed
+		}
+		floatValue, _ := strconv.ParseFloat(value.String(), 64)
+		return int64(floatValue)
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		parsed, _ := strconv.ParseInt(text, 10, 64)
+		return parsed
+	}
+	return 0
+}
+
+func rawBoolPointer(raw json.RawMessage) *bool {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var value bool
+	if json.Unmarshal(raw, &value) != nil {
+		return nil
+	}
+	return &value
+}
+
+func rawFloat64(raw json.RawMessage) float64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var number json.Number
+	if json.Unmarshal(raw, &number) == nil {
+		value, _ := strconv.ParseFloat(number.String(), 64)
+		return value
+	}
+	return 0
+}
+
+func rawInt64Map(raw json.RawMessage) map[string]int64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var values map[string]json.RawMessage
+	if json.Unmarshal(raw, &values) != nil {
+		return nil
+	}
+	result := make(map[string]int64, len(values))
+	for key, value := range values {
+		result[key] = rawInt64(value)
+	}
 	return result
+}
+
+// decimalNanos converts a USD JSON number into integer nano-USD without first
+// rounding it to cents. This preserves the precision of per-token cost fields.
+func decimalNanos(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
+	var text string
+	if raw[0] == '"' {
+		if json.Unmarshal(raw, &text) != nil {
+			return 0, false
+		}
+	} else {
+		text = string(raw)
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value > float64(math.MaxInt64)/1e9 || value < float64(math.MinInt64)/1e9 {
+		return 0, false
+	}
+	return int64(math.Round(value * 1e9)), true
+}
+
+func nanosToCents(nanos int64) int64 {
+	if nanos >= 0 {
+		return (nanos + 5_000_000) / 10_000_000
+	}
+	return (nanos - 5_000_000) / 10_000_000
 }
 
 func mustJSON(value any) json.RawMessage {
@@ -359,15 +838,13 @@ func (c *MainClient) OpenModelResponse(ctx context.Context, method, path string,
 	if c.cfg.AppCredential == "" {
 		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_APP_CREDENTIAL_MISSING", Message: "model relay credential is not configured"}
 	}
-	// The caller may carry a proxy user's id for local accounting, but the
-	// public model gateway must always charge the configured owner account.
-	if ownerID := strings.TrimSpace(c.cfg.OwnerMainUserID); ownerID != "" {
-		mainUserID = ownerID
-	}
 	if strings.TrimSpace(mainUserID) == "" {
-		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "model billing owner is not configured"}
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "mapped Agent user is not configured"}
 	}
 	headers.Set("Authorization", "Bearer "+c.cfg.AppCredential)
+	// Keep the public satellite identity tied to the current Agent Session. The
+	// Sub2API Agent model credential separately resolves the Owner billing key
+	// after it verifies this user is an active mapping for the same Agent.
 	headers.Set("X-Sub2API-On-Behalf-Of", mainUserID)
 	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
 	if requestID != "" {

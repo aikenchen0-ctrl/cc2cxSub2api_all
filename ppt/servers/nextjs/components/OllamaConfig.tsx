@@ -440,7 +440,7 @@ export default function OllamaConfig({
               <Command>
                 <CommandInput placeholder="Search model..." />
                 <CommandList>
-                  <CommandEmpty>No model found.</CommandEmpty>
+                  <CommandEmpty>未找到模型。</CommandEmpty>
                   {pulledModels.length > 0 && (
                     <CommandGroup heading="Downloaded">
                       {pulledModels.map((model) => (

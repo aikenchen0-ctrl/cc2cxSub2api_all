@@ -195,12 +195,19 @@ func RegisterGatewayRoutes(
 
 	// API网关（Claude API兼容）
 	gateway := r.Group("/v1")
+	gateway.Use(func(c *gin.Context) {
+		if c.Request.URL.Path == "/v1/sub2api/balance" {
+			c.Header("Cache-Control", "no-store")
+		}
+		c.Next()
+	})
 	gateway.Use(bodyLimit)
 	gateway.Use(clientRequestID)
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
 	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+	gateway.GET("/sub2api/balance", h.Gateway.SatelliteUserBalance)
 	gateway.Use(groupModelAllowlist)
 	gateway.Use(compositeTarget)
 	gateway.Use(requireGroupAnthropic)

@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import math
 import os
 import secrets
 import sqlite3
@@ -16,13 +17,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from urllib.parse import urlsplit, urlunsplit
 
 SESSION_COOKIE = "aihuoke_session"
 SESSION_TTL_SECONDS = 3 * 24 * 60 * 60
 _CURRENT_SUBJECT: ContextVar[str] = ContextVar("aihuoke_sub2api_subject", default="")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+balance_router = APIRouter(prefix="/api/sub2api", tags=["sub2api"])
 
 
 def _load_local_env() -> None:
@@ -295,6 +299,51 @@ def satellite_headers(*, required: bool = True) -> dict[str, str]:
     if not subject or not _has_configured_secret(credential):
         return {}
     return {"Authorization": f"Bearer {credential}", "X-Sub2API-On-Behalf-Of": subject, "X-Sub2API-Satellite": "aihuoke"}
+
+
+def sub2api_purchase_url() -> str | None:
+    raw = os.getenv("LINK", "").strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = "http://" + raw
+    try:
+        parts = urlsplit(raw)
+        if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            return None
+        return urlunsplit((parts.scheme, parts.netloc, "/purchase", "", ""))
+    except ValueError:
+        return None
+
+
+@balance_router.get("/balance")
+async def sub2api_balance(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    subject = current_subject().strip()
+    if not managed() or not subject:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    base = relay_base_url()
+    if not base:
+        raise HTTPException(status_code=503, detail="Sub2API is not configured")
+    try:
+        headers = satellite_headers()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Sub2API satellite is not configured") from exc
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            upstream = await client.get(f"{base}/sub2api/balance", headers=headers)
+        if upstream.status_code >= 400:
+            status = upstream.status_code if upstream.status_code in {401, 503} else 502
+            raise HTTPException(status_code=status, detail="Balance is unavailable")
+        data = upstream.json()
+        balance = float(data["balance"])
+        if not math.isfinite(balance):
+            raise ValueError("invalid balance")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="Balance is unavailable") from exc
+    return {"balance": balance, "recharge_url": sub2api_purchase_url()}
 
 
 @router.get("/sso/callback")

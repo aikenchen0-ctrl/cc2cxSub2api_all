@@ -516,7 +516,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                   aria-atomic="true"
                 >
                   <span>{activeSlideIndex + 1}</span>
-                  <span>of</span>
+                  <span>/</span>
                   <span>{slideCount}</span>
                 </div>
                 <PresentationIconButton

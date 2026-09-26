@@ -272,7 +272,7 @@ export function InfographicDataEditorContent({
 
               <div className="mt-3 flex gap-2 rounded-lg border border-[#ECECF1] bg-[#F8F8FA] p-3 text-[10px] leading-4 text-[#686873]">
                 <Palette size={14} className="mt-0.5 shrink-0 text-[#7C51F8]" />
-                <span>The slide background remains visible behind the infographic.</span>
+                <span>信息图后方仍会显示幻灯片背景。</span>
               </div>
             </aside>
 
@@ -956,7 +956,7 @@ function GanttTaskRangePreview({
   return (
     <div className="mt-3 rounded-xl border border-[#E5E6EB] bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-3 text-[10px]">
-        <span className="font-medium text-[#686873]">Schedule preview</span>
+        <span className="font-medium text-[#686873]">时间表预览</span>
         <span className="truncate text-[#8B8B94]">
           {startLabel} → {endLabel}
         </span>
@@ -1464,7 +1464,7 @@ function BeforeAfterEditor({
                                 <span className="grid size-11 place-items-center rounded-xl bg-[#506FBE]">
                                   <InfographicIconPreview color={icon.color} url={icon.url} />
                                 </span>
-                                <span className="text-[9px] font-semibold text-[#7C51F8]">Change icon</span>
+                                <span className="text-[9px] font-semibold text-[#7C51F8]">更换图标</span>
                               </button>
                               <div className="mt-2">
                                 <DeferredColorInput
@@ -1787,7 +1787,7 @@ function HierarchyEditor({
               <LabeledField label={data.type === "org_chart" ? "Name" : "Label"}><TextInput ariaLabel={`Item ${index + 1} heading`} value={item.heading} onChange={(heading) => updateItem(index, { heading })} /></LabeledField>
               <LabeledField label="Parent">
                 <select className={inputClassName} value={item.parent_id ?? ""} onChange={(event) => updateItem(index, { parent_id: event.target.value || null })}>
-                  <option value="">Top level</option>
+                  <option value="">顶层</option>
                   {data.items.map((candidate) => candidate.id !== item.id ? <option key={candidate.id} value={candidate.id}>{candidate.heading || candidate.id}</option> : null)}
                 </select>
               </LabeledField>

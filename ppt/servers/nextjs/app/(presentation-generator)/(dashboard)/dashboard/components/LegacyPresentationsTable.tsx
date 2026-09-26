@@ -129,9 +129,9 @@ export function LegacyPresentationsTable({
       <div className="w-full overflow-x-auto border-t border-[#EDEEEF]">
         <div className="min-w-[760px]">
           <div className="grid min-h-[56px] grid-cols-[minmax(280px,1fr)_272px_272px] border-b border-[#EDEEEF] text-sm font-semibold tracking-[0.14px] text-[#333333]">
-            <div className="flex items-center px-[14px]">Name</div>
-            <div className="flex items-center px-[14px]">Created on</div>
-            <div className="flex items-center px-[14px]">Format</div>
+            <div className="flex items-center px-[14px]">名称</div>
+            <div className="flex items-center px-[14px]">创建时间</div>
+            <div className="flex items-center px-[14px]">格式</div>
           </div>
           {presentations.map((presentation) => (
             <div

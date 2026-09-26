@@ -10,6 +10,9 @@ import { APP_CONFIG } from "./config.js";
 import {
   createSessionCookie,
   requireQrcodeUser,
+  satelliteHeaders,
+  sub2apiPurchaseUrl,
+  sub2apiV1Base,
   verifyQrcodeSSOTicket
 } from "./sso.js";
 
@@ -556,6 +559,35 @@ export function createQrApp({
       // server logs so missing/mismatched production secrets are diagnosable.
       console.error("QRCode SSO callback failed:", error instanceof Error ? error.message : error);
       response.status(401).send("SSO login failed");
+    }
+  });
+
+  app.get("/api/sub2api/balance", async (request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    const userId = requireQrcodeUser(request, response);
+    if (!userId) return;
+    if (userId === "local") {
+      response.status(503).json({ error: "Sub2API balance is unavailable" });
+      return;
+    }
+    const headers = satelliteHeaders(userId);
+    const base = sub2apiV1Base();
+    if (!headers.Authorization || !base) {
+      response.status(503).json({ error: "Sub2API satellite is not configured" });
+      return;
+    }
+    try {
+      const upstream = await fetch(`${base}/sub2api/balance`, { headers, cache: "no-store" });
+      if (!upstream.ok) {
+        response.status(upstream.status === 401 ? 401 : upstream.status === 503 ? 503 : 502).json({ error: "余额暂时不可用" });
+        return;
+      }
+      const data = await upstream.json();
+      const balance = Number(data?.balance);
+      if (!Number.isFinite(balance)) throw new Error("Invalid balance response");
+      response.json({ balance, recharge_url: sub2apiPurchaseUrl() });
+    } catch {
+      response.status(502).json({ error: "余额暂时不可用" });
     }
   });
 

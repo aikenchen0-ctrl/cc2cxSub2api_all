@@ -6,12 +6,13 @@
 
 | 凭据 | 保存位置 | 用途 | 是否出现在浏览器 |
 | --- | --- | --- | --- |
-| `SUB2API_ADMIN_KEY` | AgentAPI 服务端环境变量 | 创建主站用户、读取主站余额、受控管理动作 | 否 |
-| `SUB2API_APP_CREDENTIAL` | AgentAPI 服务端环境变量 | AgentAPI 调用主站 `/v1` | 否 |
+| `AGENT_RUNTIME_CONTROL_CREDENTIAL` (`agt_ctl_*`) | AgentAPI 服务端 Secret 文件 | 当前 Agent 的 Owner/usage/状态 API；用户映射时必须另附有效身份证明 | 否 |
+| `SUB2API_APP_CREDENTIAL` (`agt_model_*`) | AgentAPI 服务端 Secret 文件 | 当前 Agent 的主站 `/v1` 模型/余额请求 | 否 |
+| `SUB2API_SSO_SECRET` | AgentAPI 与 Sub2API 服务端 Secret | 验证现有 HMAC SSO ticket，不改变浏览器 SSO 协议 | 否 |
 | AgentAPI Session | AgentAPI SQLite 加密会话 + HttpOnly Cookie | 控制台登录 | 仅有不可读 Cookie |
 | `sk-agent-*` | AgentAPI SQLite 哈希 + 用户自己的客户端 | 调用 AgentAPI `/v1` | 只在创建响应中显示一次 |
 
-主站凭据从不进入 AgentAPI 的前端构建产物、日志、Cookie、localStorage 或 API 响应。
+逐站 control/model credential、SSO Secret 与主站 JWT 从不进入 AgentAPI 的前端构建产物、Cookie、localStorage 或 API 响应；业务运行时不使用 `SUB2API_ADMIN_KEY`。
 
 ## 2. 创建客户端 Key
 
@@ -126,7 +127,23 @@ GET 类型的 `/v1/models`、视频轮询等请求也支持 AgentAPI Key；只�
 
 模型提交请求的重试应由客户端生成新的 `Idempotency-Key` 策略并结合业务判断；不能因为网络超时就无限重放可能已经到达主站的请求。
 
-## 6. 兼容边界
+## 6. 用户 Profile 和密码
+
+AgentAPI 用户控制台把个人资料和改密限定在当前 HttpOnly Session：
+
+```http
+GET /api/v1/agent/profile
+PUT /api/v1/agent/profile
+PUT /api/v1/agent/password
+Cookie: agentapi_session=<HttpOnly session>
+Origin: https://agent.example.com
+```
+
+Profile 更新只接受 `username`，不允许从浏览器修改邮箱、余额、角色、主站用户 ID 或 Agent ID。改密体为 `old_password` 和 `new_password`；主站验证旧密码后会使原 JWT 失效，AgentAPI 同时撤销本地 Session，用户需重新登录。密码不保存在本地数据库或浏览器存储。
+
+菜单 SSO 只建立 identity-only Session：可查看票据中的基本 Profile，但不能编辑或改密；用户需要以主站账号密码登录。服务端按字段过滤 Sub2API Profile 响应，仍不会把 JWT 或管理凭据返回浏览器。
+
+## 7. 兼容边界
 
 - AgentAPI Key 只对当前 AgentAPI 实例生效，不可拿到主站或其他代理站使用；
 - AgentAPI 不接受浏览器把 `X-Sub2API-On-Behalf-Of`、`X-Sub2API-Satellite` 或 `agent_id` 作为身份凭据；

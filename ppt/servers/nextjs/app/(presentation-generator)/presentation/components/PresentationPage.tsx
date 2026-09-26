@@ -808,7 +808,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           role="alert"
         >
           <AlertCircle className="w-16 h-16 mb-4 text-red-500" />
-          <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
+          <h2 className="text-xl font-semibold mb-2">出了点问题</h2>
           <p className="text-center mb-4">
             We couldn't load your presentation. Please try again.
           </p>
@@ -886,7 +886,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                   className="h-4 w-4 text-[#6847F4]"
                   aria-hidden="true"
                 />
-                <span>Navigate with</span>
+                <span>导航方式：</span>
                 <span
                   className="flex items-center gap-1"
                   aria-label="arrow keys"
@@ -900,7 +900,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                     </kbd>
                   ))}
                 </span>
-                <span>or the left thumbnails</span>
+                <span>或使用左侧缩略图</span>
                 <button
                   type="button"
                   aria-label="Dismiss navigation hint"

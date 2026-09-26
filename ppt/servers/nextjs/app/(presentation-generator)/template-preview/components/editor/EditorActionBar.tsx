@@ -50,7 +50,7 @@ export function EditorActionBar({
         onClick={onReconstruct}
         type="button"
       >
-        <span className="whitespace-nowrap">Re-Construct</span>
+        <span className="whitespace-nowrap">重新构建</span>
         <RefreshCw
           className={cn(
             "h-[14px] w-[14px] shrink-0",
@@ -65,7 +65,7 @@ export function EditorActionBar({
         title="Add blank slide"
         type="button"
       >
-        <span>Blank</span>
+        <span>空白</span>
         <Plus className="h-4 w-4 shrink-0" />
       </button>
       <div className="h-[20px] w-0 shrink-0 border-l border-[#EDEEEF]" />
@@ -74,7 +74,7 @@ export function EditorActionBar({
         onClick={onCopy}
         type="button"
       >
-        <span className="whitespace-nowrap">Copy ID</span>
+        <span className="whitespace-nowrap">复制 ID</span>
         <Copy className="h-4 w-4 shrink-0" />
       </button>
       <div className="h-[20px] w-0 shrink-0 border-l border-[#EDEEEF]" />

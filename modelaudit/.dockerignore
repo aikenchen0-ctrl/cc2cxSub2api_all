@@ -1,0 +1,11 @@
+**/.env
+**/.env.*
+!**/.env.example
+/data/
+**/reports/
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/tests/
+**/.git/

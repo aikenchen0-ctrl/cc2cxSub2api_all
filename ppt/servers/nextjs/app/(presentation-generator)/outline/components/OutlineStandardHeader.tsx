@@ -23,6 +23,7 @@ const OutlineStandardHeader = ({
         >
           <Image
             src="/project-icon.jpg"
+            data-sub2api-site-logo
             alt="永恒PPT"
             width={32}
             height={33}

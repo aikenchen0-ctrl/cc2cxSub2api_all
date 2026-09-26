@@ -132,7 +132,7 @@ const WebSearchProvider = ({
                         <Command>
                           <CommandInput placeholder="Search provider..." />
                           <CommandList>
-                            <CommandEmpty>No provider found.</CommandEmpty>
+                            <CommandEmpty>未找到服务商。</CommandEmpty>
                             <CommandGroup>
                               {WEB_SEARCH_PROVIDER_OPTIONS.map((option) => (
                                 <CommandItem

@@ -230,7 +230,7 @@ export default function LLMProviderSelection({
             <TabsTrigger value="google">Google</TabsTrigger>
             <TabsTrigger value="anthropic">Anthropic</TabsTrigger>
             <TabsTrigger value="ollama">Ollama</TabsTrigger>
-            <TabsTrigger value="custom">Custom</TabsTrigger>
+            <TabsTrigger value="custom">自定义</TabsTrigger>
             <TabsTrigger value="codex">ChatGPT</TabsTrigger>
           </TabsList>
         </Tabs>

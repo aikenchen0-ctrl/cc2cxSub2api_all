@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { PanelRightClose, PanelRight, Settings, FolderPlus, LogOut, Loader2, X, Download, ChevronDown, Users, Images, MemoryStick, Cpu, HardDrive, TimerReset } from 'lucide-react';
 import type { ActiveImageTaskInfo, AgentPlan, AgentToolId, CanvasItem, CanvasTool, ChatMessage, ImageAspectRatio, ImageResolution, ProductPosterRequest } from './types';
 import AuthPanel from './components/AuthPanel';
+import Sub2ApiBalance from './components/Sub2ApiBalance';
 import Canvas from './components/Canvas';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
@@ -1344,6 +1345,24 @@ function App() {
       isMounted = false;
     };
   }, [isAuthReady, authSession?.token]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (
+      query.get('open') !== 'product-poster'
+      || !isAuthReady
+      || !authSession
+      || !hasLoadedCanvas
+    ) {
+      return;
+    }
+
+    query.delete('open');
+    const search = query.toString();
+    const nextUrl = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`;
+    window.history.replaceState(window.history.state, '', nextUrl);
+    setProductPosterOpenSignal(signal => signal + 1);
+  }, [authSession, hasLoadedCanvas, isAuthReady]);
 
   useEffect(() => {
     if (!authSession || !hasLoadedCanvas || !currentProjectId) return;
@@ -3032,6 +3051,7 @@ function App() {
                 </div>
               )}
             </div>
+            <Sub2ApiBalance />
             <button
               onClick={handleLogout}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-300 transition-all hover:bg-red-50 hover:text-red-500 active:scale-95"

@@ -51,7 +51,7 @@ export default function BedrockManualFields({
   return (
     <div className="mt-3 w-full min-w-0 max-w-full space-y-4">
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700">Model</label>
+        <label className="block text-sm font-medium text-gray-700">模型</label>
         <input
           type="text"
           value={llmConfig.BEDROCK_MODEL || ''}
@@ -62,7 +62,7 @@ export default function BedrockManualFields({
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700">Region</label>
+        <label className="block text-sm font-medium text-gray-700">区域</label>
         <input
           type="text"
           value={llmConfig.BEDROCK_REGION || ''}
@@ -86,7 +86,7 @@ export default function BedrockManualFields({
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700">AWS Access Key ID</label>
+        <label className="block text-sm font-medium text-gray-700">AWS 访问密钥 ID</label>
         <input
           type="text"
           value={llmConfig.BEDROCK_AWS_ACCESS_KEY_ID || ''}
@@ -119,7 +119,7 @@ export default function BedrockManualFields({
             type="button"
             className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-[#F9F9FA] px-3 py-2.5 text-left text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
           >
-            <span>Advanced settings</span>
+            <span>高级设置</span>
             <ChevronDown
               className={cn(
                 'h-4 w-4 shrink-0 text-gray-600 transition-transform duration-200',

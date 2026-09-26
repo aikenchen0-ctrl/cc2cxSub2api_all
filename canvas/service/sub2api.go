@@ -1,13 +1,17 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -16,6 +20,93 @@ import (
 )
 
 const sub2APIRelayChannelID = "sub2api-relay"
+
+// FetchSub2APIUserBalance reads the current Sub2API account balance through
+// the managed server-side satellite credential. It never accepts a browser
+// supplied credential or subject.
+func FetchSub2APIUserBalance(ctx context.Context, subject string) (float64, int, error) {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return 0, http.StatusUnauthorized, errors.New("Sub2API subject is unavailable")
+	}
+	credential := strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL"))
+	if credential == "" {
+		return 0, http.StatusServiceUnavailable, errors.New("Sub2API relay credential is unavailable")
+	}
+	baseURL, err := sub2APIRelayBaseURL()
+	if err != nil {
+		return 0, http.StatusServiceUnavailable, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/sub2api/balance", nil)
+	if err != nil {
+		return 0, http.StatusServiceUnavailable, err
+	}
+	if err := ApplySub2APIHeadersForUser(request.Header, subject, ""); err != nil {
+		return 0, http.StatusServiceUnavailable, err
+	}
+	client := &http.Client{Timeout: 12 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, http.StatusBadGateway, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusServiceUnavailable {
+			return 0, response.StatusCode, fmt.Errorf("Sub2API balance request returned %d", response.StatusCode)
+		}
+		return 0, http.StatusBadGateway, fmt.Errorf("Sub2API balance request returned %d", response.StatusCode)
+	}
+	var payload struct {
+		Balance float64 `json:"balance"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload); err != nil {
+		return 0, http.StatusBadGateway, errors.New("invalid Sub2API balance response")
+	}
+	return payload.Balance, http.StatusOK, nil
+}
+
+func sub2APIRelayBaseURL() (string, error) {
+	raw := strings.TrimSpace(os.Getenv("SUB2API_RELAY_BASE_URL"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("LINK"))
+	}
+	if raw == "" {
+		return "", errors.New("SUB2API_RELAY_BASE_URL or LINK must be configured")
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "", errors.New("Sub2API relay base URL must be an HTTP(S) origin or /v1 URL")
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	if path != "" && path != "/v1" {
+		return "", errors.New("Sub2API relay base URL must use /v1")
+	}
+	parsed.Path = "/v1"
+	parsed.RawPath = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+// Sub2APIPurchaseURL is intentionally derived from the public LINK only. A
+// docker-internal relay URL is not safe to expose as a browser recharge link.
+func Sub2APIPurchaseURL() string {
+	raw := strings.TrimSpace(os.Getenv("LINK"))
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return ""
+	}
+	parsed.Path = "/purchase"
+	parsed.RawPath = ""
+	return parsed.String()
+}
 
 func IsSub2APIChannel(channel model.ModelChannel) bool {
 	return channel.ID == sub2APIRelayChannelID

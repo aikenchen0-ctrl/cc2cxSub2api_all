@@ -34,6 +34,7 @@ function IconStrip({
       >
         <img
           src="/project-icon.jpg"
+          data-sub2api-site-logo
           alt="AI一键复刻网站"
           className="h-5 w-5 rounded object-cover"
         />

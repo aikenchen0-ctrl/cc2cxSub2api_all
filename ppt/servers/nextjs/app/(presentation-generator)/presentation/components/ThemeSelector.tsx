@@ -55,8 +55,8 @@ const ThemeSelector = ({ current_theme, themes: allThemes }: { current_theme: an
                     <button className='text-xs text-gray-500 pb-2 text-right underline' onClick={() => {
                         trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/theme?tab=new-theme" });
                         router.push(`/theme?tab=new-theme`)
-                    }}>+Customize Theme</button>
-                    <button className='text-xs text-gray-500 pb-2 text-right underline' onClick={resetTheme}>Reset Theme</button>
+                    }}>+自定义主题</button>
+                    <button className='text-xs text-gray-500 pb-2 text-right underline' onClick={resetTheme}>重置主题</button>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
 

@@ -8,7 +8,7 @@ import { createHunyuanTask, getHunyuanHealth, getHunyuanTask } from './server/pr
 import { createRodinTask, getRodinHealth, getRodinTask } from './server/providers/rodin.mjs'
 import { createTripoTask, getTripoHealth, getTripoTask } from './server/providers/tripo.mjs'
 import { analyzeAssetImage, getVisionHealth } from './server/providers/vision.mjs'
-import { consumeTicket, createSession, getIdentity, isManaged, loadTaskOwners, rememberTaskOwner, requireIdentity, safeNext, verifyTicket } from './server/auth-sso.mjs'
+import { consumeTicket, createSession, getIdentity, isManaged, loadTaskOwners, rememberTaskOwner, requireIdentity, safeNext, satelliteHeaders, sub2apiPurchaseUrl, sub2apiV1Base, verifyTicket } from './server/auth-sso.mjs'
 import { serveStaticApp } from './server/static-app.mjs'
 
 const DEFAULT_GENERATION_PROVIDER = 'rodin'
@@ -77,6 +77,35 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 200, { id: me.id, username: me.username || '', displayName: me.displayName || '' })
       } else {
         sendJson(response, 200, { id: 'local', username: '', displayName: '' })
+      }
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/sub2api/balance') {
+      response.setHeader('Cache-Control', 'no-store')
+      if (!isManaged()) {
+        sendJson(response, 401, { error: 'Sub2API login required' })
+        return
+      }
+      const identity = await requireIdentity(request)
+      const headers = satelliteHeaders(identity.subject)
+      const base = sub2apiV1Base()
+      if (!headers.Authorization || !base) {
+        sendJson(response, 503, { error: 'Sub2API satellite is not configured' })
+        return
+      }
+      try {
+        const upstream = await fetch(`${base}/sub2api/balance`, { headers, cache: 'no-store' })
+        if (!upstream.ok) {
+          sendJson(response, upstream.status === 401 ? 401 : upstream.status === 503 ? 503 : 502, { error: 'Balance is unavailable' })
+          return
+        }
+        const body = await upstream.json()
+        const balance = Number(body?.balance)
+        if (!Number.isFinite(balance)) throw new Error('Invalid balance response')
+        sendJson(response, 200, { balance, recharge_url: sub2apiPurchaseUrl() })
+      } catch {
+        sendJson(response, 502, { error: 'Balance is unavailable' })
       }
       return
     }

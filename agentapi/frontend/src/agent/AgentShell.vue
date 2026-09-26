@@ -19,14 +19,14 @@ const logo = computed(() => context.value?.agent.site_logo || '/logo.svg')
 
 const links = computed(() => {
   const items = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/recharge', label: 'Recharge' },
-    { to: '/console', label: 'Model console' },
-    { to: '/keys', label: 'API keys' },
-    { to: '/usage', label: 'Usage' },
-    { to: '/profile', label: 'Profile' },
+    { to: '/dashboard', label: '总览' },
+    { to: '/recharge', label: '充值' },
+    { to: '/console', label: '模型工作台' },
+    { to: '/keys', label: 'API 密钥' },
+    { to: '/usage', label: '用量记录' },
+    { to: '/profile', label: '个人资料' },
   ]
-  if (admin.value) items.splice(1, 0, { to: '/agent-admin', label: 'Agent console' })
+  if (admin.value) items.splice(1, 0, { to: '/agent-admin', label: '代理站管理' })
   return items
 })
 
@@ -70,10 +70,10 @@ onMounted(async () => {
           <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-dark-800 dark:hover:text-white" :class="route.path === link.to ? 'bg-gray-100 font-medium text-gray-900 dark:bg-dark-800 dark:text-white' : ''">{{ link.label }}</RouterLink>
         </nav>
         <div class="ml-auto flex items-center gap-2">
-          <button class="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600" type="button" aria-label="Toggle theme" @click="toggleTheme">{{ dark ? '☀️' : '🌙' }}</button>
-          <RouterLink v-if="!signedIn && route.path !== '/login'" to="/login" class="hidden rounded-lg px-3 py-2 text-sm md:inline">Sign in</RouterLink>
-          <RouterLink v-if="!signedIn && route.path !== '/register'" to="/register" class="rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white">Create account</RouterLink>
-          <button v-if="signedIn" class="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600" type="button" @click="signOut">Sign out</button>
+          <button class="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600" type="button" aria-label="切换主题" @click="toggleTheme">{{ dark ? '☀️' : '🌙' }}</button>
+          <RouterLink v-if="!signedIn && route.path !== '/login'" to="/login" class="hidden rounded-lg px-3 py-2 text-sm md:inline">登录</RouterLink>
+          <RouterLink v-if="!signedIn && route.path !== '/register'" to="/register" class="rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white">注册账号</RouterLink>
+          <button v-if="signedIn" class="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600" type="button" @click="signOut">退出登录</button>
         </div>
       </div>
       <div v-if="signedIn" class="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-2 md:hidden sm:px-6">
