@@ -2,6 +2,7 @@ services:
   production:
     platform: ${PRESENTON_DOCKER_PLATFORM:-linux/amd64}
     image: ${PRESENTON_IMAGE:-ppt:sub2api-integration}
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile

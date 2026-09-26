@@ -48,12 +48,12 @@ export default function GenerationModeDialog({
             }}
           >
             <DialogPrimitive.Description className="sr-only">
-              Choose Standard mode for fixed layouts or Smart mode for adaptive
+              标准模式使用固定布局，智能模式会根据内容自适应。
               layouts.
             </DialogPrimitive.Description>
             <div className="sticky top-0 z-10 border-b border-[#EDEEEF] bg-[#F9FAFB] px-4 py-4 sm:px-8">
               <DialogPrimitive.Title className="text-xl font-medium tracking-[-0.2px] text-[#808080]">
-                Select Mode
+               选择生成模式
               </DialogPrimitive.Title>
               <DialogPrimitive.Close className="absolute right-4 top-5 sm:right-8">
                 <X className="h-5 w-5 text-[#808080]" />
@@ -91,7 +91,7 @@ export default function GenerationModeDialog({
                   className="rounded-[80px] bg-[#7A5AF8] px-5 text-base font-medium text-white shadow-none hover:bg-[#6938EF]/90"
                   onClick={() => selectMode("standard")}
                 >
-                  Select Standard
+                  选择标准模式
                 </Button>
               </div>
             </div>
@@ -129,7 +129,7 @@ export default function GenerationModeDialog({
                   }}
                   onClick={() => selectMode("smart")}
                 >
-                  Select Smart
+                  选择智能模式
                 </Button>
               </div>
             </div>

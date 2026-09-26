@@ -59,8 +59,8 @@ export const PresentationCard = ({
     e.preventDefault();
     if (isUnsupported) {
       notify.warning(
-        "Unsupported presentation",
-        "This deck was created in an older 永恒PPT version. Downgrade to a compatible version to open it."
+        "暂不支持此演示文稿",
+        "此演示文稿由旧版本永恒PPT创建，请使用兼容版本打开。"
       );
       return;
     }
@@ -112,8 +112,8 @@ export const PresentationCard = ({
       onDuplicated?.(duplicated);
     } catch (error) {
       notify.error(
-        "Could not duplicate presentation",
-        error instanceof Error ? error.message : "Something went wrong while duplicating the presentation."
+        "无法复制演示文稿",
+        error instanceof Error ? error.message : "复制演示文稿时出现问题。"
       );
     } finally {
       setIsDuplicating(false);
@@ -263,7 +263,7 @@ export const PresentationCard = ({
               />
             </div>
             <DialogTitle className="text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#B42318]">
-              Delete presentation?
+            删除演示文稿？
             </DialogTitle>
             <DialogDescription asChild>
               <div className="w-full pt-2 text-sm leading-6 text-[#667085]">
@@ -277,7 +277,7 @@ export const PresentationCard = ({
                   </p>
                 </div>
                 <p className="mt-3 text-[13px] font-medium text-[#D92D20]">
-                  This action cannot be undone.
+                  此操作无法撤销。
                 </p>
               </div>
             </DialogDescription>
@@ -290,7 +290,7 @@ export const PresentationCard = ({
               disabled={isDeleting}
               className="h-11 rounded-[10px] border border-[#D0D5DD] bg-white px-4 text-sm font-medium text-[#344054] shadow-sm transition-colors hover:bg-[#F9FAFB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -301,12 +301,12 @@ export const PresentationCard = ({
               {isDeleting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Deleting...
+                  删除中...
                 </>
               ) : (
                 <>
                   <Trash className="h-4 w-4" aria-hidden="true" />
-                  Delete
+                  删除
                 </>
               )}
             </button>

@@ -103,16 +103,16 @@ export default function LLMProviderSelection({
         needsOpenWebUIImageUrl ||
         needsOpenAICompatImageConfig,
       text: needsModelSelection
-        ? "Please Select a Model"
+        ? "请选择模型"
         : needsApiKey
-          ? "Please Enter API Key"
+          ? "请输入 API 密钥"
           : needsComfyUIConfig
-            ? "Please Configure ComfyUI"
+            ? "请配置 ComfyUI"
             : needsOpenWebUIImageUrl
-              ? "Please Enter Open WebUI URL"
+              ? "请输入 Open WebUI 地址"
               : needsOpenAICompatImageConfig
-                ? "Please Configure Custom Image API"
-                : "Save Configuration",
+                ? "请配置自定义图片 API"
+                : "保存配置",
       showProgress: false,
     });
   }, [llmConfig]);
@@ -317,7 +317,7 @@ export default function LLMProviderSelection({
         {/* <div className="my-8">
           <div className="flex items-center justify-between mb-4 bg-green-50 p-2 rounded-sm">
             <label className="text-sm font-medium text-gray-700">
-              Disable Image Generation
+              禁用图片生成
             </label>
             <Switch
               checked={isImageGenerationDisabled}
@@ -344,7 +344,7 @@ export default function LLMProviderSelection({
             <Info className="w-5 h-5 text-blue-500 mt-0.5" />
             <div>
               <h3 className="text-sm font-medium text-blue-900 mb-1">
-                Selected Models
+                已选模型
               </h3>
               <p className="text-sm text-blue-700">
                 Using{" "}

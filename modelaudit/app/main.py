@@ -235,6 +235,12 @@ def create_app() -> FastAPI:
         await require_admin(request)
         return await get_options(request.app.state.db, request.app.state.settings)
 
+    @app.get("/api/models")
+    async def available_models(request: Request) -> dict[str, Any]:
+        await require_admin(request)
+        models = sorted({profile.get("model", "").strip() for profile in request.app.state.settings.group_profiles.values() if isinstance(profile, dict) and isinstance(profile.get("model"), str) and profile.get("model", "").strip()})
+        return {"models": models}
+
     @app.post("/api/settings")
     async def update_settings(request: Request) -> dict[str, Any]:
         await require_admin(request)
@@ -245,7 +251,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=422, detail="settings_json_invalid") from exc
         if not isinstance(body, dict):
             raise HTTPException(status_code=422, detail="settings_must_be_object")
-        allowed = {"interval_minutes", "scheduler_enabled", "auto_stop_enabled", "stop_rules"}
+        allowed = {"interval_minutes", "scheduler_enabled", "auto_stop_enabled", "stop_rules", "target_model"}
         if set(body) - allowed:
             raise HTTPException(status_code=422, detail="settings_field_not_allowed")
         db: aiosqlite.Connection = request.app.state.db
@@ -259,6 +265,15 @@ def create_app() -> FastAPI:
     async def scan_now(request: Request) -> JSONResponse:
         await require_admin(request)
         require_same_origin(request, request.app.state.settings)
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="scan_body_invalid")
+        if "target_model" in body:
+            current = await get_options(request.app.state.db, request.app.state.settings)
+            await set_options(request.app.state.db, merge_options(current, {"target_model": body["target_model"]}))
         try:
             request.app.state.coordinator.launch_manual_scan()
         except ScanAlreadyRunning as exc:

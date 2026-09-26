@@ -476,7 +476,7 @@ const DashboardPage: React.FC = () => {
         pathname,
         error_message: sanitizeAnalyticsError(creationError),
       });
-      notify.error("Could not create blank presentation", message);
+      notify.error("无法创建空白演示文稿", message);
     } finally {
       blankPresentationRequestInFlight.current = false;
       setIsCreatingBlankPresentation(false);

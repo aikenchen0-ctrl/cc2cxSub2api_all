@@ -85,7 +85,7 @@ export default function CreatableModelInput({
                 value ? "font-medium text-gray-900" : "text-gray-400"
               )}
             >
-              {value || "Select a discovered model or enter any model ID"}
+              {value || "选择已发现的模型，或输入模型 ID"}
             </span>
             <ChevronDown
               className={cn(
@@ -110,7 +110,7 @@ export default function CreatableModelInput({
             <CommandInput
               value={query}
               onValueChange={setQuery}
-              placeholder="Search or enter a model ID..."
+              placeholder="搜索或输入模型 ID..."
             />
             <CommandList id={popoverId} className="max-h-60 hide-scrollbar">
               <CommandGroup>
@@ -123,10 +123,10 @@ export default function CreatableModelInput({
                     <Check className="mr-2 h-4 w-4 opacity-0" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-gray-900">
-                        Use “{customModel}”
+                        使用“{customModel}”
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-gray-600">
-                        Save as a custom model ID
+                        保存为自定义模型 ID
                       </p>
                     </div>
                   </CommandItem>
@@ -157,7 +157,7 @@ export default function CreatableModelInput({
                   ))}
                 {!customModel && filteredOptions.length === 0 && (
                   <div className="px-3 py-5 text-center text-sm text-gray-500">
-                    No discovered models yet.
+                暂未发现模型。
                   </div>
                 )}
               </CommandGroup>

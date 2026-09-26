@@ -14,7 +14,7 @@ import (
 // gatewayTransportErrorTempUnschedDuration is how long an account is temporarily
 // unscheduled after a durable transport failure (matches the OpenAI-side
 // openAITransportErrorTempUnschedDuration).
-const gatewayTransportErrorTempUnschedDuration = 10 * time.Minute
+const gatewayTransportErrorTempUnschedDuration = time.Minute
 
 // gatewayTransportFailoverBody is the Anthropic-format error body attached to
 // the failover error for a transport-level failure. Kept identical to the
@@ -58,8 +58,14 @@ func (s *GatewayService) handleUpstreamTransportError(ctx context.Context, c *gi
 
 	// Transport attempt left local validation; count Ollama Cloud activity.
 	scheduleOllamaCloudUsageActivity(s.deferredService, account)
+	healthTripped := false
+	if s.rateLimitService != nil {
+		// Transport errors have no HTTP status, but still count as an upstream
+		// request failure for the two-failure account breaker.
+		healthTripped = s.rateLimitService.ObserveUpstreamFailure(ctx, account, http.StatusBadGateway, nil)
+	}
 
-	if classifyUpstreamTransportError(err).Persistent {
+	if healthTripped && classifyUpstreamTransportError(err).Persistent {
 		s.tempUnscheduleTransportError(ctx, account, safeErr)
 	}
 

@@ -66,6 +66,9 @@ const (
 	// SuperAPIKey marks requests authenticated by the cross-group compatibility key.
 	SuperAPIKey Key = "ctx_super_api_key"
 
+	// SatelliteApp identifies a verified server-side satellite relay request.
+	SatelliteApp Key = "ctx_satellite_app"
+
 	// IsMaxTokensOneHaikuRequest 标识当前请求是否为 max_tokens=1 + haiku 模型的探测请求
 	// 用于 ClaudeCodeOnly 验证绕过（绕过 system prompt 检查，但仍需验证 User-Agent）
 	IsMaxTokensOneHaikuRequest Key = "ctx_is_max_tokens_one_haiku"

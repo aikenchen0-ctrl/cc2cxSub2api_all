@@ -134,7 +134,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               <div className="flex items-center justify-between gap-2.5">
                 <div className="min-w-[140px] w-full">
                   {isProcessing ? (
-                    <div className="flex items-center justify-end gap-3" aria-live="polite" aria-label="Processing">
+                    <div className="flex items-center justify-end gap-3" aria-live="polite" aria-label="处理中">
                       <div
                         className="h-[14px] w-[74px] rounded-full bg-[#EFEDFF] overflow-hidden ring-1 ring-[#E4E0FF]"
                         aria-hidden="true"

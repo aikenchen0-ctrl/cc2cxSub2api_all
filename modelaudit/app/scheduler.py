@@ -187,13 +187,15 @@ class ScanCoordinator:
             )
             await self.db.commit()
             accounts = await self.sub2api.list_active_accounts()
+            options = await get_options(self.db, self.settings)
+            target_model = str(options.get("target_model") or "").strip()
             account_count = len(accounts)
             group_member_counts = _active_schedulable_group_counts(accounts)
             semaphore = asyncio.Semaphore(self.settings.max_parallel_accounts)
 
             async def bounded_scan(raw: dict[str, Any]) -> tuple[int, int]:
                 async with semaphore:
-                    return await self._scan_account(run_id, raw, group_member_counts)
+                    return await self._scan_account(run_id, raw, group_member_counts, target_model)
 
             outcomes = await asyncio.gather(*(bounded_scan(account) for account in accounts), return_exceptions=True)
             for outcome in outcomes:
@@ -273,6 +275,7 @@ class ScanCoordinator:
         run_id: str,
         raw: dict[str, Any],
         group_member_counts: dict[int, int],
+        target_model: str = "",
     ) -> tuple[int, int]:
         raw_id = raw.get("id", raw.get("account_id"))
         try:
@@ -342,6 +345,8 @@ class ScanCoordinator:
             if group_id in self.settings.gateway_api_keys
         ]
         candidates = [(group_id, profile) for group_id, profile in candidates if profile is not None]
+        if target_model:
+            candidates = [(group_id, profile) for group_id, profile in candidates if profile.model == target_model]
         if not candidates:
             missing = [
                 result(name, "not_configured", "No configured ordinary API key and model profile match this account's groups.")

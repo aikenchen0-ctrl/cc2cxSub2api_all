@@ -1,0 +1,11 @@
+aicut/
+aiexcel/
+ai3d/
+aihuoke/
+canvas/
+ju/
+livart/
+ppt/
+qrcode/
+screen2code/
+yibiao/

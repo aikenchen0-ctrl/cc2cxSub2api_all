@@ -51,7 +51,7 @@ const CurrentConfig = ({ webSearchEnabled }: { webSearchEnabled: boolean }) => {
         ? "Image generation disabled"
         : llmConfig.IMAGE_PROVIDER
             ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]?.label || llmConfig.IMAGE_PROVIDER
-            : "No image provider";
+            : "未配置图片服务";
     const webSearchProviderKey = (llmConfig.WEB_SEARCH_PROVIDER || "auto").toLowerCase();
     const webSearchProvider =
         WEB_SEARCH_PROVIDERS[webSearchProviderKey]?.label || webSearchProviderKey;

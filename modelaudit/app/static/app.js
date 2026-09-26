@@ -217,6 +217,37 @@ function renderAccounts(data) {
   }
 }
 
+function renderAttribution(accounts) {
+  const container = byId('attribution-results')
+  container.replaceChildren()
+  const rows = accounts.flatMap((account) => {
+    const check = (account.checks || []).find((item) => item.probe === 'modeltrace')
+    const candidates = (check?.metrics?.probabilities || []).slice(0, 3)
+    return candidates.length ? [{ account, candidates }] : []
+  })
+  if (!rows.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = '暂无可展示的归因结果。'; container.append(empty); return }
+  for (const { account, candidates } of rows) {
+    const card = document.createElement('article'); card.className = 'attribution-item'
+    const heading = document.createElement('div'); heading.className = 'attribution-heading'
+    heading.innerHTML = '<strong></strong><span></span>'
+    heading.querySelector('strong').textContent = account.name
+    heading.querySelector('span').textContent = '#' + account.id + ' · ' + (account.platform || '')
+    card.append(heading)
+    for (const candidate of candidates) {
+      const probability = Math.max(0, Math.min(1, Number(candidate.probability) || 0))
+      const similarity = Math.max(0, Math.min(1, Number(candidate.profile_similarity) || 0))
+      const row = document.createElement('div'); row.className = 'attribution-row'
+      row.innerHTML = '<div class="attribution-label"><span></span><b></b></div><div class="attribution-track"><i></i></div><small></small>'
+      row.querySelector('.attribution-label span').textContent = candidate.model || '未知候选'
+      row.querySelector('.attribution-label b').textContent = (similarity * 100).toFixed(1) + '%'
+      row.querySelector('i').style.width = (similarity * 100).toFixed(1) + '%'
+      row.querySelector('small').textContent = '相似度 · 置信度 ' + (probability * 100).toFixed(1) + '%'
+      card.append(row)
+    }
+    container.append(card)
+  }
+}
+
 function renderAlerts(alerts) {
   const container = byId('alerts')
   container.replaceChildren()
@@ -276,6 +307,16 @@ function setSettings(settings) {
   byId('auto-stop-enabled').checked = Boolean(settings.auto_stop_enabled)
   const selected = new Set(settings.stop_rules || [])
   document.querySelectorAll('.stop-rule').forEach((input) => { input.checked = selected.has(input.value) })
+  const target = byId('target-model')
+  if (target) target.value = settings.target_model || ''
+}
+
+async function loadModels() {
+  const data = await api('/api/models')
+  const select = byId('target-model')
+  select.replaceChildren()
+  const all = document.createElement('option'); all.value = ''; all.textContent = '全部已配置模型'; select.append(all)
+  for (const model of data.models || []) { const option = document.createElement('option'); option.value = model; option.textContent = model; select.append(option) }
 }
 
 function renderDashboard(data) {
@@ -286,6 +327,7 @@ function renderDashboard(data) {
   byId('scan-state').textContent = data.scan_running ? '扫描中' : data.settings.scheduler_enabled ? '定时开启' : '定时关闭'
   byId('run-status').replaceChildren(pill(data.latest_run?.status || '等待数据', data.latest_run?.status?.startsWith('completed') ? 'normal' : 'none'))
   renderAccounts(data.accounts)
+  renderAttribution(data.accounts)
   renderAlerts(data.alerts)
   renderGroups(data.groups)
   setSettings(data.settings)
@@ -330,6 +372,7 @@ async function saveSettings() {
         scheduler_enabled: byId('scheduler-enabled').checked,
         auto_stop_enabled: byId('auto-stop-enabled').checked,
         stop_rules: stopRules,
+        target_model: byId('target-model').value,
       }),
     })
     setSettings(value)
@@ -353,9 +396,10 @@ async function stopAccount(accountId) {
 
 async function runNow() {
   try {
-    await api('/api/scan', { method: 'POST', body: '{}' })
+    await api('/api/scan', { method: 'POST', body: JSON.stringify({ target_model: byId('target-model').value }) })
     toast('扫描已加入队列')
     await refresh()
+    await loadModels()
   } catch (error) {
     toast(error.message)
   }
@@ -369,6 +413,7 @@ async function boot() {
     byId('app').classList.remove('hidden')
     byId('login-gate').classList.add('hidden')
     await refresh()
+    await loadModels()
     state.refreshTimer = window.setInterval(refresh, 8000)
   } catch (error) {
     if (error.unauthorized) showLogin()

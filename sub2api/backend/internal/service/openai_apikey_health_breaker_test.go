@@ -26,11 +26,13 @@ type openAIAPIKeyHealthAccountRepo struct {
 	AccountRepository
 	setCalls int
 	reason   string
+	until    time.Time
 }
 
-func (r *openAIAPIKeyHealthAccountRepo) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, reason string) error {
+func (r *openAIAPIKeyHealthAccountRepo) SetTempUnschedulable(_ context.Context, _ int64, until time.Time, reason string) error {
 	r.setCalls++
 	r.reason = reason
+	r.until = until
 	return nil
 }
 
@@ -39,10 +41,14 @@ type openAIAPIKeyHealthCacheStub struct {
 	recordCalls int
 	setCalls    int
 	tripped     bool
+	window      int
+	threshold   int
 }
 
-func (c *openAIAPIKeyHealthCacheStub) RecordOpenAIAPIKeyHealthFailure(context.Context, int64, int, int) (int64, bool, error) {
+func (c *openAIAPIKeyHealthCacheStub) RecordOpenAIAPIKeyHealthFailure(_ context.Context, _ int64, window, threshold int) (int64, bool, error) {
 	c.recordCalls++
+	c.window = window
+	c.threshold = threshold
 	return 3, c.tripped, nil
 }
 
@@ -76,11 +82,11 @@ func TestClassifyOpenAIAPIKeyHealthFailureExclusions(t *testing.T) {
 		eligible bool
 	}{
 		{name: "account attributed 502", err: &UpstreamFailoverError{StatusCode: http.StatusBadGateway}, eligible: true},
-		{name: "request scoped capacity", err: &UpstreamFailoverError{StatusCode: 529, RequestScopedTransient: true}},
-		{name: "provider scoped overload", err: &UpstreamFailoverError{StatusCode: 529, Scope: GatewayFailureScopeProvider}},
-		{name: "dedicated same account retry", err: &UpstreamFailoverError{StatusCode: http.StatusTooManyRequests, RetryableOnSameAccount: true}},
-		{name: "credential disable path", err: &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount}},
-		{name: "client request", err: &UpstreamFailoverError{StatusCode: http.StatusBadRequest}},
+		{name: "request scoped capacity", err: &UpstreamFailoverError{StatusCode: 529}, eligible: true},
+		{name: "provider scoped overload", err: &UpstreamFailoverError{StatusCode: 529}, eligible: true},
+		{name: "dedicated same account retry", err: &UpstreamFailoverError{StatusCode: http.StatusTooManyRequests, RetryableOnSameAccount: true}, eligible: true},
+		{name: "credential disable path", err: &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount}, eligible: true},
+		{name: "client request", err: &UpstreamFailoverError{StatusCode: http.StatusBadRequest}, eligible: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,15 +96,31 @@ func TestClassifyOpenAIAPIKeyHealthFailureExclusions(t *testing.T) {
 	}
 }
 
-func TestOpenAIAPIKeyHealthBreakerDefaultDisabled(t *testing.T) {
+func TestUpstreamFailureBreakerDefaultEnabled(t *testing.T) {
 	settings := NewSettingService(&openAIAPIKeyHealthSettingRepo{}, &config.Config{})
 	cache := &openAIAPIKeyHealthCacheStub{tripped: true}
 	svc := NewRateLimitService(&openAIAPIKeyHealthAccountRepo{}, nil, &config.Config{}, nil, cache)
 	svc.SetSettingService(settings)
 	svc.SetOpenAIAPIKeyHealthCache(cache)
 
-	require.False(t, svc.ObserveOpenAIAPIKeyHealthFailure(context.Background(), openAIHealthPoolAccount(), &UpstreamFailoverError{StatusCode: http.StatusBadGateway}))
-	require.Zero(t, cache.recordCalls)
+	require.True(t, svc.ObserveOpenAIAPIKeyHealthFailure(context.Background(), openAIHealthPoolAccount(), &UpstreamFailoverError{StatusCode: http.StatusBadGateway}))
+	require.Equal(t, 1, cache.recordCalls)
+}
+
+func TestUpstreamFailureBreakerCoversNonOpenAIAccounts(t *testing.T) {
+	cache := &openAIAPIKeyHealthCacheStub{tripped: true}
+	repo := &openAIAPIKeyHealthAccountRepo{}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, cache)
+	svc.SetSettingService(NewSettingService(&openAIAPIKeyHealthSettingRepo{}, &config.Config{}))
+	svc.SetOpenAIAPIKeyHealthCache(cache)
+
+	account := &Account{ID: 43, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
+	require.True(t, svc.ObserveUpstreamFailure(context.Background(), account, http.StatusServiceUnavailable, nil))
+	require.Equal(t, 1, cache.recordCalls)
+	require.Equal(t, 1, cache.window)
+	require.Equal(t, 2, cache.threshold)
+	require.Equal(t, 1, repo.setCalls)
+	require.WithinDuration(t, time.Now().Add(time.Minute), repo.until, 2*time.Second)
 }
 
 func TestOpenAIAPIKeyHealthBreakerTripsPersistedAndRuntimeState(t *testing.T) {

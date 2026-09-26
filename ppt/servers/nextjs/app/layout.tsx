@@ -44,22 +44,15 @@ const unbounded = Unbounded({
 export const metadata: Metadata = {
   metadataBase: new URL("https://presenton.ai"),
   title: "PPT生成",
-  description:
-    "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+  description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
   keywords: [
-    "AI presentation generator",
-    "data storytelling",
-    "data visualization tool",
-    "AI data presentation",
-    "presentation generator",
-    "data to presentation",
-    "interactive presentations",
-    "professional slides",
+    "AI 演示文稿生成",
+    "数据故事",
+    "演示文稿生成器",
   ],
   openGraph: {
     title: "PPT生成",
-    description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
     url: "https://presenton.ai",
     siteName: "PPT生成",
     images: [
@@ -71,7 +64,7 @@ export const metadata: Metadata = {
       },
     ],
     type: "website",
-    locale: "en_US",
+    locale: "zh_CN",
   },
   alternates: {
     canonical: "https://presenton.ai",
@@ -79,8 +72,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "PPT生成",
-    description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
     images: ["https://presenton.ai/presenton-feature-graphics.png"],
   },
   icons: { icon: "/project-icon.jpg", shortcut: "/project-icon.jpg" },
@@ -93,7 +85,7 @@ export default function RootLayout({
 }>) {
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body
         className={`${inter.variable} ${syne.variable} ${manrope.variable} ${unbounded.variable} antialiased`}
       >

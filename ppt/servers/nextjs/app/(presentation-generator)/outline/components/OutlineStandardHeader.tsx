@@ -18,7 +18,7 @@ const OutlineStandardHeader = ({
       <div className="flex min-w-0 items-center gap-3">
         <Link
           href="/dashboard"
-          aria-label="Go to dashboard"
+          aria-label="返回仪表盘"
           className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30"
         >
           <Image

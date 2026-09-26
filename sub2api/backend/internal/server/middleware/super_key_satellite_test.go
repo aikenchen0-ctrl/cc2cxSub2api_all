@@ -60,10 +60,16 @@ func TestBindSatelliteSuperKeyContextMarksCrossGroup(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Request.Header.Set(HeaderSatelliteApp, "canvas")
 
 	namedOnly := &service.APIKey{Name: service.SuperAPIKeyName, Key: "sat-not-a-super-prefix"}
 	bindSatelliteSuperKeyContext(c, true, namedOnly)
 	require.True(t, service.SuperKeyCrossGroup(c.Request.Context()))
+	require.Equal(t, "canvas", service.SatelliteBillingSlugFromContext(c.Request.Context()))
+
+	c.Request.Header.Set(HeaderSatelliteApp, "agentapi")
+	bindSatelliteSuperKeyContext(c, true, namedOnly)
+	require.Empty(t, service.SatelliteBillingSlugFromContext(c.Request.Context()))
 }
 
 func TestBindAgentRuntimeModelScopeKeepsUnconfiguredAndEmptyDistinct(t *testing.T) {

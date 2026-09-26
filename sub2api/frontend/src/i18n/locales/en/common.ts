@@ -208,6 +208,7 @@ export default {
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
     promoCodes: 'Promo Codes',
+    satelliteBilling: 'Satellite Billing',
     settings: 'Settings',
     myAccount: 'My Account',
     lightMode: 'Light Mode',

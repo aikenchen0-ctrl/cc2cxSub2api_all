@@ -806,6 +806,26 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		}
 	}
 
+	// Satellite pricing changes only the customer charge (ActualCost). Keep the
+	// model-based TotalCost for account cost/quota statistics, and do not apply
+	// model, group, peak, or image multipliers to an explicit satellite price.
+	satelliteBillingApplied := false
+	if satelliteCost, applied := applySatelliteBillingConfig(ctx, s.settingService, SatelliteBillingUsage{
+		Model:           requestedModel,
+		InboundEndpoint: input.InboundEndpoint,
+		Tokens: UsageTokens{
+			InputTokens:         result.Usage.InputTokens,
+			OutputTokens:        result.Usage.OutputTokens,
+			CacheCreationTokens: result.Usage.CacheCreationInputTokens,
+			CacheReadTokens:     result.Usage.CacheReadInputTokens,
+			ImageOutputTokens:   result.Usage.ImageOutputTokens,
+		},
+		ImageCount: result.ImageCount,
+	}); applied {
+		cost = overrideCustomerCostWithSatelliteQuote(cost, satelliteCost)
+		satelliteBillingApplied = true
+	}
+
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 	billingType := BillingTypeBalance
@@ -815,6 +835,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 
 	// 创建使用日志
 	accountRateMultiplier := account.BillingRateMultiplier()
+	if satelliteBillingApplied {
+		multiplier = 1
+		imageMultiplier = 1
+	}
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
 

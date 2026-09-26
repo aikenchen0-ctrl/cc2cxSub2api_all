@@ -500,7 +500,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
             <div className="flex flex-1 items-center justify-between px-5 sm:px-9">
               <div className="flex items-center gap-[26px]">
                 <PresentationIconButton
-                  title="Previous slide"
+                  title="上一页"
                   disabled={activeSlideIndex === 0}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -520,7 +520,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                   <span>{slideCount}</span>
                 </div>
                 <PresentationIconButton
-                  title="Next slide"
+                  title="下一页"
                   disabled={activeSlideIndex === slideCount - 1}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -532,7 +532,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
               </div>
               <div className="flex items-center gap-[26px]">
                 <PresentationIconButton
-                  title="Layout preview"
+                  title="布局预览"
                   active={showSlideGrid}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -543,7 +543,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                   <LayoutGrid className="size-[18px]" strokeWidth={2} />
                 </PresentationIconButton>
                 <PresentationIconButton
-                  title="Speaker note"
+                  title="演讲者备注"
                   active={notesPanelOpen}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -553,7 +553,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                   <SpeakerNoteIcon className="size-[18px]" />
                 </PresentationIconButton>
                 <PresentationIconButton
-                  title="Exit presentation"
+                  title="退出演示"
                   onClick={(event) => {
                     event.stopPropagation();
                     onExit();

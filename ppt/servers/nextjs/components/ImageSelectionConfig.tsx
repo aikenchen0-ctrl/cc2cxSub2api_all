@@ -49,7 +49,7 @@ const renderQualitySelector = (llmConfig: LLMConfig, input_field_changed: (value
                 <div className="">
                     <Select value={llmConfig.DALL_E_3_QUALITY} onValueChange={(value) => input_field_changed(value, "dall_e_3_quality")}>
                         <SelectTrigger className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                            <SelectValue placeholder="Select a quality" />
+                            <SelectValue placeholder="选择画质" />
                         </SelectTrigger>
                         <SelectContent>
                             {DALLE_3_QUALITY_OPTIONS.map((option) => (
@@ -98,7 +98,7 @@ const renderQualitySelector = (llmConfig: LLMConfig, input_field_changed: (value
                         <SelectTrigger
 
                             className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                            <SelectValue placeholder="Select a quality" />
+                            <SelectValue placeholder="选择画质" />
                         </SelectTrigger>
                         <SelectContent>
                             {GPT_IMAGE_1_5_QUALITY_OPTIONS.map((option) => (
@@ -185,7 +185,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                             style={{ width: "var(--radix-popover-trigger-width)" }}
                                         >
                                             <Command>
-                                                <CommandInput placeholder="Search provider..." />
+                                                <CommandInput placeholder="搜索服务..." />
                                                 <CommandList>
                                                     <CommandEmpty>未找到服务商。</CommandEmpty>
                                                     <CommandGroup>

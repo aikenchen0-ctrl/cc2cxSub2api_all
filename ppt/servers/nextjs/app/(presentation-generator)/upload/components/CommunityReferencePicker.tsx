@@ -62,7 +62,7 @@ export default function CommunityReferencePicker({
             Community
           </h2>
           <p className="mt-1 text-xs text-[#808080]">
-            Choose an optional design reference for Smart mode.
+            为智能模式选择一个可选的设计参考。
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export default function CommunityReferencePicker({
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search ..."
+              placeholder="搜索..."
               className="min-w-0 flex-1 bg-transparent font-syne text-base font-normal text-[#191919] outline-none placeholder:text-[#808080]"
             />
           </label>
@@ -111,7 +111,7 @@ export default function CommunityReferencePicker({
         <div className="mx-0 mt-5 rounded-xl border border-dashed border-[#D9D9DE] bg-[#FAFAFC] px-6 py-10 text-center sm:mx-6">
           <Search className="mx-auto h-5 w-5 text-[#808080]" />
           <h3 className="mt-3 text-sm font-semibold text-[#191919]">
-            No matching designs
+            没有匹配的设计
           </h3>
         </div>
       ) : (
@@ -142,7 +142,7 @@ export default function CommunityReferencePicker({
                     />
                   ) : (
                     <span className="flex h-full items-center justify-center text-xs text-[#999999]">
-                      No preview
+                      暂无预览
                     </span>
                   )}
                   <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/5" />

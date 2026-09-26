@@ -151,7 +151,7 @@ const AdvanceSettings = ({
                                     }}
                                     className="rounded-full px-[28px] py-[10px] font-syne text-xs font-semibold text-[#1E1D2B] shadow-none hover:opacity-95 min-[1800px]:px-8 min-[1800px]:py-3 min-[1800px]:text-sm"
                                 >
-                                    Save
+                                    保存
                                 </Button>
                             </div>
 
@@ -191,7 +191,7 @@ const AdvanceSettings = ({
 
                                     >
                                         <SelectTrigger className="w-[120px] rounded-xl border-[#DBDBE1] bg-white p-2.5 font-syne text-sm font-medium capitalize text-[#2C2B37] shadow-none focus:ring-0 focus-visible:ring-0 min-[1800px]:w-[140px] min-[1800px]:text-base">
-                                            <SelectValue placeholder="Select tone" />
+                                            <SelectValue placeholder="选择语气" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[120] font-syne">
                                             {Object.values(ToneType).map((tone) => (
@@ -212,7 +212,7 @@ const AdvanceSettings = ({
                                         }
                                     >
                                         <SelectTrigger className="w-[120px] rounded-xl border-[#DBDBE1] bg-white p-2.5 font-syne text-sm font-medium capitalize text-[#2C2B37] shadow-none focus:ring-0 focus-visible:ring-0 min-[1800px]:w-[140px] min-[1800px]:text-base">
-                                            <SelectValue placeholder="Select verbosity" />
+                                            <SelectValue placeholder="选择详细程度" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[120] font-syne">
                                             {Object.values(VerbosityType).map((verbosity) => (

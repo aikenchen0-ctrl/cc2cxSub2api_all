@@ -175,28 +175,28 @@ const TextProvider = ({ onInputChange, llmConfig }: OpenAIConfigProps) => {
   }, [availableModels, currentModel]);
   const providerApiKeyLabel =
     selectedProvider === "custom"
-      ? "Custom LLM API Key"
+      ? "自定义 LLM API 密钥"
       : selectedProvider === "deepseek"
-      ? "DeepSeek API Key"
+      ? "DeepSeek API 密钥"
       : selectedProvider === "vertex"
-      ? "Vertex API Key"
+      ? "Vertex API 密钥"
       : selectedProvider === "azure"
-      ? "Azure OpenAI API Key"
+      ? "Azure OpenAI API 密钥"
       : selectedProvider === "bedrock"
-      ? "Bedrock API Key (optional)"
+      ? "Bedrock API 密钥（可选）"
       : selectedProvider === "openrouter"
-      ? "OpenRouter API Key"
+      ? "OpenRouter API 密钥"
       : selectedProvider === "fireworks"
-      ? "Fireworks API Key"
+      ? "Fireworks API 密钥"
       : selectedProvider === "together"
-      ? "Together API Key"
+      ? "Together API 密钥"
       : selectedProvider === "cerebras"
-      ? "Cerebras API Key"
+      ? "Cerebras API 密钥"
       : selectedProvider === "litellm"
-      ? "LiteLLM API key (optional)"
+      ? "LiteLLM API 密钥（可选）"
       : selectedProvider === "lmstudio"
-      ? "LM Studio API key (optional)"
-      : `${selectedProvider} API Key`;
+      ? "LM Studio API 密钥（可选）"
+      : `${selectedProvider} API 密钥`;
 
   useEffect(() => {
     if (currentDeepseekBaseUrl) setDeepseekAdvancedOpen(true);
@@ -524,7 +524,7 @@ const TextProvider = ({ onInputChange, llmConfig }: OpenAIConfigProps) => {
                     style={{ width: "300px" }}
                   >
                     <Command>
-                      <CommandInput placeholder="Search provider..." />
+                      <CommandInput placeholder="搜索服务..." />
                       <CommandList>
                         <CommandEmpty>未找到服务商。</CommandEmpty>
                         <CommandGroup>

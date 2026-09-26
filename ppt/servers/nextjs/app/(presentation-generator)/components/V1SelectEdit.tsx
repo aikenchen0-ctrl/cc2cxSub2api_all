@@ -627,8 +627,8 @@ const HtmlSelectionEditor = ({
                 e.stopPropagation();
                 activateEditor();
               }}
-              aria-label="Open AI Editor"
-              title="AI Edit"
+              aria-label="打开 AI 编辑器"
+              title="AI 编辑"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
               <span>AI 编辑</span>

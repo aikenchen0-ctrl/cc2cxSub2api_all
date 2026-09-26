@@ -134,7 +134,13 @@ func bindSatelliteSuperKeyContext(c *gin.Context, satelliteHandled bool, apiKey 
 	if !satelliteHandled && !apiKey.IsSuper() {
 		return
 	}
-	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.SuperAPIKey, true))
+	ctx := context.WithValue(c.Request.Context(), ctxkey.SuperAPIKey, true)
+	if satelliteHandled {
+		if slug := strings.TrimSpace(c.GetHeader(HeaderSatelliteApp)); slug != "" {
+			ctx = context.WithValue(ctx, ctxkey.SatelliteApp, slug)
+		}
+	}
+	c.Request = c.Request.WithContext(ctx)
 }
 
 func loadSatelliteUserKey(c *gin.Context, apiKeyService satelliteUserKeyResolver, presented string, runtimeService agentRuntimeModelAuthenticator) (*service.APIKey, bool) {

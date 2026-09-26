@@ -27,11 +27,7 @@ const Header = () => {
   const backToTemplates = pathMatches(pathname, "/template-preview");
 
   const backHref = backToUpload ? "/upload" : backToTemplates ? "/templates" : "/dashboard";
-  const backLabel = backToUpload
-    ? "BACK"
-    : backToTemplates
-      ? "BACK"
-      : "BACK";
+  const backLabel = backToUpload ? "返回" : backToTemplates ? "返回" : "返回";
 
   return (
     <div className="w-full   sticky top-0 z-50 py-7 "

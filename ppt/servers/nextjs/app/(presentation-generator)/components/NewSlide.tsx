@@ -250,7 +250,7 @@ const NewSlideV1 = ({
     >
       <button
         type="button"
-        aria-label="Close layout picker"
+        aria-label="关闭布局选择器"
         onClick={() => setShowNewSlideSelection(false)}
         className="absolute right-0 top-[-52px] z-50 flex h-10 w-10 items-center justify-center rounded-full border border-[#EDEEEF] bg-white text-[#191919] shadow-[0_6.6px_13.2px_rgba(0,0,0,0.10)] transition hover:bg-[#F7F6F9]"
       >

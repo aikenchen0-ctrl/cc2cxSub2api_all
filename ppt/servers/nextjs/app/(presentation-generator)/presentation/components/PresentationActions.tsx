@@ -211,11 +211,11 @@ function presentationActionsUiReducer(
 }
 
 const insertActions: ActionItem[] = [
-  { id: "texts", label: "Texts", icon: Type },
-  { id: "charts", label: "Charts", icon: BarChart3 },
+  { id: "texts", label: "文本", icon: Type },
+  { id: "charts", label: "图表", icon: BarChart3 },
   { id: "infographics", label: "Infographics", icon: Shapes },
   { id: "tables", label: "Tables", icon: Rows3 },
-  { id: "images", label: "Images", icon: Image },
+  { id: "images", label: "图片", icon: Image },
   { id: "elements", label: "Elements", icon: Shapes },
 ];
 
@@ -297,9 +297,9 @@ export const tableTypeItems = [
 ] satisfies PaletteItem[];
 
 export const imageItems = [
-  { id: "image", label: "Image", icon: Image },
-  { id: "image-text", label: "Image + Text", icon: Columns2 },
-  { id: "image-grid", label: "Image Grid", icon: Grid3X3 },
+  { id: "image", label: "图片", icon: Image },
+  { id: "image-text", label: "图片 + 文本", icon: Columns2 },
+  { id: "image-grid", label: "图片网格", icon: Grid3X3 },
 ] satisfies PaletteItem[];
 
 const elementIconById: Record<ElementInsertKind, LucideIcon> = {
@@ -1062,11 +1062,11 @@ export const BlocksPanel = ({
         if (cancelled) return;
         dispatchBlockState({
           type: "failed",
-          message: "Could not load template components.",
+          message: "无法加载模板组件。",
         });
         trackEvent(MixpanelEvent.Editor_Template_Blocks_Load_Failed, {
           presentation_id: presentationId,
-          error_message: "Could not load template components.",
+          error_message: "无法加载模板组件。",
         });
       });
 
@@ -1102,7 +1102,7 @@ export const BlocksPanel = ({
         <input
           value={blockPrompt}
           onChange={(event) => setBlockPrompt(event.target.value)}
-          placeholder="Search blocks"
+          placeholder="搜索组件"
           className="min-w-0 flex-1 bg-transparent text-[clamp(10px,0.75vw,12px)] text-[#101323] outline-none placeholder:text-[#9CA3AF]"
         />
         <button
@@ -1113,7 +1113,7 @@ export const BlocksPanel = ({
             background:
               "linear-gradient(270deg, #D5CAFC 2.4%, #E3D2EB 35%, #FDE4C2 100%)",
           }}
-          aria-label="Create block"
+          aria-label="创建组件"
         >
           <Search
             className="h-[clamp(12px,0.9vw,14px)] w-[clamp(12px,0.9vw,14px)] text-[#101323]"
@@ -1328,8 +1328,8 @@ function ActionsPanel({
       {!aiOnly && activeAction === "texts" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Texts"
-          groups={[{ label: "Add", items: textItems }]}
+          title="文本"
+          groups={[{ label: "添加", items: textItems }]}
           onItemSelect={onTextItemSelect}
           previewKind="text"
           theme={templateTheme}
@@ -1338,8 +1338,8 @@ function ActionsPanel({
       {!aiOnly && activeAction === "charts" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Charts"
-          groups={[{ label: "Chart Type", items: chartTypeItems }]}
+          title="图表"
+          groups={[{ label: "图表类型", items: chartTypeItems }]}
           onItemSelect={onChartItemSelect}
           previewKind="chart"
           theme={templateTheme}
@@ -1348,7 +1348,7 @@ function ActionsPanel({
       {!aiOnly && activeAction === "infographics" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Infographics"
+          title="信息图"
           groups={[{ label: "Choose a layout", items: infographicItems }]}
           onItemSelect={onInfographicItemSelect}
           previewKind="infographic"
@@ -1358,7 +1358,7 @@ function ActionsPanel({
       {!aiOnly && activeAction === "tables" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Tables"
+          title="表格"
           groups={[{ label: "Table Type", items: tableTypeItems }]}
           onItemSelect={onTableItemSelect}
           previewKind="table"
@@ -1368,8 +1368,8 @@ function ActionsPanel({
       {!aiOnly && activeAction === "images" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Images"
-          groups={[{ label: "Add", items: imageItems }]}
+          title="图片"
+          groups={[{ label: "添加", items: imageItems }]}
           onItemSelect={onImageItemSelect}
           previewKind="image"
           theme={templateTheme}
@@ -1378,7 +1378,7 @@ function ActionsPanel({
       {!aiOnly && activeAction === "elements" && (
         <InsertPanel
           disabled={editingDisabled}
-          title="Elements"
+          title="元素"
           groups={elementItemGroups}
           onItemSelect={onElementItemSelect}
           previewKind="element"
@@ -1506,7 +1506,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
     if (editingDisabled) return false;
     if (typeof window === "undefined") return false;
     if (typeof props.currentSlide !== "number") {
-      notify.warning("Select a slide", "Choose a slide before adding content.");
+      notify.warning("请选择页面", "添加内容前请先选择页面。 ");
       return false;
     }
     if (
@@ -1528,7 +1528,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
 
     if (!detail.handled) {
       notify.warning(
-        "Insert unavailable",
+        "无法插入",
         "Content can be added only to slides imported through the slide editor.",
       );
       return false;

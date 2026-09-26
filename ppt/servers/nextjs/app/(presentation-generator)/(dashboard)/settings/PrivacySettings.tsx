@@ -85,7 +85,7 @@ const PrivacySettings = () => {
             <p className="text-xs text-[#9CA3AF] mt-0.5">
               {trackingEnabled
                 ? "Anonymous usage data is being shared."
-                : "Anonymous usage data is not being shared"}
+                : "不会共享匿名使用数据"}
             </p>
           </div>
           <div className="flex items-center gap-2">

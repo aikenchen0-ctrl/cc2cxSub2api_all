@@ -16,7 +16,7 @@ import (
 const openAIAPIKeyHealthBreakerReason = "openai_apikey_health_breaker"
 
 func isOpenAIAPIKeyHealthBreakerAccount(account *Account) bool {
-	return account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey && account.IsPoolMode()
+	return account != nil && account.ID > 0
 }
 
 func classifyOpenAIAPIKeyHealthFailure(err error) (int, []byte, bool) {
@@ -26,48 +26,62 @@ func classifyOpenAIAPIKeyHealthFailure(err error) (int, []byte, bool) {
 
 	var failoverErr *UpstreamFailoverError
 	if errors.As(err, &failoverErr) {
-		// These failures already have dedicated recovery/state handling or are not
-		// attributable to the selected account.
-		if failoverErr.IsCredentialFailure() ||
-			failoverErr.RequestScopedTransient ||
-			failoverErr.RetryableOnSameAccount ||
-			failoverErr.Scope == GatewayFailureScopeRequest ||
-			failoverErr.Scope == GatewayFailureScopeProvider {
-			return failoverErr.StatusCode, failoverErr.ResponseBody, false
-		}
-		if failoverErr.StatusCode == http.StatusTooManyRequests || failoverErr.StatusCode >= http.StatusInternalServerError {
+		// Every upstream failure participates in the short breaker, including
+		// 4xx, 429, 503 and request/provider-scoped overload responses.
+		if failoverErr.StatusCode > 0 {
 			return failoverErr.StatusCode, failoverErr.ResponseBody, true
 		}
-		return failoverErr.StatusCode, failoverErr.ResponseBody, false
+		return http.StatusBadGateway, failoverErr.ResponseBody, true
 	}
 
 	var imageErr *OpenAIImagesUpstreamError
 	if errors.As(err, &imageErr) {
-		if imageErr.StatusCode == http.StatusTooManyRequests || imageErr.StatusCode >= http.StatusInternalServerError {
+		if imageErr.StatusCode > 0 {
 			return imageErr.StatusCode, []byte(strings.TrimSpace(imageErr.Message)), true
 		}
 	}
 	return 0, nil, false
 }
 
+// ObserveUpstreamFailure records failures for non-OpenAI gateway paths. OpenAI
+// requests use ObserveOpenAIAPIKeyHealthFailure from their scheduler result
+// path, so they are excluded here to avoid double counting.
+func (s *RateLimitService) ObserveUpstreamFailure(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return false
+	}
+	if account == nil || account.Platform == PlatformOpenAI {
+		return false
+	}
+	return s.observeAccountHealthFailure(ctx, account, &UpstreamFailoverError{
+		StatusCode: statusCode, ResponseBody: responseBody,
+	})
+}
+
 func (s *RateLimitService) ObserveOpenAIAPIKeyHealthFailure(ctx context.Context, account *Account, upstreamErr error) bool {
-	if s == nil || s.openAIAPIKeyHealth == nil || s.settingService == nil || s.accountRepo == nil || !isOpenAIAPIKeyHealthBreakerAccount(account) {
+	if account == nil || account.Platform != PlatformOpenAI {
+		return false
+	}
+	return s.observeAccountHealthFailure(ctx, account, upstreamErr)
+}
+
+func (s *RateLimitService) observeAccountHealthFailure(ctx context.Context, account *Account, upstreamErr error) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return false
+	}
+	if s == nil || s.openAIAPIKeyHealth == nil || s.accountRepo == nil || !isOpenAIAPIKeyHealthBreakerAccount(account) {
 		return false
 	}
 	statusCode, responseBody, eligible := classifyOpenAIAPIKeyHealthFailure(upstreamErr)
 	if !eligible {
 		return false
 	}
-	settings, err := s.settingService.GetOpenAIAPIKeyHealthBreakerSettings(ctx)
-	if err != nil {
-		logger.L().Warn("openai.apikey_health_breaker_settings_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-		return false
-	}
-	if settings == nil || !settings.Enabled {
-		return false
-	}
-
-	count, tripped, err := s.openAIAPIKeyHealth.RecordOpenAIAPIKeyHealthFailure(ctx, account.ID, settings.WindowMinutes, settings.FailureThreshold)
+	const (
+		failureWindowMinutes = 1
+		failureThreshold     = 2
+		cooldownMinutes      = 1
+	)
+	count, tripped, err := s.openAIAPIKeyHealth.RecordOpenAIAPIKeyHealthFailure(ctx, account.ID, failureWindowMinutes, failureThreshold)
 	if err != nil {
 		logger.L().Warn("openai.apikey_health_breaker_record_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		return false
@@ -77,7 +91,7 @@ func (s *RateLimitService) ObserveOpenAIAPIKeyHealthFailure(ctx context.Context,
 	}
 
 	now := time.Now()
-	until := now.Add(time.Duration(settings.CooldownMinutes) * time.Minute)
+	until := now.Add(cooldownMinutes * time.Minute)
 	state := &TempUnschedState{
 		UntilUnix:            until.Unix(),
 		TriggeredAtUnix:      now.Unix(),
@@ -86,20 +100,26 @@ func (s *RateLimitService) ObserveOpenAIAPIKeyHealthFailure(ctx context.Context,
 		RuleIndex:            -1,
 		ErrorMessage:         truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
 		TriggerCount:         count,
-		TriggerThreshold:     settings.FailureThreshold,
-		TriggerWindowMinutes: settings.WindowMinutes,
+		TriggerThreshold:     failureThreshold,
+		TriggerWindowMinutes: failureWindowMinutes,
 	}
 	reasonBytes, _ := json.Marshal(state)
 	reason := string(reasonBytes)
 	if reason == "" {
-		reason = fmt.Sprintf("%s: %d failures in %d minute(s)", openAIAPIKeyHealthBreakerReason, count, settings.WindowMinutes)
+		reason = fmt.Sprintf("%s: %d failures in %d minute(s)", openAIAPIKeyHealthBreakerReason, count, failureWindowMinutes)
 	}
 
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 	defer cancel()
 	if err := s.accountRepo.SetTempUnschedulable(persistCtx, account.ID, until, reason); err != nil {
 		logger.L().Warn("openai.apikey_health_breaker_persist_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-		return false
+		// Keep the current process fail-closed even when the database write is
+		// temporarily unavailable. A later request can retry persistence after
+		// the one-minute in-memory cooldown expires.
+		account.TempUnschedulableUntil = &until
+		account.TempUnschedulableReason = reason
+		s.notifyAccountSchedulingBlocked(account, until, openAIAPIKeyHealthBreakerReason)
+		return true
 	}
 
 	if account.TempUnschedulableUntil == nil || account.TempUnschedulableUntil.Before(until) {
@@ -115,9 +135,9 @@ func (s *RateLimitService) ObserveOpenAIAPIKeyHealthFailure(ctx context.Context,
 	logger.L().Warn("openai.apikey_health_breaker_tripped",
 		zap.Int64("account_id", account.ID),
 		zap.Int64("failure_count", count),
-		zap.Int("failure_threshold", settings.FailureThreshold),
-		zap.Int("window_minutes", settings.WindowMinutes),
-		zap.Int("cooldown_minutes", settings.CooldownMinutes),
+		zap.Int("failure_threshold", failureThreshold),
+		zap.Int("window_minutes", failureWindowMinutes),
+		zap.Int("cooldown_minutes", cooldownMinutes),
 		zap.Int("upstream_status", statusCode),
 		zap.Time("until", until),
 	)

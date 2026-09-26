@@ -70,6 +70,8 @@ Docker 镜像包含 ModelTrace 的 fingerprint.py、unified_bank.json 和原 MIT
 
 将 Sub2API 的 modelaudit_link 指向 http://localhost:8077，并在浏览器中通过 Sub2API 左侧菜单进入。
 
+面板顶部可选择已配置的上游模型；扫描会逐个检查支持该模型的独占上游账号，并在“上游真实模型归因”区域展示 ModelTrace 相似度前三名。留空表示扫描全部已配置模型。
+
 ## Docker
 
 该 compose 文件默认连接本地 Sub2API 的 `deploy_sub2api-network`。若线上主 Compose 使用其它网络名，在 `.env` 中把 `MODELAUDIT_SUB2API_NETWORK` 设为实际网络名；仓库 `docker-compose.online.yml` 当前使用 `sub2api-deploy_sub2api-network`：

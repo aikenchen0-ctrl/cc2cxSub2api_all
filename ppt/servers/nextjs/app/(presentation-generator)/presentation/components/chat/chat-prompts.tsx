@@ -39,7 +39,7 @@ export const suggestions: {
         </defs>
       </svg>
     ),
-    suggestion: "Generate a full presentation from my topic",
+    suggestion: "根据我的主题生成完整演示文稿",
   },
   {
     id: "improve",
@@ -98,7 +98,7 @@ export const suggestions: {
         <path d="M4 8.5V7" stroke="#E17100" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
-    suggestion: "Add speaker notes to this slide",
+    suggestion: "为此页面添加演讲者备注",
   },
 ];
 
@@ -113,25 +113,25 @@ export const outlineQuickPrompts = [
 ];
 
 export const presentationQuickPrompts = [
-  "Create an executive summary",
+  "创建执行摘要",
   "Strengthen the story flow",
-  "Add data and citations",
-  "Create speaker notes",
+  "添加数据和引用",
+  "创建演讲者备注",
 ];
 
 export const templateV2QuickPrompts = [
   "Improve this slide's layout",
   "Rewrite this slide for executives",
-  "Add a supporting visual",
+  "添加辅助视觉素材",
   "Make the deck visually consistent",
-  "Add data and source citations",
-  "Create speaker notes for this slide",
+  "添加数据和来源引用",
+  "为此页面创建演讲者备注",
 ];
 
 export const editorQuickPrompts = [
   "Rewrite for executives",
   "Improve slide layout",
-  "Add data & citations",
+  "添加数据和引用",
   "Create speaker notes",
   "Make the deck consistent",
 ];
@@ -150,15 +150,15 @@ export const quickPromptGroups = [
     prompts: [
       "Make it shorter",
       "Make this smaller",
-      "Generate a new image and replace this one",
+  "生成新图片并替换当前图片",
     ],
   },
   {
-    label: "Add Data",
+    label: "添加数据",
     prompts: ["Add data and citations", "Add a chart", "Add a table"],
   },
   {
-    label: "Add Visuals",
+    label: "添加视觉素材",
     prompts: [
       "Generate a new image and replace this one",
       "Add a chart",

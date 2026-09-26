@@ -39,6 +39,7 @@
             <p class="subtle">仅通过普通网关 API Key 发起短探针。未能核实目标账号的请求会标为未固定，不参与判断。</p>
           </div>
           <div class="hero-actions">
+            <label class="model-picker"><span>归因目标模型</span><select id="target-model" aria-label="归因目标模型"></select></label>
             <button id="run-now" class="button button-primary" type="button">立即扫描</button>
             <a id="download-report" class="button button-secondary disabled" href="#" aria-disabled="true">下载最近报告</a>
           </div>
@@ -75,6 +76,11 @@
             <label class="toggle-field"><input class="stop-rule" value="modeltrace_red" type="checkbox"><span>ModelTrace 高置信降档（第二轮同候选确认）</span></label>
           </div>
           <p class="note">其他检查只产生告警。自动停用默认关闭；开启后仍需勾选上述规则，不会自动恢复账号。</p>
+        </section>
+
+        <section class="panel attribution-panel">
+          <div class="section-heading"><div><p class="eyebrow">MODELTRACE ATTRIBUTION</p><h2>上游真实模型归因</h2></div><span class="note">每个账号保留前三名候选</span></div>
+          <div id="attribution-results" class="attribution-list"><p class="empty">完成扫描后显示候选模型相似度。</p></div>
         </section>
 
         <section class="panel">

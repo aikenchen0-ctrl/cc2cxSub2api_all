@@ -77,6 +77,10 @@ sub2api/backend/bin/from025-server
 sub2api/backend/bin/from025-server.new
 sub2api/backend/handler-target.test.exe
 docs/sub2api-local-http.new
+/ppt/servers/nextjs/.next-build/cache/webpack/server-production/0.pack
+/ppt/servers/nextjs/.next-build/cache/webpack/client-production/0.pack
+/ppt/servers/nextjs/node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
+/aiexcel/node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
 /canvas-260917.zip
 
 # Keep documents and ordinary backup archives versionable; only the oversized

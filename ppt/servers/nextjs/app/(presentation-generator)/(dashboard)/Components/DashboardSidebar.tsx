@@ -36,7 +36,7 @@ const DashboardSidebar = () => {
                         <img src="/project-icon.jpg" data-sub2api-site-logo alt="PPT生成" className="h-[40px] object-contain w-full rounded-lg" />
                     </div>
                 </Link>
-                <nav className="pt-6 font-syne" aria-label="Dashboard sections">
+                <nav className="pt-6 font-syne" aria-label="仪表盘分区">
                     <div className="  space-y-6">
 
                         {/* Dashboard */}
@@ -85,8 +85,8 @@ const DashboardSidebar = () => {
                                 "flex flex-col tex-center items-center gap-2  transition-colors",
                                 pathname === "/theme" ? "" : "ring-transparent",
                             ].join(" ")}
-                            aria-label="Theme"
-                            title="Theme"
+                            aria-label="主题"
+                            title="主题"
                         >
                             <div className="flex flex-col cursor-pointer tex-center items-center gap-2  transition-colors">
                                 <Palette className={`h-4 w-4 ${pathname === "/theme" ? "text-[#5146E5]" : "text-slate-600"}`} />

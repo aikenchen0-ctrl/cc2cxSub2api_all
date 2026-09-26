@@ -158,7 +158,7 @@ export default function CodexConfig({
             }
             notify.success(
               "Signed in to ChatGPT",
-              "Your ChatGPT account is connected and ready to use."
+              "ChatGPT 账户已连接，可以开始使用。"
             );
           } else if (pollData.status === "failed") {
             trackEvent(MixpanelEvent.Codex_SignIn_Failed, { method: "browser_poll" });
@@ -178,7 +178,7 @@ export default function CodexConfig({
       trackEvent(MixpanelEvent.Codex_SignIn_Failed, { method: "initiate" });
       notify.error(
         "Sign-in failed",
-        "Could not start the sign-in flow. Please try again."
+        "无法启动登录流程，请重试。"
       );
       setAuthStatus("unauthenticated");
       applyProfile({});
@@ -216,7 +216,7 @@ export default function CodexConfig({
       }
       notify.success(
         "Signed in to ChatGPT",
-        "Your ChatGPT account is connected and ready to use."
+        "ChatGPT 账户已连接，可以开始使用。"
       );
     } catch (err: any) {
       trackEvent(MixpanelEvent.Codex_SignIn_Failed, { method: "manual_exchange" });
@@ -278,7 +278,7 @@ export default function CodexConfig({
     } catch {
       notify.error(
         "Sign-out failed",
-        "Could not disconnect from ChatGPT. Please try again."
+        "无法断开 ChatGPT 连接，请重试。"
       );
     } finally {
       setIsLoggingOut(false);
@@ -293,7 +293,7 @@ export default function CodexConfig({
       });
       if (!res.ok) {
         let errorData: { detail?: unknown; message?: string; error?: string } | null = null;
-        let message = "Your ChatGPT session could not be renewed. Please sign in again.";
+        let message = "ChatGPT 会话无法续期，请重新登录。";
         try {
           const parsedError: { detail?: unknown; message?: string; error?: string } = await res.json();
           errorData = parsedError;
@@ -316,12 +316,12 @@ export default function CodexConfig({
       applyProfile(data);
       notify.success(
         "Session refreshed",
-        "Your ChatGPT connection was renewed successfully."
+        "ChatGPT 连接已成功续期。"
       );
     } catch {
       notify.error(
         "Session refresh failed",
-        "Your ChatGPT session could not be renewed. Please sign in again."
+        "ChatGPT 会话无法续期，请重新登录。"
       );
       setAuthStatus("unauthenticated");
       applyProfile({});
@@ -366,7 +366,7 @@ export default function CodexConfig({
             onClick={handleCancelPolling}
             className="shrink-0 text-sm text-[#B3B3B3] hover:text-[#191919] underline underline-offset-2 transition-colors"
           >
-            Cancel
+            取消
           </button>
         </div>
 
@@ -391,7 +391,7 @@ export default function CodexConfig({
               {isExchanging ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                "Submit"
+                "提交"
               )}
             </button>
           </div>
@@ -414,7 +414,7 @@ export default function CodexConfig({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <p className="text-sm font-medium text-[#191919] truncate">
-                  {username || email || (accountId ? `Account ${accountId}` : "ChatGPT Account")}
+                  {username || email || (accountId ? `账户 ${accountId}` : "ChatGPT 账户")}
                 </p>
 
               </div>
@@ -431,7 +431,7 @@ export default function CodexConfig({
             <button
               onClick={handleRefreshToken}
               disabled={isRefreshing}
-              title="Refresh token"
+              title="刷新令牌"
               className="flex items-center justify-center px-3.5 py-2.5  border border-[#EDEEEF] rounded-[58px] minid:opacity-40 transition-colors"
             >
               {isRefreshing ? (
@@ -443,7 +443,7 @@ export default function CodexConfig({
             <button
               onClick={handleSignOut}
               disabled={isLoggingOut}
-              title="Sign out"
+              title="退出登录"
               className="flex items-center justify-center px-3.5 py-2.5  border border-[#EDEEEF] rounded-[58px]  disabled:opacity-40 transition-colors"
             >
               {isLoggingOut ? (

@@ -54,7 +54,7 @@ export const OverlayLoader = ({
         <div
           className="overlay-loader-dots shrink-0"
           role="status"
-          aria-label="Loading"
+          aria-label="加载中"
         />
         {showProgress ? (
           <div className="w-full space-y-6 pt-4">

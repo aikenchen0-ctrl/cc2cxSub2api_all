@@ -13,7 +13,7 @@ from .config import Settings
 STOP_RULES = {
     "modeltrace_red",
 }
-OPTIONS_VERSION = 3
+OPTIONS_VERSION = 4
 
 
 def defaults(settings: Settings) -> dict[str, Any]:
@@ -24,6 +24,7 @@ def defaults(settings: Settings) -> dict[str, Any]:
         "options_version": OPTIONS_VERSION,
         # Auto-stop requires an explicit rule selection on every deployment.
         "stop_rules": [],
+        "target_model": "",
     }
 
 
@@ -76,4 +77,9 @@ def merge_options(current: dict[str, Any], update: dict[str, Any]) -> dict[str, 
         if not isinstance(rules, list) or any(not isinstance(rule, str) or rule not in STOP_RULES for rule in rules):
             raise HTTPException(status_code=422, detail="stop_rules_invalid")
         value["stop_rules"] = sorted(set(rules))
+    if "target_model" in update:
+        target = update["target_model"]
+        if not isinstance(target, str) or len(target) > 160:
+            raise HTTPException(status_code=422, detail="target_model_invalid")
+        value["target_model"] = target.strip()
     return value

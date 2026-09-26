@@ -322,6 +322,26 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		}
 	}
 
+	// Satellite pricing changes only the customer charge (ActualCost). Keep the
+	// model-based TotalCost for account cost/quota statistics, and do not apply
+	// model, group, peak, or media multipliers to an explicit satellite price.
+	satelliteBillingApplied := false
+	satelliteModel := strings.TrimSpace(input.OriginalModel)
+	if satelliteModel == "" {
+		satelliteModel = result.Model
+	}
+	if satelliteCost, applied := applySatelliteBillingConfig(ctx, s.settingService, SatelliteBillingUsage{
+		Model:                satelliteModel,
+		InboundEndpoint:      input.InboundEndpoint,
+		Tokens:               tokens,
+		ImageCount:           result.ImageCount,
+		VideoCount:           result.VideoCount,
+		VideoDurationSeconds: result.VideoDurationSeconds,
+	}); applied {
+		cost = overrideCustomerCostWithSatelliteQuote(cost, satelliteCost)
+		satelliteBillingApplied = true
+	}
+
 	// Determine billing type
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 	billingType := BillingTypeBalance
@@ -423,7 +443,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
 	}
-	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
+	if satelliteBillingApplied {
+		usageLog.RateMultiplier = 1
+	} else if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = videoMultiplier
 	} else if result.ImageCount > 0 && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = imageMultiplier

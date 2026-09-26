@@ -114,7 +114,7 @@ function StudioTopBar({ activeStep }: { activeStep: StudioStep }) {
         <a
           href="/dashboard"
           className="pointer-events-auto block h-8 w-8 sm:h-[34px] sm:w-[34px] 2xl:h-[44px] 2xl:w-[44px] shrink-0"
-          aria-label="Dashboard"
+          aria-label="仪表盘"
         >
           <img
             src="/project-icon.jpg"
@@ -127,7 +127,7 @@ function StudioTopBar({ activeStep }: { activeStep: StudioStep }) {
 
         <nav
           className="pointer-events-auto flex items-center"
-          aria-label="Template Studio progress"
+          aria-label="模板工作室进度"
         >
           {studioSteps.map((step, index) => {
             const isActive = step.id === activeStep;
@@ -326,7 +326,7 @@ function UploadPanel({
                       }}
                       disabled={isProcessing}
                       className="w-[36px] h-[36px] 2xl:w-[44px] 2xl:h-[44px] top-1/2 z-20 flex items-center justify-center rounded-full border border-[#E8E8EF] bg-[#EFF0F4] text-black disabled:opacity-50"
-                      aria-label="Remove file"
+                      aria-label="移除文件"
                     >
                       <X className="h-3.5 w-3.5 2xl:h-4 2xl:w-4" />
                     </button>
@@ -544,7 +544,7 @@ function FontFallbackPicker({
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Search fonts"
+            placeholder="搜索字体"
             className="font-syne text-sm"
           />
           <CommandList
@@ -806,7 +806,7 @@ function AnalyzePanel({
               <button
                 type="button"
                 onClick={() => setResolvingFont(null)}
-                aria-label="Close"
+                aria-label="关闭"
                 className="absolute -right-14 top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#20222B] shadow-sm"
               >
                 <X className="h-6 w-6" />
@@ -1366,7 +1366,7 @@ function ReviewPanel({
                     onClick={handleDelete}
                     disabled={!isReady}
                     className="flex h-8 w-8 items-center justify-center rounded-[4px] text-black transition hover:bg-[#F6F6F9] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-9 2xl:w-9"
-                    aria-label="Delete slide"
+                    aria-label="删除页面"
                   >
                     <Trash2 className="h-4 w-4 2xl:h-[18px] 2xl:w-[18px]" />
                   </button>
@@ -1437,7 +1437,7 @@ function SaveTemplateModal({
           type="button"
           onClick={onClose}
           disabled={isSaving}
-          aria-label="Close"
+          aria-label="关闭"
           className="absolute -right-[54px] 2xl:-right-[62px] top-0 flex h-[46px] w-[46px] 2xl:h-[52px] 2xl:w-[52px] items-center justify-center rounded-full bg-white text-black shadow-sm disabled:opacity-50"
         >
           <X className="h-6 w-6 2xl:h-7 2xl:w-7" />

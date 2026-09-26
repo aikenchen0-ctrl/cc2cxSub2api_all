@@ -41,7 +41,7 @@ export const ActivityStatusIcon = ({
     return (
       <span
         className="activity-flow-dots relative mt-1 h-[9px] w-[22px] shrink-0"
-        aria-label="Working"
+        aria-label="处理中"
       >
         <span className="absolute left-0 top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
         <span className="absolute left-[8px] top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />

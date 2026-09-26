@@ -179,7 +179,7 @@ export default function AnthropicConfig({
                       style={{ width: "var(--radix-popover-trigger-width)" }}
                     >
                       <Command>
-                        <CommandInput placeholder="Search models..." />
+                        <CommandInput placeholder="搜索模型..." />
                         <CommandList>
                           <CommandEmpty>未找到模型。</CommandEmpty>
                           <CommandGroup>

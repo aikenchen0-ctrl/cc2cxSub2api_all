@@ -92,8 +92,8 @@ export function LegacyPresentationsTable({
             type="button"
             onClick={() => setShowDeleteDialog(true)}
             disabled={isDeleting}
-            aria-label="Delete all legacy presentations"
-            title="Delete all legacy presentations"
+            aria-label="删除所有旧版演示文稿"
+            title="删除所有旧版演示文稿"
             className="flex h-[35px] min-w-[51px] items-center justify-center rounded-full border border-[#EDEEEF] bg-white px-3 text-[#191919] transition-colors hover:bg-[#F6F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isDeleting ? (

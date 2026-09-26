@@ -108,7 +108,7 @@ export default function CommunityDesignPreviewDialog({
     } catch (error) {
       if (referenceRequestId.current !== requestId) return;
       notify.error(
-        "Could not load the reference presentation",
+        "无法加载参考演示文稿",
         error instanceof Error ? error.message : undefined
       );
     } finally {
@@ -130,9 +130,9 @@ export default function CommunityDesignPreviewDialog({
 
     try {
       await navigator.clipboard.writeText(prompt);
-      notify.success("Prompt copied");
+      notify.success("生成描述已复制");
     } catch {
-      notify.error("Could not copy the prompt");
+      notify.error("无法复制生成描述");
     }
   };
 
@@ -177,7 +177,7 @@ export default function CommunityDesignPreviewDialog({
                       className="mb-1 inline-flex items-center gap-1 text-xs text-[#6847F4] transition hover:text-[#5137C8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30"
                     >
                       <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-                      Community preview
+                      社区预览
                     </button>
                   )}
                   <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export default function CommunityDesignPreviewDialog({
                   </div>
                   <DialogDescription className="mt-1 line-clamp-2 text-sm font-normal leading-normal tracking-[-0.14px] text-[#808080]">
                     {displayedPresentation?.description?.trim() ||
-                      "Shared community presentation."}
+  "共享社区演示文稿。"}
                   </DialogDescription>
                 </div>
                 <div className="hidden shrink-0 items-center gap-2 sm:flex">
@@ -209,7 +209,7 @@ export default function CommunityDesignPreviewDialog({
                     onClick={() => onUseDesign(presentation)}
                     className="inline-flex h-[41px] shrink-0 items-center justify-center rounded-full border border-[#EDEEEF] px-[26px] font-syne text-sm font-normal tracking-[0.16px] text-[#191919] transition hover:bg-[#F8F8FA]"
                   >
-                    Use Design
+                    使用设计
                   </button>
                 </div>
               </header>
@@ -241,7 +241,7 @@ export default function CommunityDesignPreviewDialog({
                     </div>
                   ) : (
                     <div className="flex h-full min-h-[260px] items-center justify-center rounded-xl border border-dashed border-[#D9D9DE] bg-white text-sm text-[#808080]">
-                      {loading ? "Loading slide previews ..." : "No slide previews available"}
+                  {loading ? "正在加载页面预览..." : "暂无页面预览"}
                     </div>
                   )}
                 </div>
@@ -261,7 +261,7 @@ export default function CommunityDesignPreviewDialog({
                     </div>
 
                     <dl className="mt-2.5 space-y-2.5">
-                      <SetupRow label="Text">
+                  <SetupRow label="文本">
                         <SetupChip>
                           {textProvider ? getProviderVisual(textProvider).label : "永恒PPT 托管"}
                         </SetupChip>
@@ -269,18 +269,18 @@ export default function CommunityDesignPreviewDialog({
                           <SetupChip>{setup.text_model}</SetupChip>
                         )}
                       </SetupRow>
-                      <SetupRow label="Images">
+                  <SetupRow label="图片">
                         <SetupChip>
                           {imageProvider ? getProviderVisual(imageProvider).label : "永恒PPT 托管"}
                         </SetupChip>
                       </SetupRow>
-                      <SetupRow label="Web Search">
+                  <SetupRow label="联网搜索">
                         <SetupChip>
                           {webSearchProvider ? getProviderVisual(webSearchProvider).label : "永恒PPT 托管"}
                         </SetupChip>
                       </SetupRow>
                       {referencePresentationIds.length > 0 && (
-                        <SetupRow label="Reference">
+                    <SetupRow label="参考">
                           {referencePresentationIds.map((referenceId) => {
                             const isActiveReference =
                               isShowingReference &&
@@ -339,7 +339,7 @@ export default function CommunityDesignPreviewDialog({
                         onClick={() => void copyPrompt()}
                         disabled={!displayedPresentation?.prompt?.trim()}
                         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#191919] transition hover:bg-[#F6F6F9] disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label="Copy example prompt"
+                    aria-label="复制示例生成描述"
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </button>
@@ -347,7 +347,7 @@ export default function CommunityDesignPreviewDialog({
                     <div className="mt-2.5 max-h-[110px] overflow-y-auto overscroll-contain border-y border-[#EDEEEF] bg-[#F9FAFB] p-2.5 sm:mt-3.5 sm:min-h-0 sm:flex-1 sm:max-h-[165px]">
                       <p className="font-syne text-sm font-normal leading-5 text-[#191919]">
                         {displayedPresentation?.prompt?.trim() ||
-                          "No prompt was shared with this presentation."}
+      "此演示文稿没有共享生成描述。"}
                       </p>
                     </div>
                   </section>

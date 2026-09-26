@@ -91,7 +91,7 @@ const WebSearchProvider = ({
               });
               setWebSearchEnabled(checked);
             }}
-            aria-label="Enable web search"
+            aria-label="启用联网搜索"
           />
         </div>
         <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:gap-10">
@@ -130,7 +130,7 @@ const WebSearchProvider = ({
                       </PopoverTrigger>
                       <PopoverContent className="p-0" align="start" style={{ width: "320px" }}>
                         <Command>
-                          <CommandInput placeholder="Search provider..." />
+                          <CommandInput placeholder="搜索服务..." />
                           <CommandList>
                             <CommandEmpty>未找到服务商。</CommandEmpty>
                             <CommandGroup>

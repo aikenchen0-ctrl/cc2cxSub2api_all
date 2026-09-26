@@ -55,7 +55,7 @@ const SettingsPage = () => {
   const [buttonState, setButtonState] = useState<ButtonState>({
     isLoading: false,
     isDisabled: false,
-    text: "Save Configuration",
+    text: "保存配置",
     showProgress: false,
   });
 
@@ -122,7 +122,7 @@ const SettingsPage = () => {
       return true;
     } catch (error: any) {
       notify.error(
-        "Cannot save settings",
+        "无法保存设置",
         error?.message ||
         `Unable to reach ${provider} with the provided API key. Please verify your settings and try again.`
       );
@@ -191,7 +191,7 @@ const SettingsPage = () => {
     });
     const validationError = getLLMConfigValidationError(llmConfig);
     if (validationError) {
-      notify.warning("Cannot save settings", validationError);
+      notify.warning("无法保存设置", validationError);
       if (
         selectedProvider === "image-provider" &&
         ((llmConfig.LLM === "openai" && !String(llmConfig.OPENAI_MODEL || "").trim()) ||
@@ -229,26 +229,26 @@ const SettingsPage = () => {
       }
       await handleSaveLLMConfig(llmConfig);
       notify.success(
-        "Settings saved",
+        "设置已保存",
         "Your configuration was saved successfully."
       );
       setButtonState((prev) => ({
         ...prev,
         isLoading: false,
         isDisabled: false,
-        text: "Save Configuration",
+        text: "保存配置",
       }));
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Something went wrong while saving.";
-      notify.error("Could not save settings", message);
+      notify.error("无法保存设置", message);
       setButtonState((prev) => ({
         ...prev,
         isLoading: false,
         isDisabled: false,
-        text: "Save Configuration",
+        text: "保存配置",
       }));
     }
   };
@@ -307,19 +307,19 @@ const SettingsPage = () => {
     : textProviderLabel;
 
   const imageSummary = textProviderKey === "presenton"
-    ? "Cloud images"
+    ? "云端图片"
     : llmConfig.DISABLE_IMAGE_GENERATION
-      ? "Image generation disabled"
+      ? "已禁用图片生成"
       : llmConfig.IMAGE_PROVIDER
         ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]?.label ||
         llmConfig.IMAGE_PROVIDER
-        : "No image provider";
+        : "未配置图片服务";
   const webSearchProviderKey = (llmConfig.WEB_SEARCH_PROVIDER || "").toLowerCase();
   const webSearchSummary = textProviderKey === "presenton"
-    ? "Cloud web search"
+    ? "云端搜索"
     : llmConfig.WEB_GROUNDING
       ? `Web: ${WEB_SEARCH_PROVIDERS[webSearchProviderKey]?.label || "No provider"}`
-      : "Web search disabled";
+      : "已禁用联网搜索";
 
   useEffect(() => {
     if (
@@ -380,7 +380,7 @@ const SettingsPage = () => {
         ) {
 
           notify.warning(
-            "Provider setup required",
+            "需要配置服务",
             !llmConfig.LLM
               ? "Choose and configure a text provider before opening other pages."
               : "Complete the selected text provider configuration and save it before leaving Settings.",
@@ -463,7 +463,7 @@ const SettingsPage = () => {
                 </p>
               </div>
               <LogoutButton
-                label="Sign out"
+                label="退出登录"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-[58px] border border-[#EDEEEF] bg-[#7C51F8] px-5 py-3 font-syne text-xs font-semibold text-white transition hover:bg-[#6d46e6] disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>

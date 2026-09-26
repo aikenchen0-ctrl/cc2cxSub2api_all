@@ -478,7 +478,7 @@ const PresentonMode = ({
                             }));
                         }}>
                             <SelectTrigger className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                                <SelectValue placeholder="Select a quality" />
+                                <SelectValue placeholder="选择画质" />
                             </SelectTrigger>
                             <SelectContent>
                                 {DALLE_3_QUALITY_OPTIONS.map((option) => (
@@ -515,7 +515,7 @@ const PresentonMode = ({
                             <SelectTrigger
 
                                 className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                                <SelectValue placeholder="Select a quality" />
+                                <SelectValue placeholder="选择画质" />
                             </SelectTrigger>
                             <SelectContent>
                                 {GPT_IMAGE_1_5_QUALITY_OPTIONS.map((option) => (
@@ -1201,7 +1201,7 @@ const PresentonMode = ({
                                     }}
                                 >
                                     <SelectTrigger className="h-12 w-full rounded-lg border-gray-300">
-                                        <SelectValue placeholder="Select a model" />
+                                        <SelectValue placeholder="选择模型" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {CODEX_MODELS.map((model) => (
@@ -1273,7 +1273,7 @@ const PresentonMode = ({
 
                             >
                                 <Command>
-                                    <CommandInput placeholder="Search provider..." />
+                                    <CommandInput placeholder="搜索服务..." />
                                     <CommandList className='hide-scrollbar'>
                                         <CommandEmpty>未找到服务商。</CommandEmpty>
                                         <CommandGroup >

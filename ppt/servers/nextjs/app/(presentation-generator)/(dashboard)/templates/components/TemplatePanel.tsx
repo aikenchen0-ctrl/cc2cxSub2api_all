@@ -64,14 +64,14 @@ const LayoutPreview = () => {
       <div className="sticky top-0 right-0 z-50 py-[28px] px-6 backdrop-blur">
         <div className="flex xl:flex-row flex-col gap-6 xl:gap-0 items-center justify-between">
           <h3 className="text-[28px] tracking-[-0.84px] font-unbounded font-normal text-[#101828] flex items-center gap-2">
-            Templates
+            模板
           </h3>
           <div className="flex gap-2.5 max-sm:w-full max-md:justify-center max-sm:flex-wrap">
             <Link
               href="/custom-template"
               onClick={() => trackEvent(MixpanelEvent.Templates_New_Template_Clicked)}
               className="inline-flex items-center font-syne font-semibold gap-2 rounded-xl px-4 py-2.5 text-black text-sm shadow-sm hover:shadow-md"
-              aria-label="Create new template"
+              aria-label="新建模板"
               style={{
                 borderRadius: "48px",
                 background:
@@ -93,7 +93,7 @@ const LayoutPreview = () => {
           {loading ? (
             <TemplateListLoadingState />
           ) : error ? (
-            <TemplateListEmptyState message={`Templates could not be loaded: ${error}`} />
+              <TemplateListEmptyState message={`模板加载失败：${error}`} />
           ) : tab === "custom" ? (
             <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               <CreateCustomTemplate />
@@ -110,7 +110,7 @@ const LayoutPreview = () => {
               ))}
             </div>
           ) : activeTemplates.length === 0 ? (
-            <TemplateListEmptyState message="No built-in templates available." />
+            <TemplateListEmptyState message="暂无内置模板。" />
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {activeTemplates.map((template) => (

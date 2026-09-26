@@ -1,6 +1,0 @@
-__pycache__/
-.pytest_cache/
-*.pyc
-*.log
-.venv/
-node_modules/

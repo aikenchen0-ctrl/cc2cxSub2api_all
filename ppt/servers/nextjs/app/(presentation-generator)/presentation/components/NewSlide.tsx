@@ -106,8 +106,8 @@ const LayoutItem = memo(({ layout, onSelect }: LayoutItemProps) => {
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Add ${layoutName || "slide"} layout`}
-      title={layoutName || "Slide layout"}
+      aria-label={`添加${layoutName || "页面"}布局`}
+      title={layoutName || "页面布局"}
       onClick={selectLayout}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -197,7 +197,7 @@ const NewSlideV1 = ({
     (sampleData: any, id: string) => {
       if (slideCount >= MAX_NUMBER_OF_SLIDES) {
         notify.warning(
-          "Slide limit reached",
+      "已达到页面数量上限",
           `You can have up to ${MAX_NUMBER_OF_SLIDES} slides.`
         );
         return;
@@ -271,7 +271,7 @@ const NewSlideV1 = ({
             throw error;
           }
           console.warn(
-            "Could not refresh template layouts; using presentation layouts instead.",
+            "无法刷新模板布局，已改用演示文稿布局。",
             error,
           );
         }
@@ -289,7 +289,7 @@ const NewSlideV1 = ({
         console.error("Error loading slide layouts:", error);
         if (isMounted) {
           setLayouts([]);
-          setLoadError("Could not load layouts for this template.");
+          setLoadError("无法加载此模板的布局。 ");
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -321,7 +321,7 @@ const NewSlideV1 = ({
     >
       <button
         type="button"
-        aria-label="Close layout picker"
+        aria-label="关闭布局选择器"
         onClick={() => setShowNewSlideSelection(false)}
         className="absolute right-0 top-[-52px] z-50 flex h-10 w-10 items-center justify-center rounded-full border border-[#EDEEEF] bg-white text-[#191919] shadow-[0_6.6px_13.2px_rgba(0,0,0,0.10)] transition hover:bg-[#F7F6F9]"
       >
@@ -337,7 +337,7 @@ const NewSlideV1 = ({
             Choose Slide Layout
           </h2>
           <p className="mt-1 text-xs font-normal leading-none text-[#7A7A85]">
-            {loading ? "Loading layouts" : layoutCountText}
+            {loading ? "正在加载布局" : layoutCountText}
           </p>
         </div>
         {loading && (

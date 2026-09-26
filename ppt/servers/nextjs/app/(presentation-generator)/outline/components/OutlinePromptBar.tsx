@@ -65,8 +65,8 @@ const OutlinePromptBar: React.FC<OutlinePromptBarProps> = ({
           type="button"
           onClick={onRegenerate}
           disabled={isRegenerateDisabled}
-          aria-label="Regenerate outline"
-          title="Regenerate outline"
+          aria-label="重新生成大纲"
+          title="重新生成大纲"
           className={cn(
             "absolute right-6 top-1/2 flex h-[21px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#191919] transition hover:bg-[#F7F7FA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A00FF]/25",
             isRegenerateDisabled && "cursor-not-allowed opacity-70"

@@ -451,7 +451,7 @@ export function TemplateV2HtmlSlidePreview({
       >
         <div
           ref={contentRef}
-          aria-label="Template v2 slide preview"
+          aria-label="模板 v2 页面预览"
           className={`block h-full w-full bg-white ${contentClassName}`}
           style={{ pointerEvents: "none" }}
           dangerouslySetInnerHTML={htmlMarkup}

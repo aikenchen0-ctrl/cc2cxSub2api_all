@@ -979,7 +979,7 @@ const ThemePanel: React.FC = () => {
             source: "theme_page_header",
           })}
           className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-black text-sm font-semibold font-syne shadow-sm hover:shadow-md"
-          aria-label="Create new theme"
+          aria-label="新建主题"
           style={{
             borderRadius: "48px",
             background: "linear-gradient(270deg, #D5CAFC 2.4%, #E3D2EB 27.88%, #F4DCD3 69.23%, #FDE4C2 100%)",

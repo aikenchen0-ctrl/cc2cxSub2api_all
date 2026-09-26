@@ -514,7 +514,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                   className="z-[70] overflow-hidden rounded-lg border border-[#EDEEEF] bg-white p-0 shadow-[0_10px_30px_rgba(16,24,40,0.12)]"
                 >
                   <Command>
-                    <CommandInput placeholder="Search providers..." />
+                    <CommandInput placeholder="搜索服务..." />
                     <CommandList id={providerListId} className="max-h-60 p-1">
                       <CommandEmpty>未找到服务商。</CommandEmpty>
                       <CommandGroup>
@@ -600,7 +600,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                       </button>
                       <button
                         type="button"
-                        aria-label="Remove provider"
+                    aria-label="移除服务"
                         onClick={() =>
                           onChange(
                             order.filter((item) => item !== value),

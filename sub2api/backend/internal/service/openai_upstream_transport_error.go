@@ -16,7 +16,7 @@ import (
 
 // openAITransportErrorTempUnschedDuration is how long an account is temporarily
 // unscheduled after a durable transport failure (matches tokenRefreshTempUnschedDuration).
-const openAITransportErrorTempUnschedDuration = 10 * time.Minute
+const openAITransportErrorTempUnschedDuration = time.Minute
 
 // openAITransportFailoverBody is the OpenAI-format error body attached to the
 // failover error for a transport-level failure. Kept identical to the legacy
@@ -127,8 +127,18 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	}
 
 	// Transport attempt reached the network path; count as Ollama Cloud activity.
+	healthTripped := false
 	if s != nil {
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
+		if s.rateLimitService != nil {
+			if account != nil && account.Platform == PlatformOpenAI {
+				healthTripped = s.rateLimitService.ObserveOpenAIAPIKeyHealthFailure(ctx, account, &UpstreamFailoverError{
+					StatusCode: http.StatusBadGateway, ResponseBody: openAITransportFailoverBody,
+				})
+			} else {
+				healthTripped = s.rateLimitService.ObserveUpstreamFailure(ctx, account, http.StatusBadGateway, openAITransportFailoverBody)
+			}
+		}
 	}
 
 	// 插件已把请求交给上游时，自动切换账号可能造成重复扣费或重复执行。
@@ -137,7 +147,7 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		return err
 	}
 
-	if classifyUpstreamTransportError(err).Persistent {
+	if healthTripped && classifyUpstreamTransportError(err).Persistent {
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)
 	}
 

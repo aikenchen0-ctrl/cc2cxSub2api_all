@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -411,6 +412,50 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 	}
 
 	response.Success(c, systemSettingsResponseData(payload, authSourceDefaults))
+}
+
+// GetSatelliteBillingConfigs returns the persisted billing configuration for
+// every supported satellite application.
+func (h *SettingHandler) GetSatelliteBillingConfigs(c *gin.Context) {
+	if h.settingService == nil {
+		response.InternalError(c, "Satellite billing settings are unavailable")
+		return
+	}
+	configs, err := h.settingService.GetSatelliteBillingConfigs(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"apps": configs})
+}
+
+// UpdateSatelliteBillingConfig saves one satellite application's billing
+// configuration under the existing settings key-value store.
+func (h *SettingHandler) UpdateSatelliteBillingConfig(c *gin.Context) {
+	if h.settingService == nil {
+		response.InternalError(c, "Satellite billing settings are unavailable")
+		return
+	}
+	slug := strings.TrimSpace(c.Param("slug"))
+	if !service.IsSatelliteBillingApp(slug) {
+		response.BadRequest(c, "Unsupported satellite app")
+		return
+	}
+	var config service.SatelliteBillingConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		response.BadRequest(c, "Invalid satellite billing configuration: "+err.Error())
+		return
+	}
+	saved, err := h.settingService.UpdateSatelliteBillingConfig(c.Request.Context(), slug, config)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidSatelliteBillingConfig) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, saved)
 }
 
 // openaiFastPolicySettingsToDTO converts service -> dto for OpenAI fast policy.

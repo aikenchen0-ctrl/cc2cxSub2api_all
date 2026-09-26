@@ -1530,6 +1530,57 @@ export interface WebSearchTestResult {
   query: string;
 }
 
+export type SatelliteBillingMode = "model" | "custom" | "request" | "points";
+export type SatelliteBillingUnit =
+  | "millionTokens"
+  | "image"
+  | "videoSecond"
+  | "request";
+
+export interface SatelliteBillingRule {
+  target: string;
+  unit: SatelliteBillingUnit;
+  amount: number;
+}
+
+export interface SatelliteBillingConfig {
+  mode: SatelliteBillingMode;
+  rules: SatelliteBillingRule[];
+}
+
+export type SatelliteBillingAppSlug =
+  | "aicut"
+  | "aiexcel"
+  | "ai3d"
+  | "aihuoke"
+  | "canvas"
+  | "ju"
+  | "livart"
+  | "ppt"
+  | "qrcode"
+  | "screen2code"
+  | "yibiao";
+
+export async function getSatelliteBillingConfigs(): Promise<
+  Record<SatelliteBillingAppSlug, SatelliteBillingConfig>
+> {
+  const { data } = await apiClient.get<{
+    apps: Record<SatelliteBillingAppSlug, SatelliteBillingConfig>;
+  }>("/admin/settings/satellite-billing");
+  return data.apps;
+}
+
+export async function updateSatelliteBillingConfig(
+  slug: SatelliteBillingAppSlug,
+  config: SatelliteBillingConfig,
+): Promise<SatelliteBillingConfig> {
+  const { data } = await apiClient.put<SatelliteBillingConfig>(
+    `/admin/settings/satellite-billing/${encodeURIComponent(slug)}`,
+    config,
+  );
+  return data;
+}
+
 export async function getWebSearchEmulationConfig(): Promise<WebSearchEmulationConfig> {
   const { data } = await apiClient.get<WebSearchEmulationConfig>(
     "/admin/settings/web-search-emulation",
@@ -1593,6 +1644,8 @@ export const settingsAPI = {
   updateBetaPolicySettings,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
+  getSatelliteBillingConfigs,
+  updateSatelliteBillingConfig,
   testWebSearchEmulation,
   resetWebSearchUsage,
 };

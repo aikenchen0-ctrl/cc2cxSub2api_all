@@ -113,7 +113,7 @@ function TemplateV2PromptOverlay({
                 </div>
             ) : null}
             <form
-                aria-label="Create slide from prompt"
+                aria-label="根据描述创建页面"
                 onSubmit={submitPrompt}
                 onPointerDown={(event) => event.stopPropagation()}
                 style={{ translate: "none" }}
@@ -140,7 +140,7 @@ function TemplateV2PromptOverlay({
                 </div>
                 <button
                     type="submit"
-                    aria-label="Create slide"
+                    aria-label="创建页面"
                     disabled={!prompt.trim()}
                     style={{
                         background:

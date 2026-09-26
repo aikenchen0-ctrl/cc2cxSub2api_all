@@ -433,7 +433,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
       <div className={embedded ? "max-w-5xl" : "mx-auto max-w-5xl"}>
         {!embedded ? (
           <h1 className="font-unbounded text-[28px] font-normal tracking-[-0.84px] text-black">
-            Admin
+            管理员
           </h1>
         ) : null}
 
@@ -443,11 +443,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
           }`}
         >
           <h2 className="text-sm font-semibold text-[#191919]">
-            Manage access
+            访问管理
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[#6B7280]">
-            Create login accounts and manage admin-owned API/MCP access keys.
-            User workspaces remain private.
+            创建登录账户并管理管理员拥有的 API/MCP 密钥。用户工作区保持私密。
           </p>
 
           <Tabs defaultValue="users" className="mt-6">
@@ -456,13 +455,13 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
               value="users"
               className="h-9 rounded-full px-5 text-xs text-[#667085] shadow-none data-[state=active]:bg-white data-[state=active]:text-[#5146E5] data-[state=active]:shadow-sm"
             >
-              Users
+              用户
             </TabsTrigger>
             <TabsTrigger
               value="keys"
               className="h-9 rounded-full px-5 text-xs text-[#667085] shadow-none data-[state=active]:bg-white data-[state=active]:text-[#5146E5] data-[state=active]:shadow-sm"
             >
-              API keys
+              API 密钥
             </TabsTrigger>
           </TabsList>
 
@@ -475,19 +474,19 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                 <div>
                   <h2 className="text-sm font-semibold text-[#101323]">添加用户</h2>
                   <p className="mt-0.5 text-xs text-[#667085]">
-                    Create a private workspace and sign-in credentials.
+                    创建私有工作区和登录凭据。
                   </p>
                 </div>
               </div>
               <form onSubmit={addUser} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
                 <input
-                  aria-label="Username"
+                  aria-label="用户名"
                   className={inputClass}
-                  placeholder="Username"
+                  placeholder="用户名"
                   minLength={3}
                   maxLength={128}
                   pattern="\S+"
-                  title="Username cannot contain spaces"
+                  title="用户名不能包含空格"
                   value={username}
                   onChange={(event) =>
                     setUsername(event.target.value.replace(/\s/g, ""))
@@ -496,10 +495,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   spellCheck={false}
                 />
                 <input
-                  aria-label="Password"
+                  aria-label="密码"
                   className={inputClass}
                   type="password"
-                  placeholder="Password (8+ characters)"
+                  placeholder="密码（至少 8 个字符）"
                   minLength={8}
                   maxLength={128}
                   value={password}
@@ -508,7 +507,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                 />
                 <button type="submit" className={primaryButtonClass} disabled={busy === "add"}>
                   {busy === "add" && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create user
+                  创建用户
                 </button>
               </form>
             </section>
@@ -528,7 +527,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                 </div>
                 <button
                   type="button"
-                  aria-label="Refresh accounts"
+                  aria-label="刷新账户"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-[#EDEEEF] text-[#667085] transition hover:bg-[#F9FAFB] hover:text-[#5146E5]"
                   onClick={() => void loadUsers("manual")}
                 >
@@ -558,11 +557,11 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                           onClick={() => openResetPassword(user)}
                           disabled={busy !== null}
                         >
-                          Reset password
+                          重置密码
                         </button>
                         <button
                           type="button"
-                          aria-label={`Delete ${user.username}`}
+                          aria-label={`删除 ${user.username}`}
                           className="flex h-9 w-9 items-center justify-center rounded-full border border-[#FEE4E2] bg-white text-[#D92D20] transition hover:bg-[#FEF3F2]"
                           onClick={() => setDialog({ kind: "delete-user", user })}
                           disabled={busy !== null}
@@ -587,7 +586,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <div>
                     <h2 className="text-sm font-semibold text-[#101323]">API 和 MCP 密钥</h2>
                     <p className="mt-0.5 text-xs text-[#667085]">
-                      Keys are hidden by default. Generate as many as you need.
+                      密钥默认隐藏，可按需生成。
                     </p>
                   </div>
                 </div>
@@ -598,7 +597,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   disabled={busy === "create-key"}
                 >
                   {busy === "create-key" && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Generate key
+                  生成密钥
                 </button>
               </div>
               <div className="divide-y divide-[#EDEEEF]">
@@ -606,7 +605,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <div className="px-6 py-12 text-center">
                     <KeyRound className="mx-auto h-6 w-6 text-[#B8B4C7]" />
                     <p className="mt-3 text-sm text-[#667085]">
-                      No API keys have been generated.
+                      尚未生成 API 密钥。
                     </p>
                   </div>
                 )}
@@ -627,8 +626,8 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                       </div>
                       <button
                         type="button"
-                        aria-label={isVisible ? "Hide API key" : "Show API key"}
-                        title={isVisible ? "Hide API key" : "Show API key"}
+                          aria-label={isVisible ? "隐藏 API 密钥" : "显示 API 密钥"}
+                        title={isVisible ? "隐藏 API 密钥" : "显示 API 密钥"}
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#EDEEEF] text-[#667085] transition hover:bg-[#F4F3FF] hover:text-[#5146E5]"
                         onClick={() => toggleKeyVisibility(key.token)}
                       >
@@ -636,8 +635,8 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                       </button>
                       <button
                         type="button"
-                        aria-label="Copy API key"
-                        title="Copy API key"
+                        aria-label="复制 API 密钥"
+                        title="复制 API 密钥"
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#EDEEEF] text-[#667085] transition hover:bg-[#F4F3FF] hover:text-[#5146E5]"
                         onClick={() => void copyKey(key.token)}
                       >
@@ -645,8 +644,8 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                       </button>
                       <button
                         type="button"
-                        aria-label="Revoke API key"
-                        title="Revoke API key"
+                        aria-label="撤销 API 密钥"
+                        title="撤销 API 密钥"
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-[#FEE4E2] text-[#D92D20] transition hover:bg-[#FEF3F2]"
                         onClick={() => setDialog({ kind: "revoke-key", key })}
                         disabled={busy !== null}
@@ -680,7 +679,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <LockKeyhole className="h-5 w-5 text-[#5146E5]" />
                 </div>
                 <DialogTitle className="text-xl font-semibold leading-7 text-[#101323]">
-                  Reset password
+                  重置密码
                 </DialogTitle>
                 <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
                   Set a new password for{" "}
@@ -710,11 +709,11 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   onClick={() => setDialog(null)}
                   disabled={dialogBusy}
                 >
-                  Cancel
+                  取消
                 </button>
                 <button type="submit" className={primaryButtonClass} disabled={dialogBusy}>
                   {dialogBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Reset password
+                  重置密码
                 </button>
               </DialogFooter>
             </form>
@@ -727,11 +726,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <AlertTriangle className="h-5 w-5 text-[#D92D20]" />
                 </div>
                 <DialogTitle className="text-xl font-semibold leading-7 text-[#101323]">
-                  Delete {dialog.user.username}?
+                  删除 {dialog.user.username}？
                 </DialogTitle>
                 <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
-                  This permanently removes the user and all of their presentations,
-                  templates, chats, tasks, and files. This action cannot be undone.
+                  这将永久删除该用户及其所有演示文稿、模板、聊天记录、任务和文件，且无法撤销。
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="flex-row border-t border-[#EAECF0] p-4 sm:justify-end sm:space-x-0">
@@ -741,7 +739,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   onClick={() => setDialog(null)}
                   disabled={dialogBusy}
                 >
-                  Cancel
+                  取消
                 </button>
                 <button
                   type="button"
@@ -750,7 +748,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   disabled={dialogBusy}
                 >
                   {dialogBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  Delete user
+                  删除用户
                 </button>
               </DialogFooter>
             </>
@@ -763,11 +761,10 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <AlertTriangle className="h-5 w-5 text-[#D92D20]" />
                 </div>
                 <DialogTitle className="text-xl font-semibold leading-7 text-[#101323]">
-                  Revoke API key?
+                  撤销 API 密钥？
                 </DialogTitle>
                 <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
-                  Any application using this key will lose API and MCP access
-                  immediately. This action cannot be undone.
+                  使用此密钥的应用将立即失去 API 和 MCP 访问权限，且无法撤销。
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="flex-row border-t border-[#EAECF0] p-4 sm:justify-end sm:space-x-0">
@@ -777,7 +774,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   onClick={() => setDialog(null)}
                   disabled={dialogBusy}
                 >
-                  Cancel
+                  取消
                 </button>
                 <button
                   type="button"
@@ -786,7 +783,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   disabled={dialogBusy}
                 >
                   {dialogBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  Revoke key
+                  撤销密钥
                 </button>
               </DialogFooter>
             </>

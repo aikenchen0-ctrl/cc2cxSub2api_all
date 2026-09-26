@@ -425,7 +425,7 @@ export default function CodexConfig({
                         <button
                             onClick={handleRefreshToken}
                             disabled={isRefreshing}
-                            title="Refresh token"
+                            title="刷新令牌"
                             className="w-8 h-8 flex items-center justify-center rounded-full bg-[#EDEEEF] hover:bg-[#E4E5E6] disabled:opacity-40 transition-colors"
                         >
                             {isRefreshing ? (
@@ -437,7 +437,7 @@ export default function CodexConfig({
                         <button
                             onClick={handleSignOut}
                             disabled={isLoggingOut}
-                            title="Sign out"
+                            title="退出登录"
                             className="w-8 h-8 flex items-center justify-center rounded-full bg-[#EDEEEF] hover:bg-[#E4E5E6] disabled:opacity-40 transition-colors"
                         >
                             {isLoggingOut ? (
@@ -475,7 +475,7 @@ export default function CodexConfig({
                             style={{ width: "var(--radix-popover-trigger-width)" }}
                         >
                             <Command>
-                                <CommandInput placeholder="Search models…" />
+                                <CommandInput placeholder="搜索模型…" />
                                 <CommandList>
                                     <CommandEmpty>未找到模型。</CommandEmpty>
                                     <CommandGroup>

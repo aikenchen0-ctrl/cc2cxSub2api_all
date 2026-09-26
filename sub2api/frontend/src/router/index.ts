@@ -604,6 +604,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/satellite-billing',
+    name: 'AdminSatelliteBilling',
+    component: () => import('@/views/admin/SatelliteBillingView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Satellite Billing',
+      titleKey: 'admin.satelliteBilling.title',
+      descriptionKey: 'admin.satelliteBilling.description'
+    }
+  },
+  {
     path: '/admin/settings',
     name: 'AdminSettings',
     component: () => import('@/views/admin/SettingsView.vue'),

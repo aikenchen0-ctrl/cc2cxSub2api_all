@@ -335,7 +335,7 @@ const UploadPage = () => {
       notify.error(
         "Image provider unavailable",
         error?.message ||
-        `Unable to reach ${selectedProvider} right now. Please check your API key/settings and try again.`
+        `暂时无法连接 ${selectedProvider}，请检查 API 密钥和设置后重试。`
       );
       return false;
     }
@@ -348,13 +348,13 @@ const UploadPage = () => {
   const validateConfiguration = (): boolean => {
     if (!config.language) {
       trackUploadValidationFailure("language_missing");
-      notify.warning("Language required", "Please select a language.");
+      notify.warning("需要选择语言", "请选择语言。 ");
       return false;
     }
 
     if (files.length > 0 && config.language === LanguageType.Auto) {
       trackUploadValidationFailure("language_auto_with_documents");
-      notify.warning("Language required", "Please choose a language before processing uploaded documents.");
+      notify.warning("需要选择语言", "处理上传文件前请选择语言。 ");
       return false;
     }
 
@@ -413,10 +413,10 @@ const UploadPage = () => {
   const handleDocumentProcessing = async () => {
     setLoadingState({
       isLoading: true,
-      message: "Processing documents...",
+      message: "正在处理文件...",
       showProgress: true,
       duration: 90,
-      extra_info: files.length > 0 ? "It might take a few minutes for large documents." : "",
+      extra_info: files.length > 0 ? "大型文件可能需要几分钟。" : "",
     });
 
     let documents = [];
@@ -571,7 +571,7 @@ const UploadPage = () => {
     });
     notify.error(
       "Generation failed",
-      error.message || "Something went wrong while starting your presentation."
+        error.message || "启动演示文稿时出现问题。"
     );
   };
 

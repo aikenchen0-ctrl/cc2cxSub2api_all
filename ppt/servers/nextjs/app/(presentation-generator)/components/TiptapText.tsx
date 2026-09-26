@@ -85,7 +85,7 @@ const TiptapText: React.FC<TiptapTextProps> = ({
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               editor?.isActive("bold") ? "bg-blue-100 text-blue-600" : ""
             }`}
-            title="Bold"
+            title="粗体"
           >
             <Bold className="h-4 w-4" />
           </button>
@@ -94,7 +94,7 @@ const TiptapText: React.FC<TiptapTextProps> = ({
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               editor?.isActive("italic") ? "bg-blue-100 text-blue-600" : ""
             }`}
-            title="Italic"
+            title="斜体"
           >
             <Italic className="h-4 w-4" />
           </button>
@@ -103,7 +103,7 @@ const TiptapText: React.FC<TiptapTextProps> = ({
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               editor?.isActive("underline") ? "bg-blue-100 text-blue-600" : ""
             }`}
-            title="Underline"
+            title="下划线"
           >
             <UnderlinedIcon className="h-4 w-4" />
           </button>
@@ -112,7 +112,7 @@ const TiptapText: React.FC<TiptapTextProps> = ({
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               editor?.isActive("strike") ? "bg-blue-100 text-blue-600" : ""
             }`}
-            title="Strikethrough"
+            title="删除线"
           >
             <Strikethrough className="h-4 w-4" />
           </button>
@@ -121,7 +121,7 @@ const TiptapText: React.FC<TiptapTextProps> = ({
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               editor?.isActive("code") ? "bg-blue-100 text-blue-600" : ""
             }`}
-            title="Code"
+            title="代码"
           >
             <Code className="h-4 w-4" />
           </button>

@@ -9,7 +9,7 @@ export const EmptyState = () => {
     <div className="w-full border-y border-[#EDEEEF]">
       <Link
         href="/upload"
-        aria-label="Create your first presentation"
+        aria-label="创建你的第一个演示文稿"
         className="group mx-auto flex h-[250px] w-full max-w-[577px] flex-col items-center justify-center gap-[14px] border-x border-[#EDEEEF] bg-white px-5 outline-none transition-colors hover:bg-[#FDFDFF] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#7A5AF8]"
         onClick={() =>
           trackEvent(MixpanelEvent.Dashboard_New_Presentation_Clicked, {

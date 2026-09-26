@@ -66,7 +66,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                     <div className="">
                         <Select value={llmConfig.DALL_E_3_QUALITY || 'standard'} onValueChange={(value) => input_field_changed(value, "DALL_E_3_QUALITY")}>
                             <SelectTrigger className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                                <SelectValue placeholder="Select a quality" />
+                                <SelectValue placeholder="选择画质" />
                             </SelectTrigger>
                             <SelectContent>
                                 {DALLE_3_QUALITY_OPTIONS.map((option) => (
@@ -94,7 +94,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                             <SelectTrigger
 
                                 className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between">
-                                <SelectValue placeholder="Select a quality" />
+                                <SelectValue placeholder="选择画质" />
                             </SelectTrigger>
                             <SelectContent>
                                 {GPT_IMAGE_1_5_QUALITY_OPTIONS.map((option) => (
@@ -124,7 +124,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                             checked={!isImageGenerationDisabled}
                             className='data-[state=checked]:bg-[#4791FF] data-[state=unchecked]:bg-gray-400'
                             onCheckedChange={(checked) => handleChangeImageGenerationDisabled(!checked)}
-                            aria-label="Enable image generation"
+                            aria-label="启用图片生成"
                         />
                     </div>
 
@@ -170,7 +170,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                             <span className="text-sm font-medium text-gray-900">
                                                                 {llmConfig.IMAGE_PROVIDER
                                                                     ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]?.label || llmConfig.IMAGE_PROVIDER
-                                                                    : "Select image provider"}
+                                                : "选择图片服务"}
                                                             </span>
                                                         </div>
                                                         <ChevronUp className="w-4 h-4 text-gray-500" />
@@ -182,7 +182,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                     style={{ width: "300px" }}
                                                 >
                                                     <Command>
-                                                        <CommandInput placeholder="Search provider..." />
+                                                <CommandInput placeholder="搜索服务..." />
                                                         <CommandList>
                                                             <CommandEmpty>未找到服务商。</CommandEmpty>
                                                             <CommandGroup>
@@ -359,7 +359,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                     <div className="relative">
                                         <input
                                             type={showApiKey ? 'text' : 'password'}
-                                            placeholder="API key"
+                                            placeholder="API 密钥"
                                             className="w-full px-4 pr-12 py-2.5 h-12 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                             value={llmConfig.OPEN_WEBUI_IMAGE_API_KEY || ""}
                                             onChange={(e) => {
