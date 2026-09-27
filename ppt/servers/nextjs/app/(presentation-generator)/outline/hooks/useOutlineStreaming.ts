@@ -11,7 +11,7 @@ import {
   requestChatGptReauth,
 } from "@/utils/chatgptAuth";
 
-const MAX_STREAM_RETRIES = 3;
+const MAX_STREAM_RETRIES = 4;
 const STREAM_RETRY_DELAY_MS = 1_000;
 const DEFAULT_STATUS_MESSAGE = "Preparing your presentation outline";
 
@@ -59,6 +59,7 @@ export const useOutlineStreaming = (
     let retryCount = 0;
     let isClosed = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const retryToastId = `presentation-outline-retry-${presentationId}`;
 
     const closeEventSource = () => {
       if (eventSource) {
@@ -92,6 +93,11 @@ export const useOutlineStreaming = (
       activeIndexRef.current = -1;
       highestIndexRef.current = -1;
       setStatusMessage("Reconnecting to outline stream");
+      notify.info(
+        "正在重试生成",
+        `大纲模型暂时没有正常响应，正在进行第 ${retryCount}/${MAX_STREAM_RETRIES} 次重试（共尝试 5 次），请稍候。`,
+        { id: retryToastId, duration: retryDelay + 2500 }
+      );
 
       retryTimer = setTimeout(() => {
         if (!isClosed) {
@@ -117,7 +123,7 @@ export const useOutlineStreaming = (
             resetStreamingState();
             notify.error(
               "Stream parse failed",
-              "Failed to parse outline stream response."
+              "我已经尽力了，但还是没有生成成功。请稍后再试。"
             );
           }
           return;
@@ -189,11 +195,15 @@ export const useOutlineStreaming = (
               isClosed = true;
               closeEventSource();
               clearRetryTimer();
+              notify.dismiss(retryToastId);
               retryCount = 0;
             } catch {
               if (!scheduleRetry("failed to parse complete payload")) {
                 resetStreamingState();
-                notify.error("Parse failed", "Failed to parse presentation data.");
+                notify.error(
+                  "演示文稿生成失败",
+                  "我已经尽力了，但还是没有生成成功。请稍后再试。"
+                );
               }
             }
             accumulatedChunks = "";
@@ -204,6 +214,7 @@ export const useOutlineStreaming = (
             isClosed = true;
             closeEventSource();
             clearRetryTimer();
+            notify.dismiss(retryToastId);
             retryCount = 0;
             break;
 
@@ -221,9 +232,8 @@ export const useOutlineStreaming = (
               resetStreamingState();
               closeEventSource();
               notify.error(
-                "Outline streaming failed",
-                data.detail ||
-                  "Failed to connect to the server. Please try again."
+                "演示文稿生成失败",
+                "我已经尽力了，但还是没有生成成功。请稍后再试。"
               );
             }
             break;
@@ -235,8 +245,8 @@ export const useOutlineStreaming = (
           resetStreamingState();
           closeEventSource();
           notify.error(
-            "Connection failed",
-            "Failed to connect to the server. Please try again."
+            "演示文稿生成失败",
+            "我已经尽力了，但还是没有生成成功。请稍后再试。"
           );
         }
       };
@@ -251,6 +261,7 @@ export const useOutlineStreaming = (
       isClosed = true;
       closeEventSource();
       clearRetryTimer();
+      notify.dismiss(retryToastId);
     };
   }, [presentationId, dispatch, enabled]);
 

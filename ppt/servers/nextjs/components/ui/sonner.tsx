@@ -45,6 +45,7 @@ const UI_TEXT_ZH: Record<string, string> = {
   "Font added": "字体已添加",
   "Font removed": "字体已移除",
   "Generation failed": "生成失败",
+  "正在重试生成": "正在重试生成",
   "Template unavailable": "模板不可用",
   "Configuration saved": "配置已保存",
   "Your configuration was saved successfully.": "配置已成功保存。",

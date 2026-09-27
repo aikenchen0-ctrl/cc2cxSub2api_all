@@ -41,6 +41,7 @@ from utils.image_provider import (
 from utils.asset_directory_utils import absolute_fastapi_asset_url
 from utils.image_generation_error import normalize_image_generation_error
 import uuid
+from collections.abc import Awaitable, Callable
 
 
 COMFYUI_MAX_SEED = 0xFFFFFFFFFFFFFFFF
@@ -48,6 +49,20 @@ COMFYUI_SEED_SOURCE_VALUE_KEYS = {"value", "int", "integer", "number"}
 _IMAGE_GENERATION_LOCKS: WeakKeyDictionary[
     asyncio.AbstractEventLoop, asyncio.Lock
 ] = WeakKeyDictionary()
+IMAGE_GENERATION_MAX_ATTEMPTS = 5
+IMAGE_GENERATION_RETRY_BASE_DELAY_SECONDS = 0.75
+RETRYABLE_IMAGE_STATUS_CODES = {408, 429}
+
+
+def _is_retryable_image_error(error: Exception) -> bool:
+    if isinstance(error, (asyncio.TimeoutError, aiohttp.ClientError, OSError)):
+        return True
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+    return status_code in RETRYABLE_IMAGE_STATUS_CODES or (
+        isinstance(status_code, int) and status_code >= 500
+    )
 
 
 def _get_image_generation_lock() -> asyncio.Lock:
@@ -65,6 +80,7 @@ class ImageGenerationService:
         self.output_directory = output_directory
         self.is_image_generation_disabled = is_image_generation_disabled()
         self.image_gen_func = self.get_image_gen_func()
+        self.on_retry: Callable[[int, int], Awaitable[None]] | None = None
 
     def get_image_gen_func(self):
         if self.is_image_generation_disabled:
@@ -115,11 +131,7 @@ class ImageGenerationService:
         print(f"Request - Generating Image for {image_prompt}")
 
         try:
-            if is_parallel_image_generation_enabled():
-                image_path = await self._call_image_provider(image_prompt)
-            else:
-                async with _get_image_generation_lock():
-                    image_path = await self._call_image_provider(image_prompt)
+            image_path = await self._call_image_provider_with_retries(image_prompt)
             if image_path:
                 if image_path.startswith("http"):
                     return image_path
@@ -144,6 +156,35 @@ class ImageGenerationService:
             if normalized_error is e:
                 raise
             raise normalized_error from e
+
+    async def _call_image_provider_with_retries(self, image_prompt: str) -> str:
+        """Retry provider failures so one bad upstream does not fail a slide."""
+        last_error: Exception | None = None
+        for attempt in range(1, IMAGE_GENERATION_MAX_ATTEMPTS + 1):
+            try:
+                if is_parallel_image_generation_enabled():
+                    return await self._call_image_provider(image_prompt)
+                async with _get_image_generation_lock():
+                    return await self._call_image_provider(image_prompt)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if (
+                    attempt >= IMAGE_GENERATION_MAX_ATTEMPTS
+                    or not _is_retryable_image_error(exc)
+                ):
+                    break
+                delay = IMAGE_GENERATION_RETRY_BASE_DELAY_SECONDS * attempt
+                if self.on_retry is not None:
+                    await self.on_retry(attempt + 1, IMAGE_GENERATION_MAX_ATTEMPTS)
+                print(
+                    f"Image provider attempt {attempt}/{IMAGE_GENERATION_MAX_ATTEMPTS} "
+                    f"failed; retrying in {delay:.2f}s: {exc}"
+                )
+                await asyncio.sleep(delay)
+        assert last_error is not None
+        raise last_error
 
     async def _call_image_provider(self, image_prompt: str) -> str:
         if self.is_stock_provider_selected():

@@ -329,7 +329,7 @@ async def generate_structured_with_schema_retries(
 
     for validation_attempt in range(max_validation_loops):
         content: Optional[dict] = None
-        for attempt in range(3):
+        for attempt in range(5):
             await _raise_if_client_disconnected(disconnect_checker)
             content = await _generate_structured_content(
                 client,
@@ -347,7 +347,7 @@ async def generate_structured_with_schema_retries(
             )
             if content is not None:
                 break
-            if attempt < 2:
+            if attempt < 4:
                 await asyncio.sleep(0.5 * (attempt + 1))
 
         if content is None:

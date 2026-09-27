@@ -2170,6 +2170,11 @@ async def stream_presentation(
         asset_events: asyncio.Queue = asyncio.Queue()
         asset_warnings_by_slide: dict[int, list[dict]] = {}
 
+        async def emit_image_retry(attempt: int, max_attempts: int) -> None:
+            await asset_events.put(("retry", attempt, max_attempts))
+
+        image_generation_service.on_retry = emit_image_retry
+
         async def notify_slide_assets_ready(slide_index: int, asset_task: asyncio.Task):
             try:
                 await asset_task
@@ -2186,7 +2191,7 @@ async def stream_presentation(
                     }
                 )
             finally:
-                await asset_events.put(slide_index)
+                await asset_events.put(("slide", slide_index))
 
         slides: List[SlideModel] = []
         yield SSEResponse(
@@ -2253,9 +2258,15 @@ async def stream_presentation(
 
             while True:
                 try:
-                    done_idx = asset_events.get_nowait()
+                    asset_event = asset_events.get_nowait()
                 except asyncio.QueueEmpty:
                     break
+                if asset_event[0] == "retry":
+                    yield SSEStatusResponse(
+                        status=f"Retrying image generation ({asset_event[1]}/{asset_event[2]})"
+                    ).to_string()
+                    continue
+                done_idx = asset_event[1]
                 slides[done_idx].ui = _apply_template_content_to_ui(
                     slides[done_idx].ui,
                     slides[done_idx].content,
@@ -2279,7 +2290,13 @@ async def stream_presentation(
         ).to_string()
 
         while yielded_slide_asset_sse_count < len(slides):
-            done_idx = await asset_events.get()
+            asset_event = await asset_events.get()
+            if asset_event[0] == "retry":
+                yield SSEStatusResponse(
+                    status=f"Retrying image generation ({asset_event[1]}/{asset_event[2]})"
+                ).to_string()
+                continue
+            done_idx = asset_event[1]
             slides[done_idx].ui = _apply_template_content_to_ui(
                 slides[done_idx].ui,
                 slides[done_idx].content,

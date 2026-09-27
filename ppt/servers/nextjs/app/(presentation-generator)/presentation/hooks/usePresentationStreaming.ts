@@ -25,7 +25,7 @@ import {
 } from "../utils/streamAssetMerge";
 import { isTemplateV2Slide } from "../../_shared/blank-slide";
 
-const MAX_STREAM_RETRIES = 3;
+const MAX_STREAM_RETRIES = 4;
 const STREAM_RETRY_DELAY_MS = 1_000;
 
 interface PresentationStreamData {
@@ -152,6 +152,7 @@ export const usePresentationStreaming = (
     let streamIsTemplateV2 = preloadPresentationData;
     let smartGenerationOutcomeTracked = false;
     let latestGenerationMetrics: GenerationMetrics | null = null;
+    const retryToastId = `presentation-generation-retry-${presentationId}`;
 
     const closeEventSource = () => {
       if (eventSource) {
@@ -192,6 +193,7 @@ export const usePresentationStreaming = (
       isClosed = true;
       closeEventSource();
       clearRetryTimer();
+      notify.dismiss(retryToastId);
       setLoading(false);
       dispatch(setStreaming(false));
       setError(true);
@@ -209,6 +211,11 @@ export const usePresentationStreaming = (
       const retryDelay = STREAM_RETRY_DELAY_MS * retryCount;
       console.warn(
         `Presentation stream retry ${retryCount}/${MAX_STREAM_RETRIES}: ${reason}`
+      );
+      notify.info(
+        "正在重试生成",
+        `模型暂时没有正常响应，正在进行第 ${retryCount}/${MAX_STREAM_RETRIES} 次重试（共尝试 5 次），请稍候。`,
+        { id: retryToastId, duration: retryDelay + 2500 }
       );
 
       closeEventSource();
@@ -316,12 +323,26 @@ export const usePresentationStreaming = (
           data = JSON.parse(event.data) as PresentationStreamData;
         } catch {
           if (!scheduleRetry("invalid SSE payload")) {
-            finalizeFailure("Failed to parse stream response.");
+            finalizeFailure(
+              "我已经尽力了，但还是没有生成成功。请稍后再试。"
+            );
           }
           return;
         }
 
         switch (data.type) {
+          case "status": {
+            const status = typeof data.status === "string" ? data.status : "";
+            const match = status.match(/\((\d+)\/(\d+)\)/);
+            if (match) {
+              notify.info(
+                "正在重试生成",
+                `图片服务暂时没有正常响应，正在进行第 ${match[1]}/${match[2]} 次重试，请稍候。`,
+                { id: retryToastId, duration: 4000 }
+              );
+            }
+            break;
+          }
           case "generation_metrics": {
             const previousMetrics = latestGenerationMetrics;
             const inputTokens = readMetricNumber(
@@ -613,6 +634,7 @@ export const usePresentationStreaming = (
               isClosed = true;
               closeEventSource();
               clearRetryTimer();
+              notify.dismiss(retryToastId);
               retryCount = 0;
 
               // Remove stream parameter from URL
@@ -622,7 +644,9 @@ export const usePresentationStreaming = (
             } catch (error) {
               console.error("Could not finalize presentation stream:", error);
               if (!scheduleRetry("failed to parse complete payload")) {
-                finalizeFailure("Failed to load the completed presentation.");
+                finalizeFailure(
+                  "我已经尽力了，但还是没有生成成功。请稍后再试。"
+                );
               }
             }
             accumulatedChunks = "";
@@ -643,6 +667,7 @@ export const usePresentationStreaming = (
             isClosed = true;
             closeEventSource();
             clearRetryTimer();
+            notify.dismiss(retryToastId);
             retryCount = 0;
 
             // Remove stream parameter from URL
@@ -663,26 +688,20 @@ export const usePresentationStreaming = (
               );
               break;
             }
-            const completedSlides = Number(data.completed_slides);
-            const totalSlides = Number(data.total_slides);
             const detail =
               data.detail || "Failed to connect to the server. Please try again.";
-            const detailWithProgress =
-              Number.isFinite(completedSlides) && completedSlides > 0
-                ? `${detail} ${completedSlides}${
-                    Number.isFinite(totalSlides) && totalSlides > 0
-                      ? ` of ${totalSlides}`
-                      : ""
-                  } slides were saved and will be reused.`
-                : detail;
             if (data.retryable === false) {
-              finalizeFailure(detailWithProgress);
+              finalizeFailure(
+                "我已经尽力了，但还是没有生成成功。请稍后再试。"
+              );
               break;
             }
             if (
               !scheduleRetry(detail || "server returned stream error response")
             ) {
-              finalizeFailure(detailWithProgress);
+              finalizeFailure(
+                "我已经尽力了，但还是没有生成成功。请稍后再试。"
+              );
             }
             break;
         }
@@ -691,7 +710,9 @@ export const usePresentationStreaming = (
       eventSource.onerror = (error) => {
         console.error("EventSource failed:", error);
         if (!scheduleRetry("connection lost")) {
-          finalizeFailure("Failed to connect to the server. Please try again.");
+          finalizeFailure(
+            "我已经尽力了，但还是没有生成成功。请稍后再试。"
+          );
         }
       };
     };
@@ -717,6 +738,7 @@ export const usePresentationStreaming = (
       isClosed = true;
       closeEventSource();
       clearRetryTimer();
+      notify.dismiss(retryToastId);
     };
   }, [
     presentationId,

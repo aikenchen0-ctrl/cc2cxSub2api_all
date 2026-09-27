@@ -46,7 +46,7 @@ DEFAULT_SMART_SLIDE_COUNT = 8
 # Smart generation shares the same product-wide limit as every other deck path.
 # Keep this alias for callers that imported the older Smart-specific constant.
 MAX_SMART_SLIDE_COUNT = MAX_NUMBER_OF_SLIDES
-SMART_GENERATION_MAX_ATTEMPTS = 8
+SMART_GENERATION_MAX_ATTEMPTS = 5
 SMART_GENERATION_METRICS_INTERVAL_SECONDS = 5.0
 SMART_TITLE_MAX_VISIBLE_CHARACTERS = 800
 SMART_TITLE_MAX_VISIBLE_WORDS = 80

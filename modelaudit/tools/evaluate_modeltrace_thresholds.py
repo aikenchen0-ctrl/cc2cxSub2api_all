@@ -5,17 +5,50 @@ import hashlib
 import itertools
 import json
 import math
-import sys
+import importlib.util
+import os
 from pathlib import Path
 from typing import Any
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-MODELTRACE_ROOT = REPOSITORY_ROOT / "ModelTrace"
-sys.path.insert(0, str(MODELTRACE_ROOT))
+VENDOR_ROOT = REPOSITORY_ROOT / "modelaudit" / "vendor" / "modeltrace"
+# Optional raw reference data is deliberately outside the runtime vendor copy.
+# Set this when performing a local recalibration with the original dataset.
+REFERENCE_ROOT = Path(
+    os.environ.get("MODELAUDIT_MODELTRACE_REFERENCE_ROOT", str(REPOSITORY_ROOT / "ModelTrace" / "data"))
+)
+MODELTRACE_ROOT = REFERENCE_ROOT.parent
 
-from bank_builder import fit_robust_artifacts, read_rows  # noqa: E402
-import fingerprint  # noqa: E402
+
+def _load_vendor_fingerprint() -> Any:
+    source = VENDOR_ROOT / "fingerprint.py"
+    spec = importlib.util.spec_from_file_location("modelaudit_vendor_fingerprint", source)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"vendor ModelTrace fingerprint is missing: {source}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fingerprint = _load_vendor_fingerprint()
+
+
+def _load_reference_dependencies() -> tuple[Any, Any]:
+    """Load offline-only reference helpers without breaking normal test imports."""
+    builder = REFERENCE_ROOT.parent / "bank_builder.py"
+    if not builder.is_file():
+        raise FileNotFoundError(
+            "offline ModelTrace reference data is unavailable; "
+            "set MODELAUDIT_MODELTRACE_REFERENCE_ROOT to a checkout containing "
+            "bank_builder.py and the reference JSONL files"
+        )
+    spec = importlib.util.spec_from_file_location("modelaudit_reference_bank_builder", builder)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load offline bank builder: {builder}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.fit_robust_artifacts, module.read_rows
 
 
 DEFAULT_THRESHOLDS = (0.95, 0.90, 0.20)
@@ -42,20 +75,21 @@ def environment_disjoint_folds(environments: list[str]) -> list[dict[str, list[s
 
 
 def load_reference_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    _, read_rows = _load_reference_dependencies()
     sources = (
         ("gpt_reference.jsonl", "gpt", "GPT"),
         ("claude_reference.jsonl", "claude", "Claude"),
     )
     rows: list[dict[str, Any]] = []
     for filename, family_id, family_name in sources:
-        path = MODELTRACE_ROOT / "data" / filename
+        path = REFERENCE_ROOT / filename
         if not path.is_file():
             raise FileNotFoundError(f"ModelTrace reference data is missing: {path}")
         rows.extend(
             {**row, "family_id": family_id, "family_name": family_name}
             for row in read_rows(path)
         )
-    bank_path = MODELTRACE_ROOT / "data" / "unified_bank.json"
+    bank_path = VENDOR_ROOT / "data" / "unified_bank.json"
     if not bank_path.is_file():
         raise FileNotFoundError(f"ModelTrace unified bank is missing: {bank_path}")
     return rows, json.loads(bank_path.read_text(encoding="utf-8"))
@@ -65,6 +99,7 @@ def make_fold_bank(
     rows: list[dict[str, Any]],
     full_bank: dict[str, Any],
 ) -> dict[str, Any]:
+    fit_robust_artifacts, _ = _load_reference_dependencies()
     model_ids = list(dict.fromkeys(row["source"] for row in rows))
     templates = {item["id"]: item for item in full_bank["models"]}
     models = []
@@ -428,9 +463,16 @@ def main() -> None:
     thresholds = (args.min_probability, args.min_profile_similarity, args.min_margin)
     if any(value < 0 or value > 1 for value in thresholds) or not 0 <= args.candidate_similarity_margin <= 1:
         parser.error("all thresholds must be between 0 and 1")
-    rows, bank = load_reference_rows()
-    bank_path = MODELTRACE_ROOT / "data" / "unified_bank.json"
-    fingerprint_path = MODELTRACE_ROOT / "fingerprint.py"
+    try:
+        rows, bank = load_reference_rows()
+    except FileNotFoundError as exc:
+        # The production vendor snapshot intentionally excludes raw reference
+        # prompts. A normal installation can still run ModelTrace; only this
+        # optional offline recalibration is skipped.
+        print(json.dumps({"status": "skipped", "reason": str(exc)}, ensure_ascii=False, indent=2))
+        return
+    bank_path = VENDOR_ROOT / "data" / "unified_bank.json"
+    fingerprint_path = VENDOR_ROOT / "fingerprint.py"
     bank_sha256 = hashlib.sha256(bank_path.read_bytes()).hexdigest()
     fingerprint_sha256 = hashlib.sha256(fingerprint_path.read_bytes()).hexdigest()
     report = evaluate(rows, bank, thresholds)

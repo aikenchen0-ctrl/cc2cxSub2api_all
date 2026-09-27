@@ -142,7 +142,7 @@ async def test_auto_stop_migrates_legacy_implicitly_selected_rules(monkeypatch, 
 
     assert value["auto_stop_enabled"] is True
     assert value["stop_rules"] == []
-    assert value["options_version"] == 3
+    assert value["options_version"] == 4
     assert json.loads(stored["value_json"])["stop_rules"] == []
 
 
