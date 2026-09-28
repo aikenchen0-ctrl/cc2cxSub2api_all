@@ -256,8 +256,11 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 		if parseErr != nil || createdAt.After(cutoff) {
 			continue
 		}
-		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-		mu := s.userSettlementMutex(ownerID)
+		billingUserID := strings.TrimSpace(task.MainUserID)
+		if settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); settlementErr == nil && strings.TrimSpace(settlement.BillingMainUserID) != "" {
+			billingUserID = strings.TrimSpace(settlement.BillingMainUserID)
+		}
+		mu := s.userSettlementMutex(billingUserID)
 		mu.Lock()
 		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
@@ -268,7 +271,7 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 				if videoTaskFailed(upstreamStatus) {
 					settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID)
 					if settlementErr == nil && settlement.Status == "pending" {
-						usage, available, usageErr := s.mainUsageForRequest(ctx, task.RequestID)
+						usage, available, usageErr := s.mainUsageForRequest(ctx, billingUserID, task.RequestID)
 						switch {
 						case !available:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed video task requires authoritative usage lookup; legacy usage API is unavailable")
@@ -312,8 +315,11 @@ func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
 		if parseErr != nil || createdAt.After(cutoff) {
 			continue
 		}
-		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-		mu := s.userSettlementMutex(ownerID)
+		billingUserID := strings.TrimSpace(task.MainUserID)
+		if settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); settlementErr == nil && strings.TrimSpace(settlement.BillingMainUserID) != "" {
+			billingUserID = strings.TrimSpace(settlement.BillingMainUserID)
+		}
+		mu := s.userSettlementMutex(billingUserID)
 		mu.Lock()
 		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
@@ -324,7 +330,7 @@ func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
 				if imageTaskFailed(imageStatus) {
 					settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID)
 					if settlementErr == nil && settlement.Status == "pending" {
-						usage, available, usageErr := s.mainUsageForRequest(ctx, task.RequestID)
+						usage, available, usageErr := s.mainUsageForRequest(ctx, billingUserID, task.RequestID)
 						switch {
 						case !available:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed image task requires authoritative usage lookup; legacy usage API is unavailable")
@@ -391,7 +397,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request, requestID s
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_APP_CREDENTIAL_MISSING", "model relay credential is not configured")
 		return
 	}
-	if s.cfg.BillingMode != "" && s.cfg.BillingMode != "owner_upstream" {
+	if s.cfg.BillingMode != "" && s.cfg.BillingMode != "user_upstream" && s.cfg.BillingMode != "owner_upstream" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_MODE_INVALID", "AgentAPI billing mode is invalid")
 		return
 	}
@@ -920,6 +926,7 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 		logo = "/logo.svg"
 	}
 	payment := s.paymentConfig()
+	paymentEnabled := payment.Enabled && s.cfg.BillingMode != "user_upstream"
 	settings := map[string]any{
 		"registration_enabled": true, "email_verify_enabled": false,
 		"force_email_on_third_party_signup": false, "registration_email_suffix_whitelist": []string{},
@@ -929,11 +936,12 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 		"passkey_enabled": false, "turnstile_site_key": "", "aliyun_captcha_enabled": false,
 		"site_name": siteName, "site_logo": logo, "site_subtitle": "Agent API Gateway",
 		"api_base_url": "/api/v1", "contact_info": "", "doc_url": "", "home_content": "",
+		"recharge_url":         strings.TrimRight(s.cfg.PublicMainURL, "/") + "/purchase",
 		"compact_home_enabled": false, "hide_ccs_import_button": true,
 		// The public flag only tells the UI whether this AgentAPI instance has
 		// enabled its signed webhook bridge. It never exposes a secret or a main
 		// site credential. A verified payment still requires synced owner credit.
-		"payment_enabled": payment.Enabled, "payment_provider": payment.Provider,
+		"payment_enabled": paymentEnabled, "payment_provider": payment.Provider,
 		"payment_currency": payment.Currency, "payment_min_amount_cents": payment.MinAmountCents,
 		"payment_max_amount_cents": payment.MaxAmountCents, "payment_balance_disabled": true,
 		"risk_control_enabled": false, "table_default_page_size": 20, "table_page_size_options": []int{20, 50, 100},
@@ -951,6 +959,7 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 }
 
 func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
 		return
@@ -965,6 +974,11 @@ func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requ
 	publicAgent := redactAgentFinancials(agent)
 	result := map[string]any{"agent": publicAgent, "authenticated": false, "is_agent_admin": false}
 	if session, user, ok := s.loadSession(r); ok {
+		if mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID); balanceErr == nil {
+			user.BalanceCents = mainUser.Balance
+		} else {
+			result["balance_error"] = "Sub2API user balance is temporarily unavailable"
+		}
 		result["authenticated"] = true
 		result["is_agent_admin"] = s.isAgentAdmin(session)
 		result["main_user_id"] = session.MainUserID
@@ -1144,6 +1158,7 @@ func safeAgentProfile(raw []byte, mainUserID string, canEdit bool) map[string]an
 }
 
 func (s *Server) handleAgentWallet(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
 		return
@@ -1160,6 +1175,12 @@ func (s *Server) handleAgentWallet(w http.ResponseWriter, r *http.Request, reque
 	if !s.isAgentAdmin(session) {
 		agent = redactAgentFinancials(agent)
 	}
+	mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID)
+	if balanceErr != nil {
+		s.writeMainError(w, requestID, balanceErr)
+		return
+	}
+	user.BalanceCents = mainUser.Balance
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"agent": agent, "user": user, "main_user_id": session.MainUserID})
 }
 
@@ -1188,10 +1209,43 @@ func (s *Server) handleAgentUsers(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list agent users")
 			return
 		}
+		s.hydrateAgentUserBalances(r.Context(), users)
 		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": total, "page": page, "page_size": pageSize})
 		return
 	}
+	if mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID); balanceErr == nil {
+		user.BalanceCents = mainUser.Balance
+	} else {
+		user.BalanceCents = 0
+		user.BalanceError = "Sub2API user balance is temporarily unavailable"
+	}
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": []AgentUserView{user}, "total": 1, "page": 1, "page_size": 25})
+}
+
+func (s *Server) hydrateAgentUserBalances(ctx context.Context, users []AgentUserView) {
+	if len(users) == 0 || s.main == nil {
+		return
+	}
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, 8)
+	for i := range users {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			mainUser, err := s.main.AdminGetUser(ctx, users[i].MainUserID)
+			if err != nil {
+				users[i].BalanceCents = 0
+				users[i].BalanceError = "Sub2API user balance is temporarily unavailable"
+				return
+			}
+			users[i].BalanceCents = mainUser.Balance
+			users[i].BalanceError = ""
+		}()
+	}
+	wg.Wait()
 }
 
 func agentPagination(r *http.Request) (int, int, error) {
@@ -1295,6 +1349,17 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
+	if s.cfg.BillingMode == "user_upstream" {
+		if r.Method != http.MethodGet {
+			s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "recharge is completed on the Sub2API main site")
+			return
+		}
+		s.writeData(w, http.StatusOK, requestID, map[string]any{
+			"enabled": false, "provider": "sub2api", "currency": "", "items": []RechargeOrder{}, "total": 0,
+			"recharge_url": strings.TrimRight(s.cfg.PublicMainURL, "/") + "/purchase",
+		})
+		return
+	}
 	payment := s.paymentConfig()
 	switch r.Method {
 	case http.MethodGet:
@@ -1384,6 +1449,10 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 // credit in the same local transaction.
 func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, requestID string) {
 	w.Header().Set("Cache-Control", "no-store")
+	if s.cfg.BillingMode == "user_upstream" {
+		s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "recharge is completed on the Sub2API main site")
+		return
+	}
 	if r.Method != http.MethodPost {
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "payment webhook requires POST")
 		return
@@ -1795,6 +1864,10 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/payment-config" {
+		if s.cfg.BillingMode == "user_upstream" {
+			s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "local payment configuration is disabled for direct user billing")
+			return
+		}
 		s.paymentAdminConfig(w, r, requestID, session.MainUserID)
 		return
 	}
@@ -1964,14 +2037,26 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/recharge/orders" {
+		if s.cfg.BillingMode == "user_upstream" {
+			s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "local recharge orders are disabled for direct user billing")
+			return
+		}
 		s.paymentAdminOrders(w, r, requestID)
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/recharge/allocate" {
+		if s.cfg.BillingMode == "user_upstream" {
+			s.writeError(w, http.StatusGone, requestID, "LOCAL_ALLOCATION_DISABLED", "users spend their own Sub2API balance")
+			return
+		}
 		s.paymentAdminAllocate(w, r, requestID, session.MainUserID)
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/wallet/sync" && r.Method == http.MethodPost {
+		if s.cfg.BillingMode == "user_upstream" {
+			s.writeError(w, http.StatusGone, requestID, "OWNER_WALLET_DISABLED", "direct user billing has no shared owner wallet")
+			return
+		}
 		if !sameOrigin(r) {
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
@@ -2035,6 +2120,7 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list users")
 			return
 		}
+		s.hydrateAgentUserBalances(r.Context(), users)
 		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": users, "total": total, "page": page, "page_size": pageSize})
 		return
 	}
@@ -2044,6 +2130,10 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, prefix) && strings.HasSuffix(r.URL.Path, "/allocate") && r.Method == http.MethodPost {
+		if s.cfg.BillingMode == "user_upstream" {
+			s.writeError(w, http.StatusGone, requestID, "LOCAL_ALLOCATION_DISABLED", "users spend their own Sub2API balance")
+			return
+		}
 		if !sameOrigin(r) {
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
@@ -2417,17 +2507,16 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	chargeID := requestIDFrom(r, nil)
-	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
-		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
+	billingUserID := strings.TrimSpace(principal.ProxyMainUserID)
+	if billingUserID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main user billing identity is not configured")
 		return
 	}
-	// Serialize the before/relay/after balance observation for one owner. This
-	// prevents two concurrent requests from attributing the same asynchronous
-	// balance delta to both proxy users.
-	ownerMu := s.userSettlementMutex(ownerID)
-	ownerMu.Lock()
-	defer ownerMu.Unlock()
+	// Balance-delta fallback and idempotency are serialized per real Sub2API
+	// user. Requests from different proxy users never share a billing account.
+	userMu := s.userSettlementMutex(billingUserID)
+	userMu.Lock()
+	defer userMu.Unlock()
 	currentUser, userErr := s.store.User(s.cfg.AgentID, principal.ProxyMainUserID)
 	if userErr != nil {
 		if errors.Is(userErr, errNotFound) {
@@ -2452,30 +2541,17 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		s.writeError(w, http.StatusInternalServerError, requestID, "SETTLEMENT_LOOKUP_FAILED", "failed to load request settlement")
 		return
 	}
-	before, ok := s.readMainBalance(r.Context(), ownerID)
+	before, ok := s.readMainBalance(r.Context(), billingUserID)
 	if !ok {
-		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_BALANCE_UNAVAILABLE", "main owner balance could not be read")
-		return
-	}
-	agent, syncErr := s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, before, "balance-before:"+chargeID)
-	if syncErr != nil {
-		s.writeError(w, http.StatusInternalServerError, requestID, "BILLING_SNAPSHOT_FAILED", "failed to persist owner balance snapshot")
-		return
-	}
-	if before < agent.WalletAllocated {
-		s.writeError(w, http.StatusPaymentRequired, requestID, "MAIN_OWNER_BALANCE_OVERALLOCATED", "main owner balance is below allocated agent credit")
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_BALANCE_UNAVAILABLE", "main user balance could not be read")
 		return
 	}
 	if before < s.cfg.MaxRequestCostCents {
-		s.writeError(w, http.StatusPaymentRequired, requestID, "MAIN_OWNER_BALANCE_INSUFFICIENT", "main owner balance is insufficient")
+		s.writeError(w, http.StatusPaymentRequired, requestID, "MAIN_USER_BALANCE_INSUFFICIENT", "main user balance is insufficient")
 		return
 	}
-	settlement, created, err := s.store.PrepareSettlement(s.cfg.AgentID, principal.ProxyMainUserID, ownerID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
+	settlement, created, err := s.store.PrepareDirectSettlement(s.cfg.AgentID, billingUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
 	if err != nil {
-		if errors.Is(err, errInsufficientBalance) {
-			s.writeError(w, http.StatusPaymentRequired, requestID, "AGENT_INSUFFICIENT_BALANCE", "agent user balance is insufficient")
-			return
-		}
 		if errors.Is(err, errIdempotencyConflict) {
 			s.writeError(w, http.StatusConflict, requestID, "IDEMPOTENCY_CONFLICT", "request id is already associated with a different settlement")
 			return
@@ -2490,7 +2566,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	_ = s.store.SetSettlementModel(s.cfg.AgentID, chargeID, requestModelName(r.Header.Get("Content-Type"), body))
 
 	if modelRequestWantsStream(r.Header.Get("Accept"), r.Header.Get("Content-Type"), body) {
-		s.relayStreamingModel(w, r, requestID, ownerID, principal.ProxyMainUserID, chargeID, before, body, r.Header.Get("Content-Type"))
+		s.relayStreamingModel(w, r, requestID, billingUserID, chargeID, before, body, r.Header.Get("Content-Type"))
 		return
 	}
 
@@ -2550,7 +2626,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	// The main usage log is the authoritative source for a request charge. A
 	// balance delta is only a compatibility fallback for older Sub2API builds
 	// that do not expose the per-Agent runtime usage endpoint; it must never override a usage row.
-	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), chargeID); available {
+	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), billingUserID, chargeID); available {
 		if usageErr != nil {
 			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, usageErr.Error())
 			copyResponse(w, status, headers, responseBody)
@@ -2575,9 +2651,9 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 
-	after, hasAfter := s.readMainBalance(r.Context(), ownerID)
+	after, hasAfter := s.readMainBalance(r.Context(), billingUserID)
 	if !hasAfter {
-		if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "owner balance could not be read after relay"); err != nil {
+		if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "user balance could not be read after relay"); err != nil {
 			s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be recorded")
 			return
 		}
@@ -2595,7 +2671,6 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be recorded")
 			return
 		}
-		_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-pending:"+chargeID)
 		copyResponse(w, status, headers, responseBody)
 		return
 	}
@@ -2604,15 +2679,13 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream charge exceeds reservation and local settlement could not be recorded")
 			return
 		}
-		_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-pending:"+chargeID)
 		copyResponse(w, status, headers, responseBody)
 		return
 	}
-	if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "owner_balance_delta_fallback"}); err != nil {
+	if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "user_balance_delta_fallback"}); err != nil {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be finalized")
 		return
 	}
-	_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-after:"+chargeID)
 	copyResponse(w, status, headers, responseBody)
 }
 
@@ -2620,11 +2693,11 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 // only when the connected main site predates the per-Agent runtime usage endpoint (404),
 // allowing the legacy compatibility path to run. Any other admin API error is
 // treated as an uncertain charge and kept pending.
-func (s *Server) mainUsageForRequest(ctx context.Context, requestID string) (*MainUsageResult, bool, error) {
+func (s *Server) mainUsageForRequest(ctx context.Context, mainUserID, requestID string) (*MainUsageResult, bool, error) {
 	if !s.cfg.MainUsageAPI {
 		return nil, false, nil
 	}
-	items, err := s.main.AdminFindUsage(ctx, requestID)
+	items, err := s.main.AdminFindUsageForUser(ctx, mainUserID, requestID)
 	if err != nil {
 		var apiErr *MainAPIError
 		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
@@ -2651,14 +2724,17 @@ func (s *Server) handleImageTaskPoll(w http.ResponseWriter, r *http.Request, req
 		s.writeError(w, http.StatusNotFound, requestID, "IMAGE_TASK_NOT_FOUND", "image task was not found for this agent user")
 		return
 	}
-	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
-		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
+	billingUserID := strings.TrimSpace(task.MainUserID)
+	if settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); settlementErr == nil && strings.TrimSpace(settlement.BillingMainUserID) != "" {
+		billingUserID = strings.TrimSpace(settlement.BillingMainUserID)
+	}
+	if billingUserID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main user billing identity is not configured")
 		return
 	}
-	ownerMu := s.userSettlementMutex(ownerID)
-	ownerMu.Lock()
-	defer ownerMu.Unlock()
+	userMu := s.userSettlementMutex(billingUserID)
+	userMu.Lock()
+	defer userMu.Unlock()
 	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 	if relayErr != nil {
 		s.writeMainError(w, requestID, relayErr)
@@ -2670,7 +2746,7 @@ func (s *Server) handleImageTaskPoll(w http.ResponseWriter, r *http.Request, req
 			_ = s.store.UpdateImageTaskStatus(s.cfg.AgentID, taskID, imageStatus)
 		}
 		if settlement, lookupErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); lookupErr == nil && settlement.Status == "pending" {
-			usage, available, usageErr := s.mainUsageForRequest(r.Context(), task.RequestID)
+			usage, available, usageErr := s.mainUsageForRequest(r.Context(), billingUserID, task.RequestID)
 			switch {
 			case !available:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "async image settlement requires authoritative main-site usage; legacy usage API is unavailable")
@@ -2700,14 +2776,17 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 		s.writeError(w, http.StatusNotFound, requestID, "VIDEO_TASK_NOT_FOUND", "video task was not found for this agent user")
 		return
 	}
-	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
-		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
+	billingUserID := strings.TrimSpace(task.MainUserID)
+	if settlement, settlementErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); settlementErr == nil && strings.TrimSpace(settlement.BillingMainUserID) != "" {
+		billingUserID = strings.TrimSpace(settlement.BillingMainUserID)
+	}
+	if billingUserID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main user billing identity is not configured")
 		return
 	}
-	ownerMu := s.userSettlementMutex(ownerID)
-	ownerMu.Lock()
-	defer ownerMu.Unlock()
+	userMu := s.userSettlementMutex(billingUserID)
+	userMu.Lock()
+	defer userMu.Unlock()
 	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 	if relayErr != nil {
 		s.writeMainError(w, requestID, relayErr)
@@ -2719,7 +2798,7 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 			_ = s.store.UpdateVideoTaskStatus(s.cfg.AgentID, taskID, upstreamStatus)
 		}
 		if settlement, lookupErr := s.store.Settlement(s.cfg.AgentID, task.RequestID); lookupErr == nil && settlement.Status == "pending" {
-			usage, available, usageErr := s.mainUsageForRequest(r.Context(), task.RequestID)
+			usage, available, usageErr := s.mainUsageForRequest(r.Context(), billingUserID, task.RequestID)
 			switch {
 			case !available:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "video task settlement requires authoritative main-site usage; legacy usage API is unavailable")
@@ -2812,8 +2891,8 @@ func videoTaskFailed(status string) bool {
 	}
 }
 
-func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, requestID, ownerID, sessionMainUserID, chargeID string, before int64, body []byte, contentType string) {
-	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, s.relayBillingIdentity(sessionMainUserID), chargeID)
+func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, requestID, billingUserID, chargeID string, before int64, body []byte, contentType string) {
+	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, s.relayBillingIdentity(billingUserID), chargeID)
 	if err != nil {
 		if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, err.Error()); finalizeErr != nil {
 			slog.Error("failed to persist streaming pending settlement", "request_id", requestID, "error", finalizeErr)
@@ -2859,7 +2938,7 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 
-	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), chargeID); available {
+	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), billingUserID, chargeID); available {
 		if usageErr != nil {
 			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, usageErr.Error())
 			return
@@ -2878,9 +2957,9 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 		}
 		return
 	}
-	after, hasAfter := s.readMainBalance(r.Context(), ownerID)
+	after, hasAfter := s.readMainBalance(r.Context(), billingUserID)
 	if !hasAfter {
-		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "owner balance could not be read after streaming relay")
+		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "user balance could not be read after streaming relay")
 		return
 	}
 	delta := before - after
@@ -2889,19 +2968,16 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 	}
 	if delta == 0 {
 		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "owner usage is not visible yet")
-		_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-pending:"+chargeID)
 		return
 	}
 	if delta > s.cfg.MaxRequestCostCents {
 		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", delta, "actual owner charge exceeds local reservation")
-		_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-pending:"+chargeID)
 		return
 	}
-	if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "owner_balance_delta_fallback"}); finalizeErr != nil {
+	if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "confirmed", delta, "", MainUsageSnapshot{Source: "user_balance_delta_fallback"}); finalizeErr != nil {
 		slog.Error("failed to finalize streaming settlement", "request_id", requestID, "error", finalizeErr)
 		return
 	}
-	_, _ = s.store.SyncOwnerBalance(s.cfg.AgentID, ownerID, after, "balance-after:"+chargeID)
 }
 
 type settlementReconcileResult struct {
@@ -2913,17 +2989,6 @@ type settlementReconcileResult struct {
 }
 
 func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]settlementReconcileResult, error) {
-	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" {
-		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
-	}
-	// Reconciliation changes the same local reservation/allocated counters as
-	// model relay and manual allocation. Serialize the whole observation and
-	// finalization against the Owner so a concurrent request cannot spend a
-	// balance snapshot while an older settlement is being released.
-	ownerMu := s.userSettlementMutex(ownerID)
-	ownerMu.Lock()
-	defer ownerMu.Unlock()
 	var records []SettlementRecord
 	var err error
 	if requestID != "" {
@@ -2940,14 +3005,22 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 	}
 	result := make([]settlementReconcileResult, 0, len(records))
 	for _, record := range records {
+		billingUserID := strings.TrimSpace(record.BillingMainUserID)
+		if billingUserID == "" {
+			return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "settlement billing user is not configured"}
+		}
+		userMu := s.userSettlementMutex(billingUserID)
+		userMu.Lock()
 		item := settlementReconcileResult{RequestID: record.RequestID, Status: record.Status, ActualCents: record.ActualCents, UsageID: record.UsageID}
 		if record.Status == "released" || record.Status == "reversed" {
 			item.Message = "settlement is already released"
 			result = append(result, item)
+			userMu.Unlock()
 			continue
 		}
-		usageItems, findErr := s.main.AdminFindUsage(ctx, record.RequestID)
+		usageItems, findErr := s.main.AdminFindUsageForUser(ctx, billingUserID, record.RequestID)
 		if findErr != nil {
+			userMu.Unlock()
 			return nil, findErr
 		}
 		var usage *MainUsageResult
@@ -2961,6 +3034,7 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 			item.Status = "pending"
 			item.Message = "main-site usage is not visible yet; no local refund was made"
 			result = append(result, item)
+			userMu.Unlock()
 			continue
 		}
 		actual := usage.ActualCents
@@ -2968,21 +3042,25 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 		item.UsageID = usage.ID
 		if actual > record.ReservedCents {
 			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot); err != nil {
+				userMu.Unlock()
 				return nil, err
 			}
 			item.Status = "pending"
 			item.Message = "authoritative charge exceeds local reservation; manual review required"
 			result = append(result, item)
+			userMu.Unlock()
 			continue
 		}
 		if record.Status == "pending" {
 			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot); err != nil && !errors.Is(err, errSettlementStateConflict) {
+				userMu.Unlock()
 				return nil, err
 			}
 		}
 		item.Status = "confirmed"
 		item.Message = "settlement confirmed from main-site usage"
 		result = append(result, item)
+		userMu.Unlock()
 	}
 	return result, nil
 }
@@ -3061,10 +3139,7 @@ func (s *Server) managedRuntimeBridge() bool {
 }
 
 func (s *Server) relayBillingIdentity(proxyMainUserID string) string {
-	if s.managedRuntimeBridge() {
-		return strings.TrimSpace(proxyMainUserID)
-	}
-	return strings.TrimSpace(s.cfg.OwnerMainUserID)
+	return strings.TrimSpace(proxyMainUserID)
 }
 
 func (s *Server) mainBalance(ctx context.Context, mainUserID string) (int64, bool) {

@@ -369,7 +369,7 @@ func TestAdminFindUsageUsesZeroSchemaOwnerBridgeWithoutRuntimeCredential(t *test
 	if gotPath != "/v1/sub2api/usage?request_id=req-owner-usage" || gotAuthorization != "Bearer satellite-app-secret" || gotOwner != "42" || gotSatellite != "agentapi" {
 		t.Fatalf("unexpected zero-schema usage bridge request: path=%q auth=%q owner=%q satellite=%q", gotPath, gotAuthorization, gotOwner, gotSatellite)
 	}
-	if len(items) != 1 || items[0].ActualCents != 25 || items[0].Snapshot.Source != "sub2api_owner_usage" {
+	if len(items) != 1 || items[0].ActualCents != 25 || items[0].Snapshot.Source != "sub2api_user_usage" {
 		t.Fatalf("unexpected zero-schema usage result: %+v", items)
 	}
 }

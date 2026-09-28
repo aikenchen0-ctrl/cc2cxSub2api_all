@@ -23,6 +23,7 @@ type Config struct {
 	DatabasePath                  string
 	MainAPIBaseURL                string
 	MainModelBaseURL              string
+	PublicMainURL                 string
 	RuntimeControlCredential      string
 	AppCredential                 string
 	SatelliteSlug                 string
@@ -67,6 +68,7 @@ type Config struct {
 func LoadConfig() (Config, error) {
 	mainURL := firstNonEmpty(os.Getenv("MAIN_API_URL"), os.Getenv("LINK"), "http://localhost:18080")
 	apiBase := normalizeAPIBase(mainURL)
+	publicMainURL := normalizePublicBase(firstNonEmpty(os.Getenv("LINK"), mainURL))
 	// Keep control-plane traffic on MAIN_API_URL. Model traffic can use the
 	// Docker-internal relay endpoint without changing LINK (the public model
 	// origin) or the management API address.
@@ -102,6 +104,7 @@ func LoadConfig() (Config, error) {
 		DatabasePath:                  firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
 		MainAPIBaseURL:                apiBase,
 		MainModelBaseURL:              modelBase,
+		PublicMainURL:                 publicMainURL,
 		RuntimeControlCredential:      secretEnv("AGENT_RUNTIME_CONTROL_CREDENTIAL"),
 		AppCredential:                 secretEnv("SUB2API_APP_CREDENTIAL"),
 		SatelliteSlug:                 firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi"),
@@ -120,7 +123,7 @@ func LoadConfig() (Config, error) {
 		AgentDisabled:                 !envBool("AGENT_ENABLED", true),
 		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", false),
 		ProvisioningControlStaleAfter: envDuration("AGENT_PROVISIONING_CONTROL_STALE_AFTER", 90*time.Second),
-		BillingMode:                   firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "owner_upstream"),
+		BillingMode:                   firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "user_upstream"),
 		OwnerMainUserID:               strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
 		InitialBalanceCents:           envCents("AGENT_INITIAL_BALANCE", 0),
 		MaxRequestCostCents:           envCents("AGENT_MAX_REQUEST_COST", 100),
@@ -151,14 +154,14 @@ func LoadConfig() (Config, error) {
 	if cfg.MaxRequestCostCents <= 0 {
 		return Config{}, fmt.Errorf("AGENT_MAX_REQUEST_COST must be greater than zero")
 	}
-	if cfg.BillingMode != "owner_upstream" {
-		return Config{}, fmt.Errorf("AGENT_BILLING_MODE must be owner_upstream")
+	if cfg.BillingMode != "user_upstream" && cfg.BillingMode != "owner_upstream" {
+		return Config{}, fmt.Errorf("AGENT_BILLING_MODE must be user_upstream")
 	}
 	// Local wallet seeding is useful for unit tests, but would break the
 	// owner-authoritative accounting contract in a deployed AgentAPI. Refuse it
 	// at configuration load time instead of silently creating spendable credit.
 	if cfg.InitialBalanceCents != 0 {
-		return Config{}, fmt.Errorf("AGENT_INITIAL_BALANCE is disabled for owner_upstream billing")
+		return Config{}, fmt.Errorf("AGENT_INITIAL_BALANCE is disabled for upstream-authoritative billing")
 	}
 	if cfg.PaymentMinCents <= 0 || cfg.PaymentMaxCents < cfg.PaymentMinCents {
 		return Config{}, fmt.Errorf("AGENT_PAYMENT_MIN_AMOUNT/MAX_AMOUNT are invalid")
@@ -211,6 +214,17 @@ func normalizeModelBase(value string) string {
 		return base
 	}
 	return base + "/v1"
+}
+
+func normalizePublicBase(value string) string {
+	base := strings.TrimRight(strings.TrimSpace(value), "/")
+	if base == "" {
+		base = "http://localhost:18080"
+	}
+	base = addLocalHTTPForSchemeLessURL(base)
+	base = strings.TrimSuffix(base, "/api/v1")
+	base = strings.TrimSuffix(base, "/v1")
+	return strings.TrimRight(base, "/")
 }
 
 // The public satellite contract permits a scheme-less local LINK such as

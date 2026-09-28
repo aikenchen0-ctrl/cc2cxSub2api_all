@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { agentAPI, isAuthoritativeAgentUsageSource, type AgentContextResponse, type AgentUsageView } from '@/agent/api'
-import { enumLabel, statusLabel } from '@/agent/locale'
+import { statusLabel } from '@/agent/locale'
 import { errorMessage } from '@/agent/client'
 
 const context = ref<AgentContextResponse | null>(null)
@@ -27,13 +27,14 @@ function date(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('zh-CN')
 }
 
-function localSettlementLabel(item: AgentUsageView): string {
-  if (item.settlement_status === 'confirmed') return `本地扣款 ${money(item.actual_cents)}`
-  if (item.settlement_status === 'released') return `预留金额已退回 · ${money(item.reserved_cents)}`
-  return `预留金额 · ${money(item.reserved_cents)}`
+function settlementLabel(item: AgentUsageView): string {
+  if (item.settlement_status === 'confirmed') return `主站扣费 ${money(item.actual_cents)}`
+  if (item.settlement_status === 'released') return `请求前校验已释放 · ${money(item.reserved_cents)}`
+  return `请求前余额校验 · ${money(item.reserved_cents)}`
 }
 
 function sub2ApiUsageLabel(item: AgentUsageView): string {
+  if (item.usage_source === 'user_balance_delta_fallback') return '用户主站余额差额估算；暂无单次请求用量'
   if (item.usage_source === 'owner_balance_delta_fallback') return '旧版主账户余额差额估算；暂无单次请求用量'
   if (!isAuthoritativeAgentUsageSource(item.usage_source)) return '暂无单次请求的 Sub2API 用量详情'
   if (item.actual_cost_reported) return `Sub2API 实际费用 ${usd(item.actual_cost_usd_nanos)} · 标准费用 ${usd(item.total_cost_usd_nanos)}`
@@ -89,7 +90,7 @@ onMounted(load)
       <div>
         <p class="text-sm text-slate-500">{{ context?.agent.site_name || 'AgentAPI' }}</p>
         <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">总览</h1>
-        <p class="mt-1 text-sm text-slate-500">AgentAPI 余额是本地子余额。模型请求由主站上的代理站主账户计费。</p>
+        <p class="mt-1 text-sm text-slate-500">余额和模型费用均来自你的 Sub2API 主站账户；AgentAPI 只负责代理站身份和请求转发。</p>
       </div>
       <div class="flex gap-2">
         <RouterLink to="/recharge" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">充值</RouterLink>
@@ -112,8 +113,8 @@ onMounted(load)
       </div>
       <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <p class="text-sm text-slate-500">计费方式</p>
-        <p class="mt-2 text-lg font-semibold">{{ enumLabel(context.agent.billing_mode) }}</p>
-        <p class="text-sm text-slate-500">不收取佣金，也不使用独立上游账户。</p>
+        <p class="mt-2 text-lg font-semibold">用户主站直扣</p>
+        <p class="text-sm text-slate-500">每个用户由自己的 Sub2API 余额结算，不共用站长余额。</p>
       </div>
     </section>
 
@@ -142,7 +143,7 @@ onMounted(load)
             </p>
             <p class="mt-1 text-xs text-slate-500">{{ sub2ApiUsageLabel(item) }}</p>
           </div>
-          <p class="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{{ localSettlementLabel(item) }}</p>
+          <p class="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{{ settlementLabel(item) }}</p>
         </article>
       </div>
     </section>
@@ -150,7 +151,7 @@ onMounted(load)
     <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <h2 class="font-semibold">计费说明</h2>
       <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-        你的账号是 Sub2API 主站中的正式账号。AgentAPI 仅维护账号关联和子余额；主站余额及用量账本为最终计费依据。如果暂时无法确认上游扣款，请求会保持待核对状态，不会被静默退款。
+        你的账号是 Sub2API 主站中的正式账号。AgentAPI 只维护代理站归属、API Key 和请求审计；余额、用量与扣费均以主站为最终依据。如果暂时无法确认单次用量，请求会保持待核对状态，不会被重复收费。
       </p>
     </section>
   </main>

@@ -723,8 +723,8 @@ func TestModelRelayAddsSatelliteHeadersAndNeverCopiesCookies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.BalanceCents != 400 {
-		t.Fatalf("reservation was not charged: %+v", user)
+	if user.BalanceCents != 500 {
+		t.Fatalf("direct Sub2API billing changed the legacy local wallet: %+v", user)
 	}
 }
 
@@ -1312,19 +1312,19 @@ func TestAgentAPIKeyCanRelayWithoutCookieAndIsNotForwarded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.BalanceCents != 400 {
-		t.Fatalf("key relay did not charge local wallet: %+v", user)
+	if user.BalanceCents != 500 {
+		t.Fatalf("AgentAPI key relay changed the legacy local wallet: %+v", user)
 	}
 }
 
-func TestModelRelayUsesSessionIdentityAndKeepsOwnerBilling(t *testing.T) {
+func TestModelRelayUsesMappedUserAsBillingIdentity(t *testing.T) {
 	var modelHeader http.Header
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/sub2api/balance":
-			if r.Header.Get("Authorization") != "Bearer app-secret" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "99" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
-				t.Errorf("ordinary owner balance headers = %v", r.Header)
+			if r.Header.Get("Authorization") != "Bearer app-secret" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
+				t.Errorf("ordinary user balance headers = %v", r.Header)
 			}
 			adminReads++
 			balance := 10.0
@@ -1362,23 +1362,111 @@ func TestModelRelayUsesSessionIdentityAndKeepsOwnerBilling(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("relay status=%d body=%s", response.Code, response.Body.String())
 	}
-	if modelHeader.Get("X-Sub2API-On-Behalf-Of") != "99" {
-		t.Fatalf("upstream did not receive the configured Owner billing identity: %v", modelHeader)
+	if modelHeader.Get("X-Sub2API-On-Behalf-Of") != "42" {
+		t.Fatalf("upstream did not receive the mapped user billing identity: %v", modelHeader)
 	}
 	user, err := server.store.User(server.cfg.AgentID, "42")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.BalanceCents != 400 {
-		t.Fatalf("proxy user's local reservation was not charged: %+v", user)
+	if user.BalanceCents != 500 {
+		t.Fatalf("mapped user billing changed the legacy local wallet: %+v", user)
 	}
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "confirmed" || usage[0].ActualCents != 100 {
-		t.Fatalf("unexpected owner settlement: %+v err=%v", usage, err)
+		t.Fatalf("unexpected user settlement: %+v err=%v", usage, err)
 	}
 	settlement, err := server.store.Settlement(server.cfg.AgentID, "req-owner-billing")
-	if err != nil || settlement.ProxyMainUserID != "42" || settlement.BillingMainUserID != "99" {
-		t.Fatalf("session and billing identities were not kept distinct: settlement=%+v err=%v", settlement, err)
+	if err != nil || settlement.ProxyMainUserID != "42" || settlement.BillingMainUserID != "42" {
+		t.Fatalf("mapped user was not used as the billing identity: settlement=%+v err=%v", settlement, err)
+	}
+}
+
+func TestModelRelayRejectsInsufficientMappedUserBalanceBeforeUpstream(t *testing.T) {
+	var modelCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/sub2api/balance":
+			if r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" {
+				t.Errorf("balance lookup used the wrong user identity: %v", r.Header)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 0.50})
+		case "/v1/chat/completions":
+			modelCalls.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.BillingMode = "user_upstream"
+	server.main = NewMainClient(server.cfg)
+	_, key, err := server.store.CreateAPIKey(server.cfg.AgentID, "42", "insufficient balance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","messages":[]}`))
+	req.Header.Set("Authorization", "Bearer "+key)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusPaymentRequired || !strings.Contains(rec.Body.String(), "MAIN_USER_BALANCE_INSUFFICIENT") {
+		t.Fatalf("insufficient user balance status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if modelCalls.Load() != 0 {
+		t.Fatalf("insufficient balance reached the model upstream %d times", modelCalls.Load())
+	}
+}
+
+func TestDirectUserBillingDisablesLegacyRechargeAndAllocationEndpoints(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("disabled local funding endpoint contacted Sub2API: %s", r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.BillingMode = "user_upstream"
+	server.cfg.PublicMainURL = "https://main.example.com"
+	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	userList := httptest.NewRequest(http.MethodGet, "/api/v1/agent/recharge/orders", nil)
+	userList.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
+	userListResponse := httptest.NewRecorder()
+	server.ServeHTTP(userListResponse, userList)
+	if userListResponse.Code != http.StatusOK || !strings.Contains(userListResponse.Body.String(), `"recharge_url":"https://main.example.com/purchase"`) || !strings.Contains(userListResponse.Body.String(), `"enabled":false`) {
+		t.Fatalf("direct billing recharge discovery status=%d body=%s", userListResponse.Code, userListResponse.Body.String())
+	}
+
+	tests := []struct {
+		method string
+		path   string
+		body   string
+		code   string
+	}{
+		{http.MethodPost, "/api/v1/agent/recharge/orders", `{"amount":"10.00"}`, "LOCAL_RECHARGE_DISABLED"},
+		{http.MethodPost, "/api/v1/agent/admin/wallet/sync", `{}`, "OWNER_WALLET_DISABLED"},
+		{http.MethodPost, "/api/v1/agent/admin/users/42/allocate", `{"amount":"10.00"}`, "LOCAL_ALLOCATION_DISABLED"},
+		{http.MethodGet, "/api/v1/agent/admin/payment-config", ``, "LOCAL_RECHARGE_DISABLED"},
+	}
+	for _, test := range tests {
+		req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+		req.Host = "agent.example.com"
+		req.Header.Set("Origin", "https://agent.example.com")
+		req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusGone || !strings.Contains(rec.Body.String(), test.code) {
+			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, rec.Code, rec.Body.String())
+		}
+	}
+
+	settings := httptest.NewRecorder()
+	server.ServeHTTP(settings, httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil))
+	if settings.Code != http.StatusOK || !strings.Contains(settings.Body.String(), `"payment_enabled":false`) || !strings.Contains(settings.Body.String(), `"recharge_url":"https://main.example.com/purchase"`) {
+		t.Fatalf("direct billing public settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
 }
 
@@ -1428,7 +1516,7 @@ func TestModelRelayUsesRequestUsageInsteadOfSharedOwnerBalanceDelta(t *testing.T
 	if err != nil || len(usage) != 1 || usage[0].ActualCents != 25 || usage[0].RequestID != "usage-authoritative" || usage[0].UsageID != "700" {
 		t.Fatalf("authoritative usage was not applied: %+v err=%v", usage, err)
 	}
-	if usage[0].Model != "gpt-5.5" || usage[0].Source != "sub2api_owner_usage" || usage[0].InputTokens != 1000 || usage[0].OutputTokens != 25 || usage[0].InputCostNanos != 1234 || usage[0].TotalCostNanos != 310_000_000 || usage[0].ActualCostNanos != 250_000_000 || usage[0].UpstreamModel != "provider-gpt-5.5" {
+	if usage[0].Model != "gpt-5.5" || usage[0].Source != "sub2api_user_usage" || usage[0].InputTokens != 1000 || usage[0].OutputTokens != 25 || usage[0].InputCostNanos != 1234 || usage[0].TotalCostNanos != 310_000_000 || usage[0].ActualCostNanos != 250_000_000 || usage[0].UpstreamModel != "provider-gpt-5.5" {
 		t.Fatalf("authoritative usage details were not stored: %+v", usage[0])
 	}
 	encodedUsage, err := json.Marshal(usage[0])
@@ -1438,7 +1526,7 @@ func TestModelRelayUsesRequestUsageInsteadOfSharedOwnerBalanceDelta(t *testing.T
 	if strings.Contains(string(encodedUsage), "192.0.2.123") || strings.Contains(string(encodedUsage), "private@example.com") || strings.Contains(string(encodedUsage), "ip_address") {
 		t.Fatalf("admin-only usage fields leaked into the AgentAPI view: %s", encodedUsage)
 	}
-	if !strings.Contains(string(encodedUsage), `"usage_source":"sub2api_owner_usage"`) || !strings.Contains(string(encodedUsage), `"input_tokens":1000`) || strings.Contains(string(encodedUsage), `"MainUsageSnapshot"`) {
+	if !strings.Contains(string(encodedUsage), `"usage_source":"sub2api_user_usage"`) || !strings.Contains(string(encodedUsage), `"input_tokens":1000`) || strings.Contains(string(encodedUsage), `"MainUsageSnapshot"`) {
 		t.Fatalf("main usage snapshot was not flattened into the user API DTO: %s", encodedUsage)
 	}
 }
@@ -1477,18 +1565,28 @@ func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 		t.Fatalf("read reconciled usage: %+v err=%v", usage, err)
 	}
 	item := usage[0]
-	if item.Source != "sub2api_owner_usage" || item.UsageID != "701" || item.ActualCents != 12 || item.Model != "claude-sonnet" || item.InputTokens != 80 || item.OutputTokens != 20 || item.CacheReadTokens != 10 || item.CacheReadCostNanos != 19 {
+	if item.Source != "sub2api_user_usage" || item.UsageID != "701" || item.ActualCents != 12 || item.Model != "claude-sonnet" || item.InputTokens != 80 || item.OutputTokens != 20 || item.CacheReadTokens != 10 || item.CacheReadCostNanos != 19 {
 		t.Fatalf("reconciler lost authoritative usage fields: %+v", item)
 	}
 }
 
 func TestAgentUsersEndpointPaginatesAndRestrictsNonAdminToSelf(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("mapped user list must come from the local Agent store: %s", r.URL.Path)
-		w.WriteHeader(http.StatusInternalServerError)
+		if r.URL.Path != "/v1/sub2api/balance" {
+			t.Errorf("unexpected upstream request while hydrating mapped users: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		userID := r.Header.Get("X-Sub2API-On-Behalf-Of")
+		balance := 1.00
+		if userID == "44" {
+			balance = 4.40
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": balance})
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.main = NewMainClient(server.cfg)
 	for _, id := range []string{"43", "44", "45"} {
 		if _, err := server.store.UpsertUser(server.cfg.AgentID, id, id+"@example.com", "User "+id); err != nil {
 			t.Fatal(err)
@@ -1524,6 +1622,9 @@ func TestAgentUsersEndpointPaginatesAndRestrictsNonAdminToSelf(t *testing.T) {
 	if adminPayload.Data.Total != 4 || adminPayload.Data.Page != 2 || adminPayload.Data.PageSize != 2 || len(adminPayload.Data.Items) != 2 || adminPayload.Data.Items[0].MainUserID != "43" || adminPayload.Data.Items[1].MainUserID != "42" {
 		t.Fatalf("unexpected admin user page: %+v", adminPayload.Data)
 	}
+	if adminPayload.Data.Items[0].BalanceCents != 100 || adminPayload.Data.Items[1].BalanceCents != 100 {
+		t.Fatalf("admin user page did not hydrate Sub2API balances: %+v", adminPayload.Data.Items)
+	}
 	adminRouteRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/admin/users?page=2&page_size=2", nil)
 	adminRouteRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
 	adminRouteResponse := httptest.NewRecorder()
@@ -1543,6 +1644,9 @@ func TestAgentUsersEndpointPaginatesAndRestrictsNonAdminToSelf(t *testing.T) {
 	}
 	if adminSearchResponse.Code != http.StatusOK || json.Unmarshal(adminSearchResponse.Body.Bytes(), &searchPayload) != nil || searchPayload.Data.Total != 1 || len(searchPayload.Data.Items) != 1 || searchPayload.Data.Items[0].MainUserID != "44" {
 		t.Fatalf("admin user search failed: status=%d body=%s data=%+v", adminSearchResponse.Code, adminSearchResponse.Body.String(), searchPayload.Data)
+	}
+	if searchPayload.Data.Items[0].BalanceCents != 440 {
+		t.Fatalf("searched user did not receive the authoritative balance: %+v", searchPayload.Data.Items[0])
 	}
 
 	userRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?page=2&page_size=2&q=44", nil)
@@ -1795,14 +1899,14 @@ func TestStreamingModelRelayForwardsChunksAndSettlesAfterEOF(t *testing.T) {
 	}
 }
 
-func TestVideoTaskPollIsOwnerScopedAndSettlesOriginalRequest(t *testing.T) {
+func TestVideoTaskPollIsUserScopedAndSettlesOriginalRequest(t *testing.T) {
 	var usageVisible atomic.Bool
 	videoPolls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 10.0}))
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/balance":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 10.0})
+		case "/v1/sub2api/usage":
 			items := []map[string]any{}
 			if usageVisible.Load() {
 				items = append(items, map[string]any{"id": 702, "request_id": "video-request-1", "actual_cost": 1.0, "total_cost": 1.0})
@@ -1871,15 +1975,15 @@ func TestVideoTaskPollIsOwnerScopedAndSettlesOriginalRequest(t *testing.T) {
 	}
 }
 
-func TestAsyncImageTaskPollIsOwnerScopedAndSettlesOriginalRequest(t *testing.T) {
+func TestAsyncImageTaskPollIsUserScopedAndSettlesOriginalRequest(t *testing.T) {
 	var usageVisible atomic.Bool
 	var imageCreates atomic.Int32
 	imagePolls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 10.0}))
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/balance":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 10.0})
+		case "/v1/sub2api/usage":
 			items := []map[string]any{}
 			if usageVisible.Load() {
 				items = append(items, map[string]any{"id": 701, "request_id": "image-request-1", "actual_cost": 0.25, "total_cost": 0.25})
@@ -1997,8 +2101,8 @@ func TestAsyncImageTrackingFailuresRemainPendingAndDoNotRetryCreate(t *testing.T
 			var creates atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
-				case "/api/v1/agent-runtime/owner":
-					_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 99, "balance": 10.0}))
+				case "/v1/sub2api/balance":
+					_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 10.0})
 				case "/v1/images/generations/async":
 					creates.Add(1)
 					w.WriteHeader(http.StatusAccepted)
@@ -2057,9 +2161,9 @@ func TestAsyncImageTrackingFailuresRemainPendingAndDoNotRetryCreate(t *testing.T
 func TestFailedAsyncImagePollReleasesReservationWithoutUsage(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 10.0}))
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/balance":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 10.0})
+		case "/v1/sub2api/usage":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{}}))
 		case "/v1/images/edits/async":
 			w.WriteHeader(http.StatusAccepted)
@@ -2134,8 +2238,8 @@ func TestFailedAsyncPollKeepsReservationWhenUsageAPIIsUnavailable(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
-				case "/api/v1/agent-runtime/owner":
-					_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 99, "balance": 10.0}))
+				case "/v1/sub2api/balance":
+					_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 10.0})
 				case test.createPath:
 					w.WriteHeader(http.StatusAccepted)
 					_, _ = io.WriteString(w, test.createBody)
@@ -2190,7 +2294,7 @@ func TestStaleVideoTaskReconcilerReleasesFailedTask(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/videos/video-stale":
 			_, _ = io.WriteString(w, `{"id":"video-stale","status":"failed"}`)
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/usage":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{}}))
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -2233,7 +2337,7 @@ func TestStaleFailedVideoTaskSettlesKnownMainUsageInsteadOfRefunding(t *testing.
 		switch r.URL.Path {
 		case "/v1/videos/video-partial":
 			_, _ = io.WriteString(w, `{"id":"video-partial","status":"failed"}`)
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/usage":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{{
 				"id": 704, "request_id": "stale-video-partial-request", "actual_cost": 0.25, "total_cost": 0.25,
 			}}}))
@@ -2274,7 +2378,7 @@ func TestStaleFailedVideoTaskStaysPendingWhenUsageLookupFails(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/videos/video-uncertain":
 			_, _ = io.WriteString(w, `{"id":"video-uncertain","status":"failed"}`)
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/usage":
 			http.Error(w, `{"code":"TEMPORARY_FAILURE"}`, http.StatusServiceUnavailable)
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -2310,7 +2414,7 @@ func TestStaleFailedVideoTaskStaysPendingWhenUsageLookupFails(t *testing.T) {
 
 func TestStaleImageTaskReconcilerReleasesFailedTask(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/agent-runtime/usage" {
+		if r.URL.Path == "/v1/sub2api/usage" {
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{}}))
 			return
 		}
@@ -2357,7 +2461,7 @@ func TestStaleFailedImageTaskSettlesKnownMainUsageInsteadOfRefunding(t *testing.
 		switch r.URL.Path {
 		case "/v1/images/tasks/image-partial":
 			_, _ = io.WriteString(w, `{"id":"image-partial","task_id":"image-partial","status":"failed"}`)
-		case "/api/v1/agent-runtime/usage":
+		case "/v1/sub2api/usage":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{{
 				"id": 703, "request_id": "stale-image-partial-request", "actual_cost": 0.25, "total_cost": 0.25,
 			}}}))
@@ -2424,8 +2528,8 @@ func TestUncertainRelayStaysPendingInsteadOfRefunding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.BalanceCents != 400 {
-		t.Fatalf("uncertain charge was incorrectly refunded: %+v", user)
+	if user.BalanceCents != 500 {
+		t.Fatalf("uncertain direct charge changed the legacy local wallet: %+v", user)
 	}
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
@@ -2488,8 +2592,8 @@ func TestDuplicateModelRequestIsNotForwardedOrChargedTwice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.BalanceCents != 400 {
-		t.Fatalf("duplicate request changed local wallet twice: %+v", user)
+	if user.BalanceCents != 500 {
+		t.Fatalf("duplicate direct request changed the legacy local wallet: %+v", user)
 	}
 }
 

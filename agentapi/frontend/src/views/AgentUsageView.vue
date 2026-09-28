@@ -23,8 +23,9 @@ function usd(nanos: number): string {
 }
 
 function usageSource(source?: string): string {
+  if (source === 'user_balance_delta_fallback') return '用户主站余额差额估算'
   if (isAuthoritativeAgentUsageSource(source)) return 'Sub2API 用量记录'
-  if (source === 'owner_balance_delta_fallback') return '主账户余额差额估算'
+  if (source === 'owner_balance_delta_fallback') return '旧版主账户余额差额估算'
   return '暂无单次请求用量详情'
 }
 
@@ -83,7 +84,7 @@ onMounted(load)
       <div v-else-if="items.length === 0" class="p-5 text-sm text-slate-500">暂无用量记录。</div>
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">
-          <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800"><tr><th class="px-5 py-3">请求</th><th class="px-5 py-3">模型 / 路由</th><th class="px-5 py-3">Sub2API 用量</th><th class="px-5 py-3">本地钱包</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">创建时间</th></tr></thead>
+          <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800"><tr><th class="px-5 py-3">请求</th><th class="px-5 py-3">模型 / 路由</th><th class="px-5 py-3">Sub2API 用量</th><th class="px-5 py-3">主站结算</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">创建时间</th></tr></thead>
           <tbody>
             <tr v-for="item in items" :key="item.request_id" class="border-t dark:border-slate-700">
               <td class="max-w-xs px-5 py-4"><div class="truncate font-mono text-xs">{{ item.request_id }}</div><div v-if="item.usage_id" class="mt-1 truncate text-[11px] text-slate-400">用量编号 {{ item.usage_id }}</div></td>
@@ -99,7 +100,7 @@ onMounted(load)
                   <div v-if="item.reasoning_effort || item.service_tier || item.request_type || item.billing_mode || item.duration_ms || item.first_token_ms || item.rate_multiplier || item.long_context_billing_applied || item.openai_ws_mode || item.native_compaction_v2 || item.cache_ttl_overridden" class="mt-1 text-slate-500"><span v-if="item.reasoning_effort">推理强度 {{ enumLabel(item.reasoning_effort) }} · </span><span v-if="item.service_tier">服务等级 {{ enumLabel(item.service_tier) }} · </span><span v-if="item.request_type">请求类型 {{ enumLabel(item.request_type) }} · </span><span v-if="item.billing_mode">计费方式 {{ enumLabel(item.billing_mode) }} · </span><span v-if="item.duration_ms">耗时 {{ item.duration_ms }} 毫秒 · </span><span v-if="item.first_token_ms">首字延迟 {{ item.first_token_ms }} 毫秒 · </span><span v-if="item.rate_multiplier">倍率 ×{{ item.rate_multiplier }} · </span><span v-if="item.long_context_billing_applied">长上下文计费 · </span><span v-if="item.openai_ws_mode">兼容接口长连接模式 · </span><span v-if="item.native_compaction_v2">原生压缩 v2 · </span><span v-if="item.cache_ttl_overridden">缓存有效期已覆盖</span></div>
                 </template>
               </td>
-              <td class="px-5 py-4"><div>{{ money(item.actual_cents) }}</div><div class="mt-1 text-xs text-slate-500">预留 {{ money(item.reserved_cents) }}</div></td>
+              <td class="px-5 py-4"><div>{{ money(item.actual_cents) }}</div><div class="mt-1 text-xs text-slate-500">请求前校验 {{ money(item.reserved_cents) }}</div></td>
               <td class="px-5 py-4"><span :class="item.settlement_status === 'confirmed' ? 'text-emerald-600' : item.settlement_status === 'pending' ? 'text-amber-600' : 'text-slate-500'">{{ statusLabel(item.settlement_status) }}</span></td>
               <td class="px-5 py-4 text-slate-500">{{ new Date(item.created_at).toLocaleString('zh-CN') }}</td>
             </tr>

@@ -9,12 +9,12 @@ function usage(overrides: Partial<AgentUsageView> = {}): AgentUsageView {
   return {
     request_id: 'req-dashboard-001',
     proxy_main_user_id: 'user-1',
-    billing_main_user_id: 'owner-1',
+    billing_main_user_id: 'user-1',
     reserved_cents: 50,
     actual_cents: 0,
     settlement_status: 'confirmed',
     model: 'gpt-5.5',
-    usage_source: 'sub2api_owner_usage',
+    usage_source: 'sub2api_user_usage',
     input_tokens: 1000,
     output_tokens: 250,
     total_cost_usd_nanos: 150_000_000,
@@ -49,8 +49,8 @@ function dashboardContext(siteName: string, balanceCents: number): AgentContextR
   return {
     agent: {
       agent_id: 'agt-demo', domain: 'demo.cc2.cx', name: siteName, site_name: siteName,
-      status: 'active', billing_mode: 'owner_upstream', main_balance_cents: 5000,
-      billing_status: 'ok', wallet_available_cents: 2500, wallet_allocated_cents: 2500,
+      status: 'active', billing_mode: 'user_upstream', main_balance_cents: balanceCents,
+      billing_status: 'ok', wallet_available_cents: balanceCents, wallet_allocated_cents: 0,
     },
     authenticated: true, is_agent_admin: false, main_user_id: 'user-1', user,
   } as AgentContextResponse
@@ -78,7 +78,7 @@ describe('AgentDashboardView', () => {
     expect(wrapper.text()).toContain('req-dashboard-001')
     expect(wrapper.text()).toContain('输入 1,000 · 输出 250')
     expect(wrapper.text()).toContain('Sub2API 实际费用 $0.00 · 标准费用 $0.15')
-    expect(wrapper.text()).toContain('本地扣款 0.00')
+    expect(wrapper.text()).toContain('主站扣费 0.00')
     expect(wrapper.text()).toContain('查看全部用量')
   })
 

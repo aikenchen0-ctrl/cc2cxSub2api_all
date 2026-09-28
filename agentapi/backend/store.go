@@ -70,6 +70,7 @@ type AgentUserView struct {
 	DisplayName  string `json:"display_name,omitempty"`
 	Status       string `json:"status"`
 	BalanceCents int64  `json:"balance_cents"`
+	BalanceError string `json:"balance_error,omitempty"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
 }
@@ -257,7 +258,7 @@ func (s *Store) migrate() error {
 			name TEXT NOT NULL,
 			site_name TEXT NOT NULL,
 			site_logo TEXT NOT NULL DEFAULT '',
-			billing_mode TEXT NOT NULL DEFAULT 'owner_upstream',
+			billing_mode TEXT NOT NULL DEFAULT 'user_upstream',
 			billing_main_user_id TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at INTEGER NOT NULL,
@@ -477,7 +478,7 @@ func (s *Store) migrate() error {
 		name  string
 		def   string
 	}{
-		{"agent_config", "billing_mode", "TEXT NOT NULL DEFAULT 'owner_upstream'"},
+		{"agent_config", "billing_mode", "TEXT NOT NULL DEFAULT 'user_upstream'"},
 		{"agent_config", "billing_main_user_id", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_wallets", "owner_main_user_id", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_wallets", "main_balance_cents", "INTEGER NOT NULL DEFAULT 0"},
@@ -795,7 +796,7 @@ func (s *Store) UpsertAgent(cfg Config) error {
 	now := s.clock().UTC().Unix()
 	billingMode := cfg.BillingMode
 	if billingMode == "" {
-		billingMode = "owner_upstream"
+		billingMode = "user_upstream"
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -949,7 +950,7 @@ func boolInt(value bool) int {
 }
 
 func agentConfigStatus(cfg Config) string {
-	if cfg.AgentDisabled || cfg.ProvisioningControlEnabled && strings.TrimSpace(cfg.RuntimeControlCredential) == "" || strings.TrimSpace(cfg.AppCredential) == "" || strings.TrimSpace(cfg.OwnerMainUserID) == "" || cfg.BillingMode != "" && cfg.BillingMode != "owner_upstream" {
+	if cfg.AgentDisabled || cfg.ProvisioningControlEnabled && strings.TrimSpace(cfg.RuntimeControlCredential) == "" || strings.TrimSpace(cfg.AppCredential) == "" || strings.TrimSpace(cfg.OwnerMainUserID) == "" || cfg.BillingMode != "" && cfg.BillingMode != "user_upstream" && cfg.BillingMode != "owner_upstream" {
 		return "suspended"
 	}
 	return "active"
@@ -1954,6 +1955,46 @@ func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, r
 	return record, true, nil
 }
 
+// PrepareDirectSettlement records request idempotency for user-authoritative
+// billing without consuming AgentAPI's legacy local wallet. Sub2API performs
+// the only real balance check and charge against billingMainUserID.
+func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64) (SettlementRecord, bool, error) {
+	if requestID == "" || usageID == "" || reservedCents <= 0 || strings.TrimSpace(proxyMainUserID) == "" || proxyMainUserID != billingMainUserID {
+		return SettlementRecord{}, false, fmt.Errorf("direct settlement requires matching proxy and billing users")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return SettlementRecord{}, false, err
+	}
+	defer tx.Rollback()
+	if record, lookupErr := settlementTx(tx, agentID, requestID); lookupErr == nil {
+		if record.ProxyMainUserID != proxyMainUserID || record.BillingMainUserID != billingMainUserID || record.UsageID != usageID || record.ReservedCents != reservedCents {
+			return SettlementRecord{}, false, errIdempotencyConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return SettlementRecord{}, false, err
+		}
+		return record, false, nil
+	} else if !errors.Is(lookupErr, errNotFound) {
+		return SettlementRecord{}, false, lookupErr
+	}
+	now := s.clock().UTC().Unix()
+	if _, err := tx.Exec(`
+		INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', '', ?, ?)
+	`, agentID, proxyMainUserID, billingMainUserID, requestID, usageID, reservedCents, now, now); err != nil {
+		return SettlementRecord{}, false, err
+	}
+	record, err := settlementTx(tx, agentID, requestID)
+	if err != nil {
+		return SettlementRecord{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SettlementRecord{}, false, err
+	}
+	return record, true, nil
+}
+
 func (s *Store) Settlement(agentID, requestID string) (SettlementRecord, error) {
 	return settlementQuery(s.db, agentID, requestID)
 }
@@ -2050,6 +2091,11 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 		return tx.Commit()
 	}
 	refund := record.ReservedCents - actualCents
+	if record.ProxyMainUserID == record.BillingMainUserID {
+		// Direct user billing never debited the legacy local wallet, so there is
+		// no local reservation to refund.
+		return tx.Commit()
+	}
 	if refund <= 0 {
 		return tx.Commit()
 	}

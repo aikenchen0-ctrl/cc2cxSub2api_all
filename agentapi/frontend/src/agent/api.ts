@@ -43,6 +43,7 @@ export interface AgentUserView {
   display_name?: string
   status: string
   balance_cents: number
+  balance_error?: string
   created_at: string
   updated_at: string
 }
@@ -53,6 +54,7 @@ export interface AgentContextResponse {
   is_agent_admin: boolean
   main_user_id?: string
   user?: AgentUserView
+  balance_error?: string
 }
 
 export interface AgentModelPolicy {
@@ -136,10 +138,11 @@ export interface AgentTaskHistoryResponse {
   page_size: number
 }
 
-// Current records are sourced from the public Owner-scoped usage API. Keep the
+// Current records are sourced from the public user-scoped usage API. Keep the
 // earlier runtime/admin labels readable for snapshots persisted by older builds.
 export function isAuthoritativeAgentUsageSource(source?: string): boolean {
-  return source === 'sub2api_owner_usage'
+  return source === 'sub2api_user_usage'
+    || source === 'sub2api_owner_usage'
     || source === 'sub2api_owner_runtime_usage'
     || source === 'sub2api_admin_usage'
 }
@@ -179,35 +182,6 @@ export interface AuditEventView {
   result: string
   reason?: string
   created_at: string
-}
-
-export interface RechargeOrder {
-  id: number
-  order_no: string
-  agent_id: string
-  main_user_id: string
-  amount_cents: number
-  currency: string
-  provider: string
-  status: string
-  provider_trade_no?: string
-  payment_url?: string
-  request_id?: string
-  created_at: string
-  expires_at: string
-  paid_at?: string
-  allocated_at?: string
-  updated_at: string
-}
-
-export interface RechargeOrdersResponse {
-  enabled: boolean
-  provider: string
-  currency?: string
-  min_amount_cents?: number
-  max_amount_cents?: number
-  items: RechargeOrder[]
-  total: number
 }
 
 export interface ChatCompletionResponse {
@@ -272,32 +246,7 @@ export interface PublicSettings {
   payment_currency?: string
   payment_min_amount_cents?: number
   payment_max_amount_cents?: number
-}
-
-export interface PaymentConfig {
-  enabled: boolean
-  provider: string
-  currency: string
-  merchant_id?: string
-  webhook_secret_configured: boolean
-  min_amount_cents: number
-  max_amount_cents: number
-  order_ttl_seconds: number
-  checkout_url_template?: string
-  updated_at?: string
-}
-
-export interface PaymentConfigUpdate {
-  enabled: boolean
-  provider: string
-  currency: string
-  merchant_id: string
-  webhook_secret?: string
-  clear_webhook_secret?: boolean
-  min_amount_cents: number
-  max_amount_cents: number
-  order_ttl_seconds: number
-  checkout_url_template: string
+  recharge_url?: string
 }
 
 export interface LoginResponse {
@@ -355,38 +304,18 @@ export const agentAPI = {
     (await agentClient.get<AgentTaskHistoryResponse>('/agent/tasks', {
       params: { page, page_size: pageSize },
     })).data,
-  recharge: {
-    list: async () => (await agentClient.get<RechargeOrdersResponse>('/agent/recharge/orders')).data,
-    create: async (amount: string | number, idempotencyKey?: string) =>
-      (await agentClient.post<{ order: RechargeOrder; enabled: boolean; message: string }>('/agent/recharge/orders', { amount }, {
-        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
-      })).data,
-  },
   getAdminWallet: async () => (await agentClient.get<AgentView>('/agent/admin/wallet')).data,
-  syncAdminWallet: async () => (await agentClient.post<AgentView>('/agent/admin/wallet/sync')).data,
   getBranding: async () => (await agentClient.get<{ name: string; site_name: string; site_logo: string }>('/agent/admin/branding')).data,
   updateBranding: async (payload: { name?: string; site_name?: string; site_logo?: string }) =>
     (await agentClient.put<{ name: string; site_name: string; site_logo: string }>('/agent/admin/branding', payload)).data,
-  getPaymentConfig: async () => (await agentClient.get<PaymentConfig>('/agent/admin/payment-config')).data,
-  updatePaymentConfig: async (payload: PaymentConfigUpdate) =>
-    (await agentClient.put<PaymentConfig>('/agent/admin/payment-config', payload)).data,
   getAdminModelPolicy: async () =>
     (await agentClient.get<AgentModelPolicy>('/agent/admin/model-policy')).data,
   updateAdminModelPolicy: async (enabled: string[]) =>
     (await agentClient.put<AgentModelPolicy>('/agent/admin/model-policy', { enabled })).data,
-  getAdminRechargeOrders: async () => (await agentClient.get<RechargeOrdersResponse>('/agent/admin/recharge/orders')).data,
-  allocateRechargeOrder: async (orderNo: string, idempotencyKey?: string) =>
-    (await agentClient.post<{ order: RechargeOrder; allocated: boolean }>('/agent/admin/recharge/allocate', { order_no: orderNo }, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
-    })).data,
   getSettlements: async () => (await agentClient.get<{ items: SettlementView[]; total: number }>('/agent/admin/settlements')).data,
   getAuditEvents: async (limit = 100) => (await agentClient.get<{ items: AuditEventView[]; total: number }>('/agent/admin/audit-events', { params: { limit } })).data,
   reconcileSettlements: async (requestId?: string) =>
     (await agentClient.post<{ items: SettlementView[]; total: number }>('/agent/admin/settlements/reconcile', requestId ? { request_id: requestId } : {})).data,
-  allocate: async (mainUserID: string, amount: number, note = '', idempotencyKey?: string) =>
-    (await agentClient.post<AgentUserView>(`/agent/admin/users/${encodeURIComponent(mainUserID)}/allocate`, { amount, note }, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
-    })).data,
   setMappedUserStatus: async (mainUserID: string, status: 'active' | 'disabled') =>
     (await agentClient.patch<AgentUserView>(`/agent/admin/users/${encodeURIComponent(mainUserID)}/status`, { status })).data,
   keys: {

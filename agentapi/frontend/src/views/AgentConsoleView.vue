@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { agentAPI, type AgentContextResponse, type AgentModelPolicy, type AgentUserView, type AuditEventView, type PaymentConfig, type RechargeOrder, type SettlementView } from '@/agent/api'
+import { agentAPI, type AgentContextResponse, type AgentModelPolicy, type AgentUserView, type AuditEventView, type SettlementView } from '@/agent/api'
 import AgentConfirmDialog from '@/components/AgentConfirmDialog.vue'
 import AgentPagination from '@/components/AgentPagination.vue'
-import { currencyLabel, errorMessage, operationLabel, statusLabel, targetLabel } from '@/agent/locale'
+import { errorMessage, operationLabel, statusLabel, targetLabel } from '@/agent/locale'
 import { applyBranding, applyPageTitle } from '@/agent/branding'
 
 const context = ref<AgentContextResponse | null>(null)
@@ -16,9 +16,7 @@ const usersSearch = ref('')
 const failedSections = ref<string[]>([])
 const loading = ref(true)
 const error = ref('')
-const allocation = ref<Record<string, string>>({})
 const notice = ref('')
-const syncing = ref(false)
 const reconciling = ref(false)
 const statusUpdatingUser = ref('')
 const statusConfirmation = ref<AgentUserView | null>(null)
@@ -32,9 +30,6 @@ const statusConfirmationMessage = computed(() => {
 })
 const settlements = ref<SettlementView[]>([])
 const auditEvents = ref<AuditEventView[]>([])
-const rechargeOrders = ref<RechargeOrder[]>([])
-const rechargeEnabled = ref(false)
-const allocatingOrder = ref('')
 const brandingName = ref('')
 const brandingSiteName = ref('')
 const brandingLogo = ref('')
@@ -42,18 +37,6 @@ const brandingSaving = ref(false)
 const modelPolicy = ref<AgentModelPolicy | null>(null)
 const enabledModels = ref<string[]>([])
 const modelPolicySaving = ref(false)
-const paymentConfig = ref<PaymentConfig | null>(null)
-const paymentEnabled = ref(false)
-const paymentProvider = ref('manual')
-const paymentCurrency = ref('CNY')
-const paymentMerchantID = ref('')
-const paymentWebhookSecret = ref('')
-const paymentClearSecret = ref(false)
-const paymentMinCents = ref(100)
-const paymentMaxCents = ref(1000000)
-const paymentTTLSeconds = ref(1800)
-const paymentCheckoutTemplate = ref('')
-const paymentSaving = ref(false)
 let loadSequence = 0
 let usersSearchTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -66,12 +49,12 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   const results = await Promise.allSettled([
-    agentAPI.getContext(), agentAPI.getUsers(usersPage.value, usersPageSize.value, usersSearch.value), agentAPI.getSettlements(), agentAPI.getAdminRechargeOrders(), agentAPI.getAuditEvents(), agentAPI.getAdminModelPolicy(),
+    agentAPI.getContext(), agentAPI.getUsers(usersPage.value, usersPageSize.value, usersSearch.value), agentAPI.getSettlements(), agentAPI.getAuditEvents(), agentAPI.getAdminModelPolicy(),
   ])
   if (sequence !== loadSequence) return
 
   const failed: string[] = []
-  const [contextResult, usersResult, settlementsResult, rechargeResult, auditResult, policyResult] = results
+  const [contextResult, usersResult, settlementsResult, auditResult, policyResult] = results
   if (contextResult.status === 'fulfilled') {
     const agentContext = contextResult.value
     context.value = agentContext
@@ -91,10 +74,6 @@ async function load(): Promise<void> {
   } else failed.push('mapped users')
   if (settlementsResult.status === 'fulfilled') settlements.value = settlementsResult.value.items
   else failed.push('pending settlements')
-  if (rechargeResult.status === 'fulfilled') {
-    rechargeOrders.value = rechargeResult.value.items
-    rechargeEnabled.value = rechargeResult.value.enabled
-  } else failed.push('recharge orders')
   if (auditResult.status === 'fulfilled') auditEvents.value = auditResult.value.items
   else failed.push('audit events')
   if (policyResult.status === 'fulfilled') {
@@ -108,41 +87,10 @@ async function load(): Promise<void> {
   if (sequence === loadSequence) {
     loading.value = false
   }
-  void loadPaymentConfig(sequence)
-}
-
-async function loadPaymentConfig(sequence: number): Promise<void> {
-  try {
-    const config = await agentAPI.getPaymentConfig()
-    if (sequence !== loadSequence) return
-    paymentConfig.value = config
-    paymentEnabled.value = config.enabled
-    paymentProvider.value = config.provider
-    paymentCurrency.value = config.currency
-    paymentMerchantID.value = config.merchant_id || ''
-    paymentWebhookSecret.value = ''
-    paymentClearSecret.value = false
-    paymentMinCents.value = config.min_amount_cents
-    paymentMaxCents.value = config.max_amount_cents
-    paymentTTLSeconds.value = config.order_ttl_seconds
-    paymentCheckoutTemplate.value = config.checkout_url_template || ''
-    failedSections.value = failedSections.value.filter((item) => item !== 'payment configuration')
-    updateLoadError()
-  } catch {
-    if (sequence !== loadSequence) return
-    if (!failedSections.value.includes('payment configuration')) failedSections.value.push('payment configuration')
-    updateLoadError()
-  }
 }
 
 function loadFailed(section: string): boolean {
   return failedSections.value.includes(section)
-}
-
-function updateLoadError(): void {
-  error.value = failedSections.value.length
-    ? `以下管理信息加载失败：${failedSections.value.map(sectionLabel).join('、')}。请刷新重试。`
-    : ''
 }
 
 function sectionLabel(section: string): string {
@@ -150,10 +98,8 @@ function sectionLabel(section: string): string {
     'agent details': '代理站信息',
     'mapped users': '关联用户',
     'pending settlements': '待结算记录',
-    'recharge orders': '充值订单',
     'audit events': '审计记录',
     'model access policy': '模型权限',
-    'payment configuration': '支付配置',
   }
   return labels[section] || '其他信息'
 }
@@ -194,24 +140,6 @@ async function reconcile(): Promise<void> {
     notice.value = errorMessage(err, '核对结算记录失败，请稍后重试。')
   } finally {
     reconciling.value = false
-  }
-}
-
-async function allocate(user: AgentUserView): Promise<void> {
-  const amount = Number(allocation.value[user.main_user_id])
-  if (!Number.isFinite(amount) || amount <= 0) {
-    notice.value = '请输入大于 0 的金额。'
-    return
-  }
-  try {
-    const updated = await agentAPI.allocate(user.main_user_id, amount, 'agent console allocation')
-    const index = users.value.findIndex((item) => item.main_user_id === user.main_user_id)
-    if (index >= 0) users.value[index] = updated
-    notice.value = `已为 ${user.email || user.main_user_id} 分配 ${amount.toFixed(2)}。`
-    allocation.value[user.main_user_id] = ''
-    await load()
-  } catch (err) {
-    notice.value = errorMessage(err, '分配余额失败，请稍后重试。')
   }
 }
 
@@ -256,43 +184,6 @@ async function confirmUserStatusUpdate(): Promise<void> {
   }
 }
 
-async function syncOwnerBalance(): Promise<void> {
-  syncing.value = true
-  notice.value = ''
-  try {
-    const agent = await agentAPI.syncAdminWallet()
-    if (context.value) context.value.agent = agent
-    notice.value = '已同步主站主账户余额。'
-    await load()
-  } catch (err) {
-    notice.value = errorMessage(err, '同步余额失败，请稍后重试。')
-  } finally {
-    syncing.value = false
-  }
-}
-
-function idempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return `recharge-allocate-${crypto.randomUUID()}`
-  return `recharge-allocate-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-async function allocateRechargeOrder(order: RechargeOrder): Promise<void> {
-  if (order.status !== 'paid_pending_allocation' || allocatingOrder.value) return
-  allocatingOrder.value = order.order_no
-  notice.value = ''
-  try {
-    const result = await agentAPI.allocateRechargeOrder(order.order_no, idempotencyKey())
-    notice.value = result.allocated
-      ? `充值订单 ${order.order_no} 已分配给关联用户。`
-      : `充值订单 ${order.order_no} 仍在等待主账户余额。`
-    await load()
-  } catch (err) {
-    notice.value = errorMessage(err, '分配充值款失败，请稍后重试。')
-  } finally {
-    allocatingOrder.value = ''
-  }
-}
-
 async function saveBranding(): Promise<void> {
   brandingSaving.value = true
   notice.value = ''
@@ -317,34 +208,6 @@ async function saveBranding(): Promise<void> {
     notice.value = errorMessage(err, '更新品牌信息失败，请稍后重试。')
   } finally {
     brandingSaving.value = false
-  }
-}
-
-async function savePaymentConfig(): Promise<void> {
-  paymentSaving.value = true
-  notice.value = ''
-  try {
-    const updated = await agentAPI.updatePaymentConfig({
-      enabled: paymentEnabled.value,
-      provider: paymentProvider.value.trim(),
-      currency: paymentCurrency.value.trim().toUpperCase(),
-      merchant_id: paymentMerchantID.value.trim(),
-      ...(paymentWebhookSecret.value.trim() ? { webhook_secret: paymentWebhookSecret.value.trim() } : {}),
-      ...(paymentClearSecret.value ? { clear_webhook_secret: true } : {}),
-      min_amount_cents: Number(paymentMinCents.value),
-      max_amount_cents: Number(paymentMaxCents.value),
-      order_ttl_seconds: Number(paymentTTLSeconds.value),
-      checkout_url_template: paymentCheckoutTemplate.value.trim(),
-    })
-    paymentConfig.value = updated
-    paymentWebhookSecret.value = ''
-    paymentClearSecret.value = false
-    rechargeEnabled.value = updated.enabled
-    notice.value = '本实例支付配置已保存并立即生效。'
-  } catch (err) {
-    notice.value = errorMessage(err, '保存支付配置失败，请检查金额范围、回调密钥和收银台网址。')
-  } finally {
-    paymentSaving.value = false
   }
 }
 
@@ -376,9 +239,9 @@ onUnmounted(() => {
       <div>
         <p class="text-sm text-slate-500">AgentAPI</p>
         <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">代理站管理</h1>
-        <p class="mt-1 text-sm text-slate-500">管理关联用户，并为用户分配预付余额。</p>
+        <p class="mt-1 text-sm text-slate-500">管理本站用户、品牌与模型权限；余额和计费均由各用户的 Sub2API 账户负责。</p>
       </div>
-      <div class="flex flex-wrap gap-2"><button class="rounded-lg border px-4 py-2 text-sm" type="button" @click="load">刷新</button><button class="rounded-lg border px-4 py-2 text-sm disabled:opacity-50" type="button" :disabled="reconciling" @click="reconcile">{{ reconciling ? '正在核对…' : '核对待结算记录' }}</button><button class="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-slate-900" type="button" :disabled="syncing" @click="syncOwnerBalance">{{ syncing ? '正在同步…' : '同步主账户余额' }}</button></div>
+      <div class="flex flex-wrap gap-2"><button class="rounded-lg border px-4 py-2 text-sm" type="button" @click="load">刷新</button><button class="rounded-lg border px-4 py-2 text-sm disabled:opacity-50" type="button" :disabled="reconciling" @click="reconcile">{{ reconciling ? '正在核对…' : '核对待结算记录' }}</button></div>
     </header>
 
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ error }}</p>
@@ -403,29 +266,6 @@ onUnmounted(() => {
     <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 class="font-semibold">本实例支付配置</h2>
-          <p class="mt-1 text-sm text-slate-500">配置本代理站自己的收款渠道、商户标识和回调密钥。密钥加密保存，页面只显示是否已配置。</p>
-        </div>
-        <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50" type="button" :disabled="paymentSaving || !paymentConfig" @click="savePaymentConfig">{{ paymentSaving ? '正在保存…' : '保存支付配置' }}</button>
-      </div>
-      <div v-if="paymentConfig" class="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <label class="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm dark:border-slate-700"><input v-model="paymentEnabled" class="h-4 w-4 accent-blue-600" type="checkbox">启用本实例充值</label>
-        <label class="text-sm font-medium">支付渠道<input v-model="paymentProvider" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="64" placeholder="manual / alipay / wechat" type="text"></label>
-        <label class="text-sm font-medium">币种<input v-model="paymentCurrency" class="mt-1 w-full rounded-lg border px-3 py-2 uppercase dark:border-slate-700 dark:bg-slate-950" maxlength="3" placeholder="CNY" type="text"></label>
-        <label class="text-sm font-medium">商户标识<input v-model="paymentMerchantID" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="256" placeholder="可选；可在网址模板中使用 {merchant_id}" type="text"></label>
-        <label class="text-sm font-medium">最低金额（分）<input v-model.number="paymentMinCents" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="1" type="number"></label>
-        <label class="text-sm font-medium">最高金额（分）<input v-model.number="paymentMaxCents" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="1" type="number"></label>
-        <label class="text-sm font-medium">订单有效期（秒）<input v-model.number="paymentTTLSeconds" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="60" max="604800" type="number"></label>
-        <label class="text-sm font-medium lg:col-span-2">收银台网址模板<input v-model="paymentCheckoutTemplate" class="mt-1 w-full rounded-lg border px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950" maxlength="4096" placeholder="https://pay.example/checkout?order={order_no}&amount={amount_cents}&merchant={merchant_id}" type="url"><span class="mt-1 block text-xs font-normal text-slate-500">支持 {order_no}、{amount}、{amount_cents}、{currency}、{merchant_id}。</span></label>
-        <label class="text-sm font-medium lg:col-span-2">Webhook 密钥<input v-model="paymentWebhookSecret" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" autocomplete="new-password" :placeholder="paymentConfig.webhook_secret_configured ? '已配置；留空则保持不变' : '启用支付前必须设置'" type="password"></label>
-        <label class="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm dark:border-slate-700"><input v-model="paymentClearSecret" class="h-4 w-4 accent-red-600" type="checkbox">清除已有 Webhook 密钥</label>
-      </div>
-      <p v-else class="mt-4 text-sm text-slate-500">{{ loadFailed('payment configuration') ? '加载支付配置失败，请刷新重试。' : '正在加载支付配置…' }}</p>
-    </section>
-
-    <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
           <h2 class="font-semibold">模型权限</h2>
           <p class="mt-1 text-sm text-slate-500">限制此代理站可用的公开卫星模型。停用的模型会从 <code>/v1/models</code> 中隐藏，并在计费或调用上游前被拒绝。</p>
           <p v-if="modelPolicy" class="mt-1 text-xs text-slate-500">已启用 {{ enabledModels.length }} / {{ modelPolicy.catalog.length }} 个公开模型。</p>
@@ -441,46 +281,16 @@ onUnmounted(() => {
       <p v-else class="mt-4 text-sm text-slate-500">{{ loadFailed('model access policy') ? '加载模型目录失败，请刷新重试。' : '正在加载模型目录…' }}</p>
     </section>
 
-    <section v-if="context" class="grid gap-4 md:grid-cols-3">
+    <section v-if="context" class="grid gap-4 md:grid-cols-2">
       <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <p class="text-sm text-slate-500">代理站</p>
         <p class="mt-2 text-lg font-semibold">{{ context.agent.name }}</p>
         <p class="text-sm text-slate-500">{{ context.agent.domain || '域名待配置' }}</p>
       </div>
       <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">可用额度</p>
-        <p class="mt-2 text-2xl font-semibold">{{ money(context.agent.wallet_available_cents) }}</p>
-      </div>
-      <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">已分配额度</p>
-        <p class="mt-2 text-2xl font-semibold">{{ money(context.agent.wallet_allocated_cents) }}</p>
-      </div>
-      <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">主站主账户余额</p>
-        <p class="mt-2 text-2xl font-semibold">{{ money(context.agent.main_balance_cents) }}</p>
-        <p class="text-xs text-slate-500">{{ statusLabel(context.agent.billing_status) }} · {{ context.agent.main_balance_checked_at ? new Date(context.agent.main_balance_checked_at).toLocaleString('zh-CN') : '尚未同步' }}</p>
-      </div>
-    </section>
-
-    <section class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div class="border-b p-5 dark:border-slate-700">
-        <h2 class="font-semibold">充值订单</h2>
-        <p class="mt-1 text-sm text-slate-500">仅在主账户余额同步后才会分配已付款订单。此实例的充值功能{{ rechargeEnabled ? '已开启' : '已关闭' }}。</p>
-      </div>
-      <div v-if="rechargeOrders.length === 0" class="p-5 text-sm text-slate-500">{{ loadFailed('recharge orders') ? '加载充值订单失败，请刷新重试。' : '暂无充值订单。' }}</div>
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
-          <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800"><tr><th class="px-5 py-3">订单号</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">金额</th><th class="px-5 py-3">状态</th><th class="px-5 py-3"></th></tr></thead>
-          <tbody>
-            <tr v-for="order in rechargeOrders" :key="order.order_no" class="border-t dark:border-slate-700">
-              <td class="px-5 py-4 font-mono text-xs">{{ order.order_no }}</td>
-              <td class="px-5 py-4 font-mono text-xs">{{ order.main_user_id }}</td>
-              <td class="px-5 py-4">{{ money(order.amount_cents) }} {{ currencyLabel(order.currency) }}</td>
-              <td class="px-5 py-4">{{ statusLabel(order.status) }}</td>
-              <td class="px-5 py-4 text-right"><button v-if="order.status === 'paid_pending_allocation'" class="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50" type="button" :disabled="allocatingOrder !== ''" @click="allocateRechargeOrder(order)">{{ allocatingOrder === order.order_no ? '正在分配…' : '分配余额' }}</button></td>
-            </tr>
-          </tbody>
-        </table>
+        <p class="text-sm text-slate-500">计费方式</p>
+        <p class="mt-2 text-lg font-semibold">用户主站直扣</p>
+        <p class="text-xs text-slate-500">每个用户使用自己的 Sub2API 余额，代理站不维护共享钱包。</p>
       </div>
     </section>
 
@@ -506,7 +316,7 @@ onUnmounted(() => {
       <div class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">
           <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800">
-            <tr><th class="px-5 py-3">用户</th><th class="px-5 py-3">状态 / 访问权限</th><th class="px-5 py-3">余额</th><th class="px-5 py-3">分配额度</th></tr>
+            <tr><th class="px-5 py-3">用户</th><th class="px-5 py-3">状态 / 访问权限</th><th class="px-5 py-3">Sub2API 实时余额</th></tr>
           </thead>
           <tbody>
             <tr v-for="user in users" :key="user.main_user_id" class="border-t dark:border-slate-700">
@@ -524,10 +334,9 @@ onUnmounted(() => {
                   <span v-else class="text-xs text-slate-500">代理站主账户</span>
                 </div>
               </td>
-              <td class="px-5 py-4">{{ money(user.balance_cents) }}</td>
-              <td class="px-5 py-4"><div class="flex gap-2"><input v-model="allocation[user.main_user_id]" class="w-28 rounded border px-2 py-1" min="0" step="0.01" type="number" placeholder="金额"><button class="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50" type="button" :disabled="user.status !== 'active'" @click="allocate(user)">分配</button></div></td>
+              <td class="px-5 py-4"><span v-if="!user.balance_error">{{ money(user.balance_cents) }}</span><span v-else class="text-xs text-amber-600">暂时无法读取</span></td>
             </tr>
-            <tr v-if="!loading && users.length === 0"><td class="px-5 py-8 text-center text-slate-500" colspan="4">{{ loadFailed('mapped users') ? '加载关联用户失败，请刷新重试。' : '暂无关联用户。' }}</td></tr>
+            <tr v-if="!loading && users.length === 0"><td class="px-5 py-8 text-center text-slate-500" colspan="3">{{ loadFailed('mapped users') ? '加载关联用户失败，请刷新重试。' : '暂无关联用户。' }}</td></tr>
           </tbody>
         </table>
       </div>

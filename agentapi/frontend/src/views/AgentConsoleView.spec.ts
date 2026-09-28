@@ -10,7 +10,7 @@ const context = {
     name: 'Example Agent',
     site_name: 'Example Agent',
     status: 'active',
-    billing_mode: 'owner_upstream',
+    billing_mode: 'user_upstream',
     main_balance_cents: 10000,
     billing_status: 'ok',
     wallet_available_cents: 8000,
@@ -47,12 +47,6 @@ describe('AgentConsoleView', () => {
       total: 1,
       items: [{ request_id: 'req-pending', reserved_cents: 25, actual_cents: 0, status: 'pending' }],
     })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({
-      enabled: false,
-      provider: 'manual',
-      items: [],
-      total: 0,
-    })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 1, items: [{ id: 1, actor_type: 'agent_admin', actor_id: 'owner-1', agent_id: 'agent-1', operation: 'wallet.sync', target_type: 'agent_wallet', request_id: 'req-audit', result: 'success', created_at: '2026-09-22T00:00:00Z' }] })
     const reconcile = vi.spyOn(agentAPI, 'reconcileSettlements').mockResolvedValue({ total: 1, items: [] })
@@ -62,7 +56,7 @@ describe('AgentConsoleView', () => {
 
     expect(wrapper.text()).toContain('user@example.com')
     expect(wrapper.text()).toContain('req-pending')
-    expect(wrapper.text()).toContain('同步主账户余额')
+    expect(wrapper.text()).toContain('用户主站直扣')
 
     const button = wrapper.findAll('button').find((item) => item.text().includes('核对待结算记录'))
     expect(button).toBeDefined()
@@ -88,7 +82,6 @@ describe('AgentConsoleView', () => {
       }],
     })
     vi.spyOn(agentAPI, 'getSettlements').mockRejectedValue(new Error('settlement endpoint unavailable'))
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
 
@@ -99,25 +92,7 @@ describe('AgentConsoleView', () => {
     expect(wrapper.text()).toContain('Example Agent')
     expect(wrapper.text()).toContain('加载待结算记录失败，请刷新重试。')
     expect(wrapper.text()).toContain('以下管理信息加载失败：待结算记录。请刷新重试。')
-    expect(wrapper.text()).toContain('暂无充值订单')
-  })
-
-  it('reports payment configuration failures without hiding other administrator panels', async () => {
-    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(context)
-    vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ total: 0, page: 1, page_size: 25, items: [] })
-    vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
-    vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
-    vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getPaymentConfig').mockRejectedValue(new Error('payment config unavailable'))
-
-    const wrapper = mount(AgentConsoleView)
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('以下管理信息加载失败：支付配置。请刷新重试。')
-    expect(wrapper.text()).toContain('加载支付配置失败，请刷新重试。')
-    expect(wrapper.text()).toContain('Example Agent')
-    expect(wrapper.text()).toContain('模型权限')
+    expect(wrapper.text()).toContain('用户主站直扣')
   })
 
   it('paginates mapped users through the server-backed Agent endpoint', async () => {
@@ -137,7 +112,6 @@ describe('AgentConsoleView', () => {
       }],
     }))
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
 
@@ -172,7 +146,6 @@ describe('AgentConsoleView', () => {
       }],
     }))
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
 
@@ -200,7 +173,6 @@ describe('AgentConsoleView', () => {
       .mockResolvedValueOnce(latestContext)
     vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ total: 0, page: 1, page_size: 25, items: [] })
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
 
@@ -221,7 +193,6 @@ describe('AgentConsoleView', () => {
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(context)
     vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ total: 0, page: 1, page_size: 25, items: [] })
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
     const update = vi.spyOn(agentAPI, 'updateBranding').mockResolvedValue({ name: 'Edited', site_name: 'Edited Site', site_logo: '/edited.svg' })
@@ -240,81 +211,10 @@ describe('AgentConsoleView', () => {
     expect(wrapper.text()).toContain('品牌信息已保存')
   })
 
-  it('loads and saves the current instance payment configuration without exposing the stored secret', async () => {
-    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(context)
-    vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ total: 0, page: 1, page_size: 25, items: [] })
-    vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
-    vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
-    vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getPaymentConfig').mockResolvedValue({
-      enabled: false,
-      provider: 'manual',
-      currency: 'CNY',
-      merchant_id: 'merchant-a',
-      webhook_secret_configured: true,
-      min_amount_cents: 100,
-      max_amount_cents: 100000,
-      order_ttl_seconds: 900,
-      checkout_url_template: 'https://pay.example/checkout?order={order_no}',
-    })
-    const update = vi.spyOn(agentAPI, 'updatePaymentConfig').mockResolvedValue({
-      enabled: true,
-      provider: 'stripe-cn',
-      currency: 'CNY',
-      merchant_id: 'merchant-b',
-      webhook_secret_configured: true,
-      min_amount_cents: 200,
-      max_amount_cents: 200000,
-      order_ttl_seconds: 1200,
-      checkout_url_template: 'https://pay.example/checkout?order={order_no}&merchant={merchant_id}',
-    })
-
-    const wrapper = mount(AgentConsoleView)
-    await flushPromises()
-
-    const labelInput = (labelText: string) => {
-      const label = wrapper.findAll('label').find((item) => item.text().includes(labelText))
-      expect(label, `missing label: ${labelText}`).toBeDefined()
-      return label!.find('input')
-    }
-    expect(labelInput('Webhook 密钥').attributes('placeholder')).toBe('已配置；留空则保持不变')
-    expect(wrapper.text()).toContain('清除已有 Webhook 密钥')
-    await labelInput('启用本实例充值').setValue(true)
-    await labelInput('支付渠道').setValue('stripe-cn')
-    await labelInput('商户标识').setValue('merchant-b')
-    await labelInput('最低金额').setValue('200')
-    await labelInput('最高金额').setValue('200000')
-    await labelInput('订单有效期').setValue('1200')
-    await labelInput('收银台网址模板').setValue('https://pay.example/checkout?order={order_no}&merchant={merchant_id}')
-    await labelInput('Webhook 密钥').setValue('replacement-secret')
-
-    const button = wrapper.findAll('button').find((item) => item.text().includes('保存支付配置'))
-    expect(button).toBeDefined()
-    await button!.trigger('click')
-    await flushPromises()
-
-    expect(update).toHaveBeenCalledWith({
-      enabled: true,
-      provider: 'stripe-cn',
-      currency: 'CNY',
-      merchant_id: 'merchant-b',
-      webhook_secret: 'replacement-secret',
-      min_amount_cents: 200,
-      max_amount_cents: 200000,
-      order_ttl_seconds: 1200,
-      checkout_url_template: 'https://pay.example/checkout?order={order_no}&merchant={merchant_id}',
-    })
-    expect(wrapper.text()).toContain('本实例支付配置已保存并立即生效')
-    expect(labelInput('Webhook 密钥').element).toHaveProperty('value', '')
-    expect(wrapper.text()).not.toContain('replacement-secret')
-  })
-
   it('saves an allowlist from the public catalog without exposing private model names', async () => {
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(context)
     vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ total: 0, page: 1, page_size: 25, items: [] })
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5', 'gpt-image-2'], enabled: ['gpt-5.5'], customized: true })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
     const update = vi.spyOn(agentAPI, 'updateAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5', 'gpt-image-2'], enabled: ['gpt-5.5', 'gpt-image-2'], customized: true })
@@ -348,7 +248,6 @@ describe('AgentConsoleView', () => {
     })
     vi.spyOn(agentAPI, 'getUsers').mockImplementation(async (page = 1, pageSize = 25) => ({ total: 1, page, page_size: pageSize, items: [mappedUser()] }))
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ total: 0, items: [] })
-    vi.spyOn(agentAPI, 'getAdminRechargeOrders').mockResolvedValue({ enabled: false, provider: 'manual', items: [], total: 0 })
     vi.spyOn(agentAPI, 'getAdminModelPolicy').mockResolvedValue({ catalog: ['gpt-5.5'], enabled: ['gpt-5.5'], customized: false })
     vi.spyOn(agentAPI, 'getAuditEvents').mockResolvedValue({ total: 0, items: [] })
     const update = vi.spyOn(agentAPI, 'setMappedUserStatus').mockImplementation(async (_mainUserID, status) => {

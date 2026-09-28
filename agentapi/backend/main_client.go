@@ -362,34 +362,19 @@ func (c *MainClient) RuntimeGetOwner(ctx context.Context) (MainUserResult, error
 	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: moneyValue(raw["balance"]), Raw: data}, nil
 }
 
-// SatelliteOwnerBalance reads the configured Owner through the existing
-// public satellite relay contract. It needs no Agent provisioning/runtime
-// records in Sub2API: the application credential stays server-side and the
-// Owner user id is supplied as X-Sub2API-On-Behalf-Of.
-func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID string) (MainUserResult, error) {
-	ownerMainUserID = strings.TrimSpace(ownerMainUserID)
-	if ownerMainUserID == "" {
-		return MainUserResult{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
+// SatelliteUserBalance reads one mapped Sub2API user's authoritative balance
+// through the public satellite relay contract. The application credential and
+// on-behalf-of identity are generated exclusively by AgentAPI's server.
+func (c *MainClient) SatelliteUserBalance(ctx context.Context, mainUserID string) (MainUserResult, error) {
+	mainUserID = strings.TrimSpace(mainUserID)
+	if mainUserID == "" {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "main user identity is not configured"}
 	}
 	credential := strings.TrimSpace(c.cfg.AppCredential)
 	if credential == "" {
 		return MainUserResult{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_APP_CREDENTIAL_MISSING", Message: "satellite application credential is not configured"}
 	}
-	headers := make(http.Header)
-	headers.Set("Accept", "application/json")
-	headers.Set("Authorization", "Bearer "+credential)
-	headers.Set("X-Sub2API-On-Behalf-Of", ownerMainUserID)
-	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
-	base := strings.TrimRight(c.cfg.MainModelBaseURL, "/")
-	path := "/v1/sub2api/balance"
-	if strings.HasSuffix(base, "/v1") {
-		path = "/sub2api/balance"
-	}
-	resp, data, err := c.request(ctx, http.MethodGet, base+path, nil, headers)
-	if err != nil {
-		return MainUserResult{}, err
-	}
-	data, err = unwrapMainResponse(resp.StatusCode, data)
+	data, err := c.satelliteUserJSON(ctx, mainUserID, "/v1/sub2api/balance")
 	if err != nil {
 		return MainUserResult{}, err
 	}
@@ -397,9 +382,13 @@ func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID 
 		Balance json.RawMessage `json:"balance"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return MainUserResult{}, fmt.Errorf("decode satellite owner balance: %w", err)
+		return MainUserResult{}, fmt.Errorf("decode satellite user balance: %w", err)
 	}
-	return MainUserResult{ID: ownerMainUserID, Balance: moneyValue(payload.Balance), Raw: data}, nil
+	return MainUserResult{ID: mainUserID, Balance: moneyValue(payload.Balance), Raw: data}, nil
+}
+
+func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID string) (MainUserResult, error) {
+	return c.SatelliteUserBalance(ctx, ownerMainUserID)
 }
 
 func (c *MainClient) MapRuntimeUser(ctx context.Context, mainUserID, userAccessToken string) error {
@@ -426,18 +415,16 @@ func (c *MainClient) MapRuntimeUserWithSSOTicket(ctx context.Context, mainUserID
 	return err
 }
 
-// AdminGetUser reads the configured Owner through the public satellite bridge
-// in ordinary mode. The legacy runtime endpoint is selected only by the
-// explicit compatibility switch; a stale agt_ctl_* environment value alone
-// must never restore the old database dependency.
+// AdminGetUser reads a mapped user through the public satellite bridge in
+// ordinary mode. Legacy runtime mode remains Owner-scoped for old instances.
 func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainUserResult, error) {
-	if strings.TrimSpace(mainUserID) != strings.TrimSpace(c.cfg.OwnerMainUserID) {
-		return MainUserResult{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "runtime credential is restricted to its configured Owner"}
-	}
 	if c.cfg.ProvisioningControlEnabled {
+		if strings.TrimSpace(mainUserID) != strings.TrimSpace(c.cfg.OwnerMainUserID) {
+			return MainUserResult{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "legacy runtime credential is restricted to its configured Owner"}
+		}
 		return c.RuntimeGetOwner(ctx)
 	}
-	return c.SatelliteOwnerBalance(ctx, mainUserID)
+	return c.SatelliteUserBalance(ctx, mainUserID)
 }
 
 func (c *MainClient) RuntimeUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
@@ -610,18 +597,20 @@ func (c *MainClient) AdminGetProvisioningAgent(ctx context.Context, agentID stri
 // AdminFindUsage uses the public Owner-scoped usage endpoint in ordinary mode.
 // The old runtime query remains available only when compatibility mode is
 // explicitly enabled.
-func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]MainUsageResult, error) {
+func (c *MainClient) AdminFindUsageForUser(ctx context.Context, mainUserID, requestID string) ([]MainUsageResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return nil, fmt.Errorf("request id is required")
 	}
 	var data json.RawMessage
 	var err error
+	source := "sub2api_user_usage"
 	if c.cfg.ProvisioningControlEnabled {
 		path := "/agent-runtime/usage?request_id=" + url.QueryEscape(requestID)
 		data, err = c.runtimeJSON(ctx, http.MethodGet, path, nil)
+		source = "sub2api_owner_usage"
 	} else {
-		data, err = c.satelliteOwnerJSON(ctx, "/v1/sub2api/usage?request_id="+url.QueryEscape(requestID))
+		data, err = c.satelliteUserJSON(ctx, mainUserID, "/v1/sub2api/usage?request_id="+url.QueryEscape(requestID))
 	}
 	if err != nil {
 		return nil, err
@@ -630,20 +619,24 @@ func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]Ma
 		Items []json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Items != nil {
-		return decodeMainUsageItems(envelope.Items)
+		return decodeMainUsageItems(envelope.Items, source)
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, err
 	}
-	return decodeMainUsageItems(items)
+	return decodeMainUsageItems(items, source)
 }
 
-func (c *MainClient) satelliteOwnerJSON(ctx context.Context, path string) (json.RawMessage, error) {
+func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]MainUsageResult, error) {
+	return c.AdminFindUsageForUser(ctx, c.cfg.OwnerMainUserID, requestID)
+}
+
+func (c *MainClient) satelliteUserJSON(ctx context.Context, mainUserID, path string) (json.RawMessage, error) {
 	headers := make(http.Header)
 	headers.Set("Authorization", "Bearer "+strings.TrimSpace(c.cfg.AppCredential))
 	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
-	headers.Set("X-Sub2API-On-Behalf-Of", strings.TrimSpace(c.cfg.OwnerMainUserID))
+	headers.Set("X-Sub2API-On-Behalf-Of", strings.TrimSpace(mainUserID))
 	base := strings.TrimRight(c.cfg.MainModelBaseURL, "/")
 	if strings.HasSuffix(base, "/v1") && strings.HasPrefix(path, "/v1/") {
 		path = strings.TrimPrefix(path, "/v1")
@@ -664,7 +657,7 @@ func (c *MainClient) satelliteOwnerJSON(ctx context.Context, path string) (json.
 	return body, nil
 }
 
-func decodeMainUsageItems(items []json.RawMessage) ([]MainUsageResult, error) {
+func decodeMainUsageItems(items []json.RawMessage, source string) ([]MainUsageResult, error) {
 	result := make([]MainUsageResult, 0, len(items))
 	for _, rawItem := range items {
 		var item map[string]json.RawMessage
@@ -686,7 +679,7 @@ func decodeMainUsageItems(items []json.RawMessage) ([]MainUsageResult, error) {
 			return nil, fmt.Errorf("main usage %q has neither a valid actual_cost nor a fallback total_cost", requestID)
 		}
 		var snapshot MainUsageSnapshot
-		snapshot.Source = "sub2api_owner_usage"
+		snapshot.Source = source
 		snapshot.ServiceTier = rawString(item["service_tier"])
 		snapshot.ReasoningEffort = rawString(item["reasoning_effort"])
 		snapshot.InboundEndpoint = rawString(item["inbound_endpoint"])
