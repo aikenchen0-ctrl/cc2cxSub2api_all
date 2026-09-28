@@ -152,7 +152,7 @@ def with_sub2api_defaults(config: dict[str, Any]) -> dict[str, Any]:
         "LLM": "custom",
         "CUSTOM_LLM_URL": urlunsplit((parsed.scheme, parsed.netloc, path, "", "")),
         "CUSTOM_LLM_API_KEY": api_key,
-        "CUSTOM_MODEL": os.getenv("SUB2API_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini",
+        "CUSTOM_MODEL": os.getenv("SUB2API_MODEL", "gpt-5.6-sol").strip() or "gpt-5.6-sol",
         "DISABLE_IMAGE_GENERATION": config.get("DISABLE_IMAGE_GENERATION", True),
     }
 

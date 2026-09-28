@@ -92,7 +92,7 @@ export function SlideEditorFontImportDialog({
             </span>
             <span className="grid gap-1">
               <span className="text-xl font-semibold text-[#111827]">
-                Prepare fonts
+                准备字体
               </span>
               {fileName ? (
                 <span className="max-w-[520px] truncate text-sm font-normal text-[#6B7280]">
@@ -109,10 +109,10 @@ export function SlideEditorFontImportDialog({
               <Loader2 className="h-8 w-8 animate-spin text-[#7A5AF8]" />
               <div>
                 <p className="text-sm font-semibold text-[#111827]">
-                  Checking presentation fonts
+                  检查演示文稿字体
                 </p>
                 <p className="mt-1 text-sm text-[#6B7280]">
-                  Looking for fonts that need to be available in the editor.
+                  查找需要在编辑器中可用的字体。
                 </p>
               </div>
             </div>
@@ -122,7 +122,7 @@ export function SlideEditorFontImportDialog({
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#D97706]" />
                 <div>
                   <p className="text-sm font-semibold text-[#92400E]">
-                    Font check failed
+                    字体检查失败
                   </p>
                   <p className="mt-1 text-sm text-[#6B7280]">{error}</p>
                 </div>
@@ -135,7 +135,7 @@ export function SlideEditorFontImportDialog({
                   <div className="mb-3 flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-[#16A34A]" />
                     <h3 className="text-sm font-semibold text-[#166534]">
-                      Available fonts ({fontsData.available_fonts.length})
+                      可用字体 ({fontsData.available_fonts.length})
                     </h3>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -156,7 +156,7 @@ export function SlideEditorFontImportDialog({
                   <div className="mb-4 flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-[#D97706]" />
                     <h3 className="text-sm font-semibold text-[#92400E]">
-                      Missing fonts ({fontsNeedingUpload.length})
+                      缺失字体 ({fontsNeedingUpload.length})
                     </h3>
                   </div>
                   <div className="space-y-3">
@@ -203,7 +203,7 @@ export function SlideEditorFontImportDialog({
                             onClick={() => fileInputRefs.current[uploadKey]?.click()}
                           >
                             <Upload className="h-4 w-4" />
-                            Upload
+                            上传
                           </Button>
                         </div>
                       );
@@ -215,7 +215,7 @@ export function SlideEditorFontImportDialog({
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-[#16A34A]" />
                     <p className="text-sm font-semibold text-[#166534]">
-                      All fonts are ready
+                      所有字体已就绪
                     </p>
                   </div>
                 </section>
@@ -226,7 +226,7 @@ export function SlideEditorFontImportDialog({
                   <div className="mb-3 flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-[#16A34A]" />
                     <h3 className="text-sm font-semibold text-[#166534]">
-                      Uploaded fonts ({uploadedFonts.length})
+                      上传的字体 ({uploadedFonts.length})
                     </h3>
                   </div>
                   <div className="space-y-2">
@@ -258,8 +258,8 @@ export function SlideEditorFontImportDialog({
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-[#6B7280]">
               {fontsNeedingUpload.length > 0
-                ? "Missing fonts may render with browser fallbacks."
-                : "The editor will load available font files before importing."}
+                ? "缺失的字体可能会使用浏览器默认字体渲染。"
+                : "编辑器将在导入之前加载可用的字体文件。"}
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -268,7 +268,7 @@ export function SlideEditorFontImportDialog({
                 disabled={isPreparing}
                 onClick={onCancel}
               >
-                Cancel
+                取消
               </Button>
               {error && !fontsData ? (
                 <Button
@@ -276,7 +276,7 @@ export function SlideEditorFontImportDialog({
                   disabled={isPreparing}
                   onClick={onOpenWithoutFontCheck}
                 >
-                  Open without check
+                  无需检查打开
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               ) : (
@@ -288,7 +288,7 @@ export function SlideEditorFontImportDialog({
                   {isPreparing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Preparing...
+                      准备中...
                     </>
                   ) : (
                     <>

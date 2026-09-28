@@ -5,8 +5,8 @@ import { getServerAuthStatus } from '@/utils/serverAuth'
 import { getSettingsView } from '@/utils/settingsAccess'
 
 export const metadata = {
-  title: '设置 | 永恒PPT',
-  description: 'Settings page',
+  title: '设置 | 永恒 PPT',
+  description: '设置页面',
 }
 const page = async () => {
   const status = await getServerAuthStatus()

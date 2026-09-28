@@ -71,7 +71,7 @@ export default function LogoutButton({
       title={label}
     >
       <LogOut className="h-4 w-4" />
-      {!iconOnly ? <span>{isSubmitting ? "Signing out..." : label}</span> : null}
+      {!iconOnly ? <span>{isSubmitting ? "正在退出..." : label}</span> : null}
     </button>
   );
 }

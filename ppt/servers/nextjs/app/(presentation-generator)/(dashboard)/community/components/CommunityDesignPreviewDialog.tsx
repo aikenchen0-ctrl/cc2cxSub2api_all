@@ -196,12 +196,12 @@ export default function CommunityDesignPreviewDialog({
                 <div className="hidden shrink-0 items-center gap-2 sm:flex">
                   <CommunityCount
                     icon={<Eye aria-hidden="true" className="h-4 w-4" strokeWidth={1.5} />}
-                    label={`${presentation.views ?? 0} views`}
+                    label={`${presentation.views ?? 0}视图`}
                     value={presentation.views ?? 0}
                   />
                   <CommunityCount
                     icon={<Heart aria-hidden="true" className="h-4 w-4" strokeWidth={1.5} />}
-                    label={`${presentation.likes ?? 0} likes`}
+                    label={`${presentation.likes ?? 0}点赞`}
                     value={presentation.likes ?? 0}
                   />
                   <button
@@ -234,7 +234,7 @@ export default function CommunityDesignPreviewDialog({
                             executeScripts={false}
                             html={slide}
                             fonts={displayedPresentation?.fonts}
-                            title={`${title} slide ${index + 1}`}
+                            title={`${title}幻灯片${index + 1}`}
                           />
                         </div>
                       ))}
@@ -263,7 +263,7 @@ export default function CommunityDesignPreviewDialog({
                     <dl className="mt-2.5 space-y-2.5">
                   <SetupRow label="文本">
                         <SetupChip>
-                          {textProvider ? getProviderVisual(textProvider).label : "永恒PPT 托管"}
+                          {textProvider ? getProviderVisual(textProvider).label : "永恒 PPT 托管"}
                         </SetupChip>
                         {setup?.text_model?.trim() && (
                           <SetupChip>{setup.text_model}</SetupChip>
@@ -271,12 +271,12 @@ export default function CommunityDesignPreviewDialog({
                       </SetupRow>
                   <SetupRow label="图片">
                         <SetupChip>
-                          {imageProvider ? getProviderVisual(imageProvider).label : "永恒PPT 托管"}
+                          {imageProvider ? getProviderVisual(imageProvider).label : "永恒 PPT 托管"}
                         </SetupChip>
                       </SetupRow>
                   <SetupRow label="联网搜索">
                         <SetupChip>
-                          {webSearchProvider ? getProviderVisual(webSearchProvider).label : "永恒PPT 托管"}
+                          {webSearchProvider ? getProviderVisual(webSearchProvider).label : "永恒 PPT 托管"}
                         </SetupChip>
                       </SetupRow>
                       {referencePresentationIds.length > 0 && (
@@ -297,8 +297,8 @@ export default function CommunityDesignPreviewDialog({
                                 title={String(referenceId)}
                                 aria-label={
                                   isActiveReference
-                                    ? `Viewing reference presentation ${referenceId}`
-                                    : `Preview reference presentation ${referenceId}`
+                                    ? `查看参考演示文稿${referenceId}`
+                                    : `预览参考演示文稿${referenceId}`
                                 }
                                 aria-pressed={isActiveReference}
                                 className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-[10px] border border-[#D9D6FE] bg-[#FAFAFF] px-2.5 py-0.5 text-xs font-normal text-[#4C4C4C] transition-colors hover:border-[#BDB4FD] hover:text-[#6847F4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30 disabled:cursor-wait disabled:opacity-60"
@@ -331,7 +331,7 @@ export default function CommunityDesignPreviewDialog({
                       <div className="min-w-0 flex-1">
                         <h3 className="text-base font-medium text-black">提示词</h3>
                         <p className="mt-1 font-manrope text-xs font-normal text-[#4C4C4C]">
-                          Paste into the prompt field.
+                          粘贴到提示词框。
                         </p>
                       </div>
                       <button
@@ -356,19 +356,19 @@ export default function CommunityDesignPreviewDialog({
                     <section className="min-w-0">
                       <h3 className="text-base font-medium text-black">创建者</h3>
                       <p className="mt-1 break-all text-xs font-normal leading-4 text-[#4C4C4C]">
-                        by {author}
+                        作者：{author}
                       </p>
                     </section>
 
                     <div className="mt-3 flex items-center gap-2 sm:hidden">
                       <CommunityCount
                         icon={<Eye aria-hidden="true" className="h-4 w-4" strokeWidth={1.5} />}
-                        label={`${presentation.views ?? 0} views`}
+                        label={`${presentation.views ?? 0}视图`}
                         value={presentation.views ?? 0}
                       />
                       <CommunityCount
                         icon={<Heart aria-hidden="true" className="h-4 w-4" strokeWidth={1.5} />}
-                        label={`${presentation.likes ?? 0} likes`}
+                        label={`${presentation.likes ?? 0}点赞`}
                         value={presentation.likes ?? 0}
                       />
                     </div>
@@ -378,7 +378,7 @@ export default function CommunityDesignPreviewDialog({
                       className="mt-2 inline-flex h-[41px] w-full min-w-0 items-center justify-center gap-2 rounded-full border border-[#EDEEEF] px-5 text-sm text-[#191919] sm:hidden"
                     >
                       <Check className="h-4 w-4" />
-                      Use Design
+                      使用设计
                     </button>
                   </div>
                 </aside>

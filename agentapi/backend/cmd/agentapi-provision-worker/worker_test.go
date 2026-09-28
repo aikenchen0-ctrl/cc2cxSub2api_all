@@ -36,7 +36,7 @@ func (b *fakeProvisionBackend) add(step string) error {
 }
 
 func (b *fakeProvisionBackend) Generate(context.Context, agentRecord) (generatedBundle, error) {
-	return generatedBundle{Path: b.bundlePath, ControlTokenHash: strings.Repeat("1", 64), ModelTokenHash: strings.Repeat("2", 64)}, b.add("generate")
+	return generatedBundle{Path: b.bundlePath}, b.add("generate")
 }
 func (b *fakeProvisionBackend) Deploy(context.Context, agentRecord, string) error {
 	return b.add("deploy")
@@ -72,9 +72,24 @@ func TestWorkerRunsFullProvisioningFromAuthoritativeControlPlane(t *testing.T) {
 	if strings.Join(backend.steps, ",") != strings.Join(wantBackend, ",") {
 		t.Fatalf("backend calls = %v, want %v", backend.steps, wantBackend)
 	}
-	wantAPI := []string{"GET", "POST:claim", "PATCH:validating", "POST:runtime-credentials", "PATCH:bundle_generated", "PATCH:deploying", "PATCH:domain_check", "PATCH:tls_check", "PATCH:readiness_check", "POST:activate"}
+	wantAPI := []string{"GET", "POST:claim", "PATCH:validating", "PATCH:bundle_generated", "PATCH:deploying", "PATCH:domain_check", "PATCH:tls_check", "PATCH:readiness_check", "POST:activate"}
 	if strings.Join(*calls, ",") != strings.Join(wantAPI, ",") {
 		t.Fatalf("control API calls = %v, want %v", *calls, wantAPI)
+	}
+}
+
+func TestHostBackendPassesSharedSecretsToGeneratedComposeProject(t *testing.T) {
+	backend := newHostBackend(config{
+		AppCredentialFile: "/run/secrets/sub2api_app_credential",
+		SSOSecretFile:     "/run/secrets/sub2api_sso_secret",
+	})
+	want := []string{
+		"SUB2API_APP_CREDENTIAL_FILE=/run/secrets/sub2api_app_credential",
+		"SUB2API_SSO_SECRET_FILE=/run/secrets/sub2api_sso_secret",
+	}
+	got := backend.composeSecretEnv()
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("compose secret env = %v, want %v", got, want)
 	}
 }
 
@@ -236,7 +251,7 @@ func TestWorkerSkipsAgentClaimedByAnotherWorker(t *testing.T) {
 type blockingProvisionBackend struct{ entered chan struct{} }
 
 func (b *blockingProvisionBackend) Generate(context.Context, agentRecord) (generatedBundle, error) {
-	return generatedBundle{Path: ".", ControlTokenHash: strings.Repeat("1", 64), ModelTokenHash: strings.Repeat("2", 64)}, nil
+	return generatedBundle{Path: "."}, nil
 }
 func (b *blockingProvisionBackend) Deploy(ctx context.Context, _ agentRecord, _ string) error {
 	select {
@@ -269,9 +284,6 @@ func TestWorkerCancelsDeploymentWhenLeaseIsLost(t *testing.T) {
 			calls = append(calls, "CLAIM")
 			claim := leaseClaim{Agent: state, Token: testLeaseToken, ExpiresAt: time.Now().Add(time.Minute)}
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": claim})
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/"+testAgentID+"/runtime-credentials"):
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
 		case r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/progress"):
 			var payload struct {
 				Step string `json:"step"`
@@ -438,18 +450,6 @@ func newTestControlAPI(t *testing.T, initial agentRecord) (*controlAPI, *agentRe
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/agent-provisioning/agents/"+testAgentID+"/claim":
 			calls = append(calls, "POST:claim")
 			result = leaseClaim{Agent: state, Token: testLeaseToken, ExpiresAt: time.Now().Add(90 * time.Second)}
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/agent-provisioning/agents/"+testAgentID+"/runtime-credentials":
-			if r.Header.Get("X-AgentAPI-Provisioning-Lease") != testLeaseToken {
-				t.Errorf("runtime credential registration did not use the claimed lease")
-			}
-			var payload map[string]string
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || !isSHA256Hash(payload["control_token_hash"]) || !isSHA256Hash(payload["model_token_hash"]) {
-				t.Errorf("worker did not submit only runtime credential hashes")
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			calls = append(calls, "POST:runtime-credentials")
-			result = map[string]any{}
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/agent-provisioning/agents/"+testAgentID+"/lease":
 			if r.Header.Get("X-AgentAPI-Provisioning-Lease") != testLeaseToken {
 				t.Errorf("lease renewal did not use the claimed token")

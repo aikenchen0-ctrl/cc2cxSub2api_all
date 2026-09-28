@@ -23,4 +23,4 @@ SUPPORTED_CODEX_MODELS = {
     "gpt-5.4-mini",
     "gpt-5.3-codex-spark",
 }
-DEFAULT_CODEX_MODEL = "gpt-5.6-luna"
+DEFAULT_CODEX_MODEL = "gpt-5.6-sol"

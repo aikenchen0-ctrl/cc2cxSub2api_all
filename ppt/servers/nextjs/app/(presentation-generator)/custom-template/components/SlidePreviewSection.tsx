@@ -85,9 +85,9 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                             <div>
                                 <h2 className="text-xl font-semibold text-[#111827]">幻灯片预览</h2>
                                 <p className="text-sm text-[#6B7280] mt-0.5">
-                                    {slideCount} slide{slideCount !== 1 ? 's' : ''} ready
+                                    {slideCount} 幻灯片{slideCount !== 1 ? 's' : ''} 就绪
                                     {fontCount > 0 && (
-                                        <> · {fontCount} font{fontCount !== 1 ? 's' : ''} applied</>
+                                        <> · {fontCount} 字体{fontCount !== 1 ? 's' : ''} 已应用</>
                                     )}
                                 </p>
                             </div>
@@ -105,7 +105,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                         >
                             <img
                                 src={resolveBackendAssetUrl(url)}
-                                alt={`Slide ${index + 1}`}
+                                alt={`幻灯片${index + 1}`}
                                 className="block h-auto w-full"
                                 loading="lazy"
                                 draggable={false}
@@ -127,7 +127,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                 <div className="px-6 py-5 border-t border-[#F3F4F6] bg-gradient-to-r from-[#FAFAFA] to-white">
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                         <p className="text-sm text-[#6B7280] max-w-md text-center sm:text-left">
-                            Ready to generate your template. Each slide will be converted to a reusable React component.
+                            正在为您生成模板。每一页幻灯片将被转换为可复用的 React 组件。
                         </p>
                         <Button
                             size="lg"
@@ -144,12 +144,12 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                             {isLoading ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                    Starting...
+                                    开始中...
                                 </>
                             ) : (
                                 <>
 
-                                    Generate Template
+                                    生成模板
                                     <ChevronRight className="w-4 h-4 ml-1" />
                                 </>
                             )}
@@ -162,23 +162,23 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Sparkles className="h-5 w-5 text-[#7A5AF8]" />
-                            Template details
+                            模板详情
                         </DialogTitle>
                         <DialogDescription>
-                            Name this template before generation starts.
+                            在生成开始前为模板命名。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-5 py-2">
                         <div className="grid gap-2">
                             <Label htmlFor="template-name">
-                                Name <span className="text-red-500">*</span>
+                                名称 <span className="text-red-500">*</span>
                             </Label>
                             <Input
                                 id="template-name"
                                 value={templateName}
                                 onChange={(event) => setTemplateName(event.target.value)}
                                 disabled={isLoading}
-                                placeholder="Template name"
+                                placeholder="模板名称"
                                 aria-required
                             />
                         </div>
@@ -191,7 +191,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                                 value={description}
                                 onChange={(event) => setDescription(event.target.value)}
                                 disabled={isLoading}
-                                placeholder="Add a short summary of this template..."
+                                placeholder="添加此模板的简短摘要..."
                                 rows={3}
                                 className="resize-none"
                             />
@@ -203,7 +203,7 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                             onClick={handleCloseMetadata}
                             disabled={isLoading}
                         >
-                            Cancel
+                            取消
                         </Button>
                         <Button
                             onClick={handleGenerateTemplate}
@@ -213,11 +213,11 @@ export const SlidePreviewSection: React.FC<SlidePreviewSectionProps> = ({
                             {isLoading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Generating...
+                                    生成中...
                                 </>
                             ) : (
                                 <>
-                                    Generate Template
+                                    生成模板
                                     <ChevronRight className="ml-2 h-4 w-4" />
                                 </>
                             )}

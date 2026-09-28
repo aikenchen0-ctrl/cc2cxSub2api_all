@@ -60,7 +60,7 @@ export const PresentationCard = ({
     if (isUnsupported) {
       notify.warning(
         "暂不支持此演示文稿",
-        "此演示文稿由旧版本永恒PPT创建，请使用兼容版本打开。"
+        "此演示文稿由旧版本永恒 PPT 创建，请使用兼容版本打开。"
       );
       return;
     }
@@ -130,7 +130,7 @@ export const PresentationCard = ({
         suppressHydrationWarning={true}
         onClick={handlePreview}
         aria-disabled={isUnsupported}
-        title={isUnsupported ? "Unsupported in this version of 永恒PPT" : undefined}
+        title={isUnsupported ? "此版本的永恒 PPT 不支持" : undefined}
         className={`bg-[#F8FBFB] font-syne relative shadow-none sm:shadow-none presentation-card rounded-[12px] p-0 group transition-all duration-500 slide-theme overflow-hidden flex flex-col ${
           isUnsupported
             ? "cursor-not-allowed border-[#EDEEEF]"
@@ -214,7 +214,7 @@ export const PresentationCard = ({
                       void handleDuplicate();
                     }}
                   >
-                    <p>{isDuplicating ? "Duplicating..." : "Duplicate"}</p>
+                    <p>{isDuplicating ? "复制中..." : "复制"}</p>
                     {isDuplicating ? (
                       <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
                     ) : (
@@ -270,10 +270,10 @@ export const PresentationCard = ({
                 <p>以下演示文稿将被永久删除。</p>
                 <div
                   className="mt-4 rounded-[12px] border border-[#FECDCA] bg-[#FFFBFA] px-4 py-3 text-left"
-                  title={title || "Untitled presentation"}
+                  title={title || "未命名的演示文稿"}
                 >
                   <p className="line-clamp-2 break-words text-sm font-medium leading-5 text-[#7A271A]">
-                    {title || "Untitled presentation"}
+                    {title || "未命名的演示文稿"}
                   </p>
                 </div>
                 <p className="mt-3 text-[13px] font-medium text-[#D92D20]">

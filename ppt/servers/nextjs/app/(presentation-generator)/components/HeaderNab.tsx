@@ -24,7 +24,7 @@ const HeaderNav = () => {
       >
         <LayoutDashboard className="w-5 h-5" />
         <span className="text-sm font-medium font-inter">
-          Dashboard
+          仪表盘
         </span>
       </Link>
       {canChangeKeys && (
@@ -37,7 +37,7 @@ const HeaderNav = () => {
         >
           <Settings className="w-5 h-5" />
           <span className="text-sm font-medium font-inter">
-            Settings
+            设置
           </span>
         </Link>
       )}

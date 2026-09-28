@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { agentAPI, type AgentContextResponse } from './api'
+import { siteLogo as instanceLogo, siteName as instanceSiteName } from './branding'
 import { useAgentSession } from './session'
 import { errorMessage } from './client'
 
@@ -14,8 +15,8 @@ const dark = ref(false)
 
 const signedIn = computed(() => session.isAuthenticated)
 const admin = computed(() => session.isAgentAdmin)
-const siteName = computed(() => context.value?.agent.site_name || 'AgentAPI')
-const logo = computed(() => context.value?.agent.site_logo || '/logo.svg')
+const siteName = computed(() => context.value?.agent.site_name || instanceSiteName.value)
+const logo = computed(() => context.value?.agent.site_logo || instanceLogo.value)
 
 const links = computed(() => {
   const items = [

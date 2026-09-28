@@ -55,19 +55,19 @@ interface SelectOption {
 }
 
 const REASONING_EFFORT_OPTIONS: SelectOption[] = [
-  { value: "model_default", label: "Model default" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-  { value: "max", label: "Maximum" },
+  { value: "model_default", label: "模型默认" },
+  { value: "minimal", label: "极简" },
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+  { value: "xhigh", label: "超高" },
+  { value: "max", label: "最大" },
 ];
 
 const REASONING_MODE_OPTIONS: SelectOption[] = [
-  { value: "model_default", label: "Model default" },
-  { value: "enabled", label: "On" },
-  { value: "disabled", label: "Off" },
+  { value: "model_default", label: "模型默认" },
+  { value: "enabled", label: "开启" },
+  { value: "disabled", label: "关闭" },
 ];
 
 const FALLBACK_DEFAULT_MAX_OUTPUT_TOKENS = 8_192;
@@ -254,8 +254,8 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
   const loadProviders = async () => {
     if (!config.OPENROUTER_MODEL?.trim() || !config.OPENROUTER_API_KEY?.trim()) {
       notify.warning(
-        "Model and API key required",
-        "Enter an OpenRouter model and API key first."
+        "需要模型和 API 密钥",
+        "请输入 OpenRouter 模型和 API 密钥。"
       );
       return;
     }
@@ -291,10 +291,10 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
       );
     } catch (error) {
       notify.error(
-        "Could not load providers",
+        "无法加载提供商",
         error instanceof Error
           ? error.message
-          : "OpenRouter provider discovery failed."
+          : "OpenRouter 提供商发现失败。"
       );
     } finally {
       setProvidersLoading(false);
@@ -338,11 +338,11 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-[12px] border border-[#EDEEEF] bg-white px-6 py-5 select-none [&::-webkit-details-marker]:hidden">
         <span>
           <span className="block text-sm font-semibold text-[#191919]">
-            Advanced text-provider settings
+            高级文本提供者设置
                             <span className="ml-1 font-normal text-[#777A82]">（可选）</span>
           </span>
           <span className="mt-1 block text-xs font-normal text-[#6B6C70]">
-            Configure output limits and reasoning behavior when needed.
+            根据需要配置输出限制和推理行为。
           </span>
         </span>
         <ChevronDown
@@ -359,23 +359,23 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
             className="inline-flex items-center gap-2 rounded-[48px] border border-[#EDEEEF] bg-white px-4 py-2.5 text-xs font-semibold text-[#5146E5] transition hover:bg-[#F4F3FF]"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            Reset to defaults
+            重置为默认值
           </button>
         </div>
         <section className="space-y-6 rounded-[12px] border border-[#EDEEEF] bg-white p-6">
           <div>
             <h4 className="text-sm font-semibold text-[#191919]">
-              Generation controls
+              生成控制
             </h4>
             <p className="mt-1 text-xs leading-5 text-[#6B6C70]">
-              Set an output limit and control reasoning for supported models.
+              为支持的模型设置输出限制并控制推理。
             </p>
           </div>
 
           <div className="space-y-5">
             <div className="min-w-0">
               <label className="mb-2 block text-sm font-medium text-[#303036]">
-                Max output tokens
+                最大输出令牌数
               </label>
               <input
                 type="number"
@@ -393,7 +393,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                   );
                 }}
                 placeholder={
-                  useModelMaximum ? "Model maximum" : "Enter a token limit"
+                  useModelMaximum ? "模型最大" : "输入令牌限制"
                 }
                 className={numberInputClass}
               />
@@ -416,13 +416,10 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                   }}
                   className="h-4 w-4 rounded border-[#C8CBD3] accent-[#7A5AF8]"
                 />
-                Use the selected model&apos;s maximum output limit
+                使用所选模型的最大输出限制
               </label>
               <p className="mt-1.5 text-xs leading-5 text-[#6B6C70]">
-                Leave blank to use the default, enter a manual limit, or select
-                model maximum to use the selected model&apos;s advertised limit.
-                The selected limit applies to every generation attempt,
-                including retries.
+                留空以使用默认值，输入手动限制，或选择模型最大值以使用所选模型的推荐限制。所选限制适用于每次生成尝试，包括重试。
                 {!hasManualMaxOutputTokens && !useModelMaximum && (
                   <>字段中显示的是实际默认值。</>
                 )}
@@ -431,8 +428,8 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
 
             <div className="grid gap-5 md:grid-cols-2">
               <SettingSelect
-                label="Reasoning mode"
-                description="Use the backend model default, force reasoning on, or turn it off for faster responses."
+                label="推理模式"
+                description="使用后端模型默认设置、强制开启推理或关闭它以获得更快的响应。"
                 value={reasoningMode}
                 options={REASONING_MODE_OPTIONS}
                 onValueChange={setReasoningMode}
@@ -440,8 +437,8 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
 
               {reasoningAvailable && (
                 <SettingSelect
-                  label="Reasoning effort"
-                  description="Higher effort may improve difficult generations, but can increase latency and token usage."
+                  label="推理强度"
+                  description="更高的强度可能会改善困难的生成效果，但会增加延迟和令牌消耗。"
                   value={
                     config.LLM_REASONING_EFFORT === "default" ||
                     config.LLM_REASONING_EFFORT === "none"
@@ -461,10 +458,10 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-semibold text-[#191919]">
-                  OpenRouter routing
+                  OpenRouter 路由
                 </h4>
                 <p className="mt-1 text-xs leading-5 text-[#6B6C70]">
-                  Leave the order empty to let OpenRouter route automatically.
+                  留空让 OpenRouter 自动进行路由。
                 </p>
               </div>
               <button
@@ -476,7 +473,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                 {providersLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Load providers"
+                  "加载提供商"
                 )}
               </button>
             </div>
@@ -497,7 +494,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                     <span className="min-w-0 flex-1 truncate">
                       {providerToAdd
                         ? providerMap.get(providerToAdd)?.label || providerToAdd
-                        : "Default"}
+                        : "默认"}
                     </span>
                     <ChevronDown
                       className={`h-4 w-4 shrink-0 text-[#667085] transition-transform ${
@@ -533,7 +530,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                             </span>
                             {!provider.available && (
                               <span className="shrink-0 text-xs text-[#8A8B91]">
-                                Unavailable
+                                不可用
                               </span>
                             )}
                             {providerToAdd === provider.value && (
@@ -563,7 +560,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                   setProviderToAdd("");
                 }}
               >
-                Add
+                添加
               </button>
             </div>
 
@@ -578,11 +575,11 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                     >
                       <span className="min-w-0 flex-1 truncate">
                         {provider?.label || value}
-                        {provider ? "" : " (unverified)"}
+                        {provider ? "" : "(未验证)"}
                       </span>
                       <button
                         type="button"
-                        aria-label="Move provider up"
+                        aria-label="将提供商向上移动"
                         disabled={index === 0}
                         onClick={() => move(index, -1)}
                         className="rounded p-1 text-[#667085] hover:bg-white disabled:opacity-30"
@@ -591,7 +588,7 @@ export default function AdvancedTextProviderSettings({ config, onChange }: Props
                       </button>
                       <button
                         type="button"
-                        aria-label="Move provider down"
+                        aria-label="将提供商向下移动"
                         disabled={index === order.length - 1}
                         onClick={() => move(index, 1)}
                         className="rounded p-1 text-[#667085] hover:bg-white disabled:opacity-30"

@@ -407,7 +407,7 @@ function CommunityPresentationCard({
               executeScripts={false}
               html={thumbnail}
               fonts={presentation.fonts}
-              title={`${title} preview`}
+              title={`${title}预览`}
             />
           </div>
         ) : (
@@ -467,11 +467,11 @@ function CommunityPresentationCard({
         <div className="flex min-h-[34px] items-center justify-between border-t border-[#EDEEEF] py-2.5 text-[10px] font-medium tracking-[0.4px] text-[#808080]">
           <span className="min-w-0 flex-1 truncate" title={author}>作者：{author}</span>
           <div className="ml-2 flex shrink-0 items-center gap-3">
-            <span className="inline-flex items-center gap-1" aria-label={`${presentation.views ?? 0} views`}>
+            <span className="inline-flex items-center gap-1" aria-label={`${presentation.views ?? 0}视图`}>
               <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
               {formatCount(presentation.views ?? 0)}
             </span>
-            <span className="inline-flex items-center gap-1" aria-label={`${presentation.likes ?? 0} likes`}>
+            <span className="inline-flex items-center gap-1" aria-label={`${presentation.likes ?? 0}点赞`}>
               <Heart className="h-3.5 w-3.5" strokeWidth={1.5} />
               {formatCount(presentation.likes ?? 0)}
             </span>

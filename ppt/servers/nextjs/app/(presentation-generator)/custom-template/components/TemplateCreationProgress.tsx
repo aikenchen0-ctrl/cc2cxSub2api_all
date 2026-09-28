@@ -24,27 +24,27 @@ interface StepConfig {
 const steps: StepConfig[] = [
     {
         id: 'file-upload',
-        label: 'Upload',
+        label: '上传',
         icon: <Upload className="w-4 h-4" />
     },
     {
         id: 'font-check',
-        label: 'Fonts',
+        label: '字体',
         icon: <Type className="w-4 h-4" />
     },
     {
         id: 'slides-preview',
-        label: 'Preview',
+        label: '预览',
         icon: <Images className="w-4 h-4" />
     },
     {
         id: 'template-creation',
-        label: 'Generate',
+        label: '生成',
         icon: <Sparkles className="w-4 h-4" />
     },
     {
         id: 'completed',
-        label: 'Done',
+        label: '完成',
         icon: <Check className="w-4 h-4" />
     },
 ];
@@ -145,7 +145,7 @@ export const TemplateCreationProgress: React.FC<TemplateCreationProgressProps> =
                 <div className="mt-6 p-4 bg-[#F9FAFB] rounded-xl border border-[#E5E7EB]">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-[#374151]">
-                            Processing slides
+                            幻灯片处理中
                         </span>
                         <span className="text-sm font-medium text-[#374151]">
                             {processedSlides} / {totalSlides}

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { agentAPI, type AgentContextResponse, type AgentModelPolicy, type AgentUserView, type AuditEventView, type RechargeOrder, type SettlementView } from '@/agent/api'
+import { agentAPI, type AgentContextResponse, type AgentModelPolicy, type AgentUserView, type AuditEventView, type PaymentConfig, type RechargeOrder, type SettlementView } from '@/agent/api'
 import AgentConfirmDialog from '@/components/AgentConfirmDialog.vue'
 import AgentPagination from '@/components/AgentPagination.vue'
 import { currencyLabel, errorMessage, operationLabel, statusLabel, targetLabel } from '@/agent/locale'
+import { applyBranding, applyPageTitle } from '@/agent/branding'
 
 const context = ref<AgentContextResponse | null>(null)
 const users = ref<AgentUserView[]>([])
@@ -26,8 +27,8 @@ const statusConfirmationMessage = computed(() => {
   if (!user) return ''
   const account = user.email || user.main_user_id
   return user.status === 'active'
-    ? `确定停用 ${account} 关联的 Sub2API 账号吗？AgentAPI 访问会立即关闭，主站也可能同时停用此账号。`
-    : `确定重新启用 ${account} 关联的 Sub2API 账号吗？主站确认账号状态后，AgentAPI 将恢复访问。`
+    ? `确定停用 ${account} 在本代理站的访问吗？现有 Session 和客户端 Key 将立即停止使用。`
+    : `确定重新启用 ${account} 在本代理站的访问吗？启用后 Session 和客户端 Key 可恢复使用。`
 })
 const settlements = ref<SettlementView[]>([])
 const auditEvents = ref<AuditEventView[]>([])
@@ -41,6 +42,18 @@ const brandingSaving = ref(false)
 const modelPolicy = ref<AgentModelPolicy | null>(null)
 const enabledModels = ref<string[]>([])
 const modelPolicySaving = ref(false)
+const paymentConfig = ref<PaymentConfig | null>(null)
+const paymentEnabled = ref(false)
+const paymentProvider = ref('manual')
+const paymentCurrency = ref('CNY')
+const paymentMerchantID = ref('')
+const paymentWebhookSecret = ref('')
+const paymentClearSecret = ref(false)
+const paymentMinCents = ref(100)
+const paymentMaxCents = ref(1000000)
+const paymentTTLSeconds = ref(1800)
+const paymentCheckoutTemplate = ref('')
+const paymentSaving = ref(false)
 let loadSequence = 0
 let usersSearchTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -88,7 +101,6 @@ async function load(): Promise<void> {
     modelPolicy.value = policyResult.value
     enabledModels.value = [...policyResult.value.enabled]
   } else failed.push('model access policy')
-
   failedSections.value = failed
   error.value = failed.length
     ? `以下管理信息加载失败：${failed.map(sectionLabel).join('、')}。请刷新重试。`
@@ -96,10 +108,41 @@ async function load(): Promise<void> {
   if (sequence === loadSequence) {
     loading.value = false
   }
+  void loadPaymentConfig(sequence)
+}
+
+async function loadPaymentConfig(sequence: number): Promise<void> {
+  try {
+    const config = await agentAPI.getPaymentConfig()
+    if (sequence !== loadSequence) return
+    paymentConfig.value = config
+    paymentEnabled.value = config.enabled
+    paymentProvider.value = config.provider
+    paymentCurrency.value = config.currency
+    paymentMerchantID.value = config.merchant_id || ''
+    paymentWebhookSecret.value = ''
+    paymentClearSecret.value = false
+    paymentMinCents.value = config.min_amount_cents
+    paymentMaxCents.value = config.max_amount_cents
+    paymentTTLSeconds.value = config.order_ttl_seconds
+    paymentCheckoutTemplate.value = config.checkout_url_template || ''
+    failedSections.value = failedSections.value.filter((item) => item !== 'payment configuration')
+    updateLoadError()
+  } catch {
+    if (sequence !== loadSequence) return
+    if (!failedSections.value.includes('payment configuration')) failedSections.value.push('payment configuration')
+    updateLoadError()
+  }
 }
 
 function loadFailed(section: string): boolean {
   return failedSections.value.includes(section)
+}
+
+function updateLoadError(): void {
+  error.value = failedSections.value.length
+    ? `以下管理信息加载失败：${failedSections.value.map(sectionLabel).join('、')}。请刷新重试。`
+    : ''
 }
 
 function sectionLabel(section: string): string {
@@ -110,6 +153,7 @@ function sectionLabel(section: string): string {
     'recharge orders': '充值订单',
     'audit events': '审计记录',
     'model access policy': '模型权限',
+    'payment configuration': '支付配置',
   }
   return labels[section] || '其他信息'
 }
@@ -192,8 +236,8 @@ async function confirmUserStatusUpdate(): Promise<void> {
     const index = users.value.findIndex((item) => item.main_user_id === user.main_user_id)
     if (index >= 0) users.value[index] = updated
     notice.value = status === 'disabled'
-      ? 'Sub2API 账号已停用，新的 AgentAPI 请求将被拒绝。'
-      : 'Sub2API 账号已启用，AgentAPI 访问已恢复。'
+      ? '该用户在本代理站的访问已停用，新的 AgentAPI 请求将被拒绝。'
+      : '该用户在本代理站的访问已启用。'
     await load()
   } catch (err) {
     notice.value = errorMessage(err, '更新用户状态失败。为确保安全，该用户在代理站的访问仍保持关闭。')
@@ -266,11 +310,41 @@ async function saveBranding(): Promise<void> {
     brandingName.value = updated.name
     brandingSiteName.value = updated.site_name
     brandingLogo.value = updated.site_logo || ''
+    applyBranding(updated.site_name, updated.site_logo)
+    applyPageTitle('代理站管理')
     notice.value = '品牌信息已保存，新页面将使用更新后的名称和标志。'
   } catch (err) {
     notice.value = errorMessage(err, '更新品牌信息失败，请稍后重试。')
   } finally {
     brandingSaving.value = false
+  }
+}
+
+async function savePaymentConfig(): Promise<void> {
+  paymentSaving.value = true
+  notice.value = ''
+  try {
+    const updated = await agentAPI.updatePaymentConfig({
+      enabled: paymentEnabled.value,
+      provider: paymentProvider.value.trim(),
+      currency: paymentCurrency.value.trim().toUpperCase(),
+      merchant_id: paymentMerchantID.value.trim(),
+      ...(paymentWebhookSecret.value.trim() ? { webhook_secret: paymentWebhookSecret.value.trim() } : {}),
+      ...(paymentClearSecret.value ? { clear_webhook_secret: true } : {}),
+      min_amount_cents: Number(paymentMinCents.value),
+      max_amount_cents: Number(paymentMaxCents.value),
+      order_ttl_seconds: Number(paymentTTLSeconds.value),
+      checkout_url_template: paymentCheckoutTemplate.value.trim(),
+    })
+    paymentConfig.value = updated
+    paymentWebhookSecret.value = ''
+    paymentClearSecret.value = false
+    rechargeEnabled.value = updated.enabled
+    notice.value = '本实例支付配置已保存并立即生效。'
+  } catch (err) {
+    notice.value = errorMessage(err, '保存支付配置失败，请检查金额范围、回调密钥和收银台网址。')
+  } finally {
+    paymentSaving.value = false
   }
 }
 
@@ -324,6 +398,29 @@ onUnmounted(() => {
         <label class="text-sm font-medium">站点名称<input v-model="brandingSiteName" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="160" type="text"></label>
         <label class="text-sm font-medium">标志图片网址或路径<input v-model="brandingLogo" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="2048" placeholder="/logo.svg 或 https://…" type="text"></label>
       </div>
+    </section>
+
+    <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="font-semibold">本实例支付配置</h2>
+          <p class="mt-1 text-sm text-slate-500">配置本代理站自己的收款渠道、商户标识和回调密钥。密钥加密保存，页面只显示是否已配置。</p>
+        </div>
+        <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50" type="button" :disabled="paymentSaving || !paymentConfig" @click="savePaymentConfig">{{ paymentSaving ? '正在保存…' : '保存支付配置' }}</button>
+      </div>
+      <div v-if="paymentConfig" class="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <label class="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm dark:border-slate-700"><input v-model="paymentEnabled" class="h-4 w-4 accent-blue-600" type="checkbox">启用本实例充值</label>
+        <label class="text-sm font-medium">支付渠道<input v-model="paymentProvider" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="64" placeholder="manual / alipay / wechat" type="text"></label>
+        <label class="text-sm font-medium">币种<input v-model="paymentCurrency" class="mt-1 w-full rounded-lg border px-3 py-2 uppercase dark:border-slate-700 dark:bg-slate-950" maxlength="3" placeholder="CNY" type="text"></label>
+        <label class="text-sm font-medium">商户标识<input v-model="paymentMerchantID" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="256" placeholder="可选；可在网址模板中使用 {merchant_id}" type="text"></label>
+        <label class="text-sm font-medium">最低金额（分）<input v-model.number="paymentMinCents" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="1" type="number"></label>
+        <label class="text-sm font-medium">最高金额（分）<input v-model.number="paymentMaxCents" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="1" type="number"></label>
+        <label class="text-sm font-medium">订单有效期（秒）<input v-model.number="paymentTTLSeconds" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" min="60" max="604800" type="number"></label>
+        <label class="text-sm font-medium lg:col-span-2">收银台网址模板<input v-model="paymentCheckoutTemplate" class="mt-1 w-full rounded-lg border px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950" maxlength="4096" placeholder="https://pay.example/checkout?order={order_no}&amount={amount_cents}&merchant={merchant_id}" type="url"><span class="mt-1 block text-xs font-normal text-slate-500">支持 {order_no}、{amount}、{amount_cents}、{currency}、{merchant_id}。</span></label>
+        <label class="text-sm font-medium lg:col-span-2">Webhook 密钥<input v-model="paymentWebhookSecret" class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" autocomplete="new-password" :placeholder="paymentConfig.webhook_secret_configured ? '已配置；留空则保持不变' : '启用支付前必须设置'" type="password"></label>
+        <label class="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm dark:border-slate-700"><input v-model="paymentClearSecret" class="h-4 w-4 accent-red-600" type="checkbox">清除已有 Webhook 密钥</label>
+      </div>
+      <p v-else class="mt-4 text-sm text-slate-500">{{ loadFailed('payment configuration') ? '加载支付配置失败，请刷新重试。' : '正在加载支付配置…' }}</p>
     </section>
 
     <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -391,7 +488,7 @@ onUnmounted(() => {
       <div class="flex flex-wrap items-end justify-between gap-4 border-b p-5 dark:border-slate-700">
         <div>
           <h2 class="font-semibold">代理站用户</h2>
-          <p class="mt-1 text-sm text-slate-500">这里只显示已关联到此代理站的用户。停用关联用户时也会更新其 Sub2API 账号；代理站会先关闭访问权限。</p>
+        <p class="mt-1 text-sm text-slate-500">这里只显示已关联到此代理站的用户。停用操作默认只关闭本代理站访问；旧 runtime 兼容实例可能同时同步主站状态。</p>
         </div>
         <label class="w-full text-sm font-medium sm:w-72">
           搜索关联用户

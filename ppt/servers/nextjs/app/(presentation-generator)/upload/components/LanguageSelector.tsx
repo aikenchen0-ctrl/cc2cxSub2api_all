@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 import { Check, ChevronDown } from 'lucide-react';
 import React, { useState } from 'react'
-import { LanguageType } from '../type';
+import { getLanguageDisplayName, LanguageType } from '../type';
 import { cn } from '@/lib/utils';
 
 
@@ -26,7 +26,7 @@ export const LanguageSelector: React.FC<{
                     className="px-3.5 py-1 justify-between rounded-[48px] font-instrument_sans font-semibold overflow-hidden bg-[#F7F6F9] border-[#EDEEEF] focus-visible:ring-[#5141E5] border-none"
                 >
                     <p className="text-sm font-medium truncate">
-                        {value || "选择语言"}
+                        {getLanguageDisplayName(value)}
                     </p>
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -57,7 +57,7 @@ export const LanguageSelector: React.FC<{
                                             value === language ? "opacity-100" : "opacity-0"
                                         )}
                                     />
-                                    {language}
+                                    {getLanguageDisplayName(language)}
                                 </CommandItem>
                             ))}
                         </CommandGroup>

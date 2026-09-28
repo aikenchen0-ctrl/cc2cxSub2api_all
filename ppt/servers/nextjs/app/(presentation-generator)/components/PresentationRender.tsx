@@ -142,14 +142,14 @@ const SlideScale = ({
                   slide={slide}
                   renderIndex={renderIndex}
                   fonts={fonts}
-                  title={`Slide ${(renderIndex ?? slide.index ?? 0) + 1}`}
+                  title={`幻灯片${(renderIndex ?? slide.index ?? 0) + 1}`}
                 />
               ) : (
                 <SmartHtmlSlide
                   fixedSize
                   fonts={fonts}
                   html={slide.html_content}
-                  title={`Slide ${(renderIndex ?? slide.index ?? 0) + 1}`}
+                  title={`幻灯片${(renderIndex ?? slide.index ?? 0) + 1}`}
                 />
               )
             ) : (

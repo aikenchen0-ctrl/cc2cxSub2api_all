@@ -216,8 +216,8 @@ export function resolvedChartColorTargets(
       index,
       label:
         paletteSize === 1
-          ? "Chart color"
-          : element.series?.[index]?.name ?? `Color ${index + 1}`,
+          ? "图表颜色"
+          : element.series?.[index]?.name ?? `颜色${index + 1}`,
       mode,
     }));
   }
@@ -230,7 +230,7 @@ export function resolvedChartColorTargets(
       label:
         categories[index] ??
         element.data[index]?.label ??
-        `Item ${index + 1}`,
+        `项目${index + 1}`,
       mode,
     }));
   }

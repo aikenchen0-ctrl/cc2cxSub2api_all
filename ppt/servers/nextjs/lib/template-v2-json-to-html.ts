@@ -1257,8 +1257,8 @@ function renderGanttInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const columns = readArray(data.columns).map(readRecord);
   const rows = readArray(data.rows).map(readRecord);
-  const safeColumns = columns.length > 0 ? columns : [{ label: "Phase" }];
-  const safeRows = rows.length > 0 ? rows : [{ label: "Workstream", items: [] }];
+  const safeColumns = columns.length > 0 ? columns : [{ label: "阶段" }];
+  const safeRows = rows.length > 0 ? rows : [{ label: "工作流", items: [] }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1320,7 +1320,7 @@ function renderGanttInfographic(item: JsonRecord, mode: RenderMode): string {
 function renderTimelineInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const items = readArray(data.items).map(readRecord);
-  const safeItems = items.length > 0 ? items : [{ heading: "Milestone" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "里程碑" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1330,7 +1330,7 @@ function renderTimelineInfographic(item: JsonRecord, mode: RenderMode): string {
   const cards = safeItems
     .map(
       (entry, index) =>
-        `<div style="position:relative;display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;text-align:center">${index < safeItems.length - 1 ? `<div style="position:absolute;left:calc(50% + 47px);right:calc(-50% + 47px);top:112px;height:3px;background:${escapeCssColor(colors[(index + 1) % colors.length])}"></div>` : ""}<div style="height:54px;display:flex;align-items:flex-end;padding-bottom:8px;font-size:15px;font-weight:700;color:${textColor}">${String(index + 1).padStart(2, "0")}</div><div style="z-index:1;display:grid;width:90px;height:90px;box-sizing:border-box;place-items:center;border:3px solid ${escapeCssColor(colors[index % colors.length])};border-radius:999px"><div style="display:grid;width:72px;height:72px;place-items:center;border-radius:999px;background:${escapeCssColor(colors[index % colors.length])};color:#fff">${infographicIconImage(entry.icon, entry.color)}</div></div><div style="padding:12px 6px 0;font-size:15px;font-weight:700;color:${textColor}">${escapeHtml(readString(entry.heading) ?? `Step ${index + 1}`)}</div><div style="padding:5px 8px 0;font-size:10px;line-height:1.25;color:${mutedColor}">${escapeHtml(readString(entry.description) ?? "")}</div></div>`
+        `<div style="position:relative;display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;text-align:center">${index < safeItems.length - 1 ? `<div style="position:absolute;left:calc(50% + 47px);right:calc(-50% + 47px);top:112px;height:3px;background:${escapeCssColor(colors[(index + 1) % colors.length])}"></div>` : ""}<div style="height:54px;display:flex;align-items:flex-end;padding-bottom:8px;font-size:15px;font-weight:700;color:${textColor}">${String(index + 1).padStart(2, "0")}</div><div style="z-index:1;display:grid;width:90px;height:90px;box-sizing:border-box;place-items:center;border:3px solid ${escapeCssColor(colors[index % colors.length])};border-radius:999px"><div style="display:grid;width:72px;height:72px;place-items:center;border-radius:999px;background:${escapeCssColor(colors[index % colors.length])};color:#fff">${infographicIconImage(entry.icon, entry.color)}</div></div><div style="padding:12px 6px 0;font-size:15px;font-weight:700;color:${textColor}">${escapeHtml(readString(entry.heading) ?? `步骤 ${index + 1}`)}</div><div style="padding:5px 8px 0;font-size:10px;line-height:1.25;color:${mutedColor}">${escapeHtml(readString(entry.description) ?? "")}</div></div>`
     )
     .join("");
   return `<div style="${frameStyle(item, mode, { width: 720, height: 260 })}${transformStyle(
@@ -1341,7 +1341,7 @@ function renderTimelineInfographic(item: JsonRecord, mode: RenderMode): string {
 function renderRoadmapInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 8);
-  const safeEntries = entries.length > 0 ? entries : [{ heading: "Destination" }];
+  const safeEntries = entries.length > 0 ? entries : [{ heading: "目标" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1395,7 +1395,7 @@ function renderMilestoneTimelineInfographic(item: JsonRecord, mode: RenderMode):
 function renderStaircaseInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 7);
-  const safeEntries = entries.length > 0 ? entries : [{ heading: "Step" }];
+  const safeEntries = entries.length > 0 ? entries : [{ heading: "步骤" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1425,7 +1425,7 @@ function renderStaircaseInfographic(item: JsonRecord, mode: RenderMode): string 
     const x = sidePadding + index * itemWidth;
     const y = 102 + index * drop;
     const color = colors[index % colors.length];
-    return `<div style="position:absolute;left:${cssNumber(x + contentInset)}px;top:${cssNumber(y - 53)}px;display:grid;width:24px;height:24px;place-items:center;border-radius:999px;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon, entry.color)}</div><div style="position:absolute;left:${cssNumber(x + contentInset)}px;top:${cssNumber(y - 21)}px;width:${cssNumber(itemWidth * 0.92)}px;font-size:13px;font-weight:700;color:${customTextColor ?? escapeCssColor(color)}">${escapeHtml(readString(entry.heading) ?? `Step ${index + 1}`)}</div><div style="position:absolute;left:${cssNumber(x + contentInset + 1)}px;top:${cssNumber(y + 10)}px;width:${cssNumber(itemWidth * 0.88)}px;font-size:9.5px;line-height:1.2;color:${textColor}">${escapeHtml(readString(entry.description) ?? "")}</div>`;
+    return `<div style="position:absolute;left:${cssNumber(x + contentInset)}px;top:${cssNumber(y - 53)}px;display:grid;width:24px;height:24px;place-items:center;border-radius:999px;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon, entry.color)}</div><div style="position:absolute;left:${cssNumber(x + contentInset)}px;top:${cssNumber(y - 21)}px;width:${cssNumber(itemWidth * 0.92)}px;font-size:13px;font-weight:700;color:${customTextColor ?? escapeCssColor(color)}">${escapeHtml(readString(entry.heading) ?? `步骤 ${index + 1}`)}</div><div style="position:absolute;left:${cssNumber(x + contentInset + 1)}px;top:${cssNumber(y + 10)}px;width:${cssNumber(itemWidth * 0.88)}px;font-size:9.5px;line-height:1.2;color:${textColor}">${escapeHtml(readString(entry.description) ?? "")}</div>`;
   }).join("");
   return `<div style="${frameStyle(item, mode, { width: 720, height: 340 })}${transformStyle(
     item
@@ -1433,17 +1433,17 @@ function renderStaircaseInfographic(item: JsonRecord, mode: RenderMode): string 
 }
 
 function renderSupplyChainInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item), entries=readArray(data.items).map(readRecord).slice(0,7), safe=entries.length?entries:[{heading:"Sourcing"}];
+  const data=infographicData(item), entries=readArray(data.items).map(readRecord).slice(0,7), safe=entries.length?entries:[{heading:"资源获取"}];
   const colors=infographicPalette(item), bg=infographicBaseColor(item), dark=isDarkInfographicColor(bg), text=infographicTextColor(item,dark?"#F0F1F4":"#111111");
   const lineColor=dark?"#E0E0E0":"#D2D2D2";
   const pad=safe.length>1?720*.13:720*.5,gap=safe.length>1?(720-pad*2)/(safe.length-1):0,cy=300*.49,rx=safe.length>1?gap*.5:Math.min(720,300)*.16,ry=Math.min(rx,300*.22),radius=Math.min(rx,ry)*.78,k=.55228475;
   const wavePath=safe.map((_,index)=>{const x=pad+index*gap,direction=index%2===0?-1:1,peakY=cy+direction*ry,left=x-rx,right=x+rx,first=`${left} ${cy} C ${left} ${cy+direction*ry*k} ${x-rx*k} ${peakY} ${x} ${peakY}`,second=`C ${x+rx*k} ${peakY} ${right} ${cy+direction*ry*k} ${right} ${cy}`;return `${index===0?"M":"L"} ${first} ${second}`}).join(" ");
-  const nodes=safe.map((entry,index)=>{const x=pad+index*gap, top=index%2===1, color=colors[index%colors.length], diameter=radius*2,titleY=top?cy-radius-68:cy+radius+31; return `<div style="position:absolute;left:${x-radius}px;top:${cy-radius}px;width:${diameter}px;height:${diameter}px;box-sizing:border-box;border:1.5px solid ${lineColor};border-radius:50%;display:grid;place-items:center;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${x-55}px;top:${titleY}px;width:110px;text-align:center;color:${escapeCssColor(text)};font:700 11px Arial">${escapeHtml(readString(entry.heading)??"Stage")}</div><div style="position:absolute;left:${x-55}px;top:${titleY+16}px;width:110px;text-align:center;white-space:pre-line;color:${escapeCssColor(text)};font:9px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div><div style="position:absolute;left:${x-30}px;top:${top?cy-radius-24:cy+radius+4}px;width:60px;text-align:center;color:${escapeCssColor(color)};font:700 19px Arial">${String(index+1).padStart(2,"0")}</div>`}).join("");
+  const nodes=safe.map((entry,index)=>{const x=pad+index*gap, top=index%2===1, color=colors[index%colors.length], diameter=radius*2,titleY=top?cy-radius-68:cy+radius+31; return `<div style="position:absolute;left:${x-radius}px;top:${cy-radius}px;width:${diameter}px;height:${diameter}px;box-sizing:border-box;border:1.5px solid ${lineColor};border-radius:50%;display:grid;place-items:center;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${x-55}px;top:${titleY}px;width:110px;text-align:center;color:${escapeCssColor(text)};font:700 11px Arial">${escapeHtml(readString(entry.heading)??"阶段")}</div><div style="position:absolute;left:${x-55}px;top:${titleY+16}px;width:110px;text-align:center;white-space:pre-line;color:${escapeCssColor(text)};font:9px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div><div style="position:absolute;left:${x-30}px;top:${top?cy-radius-24:cy+radius+4}px;width:60px;text-align:center;color:${escapeCssColor(color)};font:700 19px Arial">${String(index+1).padStart(2,"0")}</div>`}).join("");
   return `<div style="${frameStyle(item,mode,{width:720,height:300})}${transformStyle(item)}position:relative;overflow:hidden;font-family:Arial"><svg viewBox="0 0 720 300" width="100%" height="100%" preserveAspectRatio="none" style="position:absolute;inset:0"><path d="${wavePath}" fill="none" stroke="${lineColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>${nodes}</div>`;
 }
 
 function renderStairStepBlocksInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"Foundation"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#F0F1F4":"#111111");
+  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"基础"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#F0F1F4":"#111111");
   const w=560/safe.length;
   const blockHeight=102;
   const topPadding=8;
@@ -1452,52 +1452,52 @@ function renderStairStepBlocksInfographic(item: JsonRecord, mode: RenderMode): s
   // inside the 350px design surface instead of clipping it above the frame.
   const firstBlockTop=safe.length>4?190:144;
   const rise=safe.length>1?Math.min(48,(firstBlockTop-topPadding)/(safe.length-1)):0;
-  const content=safe.map((entry,index)=>{const x=80+index*w,y=firstBlockTop-index*rise,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${cssNumber(x)}px;top:${cssNumber(y)}px;width:${cssNumber(w+1)}px;height:${blockHeight}px;background:${escapeCssColor(color)};box-sizing:border-box;${dark?"border:1px solid #d6d6d6;":""}"><div style="padding:8px;color:${escapeCssColor(nodeText)};font:700 20px Arial">Step ${String(index+1).padStart(2,"0")}</div><div style="position:absolute;left:9px;bottom:34px;width:22px;height:22px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:9px;bottom:6px;color:${escapeCssColor(nodeText)};font:700 10px Arial">${escapeHtml(readString(entry.heading)??"Step")}</div></div><div style="position:absolute;left:${cssNumber(x+9)}px;top:${cssNumber(y+blockHeight+7)}px;width:${cssNumber(w-14)}px;color:${escapeCssColor(text)};font:9px/1.16 Arial">${escapeHtml(readString(entry.description)??"")}</div>`}).join("");
+  const content=safe.map((entry,index)=>{const x=80+index*w,y=firstBlockTop-index*rise,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${cssNumber(x)}px;top:${cssNumber(y)}px;width:${cssNumber(w+1)}px;height:${blockHeight}px;background:${escapeCssColor(color)};box-sizing:border-box;${dark?"border:1px solid #d6d6d6;":""}"><div style="padding:8px;color:${escapeCssColor(nodeText)};font:700 20px Arial">步骤 ${String(index+1).padStart(2,"0")}</div><div style="position:absolute;left:9px;bottom:34px;width:22px;height:22px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:9px;bottom:6px;color:${escapeCssColor(nodeText)};font:700 10px Arial">${escapeHtml(readString(entry.heading)??"步骤")}</div></div><div style="position:absolute;left:${cssNumber(x+9)}px;top:${cssNumber(y+blockHeight+7)}px;width:${cssNumber(w-14)}px;color:${escapeCssColor(text)};font:9px/1.16 Arial">${escapeHtml(readString(entry.description)??"")}</div>`}).join("");
   return `<div style="${frameStyle(item,mode,{width:720,height:350})}${transformStyle(item)}position:relative;overflow:hidden">${content}</div>`;
 }
 
 function renderMaturityModelInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"Initial"}],colors=infographicPalette(item);
-  const content=safe.map((entry,index)=>{const reverse=safe.length-1-index,w=446,x=22+index*65,y=31+reverse*65,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:56px;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)}"><div style="position:absolute;left:16px;top:0;width:24%;height:100%;display:flex;align-items:center;font:700 16px Arial">${escapeHtml(readString(entry.heading)??"Level")}</div><div style="position:absolute;left:29%;top:12px;height:32px;border-left:1px solid ${escapeCssColor(nodeText)}"></div><div style="position:absolute;left:36%;top:7px;width:49%;height:42px;display:flex;align-items:center;font:10px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div><div style="position:absolute;right:9px;top:13px;width:30px;height:30px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div></div>`}).join("");
+  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"初始阶段"}],colors=infographicPalette(item);
+  const content=safe.map((entry,index)=>{const reverse=safe.length-1-index,w=446,x=22+index*65,y=31+reverse*65,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:56px;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)}"><div style="position:absolute;left:16px;top:0;width:24%;height:100%;display:flex;align-items:center;font:700 16px Arial">${escapeHtml(readString(entry.heading)??"等级")}</div><div style="position:absolute;left:29%;top:12px;height:32px;border-left:1px solid ${escapeCssColor(nodeText)}"></div><div style="position:absolute;left:36%;top:7px;width:49%;height:42px;display:flex;align-items:center;font:10px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div><div style="position:absolute;right:9px;top:13px;width:30px;height:30px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div></div>`}).join("");
   return `<div style="${frameStyle(item,mode,{width:720,height:390})}${transformStyle(item)}position:relative;overflow:hidden">${content}</div>`;
 }
 
 function renderPillarFrameworkInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"Customer"}],colors=infographicPalette(item); const gap=7,w=(680-gap*(safe.length-1))/safe.length;
+  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"客户"}],colors=infographicPalette(item); const gap=7,w=(680-gap*(safe.length-1))/safe.length;
   const roofColor=withHash(readString(data.card_color))??"#D6D6D6",roofTextColor=withHash(readString(data.background_text_color))??withHash(readString(item.text_color))??"#4D73BE";
-  const content=safe.map((entry,index)=>{const x=20+index*(w+gap),color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${x}px;top:131px;width:${w}px;height:34px;display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:700 13px Arial">${escapeHtml(readString(entry.heading)??"Pillar")}</div><div style="position:absolute;left:${x}px;top:175px;width:${w}px;height:134px;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};text-align:center"><div style="height:55px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="padding:2px 8px;font:10px/1.18 Arial">${escapeHtml(readString(entry.description)??"")}</div></div><div style="position:absolute;left:${x}px;top:320px;width:${w}px;height:36px;display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:10px Arial">${escapeHtml(readString(entry.focus)??"")}</div>`}).join("");
-  return `<div style="${frameStyle(item,mode,{width:720,height:380})}${transformStyle(item)}position:relative;overflow:hidden;font-family:Arial"><svg viewBox="0 0 720 380" style="position:absolute;inset:0;width:100%;height:100%"><path d="M20 125 L375 6 L710 125 Z" fill="${escapeAttribute(escapeCssColor(roofColor))}"/></svg><div style="position:absolute;left:190px;top:82px;width:360px;text-align:center;color:${escapeCssColor(roofTextColor)};font:700 17px Arial">${escapeHtml(readString(data.title)??"Growth & Transformation Framework")}</div>${content}</div>`;
+  const content=safe.map((entry,index)=>{const x=20+index*(w+gap),color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);return `<div style="position:absolute;left:${x}px;top:131px;width:${w}px;height:34px;display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:700 13px Arial">${escapeHtml(readString(entry.heading)??"支柱")}</div><div style="position:absolute;left:${x}px;top:175px;width:${w}px;height:134px;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};text-align:center"><div style="height:55px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="padding:2px 8px;font:10px/1.18 Arial">${escapeHtml(readString(entry.description)??"")}</div></div><div style="position:absolute;left:${x}px;top:320px;width:${w}px;height:36px;display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:10px Arial">${escapeHtml(readString(entry.focus)??"")}</div>`}).join("");
+  return `<div style="${frameStyle(item,mode,{width:720,height:380})}${transformStyle(item)}position:relative;overflow:hidden;font-family:Arial"><svg viewBox="0 0 720 380" style="position:absolute;inset:0;width:100%;height:100%"><path d="M20 125 L375 6 L710 125 Z" fill="${escapeAttribute(escapeCssColor(roofColor))}"/></svg><div style="position:absolute;left:190px;top:82px;width:360px;text-align:center;color:${escapeCssColor(roofTextColor)};font:700 17px Arial">${escapeHtml(readString(data.title)??"增长与转型框架")}</div>${content}</div>`;
 }
 
 function renderTransformationHubInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,8),safe=entries.length?entries:[{heading:"Strategy"},{heading:"Process"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg);
+  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,8),safe=entries.length?entries:[{heading:"战略"},{heading:"流程"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg);
   const centerColor=withHash(readString(data.card_color))??"#D6D6D6",centerTextColor=withHash(readString(data.background_text_color))??withHash(readString(item.text_color))??"#111111";
   const leftCount=Math.ceil(safe.length/2),lineColor=dark?"#e0e0e0":"#d2d2d2",lines:string[]=[];
-  const boxes=safe.map((entry,index)=>{const left=index<leftCount,rank=left?index:index-leftCount,count=left?leftCount:safe.length-leftCount,centerY=52.5+rank*(195/Math.max(1,count-1)),x=left?11:511,y=centerY-27,elbow=left?297:423,tip=left?191:511,base=left?198:504,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);lines.push(`<path d="M360 150 H${elbow} V${centerY} H${base}" fill="none" stroke="${lineColor}" stroke-width="1.5"/><polygon points="${left?`${tip},${centerY} ${base},${centerY-4} ${base},${centerY+4}`:`${tip},${centerY} ${base},${centerY-4} ${base},${centerY+4}`}" fill="${lineColor}"/>`);return `<div style="position:absolute;left:${x}px;top:${y}px;width:180px;height:54px;box-sizing:border-box;border:1px solid ${lineColor};display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:700 15px Arial">${escapeHtml(readString(entry.heading)??"Capability")}</div>`}).join("");
-  return `<div style="${frameStyle(item,mode,{width:720,height:300})}${transformStyle(item)}position:relative;overflow:hidden"><svg viewBox="0 0 720 300" style="position:absolute;inset:0;width:100%;height:100%">${lines.join("")}</svg>${boxes}<div style="position:absolute;left:280.5px;top:70.5px;width:159px;height:159px;border-radius:50%;display:grid;place-items:center;background:${escapeCssColor(centerColor)};color:${escapeCssColor(centerTextColor)};text-align:center;font:700 20px/1.15 Arial;white-space:pre-line">${escapeHtml(readString(data.center_label)??"Business Transformation")}</div></div>`;
+  const boxes=safe.map((entry,index)=>{const left=index<leftCount,rank=left?index:index-leftCount,count=left?leftCount:safe.length-leftCount,centerY=52.5+rank*(195/Math.max(1,count-1)),x=left?11:511,y=centerY-27,elbow=left?297:423,tip=left?191:511,base=left?198:504,color=colors[index%colors.length],nodeText=blackOrWhiteTextColor(color);lines.push(`<path d="M360 150 H${elbow} V${centerY} H${base}" fill="none" stroke="${lineColor}" stroke-width="1.5"/><polygon points="${left?`${tip},${centerY} ${base},${centerY-4} ${base},${centerY+4}`:`${tip},${centerY} ${base},${centerY-4} ${base},${centerY+4}`}" fill="${lineColor}"/>`);return `<div style="position:absolute;left:${x}px;top:${y}px;width:180px;height:54px;box-sizing:border-box;border:1px solid ${lineColor};display:grid;place-items:center;background:${escapeCssColor(color)};color:${escapeCssColor(nodeText)};font:700 15px Arial">${escapeHtml(readString(entry.heading)??"能力")}</div>`}).join("");
+  return `<div style="${frameStyle(item,mode,{width:720,height:300})}${transformStyle(item)}position:relative;overflow:hidden"><svg viewBox="0 0 720 300" style="position:absolute;inset:0;width:100%;height:100%">${lines.join("")}</svg>${boxes}<div style="position:absolute;left:280.5px;top:70.5px;width:159px;height:159px;border-radius:50%;display:grid;place-items:center;background:${escapeCssColor(centerColor)};color:${escapeCssColor(centerTextColor)};text-align:center;font:700 20px/1.15 Arial;white-space:pre-line">${escapeHtml(readString(data.center_label)??"业务转型")}</div></div>`;
 }
 
 function renderDiagonalCirclesInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"Strategy"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#f0f1f4":"#111111");
+  const data=infographicData(item),entries=readArray(data.items).map(readRecord).slice(0,7),safe=entries.length?entries:[{heading:"战略"}],colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#f0f1f4":"#111111");
   const lineColor=dark?"#e0e0e0":"#d2d2d2",r=58.05,arrowSize=6.02,textW=147.6;
   const layout=safe.map((entry,index)=>{const x=154.8+index*90,y=301-index*50.74,color=colors[index%colors.length],calloutLeft=index%2===1,anchorX=x+(calloutLeft?-r*.64:r*.3),anchorY=y+(calloutLeft?-r*.77:r*.954),elbowY=y+(calloutLeft?-r*1.28:r*1.22),direction=calloutLeft?-1:1,arrowTipX=anchorX+direction*r*.82,arrowBaseX=arrowTipX-direction*arrowSize,textX=calloutLeft?Math.max(7.2,arrowTipX-arrowSize-12.96-textW):Math.min(565.2,arrowTipX+arrowSize+12.96);return {anchorX,anchorY,arrowBaseX,arrowTipX,calloutLeft,color,elbowY,entry,index,textX,x,y};});
   const circles=layout.map(({color,x,y})=>`<div style="position:absolute;left:${x-r}px;top:${y-r}px;width:${r*2}px;height:${r*2}px;border-radius:50%;background:${escapeCssColor(color)};opacity:.88"></div>`).join("");
   const connectors=layout.map(({anchorX,anchorY,arrowBaseX,arrowTipX,elbowY})=>`<path d="M${anchorX} ${anchorY} V${elbowY} H${arrowBaseX}" fill="none" stroke="${lineColor}" stroke-width="1.5"/><polygon points="${arrowTipX},${elbowY} ${arrowBaseX},${elbowY-arrowSize*.65} ${arrowBaseX},${elbowY+arrowSize*.65}" fill="${lineColor}"/><circle cx="${anchorX}" cy="${anchorY}" r="3" fill="${lineColor}"/>`).join("");
-  const annotations=layout.map(({calloutLeft,color,elbowY,entry,index,textX,x,y})=>{const nodeText=blackOrWhiteTextColor(color),numberLeft=calloutLeft?x-r*.82:x-r*.05,numberTop=calloutLeft?y-r*.78:y+r*.51,iconLeft=x+r*.62-r*.34,iconTop=y-r*.34-r*.34;return `<div style="position:absolute;left:${numberLeft}px;top:${numberTop}px;width:${r*.7}px;height:${r*.35}px;text-align:center;color:${escapeCssColor(nodeText)};font:700 19px Arial">${String(index+1).padStart(2,"0")}</div><div style="position:absolute;left:${iconLeft}px;top:${iconTop}px;width:${r*.68}px;height:${r*.68}px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${textX}px;top:${elbowY-11.18}px;width:${textW}px;text-align:${calloutLeft?"right":"left"};color:${escapeCssColor(text)}"><div style="height:21.5px;color:${escapeCssColor(color)};font:700 12px Arial">${escapeHtml(readString(entry.heading)??"Pillar")}</div><div style="padding-top:8px;font:9px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div></div>`}).join("");
+  const annotations=layout.map(({calloutLeft,color,elbowY,entry,index,textX,x,y})=>{const nodeText=blackOrWhiteTextColor(color),numberLeft=calloutLeft?x-r*.82:x-r*.05,numberTop=calloutLeft?y-r*.78:y+r*.51,iconLeft=x+r*.62-r*.34,iconTop=y-r*.34-r*.34;return `<div style="position:absolute;left:${numberLeft}px;top:${numberTop}px;width:${r*.7}px;height:${r*.35}px;text-align:center;color:${escapeCssColor(nodeText)};font:700 19px Arial">${String(index+1).padStart(2,"0")}</div><div style="position:absolute;left:${iconLeft}px;top:${iconTop}px;width:${r*.68}px;height:${r*.68}px;display:grid;place-items:center">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${textX}px;top:${elbowY-11.18}px;width:${textW}px;text-align:${calloutLeft?"right":"left"};color:${escapeCssColor(text)}"><div style="height:21.5px;color:${escapeCssColor(color)};font:700 12px Arial">${escapeHtml(readString(entry.heading)??"支柱")}</div><div style="padding-top:8px;font:9px/1.15 Arial">${escapeHtml(readString(entry.description)??"")}</div></div>`}).join("");
   return `<div style="${frameStyle(item,mode,{width:720,height:430})}${transformStyle(item)}position:relative;overflow:hidden">${circles}<svg viewBox="0 0 720 430" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible">${connectors}</svg>${annotations}</div>`;
 }
 
 function renderRiskMatrixInfographic(item: JsonRecord, mode: RenderMode): string {
-  const data=infographicData(item),raw=readArray(data.items).map(readRecord).slice(0,4),defaults=[{heading:"Identify"},{heading:"Prioritize"},{heading:"Assess"},{heading:"Respond"}],safe=defaults.map((fallback,index)=>raw[index]??fallback),colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#f0f1f4":"#111111");
+  const data=infographicData(item),raw=readArray(data.items).map(readRecord).slice(0,4),defaults=[{heading:"识别"},{heading:"排序"},{heading:"评估"},{heading:"应对"}],safe=defaults.map((fallback,index)=>raw[index]??fallback),colors=infographicPalette(item),bg=infographicBaseColor(item),dark=isDarkInfographicColor(bg),text=infographicTextColor(item,dark?"#f0f1f4":"#111111");
   const q=159,cx=360,cy=185,pos=[[194.5,19.5],[366.5,19.5],[194.5,191.5],[366.5,191.5]],sideMargin=10.8,arrowGap=13,arrowLength=28.8,textGap=13,arrowHalf=20.35,arrows:string[]=[];
-  const content=safe.map((entry,index)=>{const [x,y]=pos[index],left=index%2===0,color=colors[index%colors.length],mid=y+q/2,blockEdge=left?x:x+q,arrowBase=blockEdge+(left?-arrowGap:arrowGap),arrowTip=arrowBase+(left?-arrowLength:arrowLength),tx=left?sideMargin:arrowTip+textGap,textWidth=left?Math.max(86.4,arrowTip-textGap-sideMargin):Math.max(86.4,720-sideMargin-tx);arrows.push(`<polygon points="${arrowTip},${mid} ${arrowBase},${mid-arrowHalf} ${arrowBase},${mid+arrowHalf}" fill="${escapeCssColor(color)}"/>`);return `<div style="position:absolute;left:${x}px;top:${y}px;width:${q}px;height:${q}px;border-radius:16px;display:grid;place-items:center;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${tx}px;top:${y+q*.27}px;width:${textWidth}px;text-align:${left?"right":"left"};color:${escapeCssColor(text)}"><div style="height:${q*.11}px;color:${escapeCssColor(color)};font:700 12px Arial">${escapeHtml(readString(entry.heading)??"Activity")}</div><div style="padding-top:${q*.01}px;font:9px/1.1 Arial">${escapeHtml(readString(entry.description)??"")}</div></div>`}).join(""); const label=(readString(data.center_label)??"RISK").padEnd(4," ").slice(0,4);
+  const content=safe.map((entry,index)=>{const [x,y]=pos[index],left=index%2===0,color=colors[index%colors.length],mid=y+q/2,blockEdge=left?x:x+q,arrowBase=blockEdge+(left?-arrowGap:arrowGap),arrowTip=arrowBase+(left?-arrowLength:arrowLength),tx=left?sideMargin:arrowTip+textGap,textWidth=left?Math.max(86.4,arrowTip-textGap-sideMargin):Math.max(86.4,720-sideMargin-tx);arrows.push(`<polygon points="${arrowTip},${mid} ${arrowBase},${mid-arrowHalf} ${arrowBase},${mid+arrowHalf}" fill="${escapeCssColor(color)}"/>`);return `<div style="position:absolute;left:${x}px;top:${y}px;width:${q}px;height:${q}px;border-radius:16px;display:grid;place-items:center;background:${escapeCssColor(color)}">${infographicIconImage(entry.icon,entry.color)}</div><div style="position:absolute;left:${tx}px;top:${y+q*.27}px;width:${textWidth}px;text-align:${left?"right":"left"};color:${escapeCssColor(text)}"><div style="height:${q*.11}px;color:${escapeCssColor(color)};font:700 12px Arial">${escapeHtml(readString(entry.heading)??"活动")}</div><div style="padding-top:${q*.01}px;font:9px/1.1 Arial">${escapeHtml(readString(entry.description)??"")}</div></div>`}).join(""); const label=(readString(data.center_label)??"风险").padEnd(4," ").slice(0,4);
   return `<div style="${frameStyle(item,mode,{width:720,height:370})}${transformStyle(item)}position:relative;overflow:hidden"><svg viewBox="0 0 720 370" style="position:absolute;inset:0;width:100%;height:100%">${arrows.join("")}</svg>${content}<div style="position:absolute;left:${cx-q*.375}px;top:${cy-q*.375}px;width:${q*.75}px;height:${q*.75}px;border-radius:16px;background:rgba(255,255,255,.34);display:grid;grid-template-columns:1fr 1fr;color:#fff;font:700 24px Arial;text-align:center;align-items:center">${label.split("").map(letter=>`<span>${escapeHtml(letter)}</span>`).join("")}</div></div>`;
 }
 
 function renderChevronProcessInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 8);
-  const safeEntries = entries.length > 0 ? entries : [{ heading: "Stage" }];
+  const safeEntries = entries.length > 0 ? entries : [{ heading: "阶段" }];
   const colors = infographicPalette(item);
   const baseColor = infographicBaseColor(item);
   const dark = isDarkInfographicColor(baseColor);
@@ -1540,7 +1540,7 @@ function renderChevronProcessInfographic(item: JsonRecord, mode: RenderMode): st
 function renderRadialCycleInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 8);
-  const safeEntries = entries.length > 0 ? entries : [{ heading: "Stage" }];
+  const safeEntries = entries.length > 0 ? entries : [{ heading: "阶段" }];
   const colors = infographicPalette(item);
   const centerX = 280;
   const centerY = 260;
@@ -1568,7 +1568,7 @@ function renderRadialCycleInfographic(item: JsonRecord, mode: RenderMode): strin
 function renderConversionFunnelInfographic(item: JsonRecord, mode: RenderMode): string {
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 8);
-  const safeEntries = entries.length > 0 ? entries : [{ value: 50, heading: "Stage" }];
+  const safeEntries = entries.length > 0 ? entries : [{ value: 50, heading: "阶段" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1608,7 +1608,7 @@ function renderPyramidInfographic(item: JsonRecord, mode: RenderMode): string {
   const entries = readArray(data.items).map(readRecord).slice(0, 4);
   const safeEntries = entries.length >= 3
     ? entries
-    : [{ heading: "Foundation" }, { heading: "Efficiency" }, { heading: "Innovation" }];
+    : [{ heading: "基础" }, { heading: "效率" }, { heading: "创新" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1653,7 +1653,7 @@ function renderSegmentedWheelInfographic(item: JsonRecord, mode: RenderMode): st
   const entries = readArray(data.items).map(readRecord).slice(0, 6);
   const safeEntries = entries.length >= 3
     ? entries
-    : [{ heading: "Foundation" }, { heading: "Efficiency" }, { heading: "Growth" }];
+    : [{ heading: "基础" }, { heading: "效率" }, { heading: "增长" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);
@@ -1706,7 +1706,7 @@ function renderCustomerJourneyInfographic(item: JsonRecord, mode: RenderMode): s
   const entries = readArray(data.items).map(readRecord).slice(0, 6);
   const safeEntries = entries.length >= 4
     ? entries
-    : [{}, { heading: "Awareness" }, { heading: "Consideration" }, { heading: "Experience" }];
+    : [{}, { heading: "认知" }, { heading: "考虑" }, { heading: "体验" }];
   const startEntry = safeEntries[0];
   const stages = safeEntries.slice(1);
   const colors = infographicPalette(item);
@@ -1750,7 +1750,7 @@ function renderBeforeAfterInfographic(item: JsonRecord, mode: RenderMode): strin
   const data = infographicData(item);
   const entries = readArray(data.items).map(readRecord).slice(0, 10);
   const evenEntries = entries.slice(0, entries.length - (entries.length % 2));
-  const safeEntries = evenEntries.length >= 2 ? evenEntries : [{ heading: "Before" }, { heading: "After" }];
+  const safeEntries = evenEntries.length >= 2 ? evenEntries : [{ heading: "之前" }, { heading: "之后" }];
   const pairCount = safeEntries.length / 2;
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
@@ -2075,7 +2075,7 @@ function renderMindMapInfographic(item: JsonRecord, mode: RenderMode): string {
   const topLevel = readArray(data.items).map(readRecord);
   const nested = readArray(topLevel[0]?.items).map(readRecord);
   const entries = (topLevel.length === 1 && nested.length > 0 ? nested : topLevel).slice(0, 8);
-  const safeEntries = entries.length > 0 ? entries : [{ heading: "Core idea" }];
+  const safeEntries = entries.length > 0 ? entries : [{ heading: "核心理念" }];
   const colors = infographicPalette(item);
   const background = infographicBaseColor(item);
   const dark = isDarkInfographicColor(background);

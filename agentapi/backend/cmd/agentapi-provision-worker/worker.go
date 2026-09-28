@@ -25,6 +25,7 @@ import (
 type config struct {
 	MainURL                string
 	ProvisioningCredential string
+	AppCredentialFile      string
 	SSOSecretFile          string
 	StateDir               string
 	ProvisionerPath        string
@@ -191,16 +192,6 @@ func (a *controlAPI) renewLease(ctx context.Context, agentID, token string) erro
 	return err
 }
 
-func (a *controlAPI) registerRuntimeCredentials(ctx context.Context, agentID, controlHash, modelHash, leaseToken string) error {
-	if !validWorkerAgentID(agentID) || !isSHA256Hash(controlHash) || !isSHA256Hash(modelHash) || controlHash == modelHash || strings.TrimSpace(leaseToken) == "" {
-		return fmt.Errorf("deployment bundle returned invalid runtime credential metadata")
-	}
-	_, err := a.requestWithLease(ctx, http.MethodPost,
-		"agent-provisioning/agents/"+url.PathEscape(agentID)+"/runtime-credentials",
-		map[string]string{"control_token_hash": controlHash, "model_token_hash": modelHash}, "", "", leaseToken)
-	return err
-}
-
 func validWorkerAgentID(value string) bool {
 	if len(value) != 36 || !strings.HasPrefix(value, "agt_") {
 		return false
@@ -211,14 +202,6 @@ func validWorkerAgentID(value string) bool {
 		}
 	}
 	return true
-}
-
-func isSHA256Hash(value string) bool {
-	if len(value) != sha256.Size*2 {
-		return false
-	}
-	decoded, err := hex.DecodeString(value)
-	return err == nil && len(decoded) == sha256.Size
 }
 
 func (a *controlAPI) getAgent(ctx context.Context, agentID string) (agentRecord, error) {
@@ -592,9 +575,6 @@ func (w *provisionWorker) provisionClaimed(ctx context.Context, agent agentRecor
 		switch agent.CurrentStep {
 		case "validating":
 			bundle, generateErr := w.backend.Generate(ctx, agent)
-			if generateErr == nil {
-				generateErr = w.api.registerRuntimeCredentials(ctx, agent.AgentID, bundle.ControlTokenHash, bundle.ModelTokenHash, leaseToken)
-			}
 			if generateErr != nil {
 				failure = &workerFailure{code: "bundle_generation_failed", retryable: true, err: generateErr}
 			} else {
@@ -611,10 +591,6 @@ func (w *provisionWorker) provisionClaimed(ctx context.Context, agent agentRecor
 				generated, generateErr := w.backend.Generate(ctx, agent)
 				if generateErr != nil {
 					failure = &workerFailure{code: "bundle_generation_failed", retryable: true, err: generateErr}
-					break
-				}
-				if registerErr := w.api.registerRuntimeCredentials(ctx, agent.AgentID, generated.ControlTokenHash, generated.ModelTokenHash, leaseToken); registerErr != nil {
-					failure = &workerFailure{code: "bundle_generation_failed", retryable: true, err: registerErr}
 					break
 				}
 				bundle = &generated
@@ -683,19 +659,15 @@ type hostBackend struct{ cfg config }
 func newHostBackend(cfg config) *hostBackend { return &hostBackend{cfg: cfg} }
 
 type bundleResult struct {
-	AgentID          string `json:"agent_id"`
-	Slug             string `json:"slug"`
-	Domain           string `json:"domain"`
-	Status           string `json:"status"`
-	BundlePath       string `json:"bundle_path"`
-	ControlTokenHash string `json:"control_token_hash"`
-	ModelTokenHash   string `json:"model_token_hash"`
+	AgentID    string `json:"agent_id"`
+	Slug       string `json:"slug"`
+	Domain     string `json:"domain"`
+	Status     string `json:"status"`
+	BundlePath string `json:"bundle_path"`
 }
 
 type generatedBundle struct {
-	Path             string
-	ControlTokenHash string
-	ModelTokenHash   string
+	Path string
 }
 
 func (b *hostBackend) Generate(ctx context.Context, agent agentRecord) (generatedBundle, error) {
@@ -718,15 +690,14 @@ func (b *hostBackend) Generate(ctx context.Context, agent agentRecord) (generate
 		return generatedBundle{}, fmt.Errorf("deployment bundle generation command failed")
 	}
 	var result bundleResult
-	if err := json.Unmarshal(output, &result); err != nil || result.AgentID != agent.AgentID || result.Slug != agent.Slug || result.Domain != agent.Domain || result.Status != "generated" ||
-		!isSHA256Hash(result.ControlTokenHash) || !isSHA256Hash(result.ModelTokenHash) || result.ControlTokenHash == result.ModelTokenHash {
-		return generatedBundle{}, fmt.Errorf("deployment bundle generator returned invalid runtime credential metadata")
+	if err := json.Unmarshal(output, &result); err != nil || result.AgentID != agent.AgentID || result.Slug != agent.Slug || result.Domain != agent.Domain || result.Status != "generated" {
+		return generatedBundle{}, fmt.Errorf("deployment bundle generator returned invalid metadata")
 	}
 	bundle, err := bundlePathWithinState(b.cfg.StateDir, result.BundlePath)
 	if err != nil {
 		return generatedBundle{}, err
 	}
-	return generatedBundle{Path: bundle, ControlTokenHash: result.ControlTokenHash, ModelTokenHash: result.ModelTokenHash}, nil
+	return generatedBundle{Path: bundle}, nil
 }
 
 func bundlePathWithinState(stateDir, bundlePath string) (string, error) {
@@ -761,7 +732,7 @@ func (b *hostBackend) Deploy(ctx context.Context, agent agentRecord, bundle stri
 	if err := b.ensureNetwork(ctx); err != nil {
 		return &workerFailure{code: "network_unavailable", retryable: true, err: err}
 	}
-	composeEnv := []string{"SUB2API_SSO_SECRET_FILE=" + b.cfg.SSOSecretFile}
+	composeEnv := b.composeSecretEnv()
 	if err := b.docker(ctx, nil, "network", "connect", b.cfg.EdgeNetwork, b.cfg.NginxContainer); err != nil {
 		if !b.containerOnNetwork(ctx, b.cfg.NginxContainer) {
 			return err
@@ -777,6 +748,13 @@ func (b *hostBackend) Deploy(ctx context.Context, agent agentRecord, bundle stri
 		return fmt.Errorf("agent container deployment command failed")
 	}
 	return nil
+}
+
+func (b *hostBackend) composeSecretEnv() []string {
+	return []string{
+		"SUB2API_APP_CREDENTIAL_FILE=" + b.cfg.AppCredentialFile,
+		"SUB2API_SSO_SECRET_FILE=" + b.cfg.SSOSecretFile,
+	}
 }
 
 func (b *hostBackend) ensureNetwork(ctx context.Context) error {

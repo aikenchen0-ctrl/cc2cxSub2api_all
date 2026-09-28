@@ -119,6 +119,15 @@ export enum LanguageType {
   Samoan = "Samoan (Gagana Samoa)",
 }
 
+export const DEFAULT_PRESENTATION_LANGUAGE = LanguageType.ChineseSimplified;
+
+export const getLanguageDisplayName = (language: string | null): string => {
+  if (language === LanguageType.ChineseSimplified) return "简体中文";
+  if (language === LanguageType.ChineseTraditional) return "繁体中文";
+  if (language === LanguageType.Auto) return "自动（英语）";
+  return language || "选择语言";
+};
+
 export interface PresentationConfig {
   slides: string | null;
   language: LanguageType | null;
@@ -145,4 +154,3 @@ export enum VerbosityType {
   Standard = "standard",
   Text_Heavy = "text-heavy",
 }
-

@@ -5,6 +5,8 @@ type BalancePayload = { balance: number; recharge_url?: string };
 type BalanceEnvelope = { success?: boolean; data?: BalancePayload };
 
 const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const balanceFormat = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatBalance = (value: number) => `￥${balanceFormat.format(value)}`;
 
 const Sub2ApiBalance: React.FC = () => {
   const [balance, setBalance] = useState<number | null>(null);
@@ -76,8 +78,8 @@ const Sub2ApiBalance: React.FC = () => {
   return (
     <>
       <button type="button" onClick={openRecharge} aria-label="Sub2API 账户余额，点击前往充值" title="Sub2API 账户余额" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-950">
-        <span>余额</span>
-        <span className={`tabular-nums ${insufficient ? 'text-red-600' : ''}`}>{balance === null ? '--' : money.format(balance)}</span>
+        <span className={`tabular-nums ${insufficient ? 'text-red-600' : ''}`}>{balance === null ? '￥--' : formatBalance(balance)}</span>
+        <span>充值</span>
       </button>
       {dialogOpen ? (
         <div className="fixed inset-0 z-[5000001] grid place-items-center bg-black/55 p-5 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDialogOpen(false); }}>

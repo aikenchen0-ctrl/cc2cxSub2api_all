@@ -168,18 +168,9 @@ func provision(stateDir string, req request) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	controlCredential, controlHash, err := randomRuntimeCredential("agt_ctl_")
-	if err != nil {
-		return result{}, err
-	}
-	modelCredential, modelHash, err := randomRuntimeCredential("agt_model_")
-	if err != nil {
-		return result{}, err
-	}
 	res := result{
 		AgentID: req.AgentID, Slug: req.Slug, Domain: req.Domain, Status: "generated",
 		BundlePath: agentDir, RuntimeSecretDir: runtimeSecretDir, Fingerprint: fingerprint,
-		ControlTokenHash: controlHash, ModelTokenHash: modelHash,
 	}
 	state := persisted{Request: req, Result: res}
 	files := map[string]struct {
@@ -199,11 +190,7 @@ func provision(stateDir string, req request) (result, error) {
 			return result{}, err
 		}
 	}
-	secretFiles := map[string]string{
-		"session_secret":           secret + "\n",
-		"agent_control_credential": controlCredential + "\n",
-		"agent_model_credential":   modelCredential + "\n",
-	}
+	secretFiles := map[string]string{"session_secret": secret + "\n"}
 	for name, body := range secretFiles {
 		if err := os.WriteFile(filepath.Join(secretTmp, name), []byte(body), 0o600); err != nil {
 			return result{}, err
@@ -299,16 +286,6 @@ func randomSecret() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func randomRuntimeCredential(prefix string) (string, string, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", "", err
-	}
-	credential := prefix + base64.RawURLEncoding.EncodeToString(raw)
-	sum := sha256.Sum256([]byte(credential))
-	return credential, hex.EncodeToString(sum[:]), nil
 }
 
 func acquireLock(stateDir string, timeout time.Duration) (func(), error) {
@@ -450,7 +427,15 @@ func validateRuntimeSecretFiles(dir string, result result) error {
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("secret directory permissions are too broad")
 	}
-	for _, name := range []string{"session_secret", "agent_control_credential", "agent_model_credential"} {
+	names := []string{"session_secret"}
+	legacyRuntime := result.ControlTokenHash != "" || result.ModelTokenHash != ""
+	if legacyRuntime {
+		if len(result.ControlTokenHash) != 64 || len(result.ModelTokenHash) != 64 || result.ControlTokenHash == result.ModelTokenHash {
+			return fmt.Errorf("legacy runtime credential metadata is invalid")
+		}
+		names = append(names, "agent_control_credential", "agent_model_credential")
+	}
+	for _, name := range names {
 		fileInfo, statErr := os.Lstat(filepath.Join(dir, name))
 		if statErr != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%s is not a regular secret file", name)
@@ -480,14 +465,12 @@ func validateRuntimeSecretFiles(dir string, result result) error {
 
 func renderEnv(req request, res result) string {
 	q := strconv.Quote
-	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_PROVISIONING_CONTROL_ENABLED=true\nAGENT_PROVISIONING_CONTROL_STALE_AFTER=90s\nAGENT_BILLING_MODE=owner_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL))
+	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_PROVISIONING_CONTROL_ENABLED=false\nAGENT_BILLING_MODE=owner_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL))
 }
 
 func renderCompose(req request, secretDir string) string {
 	secretDir = filepath.ToSlash(secretDir)
 	sessionSecretPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/session_secret")
-	controlCredentialPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/agent_control_credential")
-	modelCredentialPath := strconv.Quote(strings.TrimRight(secretDir, "/") + "/agent_model_credential")
 	return fmt.Sprintf(`services:
   agentapi:
     image: %s
@@ -501,13 +484,11 @@ func renderCompose(req request, secretDir string) string {
       - agentapi_data:/app/data
     secrets:
       - session_secret
-      - agent_control_credential
-      - agent_model_credential
+      - sub2api_app_credential
       - sub2api_sso_secret
     environment:
       SESSION_SECRET_FILE: /run/secrets/session_secret
-      AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE: /run/secrets/agent_control_credential
-      SUB2API_APP_CREDENTIAL_FILE: /run/secrets/agent_model_credential
+      SUB2API_APP_CREDENTIAL_FILE: /run/secrets/sub2api_app_credential
       SUB2API_SSO_SECRET_FILE: /run/secrets/sub2api_sso_secret
     networks: [agentapi-edge]
 volumes:
@@ -515,16 +496,14 @@ volumes:
 secrets:
   session_secret:
     file: %s
-  agent_control_credential:
-    file: %s
-  agent_model_credential:
-    file: %s
+  sub2api_app_credential:
+    file: ${SUB2API_APP_CREDENTIAL_FILE:?set SUB2API_APP_CREDENTIAL_FILE}
   sub2api_sso_secret:
     file: ${SUB2API_SSO_SECRET_FILE:?set SUB2API_SSO_SECRET_FILE}
 networks:
   agentapi-edge:
     external: true
-`, req.Image, req.Slug, sessionSecretPath, controlCredentialPath, modelCredentialPath)
+`, req.Image, req.Slug, sessionSecretPath)
 }
 
 func renderNginx(req request) string {

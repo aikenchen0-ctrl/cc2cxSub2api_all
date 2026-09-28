@@ -86,8 +86,8 @@ const LayoutItem = memo(({ layout, onSelect }: LayoutItemProps) => {
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Add ${layoutName || "slide"} layout`}
-      title={layoutName || "Slide layout"}
+      aria-label={`添加${layoutName || "slide"}布局`}
+      title={layoutName || "幻灯片布局"}
       onClick={selectLayout}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -170,8 +170,8 @@ const NewSlideV1 = ({
     (sampleData: any, id: string) => {
       if (slideCount >= MAX_NUMBER_OF_SLIDES) {
         notify.warning(
-          "Slide limit reached",
-          `You can have up to ${MAX_NUMBER_OF_SLIDES} slides.`
+          "已达到幻灯片数量限制",
+          `您最多可以有${MAX_NUMBER_OF_SLIDES}张幻灯片。`
         );
         return;
       }
@@ -190,7 +190,7 @@ const NewSlideV1 = ({
         setShowNewSlideSelection(false);
       } catch (error: any) {
         console.error(error);
-        notify.error("Could not add slide", "Something went wrong while adding the new slide.");
+        notify.error("无法添加幻灯片", "在添加新幻灯片时出错");
       }
     },
     [
@@ -263,10 +263,10 @@ const NewSlideV1 = ({
             id="choose-slide-layout-title"
             className="text-base font-medium leading-tight text-[#191919]"
           >
-            Choose Slide Layout
+            选择幻灯片布局
           </h2>
           <p className="mt-1 text-xs font-normal leading-none text-[#7A7A85]">
-            {loading ? "Loading layouts" : layoutCountText}
+            {loading ? "加载布局" : layoutCountText}
           </p>
         </div>
         {loading && (
@@ -291,7 +291,7 @@ const NewSlideV1 = ({
           </div>
         ) : (
           <div className="flex h-56 items-center justify-center rounded-lg border border-dashed border-[#D9D9E1] bg-[#FAFAFB] text-sm text-[#7A7A85]">
-            No layouts available.
+            暂无可用布局
           </div>
         )}
       </div>

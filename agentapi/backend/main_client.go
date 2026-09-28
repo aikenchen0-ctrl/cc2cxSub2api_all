@@ -362,6 +362,46 @@ func (c *MainClient) RuntimeGetOwner(ctx context.Context) (MainUserResult, error
 	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: moneyValue(raw["balance"]), Raw: data}, nil
 }
 
+// SatelliteOwnerBalance reads the configured Owner through the existing
+// public satellite relay contract. It needs no Agent provisioning/runtime
+// records in Sub2API: the application credential stays server-side and the
+// Owner user id is supplied as X-Sub2API-On-Behalf-Of.
+func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID string) (MainUserResult, error) {
+	ownerMainUserID = strings.TrimSpace(ownerMainUserID)
+	if ownerMainUserID == "" {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
+	}
+	credential := strings.TrimSpace(c.cfg.AppCredential)
+	if credential == "" {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_APP_CREDENTIAL_MISSING", Message: "satellite application credential is not configured"}
+	}
+	headers := make(http.Header)
+	headers.Set("Accept", "application/json")
+	headers.Set("Authorization", "Bearer "+credential)
+	headers.Set("X-Sub2API-On-Behalf-Of", ownerMainUserID)
+	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
+	base := strings.TrimRight(c.cfg.MainModelBaseURL, "/")
+	path := "/v1/sub2api/balance"
+	if strings.HasSuffix(base, "/v1") {
+		path = "/sub2api/balance"
+	}
+	resp, data, err := c.request(ctx, http.MethodGet, base+path, nil, headers)
+	if err != nil {
+		return MainUserResult{}, err
+	}
+	data, err = unwrapMainResponse(resp.StatusCode, data)
+	if err != nil {
+		return MainUserResult{}, err
+	}
+	var payload struct {
+		Balance json.RawMessage `json:"balance"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return MainUserResult{}, fmt.Errorf("decode satellite owner balance: %w", err)
+	}
+	return MainUserResult{ID: ownerMainUserID, Balance: moneyValue(payload.Balance), Raw: data}, nil
+}
+
 func (c *MainClient) MapRuntimeUser(ctx context.Context, mainUserID, userAccessToken string) error {
 	mainUserID = strings.TrimSpace(mainUserID)
 	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
@@ -386,13 +426,18 @@ func (c *MainClient) MapRuntimeUserWithSSOTicket(ctx context.Context, mainUserID
 	return err
 }
 
-// AdminGetUser is a compatibility wrapper; the runtime API can return only
-// the configured Owner, never an arbitrary main-site user.
+// AdminGetUser reads the configured Owner through the public satellite bridge
+// in ordinary mode. The legacy runtime endpoint is selected only by the
+// explicit compatibility switch; a stale agt_ctl_* environment value alone
+// must never restore the old database dependency.
 func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainUserResult, error) {
 	if strings.TrimSpace(mainUserID) != strings.TrimSpace(c.cfg.OwnerMainUserID) {
 		return MainUserResult{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "runtime credential is restricted to its configured Owner"}
 	}
-	return c.RuntimeGetOwner(ctx)
+	if c.cfg.ProvisioningControlEnabled {
+		return c.RuntimeGetOwner(ctx)
+	}
+	return c.SatelliteOwnerBalance(ctx, mainUserID)
 }
 
 func (c *MainClient) RuntimeUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
@@ -562,15 +607,22 @@ func (c *MainClient) AdminGetProvisioningAgent(ctx context.Context, agentID stri
 	return c.RuntimeGetProvisioningAgent(ctx, agentID)
 }
 
-// AdminFindUsage is a compatibility wrapper around the Owner-scoped runtime
-// usage query. Sub2API applies the Owner filter again server-side.
+// AdminFindUsage uses the public Owner-scoped usage endpoint in ordinary mode.
+// The old runtime query remains available only when compatibility mode is
+// explicitly enabled.
 func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]MainUsageResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return nil, fmt.Errorf("request id is required")
 	}
-	path := "/agent-runtime/usage?request_id=" + url.QueryEscape(requestID)
-	data, err := c.runtimeJSON(ctx, http.MethodGet, path, nil)
+	var data json.RawMessage
+	var err error
+	if c.cfg.ProvisioningControlEnabled {
+		path := "/agent-runtime/usage?request_id=" + url.QueryEscape(requestID)
+		data, err = c.runtimeJSON(ctx, http.MethodGet, path, nil)
+	} else {
+		data, err = c.satelliteOwnerJSON(ctx, "/v1/sub2api/usage?request_id="+url.QueryEscape(requestID))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -585,6 +637,31 @@ func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]Ma
 		return nil, err
 	}
 	return decodeMainUsageItems(items)
+}
+
+func (c *MainClient) satelliteOwnerJSON(ctx context.Context, path string) (json.RawMessage, error) {
+	headers := make(http.Header)
+	headers.Set("Authorization", "Bearer "+strings.TrimSpace(c.cfg.AppCredential))
+	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
+	headers.Set("X-Sub2API-On-Behalf-Of", strings.TrimSpace(c.cfg.OwnerMainUserID))
+	base := strings.TrimRight(c.cfg.MainModelBaseURL, "/")
+	if strings.HasSuffix(base, "/v1") && strings.HasPrefix(path, "/v1/") {
+		path = strings.TrimPrefix(path, "/v1")
+	}
+	response, body, err := c.request(ctx, http.MethodGet, base+path, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("sub2api satellite request failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(body, &envelope) == nil && len(envelope.Data) > 0 {
+		return envelope.Data, nil
+	}
+	return body, nil
 }
 
 func decodeMainUsageItems(items []json.RawMessage) ([]MainUsageResult, error) {
@@ -609,7 +686,7 @@ func decodeMainUsageItems(items []json.RawMessage) ([]MainUsageResult, error) {
 			return nil, fmt.Errorf("main usage %q has neither a valid actual_cost nor a fallback total_cost", requestID)
 		}
 		var snapshot MainUsageSnapshot
-		snapshot.Source = "sub2api_owner_runtime_usage"
+		snapshot.Source = "sub2api_owner_usage"
 		snapshot.ServiceTier = rawString(item["service_tier"])
 		snapshot.ReasoningEffort = rawString(item["reasoning_effort"])
 		snapshot.InboundEndpoint = rawString(item["inbound_endpoint"])
@@ -839,12 +916,12 @@ func (c *MainClient) OpenModelResponse(ctx context.Context, method, path string,
 		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_APP_CREDENTIAL_MISSING", Message: "model relay credential is not configured"}
 	}
 	if strings.TrimSpace(mainUserID) == "" {
-		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "mapped Agent user is not configured"}
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "model billing identity is not configured"}
 	}
 	headers.Set("Authorization", "Bearer "+c.cfg.AppCredential)
-	// Keep the public satellite identity tied to the current Agent Session. The
-	// Sub2API Agent model credential separately resolves the Owner billing key
-	// after it verifies this user is an active mapping for the same Agent.
+	// Ordinary mode always passes the instance Owner here. The current AgentAPI
+	// user remains local to session, ownership and quota enforcement and cannot
+	// choose the Sub2API billing identity from a browser request.
 	headers.Set("X-Sub2API-On-Behalf-Of", mainUserID)
 	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
 	if requestID != "" {
@@ -950,6 +1027,15 @@ func stringValue(value any) string {
 
 func moneyValue(value any) int64 {
 	switch typed := value.(type) {
+	case json.RawMessage:
+		var decoded any
+		decoder := json.NewDecoder(bytes.NewReader(typed))
+		decoder.UseNumber()
+		if err := decoder.Decode(&decoded); err == nil {
+			return moneyValue(decoded)
+		}
+	case []byte:
+		return moneyValue(json.RawMessage(typed))
 	case float64:
 		return int64(typed*100 + 0.5)
 	case json.Number:

@@ -72,6 +72,7 @@ func TestProvisioningControlDisabledPreservesUnmanagedInstances(t *testing.T) {
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.ProvisioningControlEnabled = false
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil))
 	if response.Code != http.StatusOK {

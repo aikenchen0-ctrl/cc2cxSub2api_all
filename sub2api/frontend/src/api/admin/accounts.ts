@@ -638,6 +638,38 @@ export async function syncUpstreamModels(id: number): Promise<SyncUpstreamModels
   return data
 }
 
+export type AccountModelRefreshStatus = 'pending' | 'refreshing' | 'success' | 'failed'
+
+export interface AccountModelRefreshItem {
+  account_id: number
+  account_name: string
+  upstream_url: string
+  status: AccountModelRefreshStatus
+  model_count?: number
+}
+
+export interface AccountModelRefreshJob {
+  id: string
+  status: 'running' | 'completed'
+  total: number
+  completed: number
+  succeeded: number
+  failed: number
+  started_at: string
+  completed_at?: string
+  items: AccountModelRefreshItem[]
+}
+
+export async function startModelRefreshJob(): Promise<AccountModelRefreshJob> {
+  const { data } = await apiClient.post<AccountModelRefreshJob>('/admin/accounts/models/refresh-all')
+  return data
+}
+
+export async function getModelRefreshJob(jobId: string): Promise<AccountModelRefreshJob> {
+  const { data } = await apiClient.get<AccountModelRefreshJob>(`/admin/accounts/models/refresh-all/${encodeURIComponent(jobId)}`)
+  return data
+}
+
 export interface SyncUpstreamPreviewParams {
   platform: string
   type: string
@@ -1102,6 +1134,8 @@ export const accountsAPI = {
   getAvailableModels,
   syncUpstreamModels,
   syncUpstreamModelsPreview,
+  startModelRefreshJob,
+  getModelRefreshJob,
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,

@@ -15,7 +15,13 @@ import { useRouter, usePathname } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { clearOutlines, setPresentationId } from "@/store/slices/presentationGeneration";
 import { PromptInput } from "./PromptInput";
-import { LanguageType, PresentationConfig, ToneType, VerbosityType } from "../type";
+import {
+  DEFAULT_PRESENTATION_LANGUAGE,
+  LanguageType,
+  PresentationConfig,
+  ToneType,
+  VerbosityType,
+} from "../type";
 import SupportingDoc from "./SupportingDoc";
 import { notify } from "@/components/ui/sonner";
 import { PresentationGenerationApi } from "../../services/api/presentation-generation";
@@ -149,7 +155,7 @@ const UploadPage = () => {
     useState<CommunityPresentation | null>(null);
   const [config, setConfig] = useState<PresentationConfig>({
     slides: null,
-    language: LanguageType.Auto,
+    language: DEFAULT_PRESENTATION_LANGUAGE,
     prompt: "",
     tone: ToneType.Default,
     verbosity: VerbosityType.Standard,
@@ -185,7 +191,7 @@ const UploadPage = () => {
         .catch((loadError) => {
           if (!active) return;
           notify.error(
-            "Could not select the community design",
+            "无法选择社区设计",
             loadError instanceof Error ? loadError.message : undefined
           );
         });
@@ -333,9 +339,9 @@ const UploadPage = () => {
       return true;
     } catch (error: any) {
       notify.error(
-        "Image provider unavailable",
+        "图像提供商不可用",
         error?.message ||
-        `暂时无法连接 ${selectedProvider}，请检查 API 密钥和设置后重试。`
+        `暂时无法连接 ${selectedProvider}请检查 API 密钥和设置后重试。`
       );
       return false;
     }
@@ -365,8 +371,8 @@ const UploadPage = () => {
     ) {
       trackUploadValidationFailure("prompt_or_document_missing");
       notify.warning(
-        "Input required",
-        "Provide a prompt, upload a document, or select a community reference."
+        "需要输入",
+        "请输入提示词、上传文档或选择社区参考。"
       );
       return false;
     }
@@ -445,8 +451,8 @@ const UploadPage = () => {
       isLoading: true,
       message:
         generationMode === "smart"
-          ? "Starting Smart presentation..."
-          : "Generating presentation outline...",
+          ? "正在启动智能演示文稿..."
+          : "正在生成演示文稿大纲...",
       showProgress: true,
       duration: 40,
       extra_info: "",
@@ -506,8 +512,8 @@ const UploadPage = () => {
       isLoading: true,
       message:
         generationMode === "smart"
-          ? "Starting Smart presentation..."
-          : "Preparing outline generation...",
+          ? "正在启动智能演示文稿..."
+          : "准备大纲生成...",
       showProgress: true,
       duration: 30,
     });
@@ -570,7 +576,7 @@ const UploadPage = () => {
       showProgress: false,
     });
     notify.error(
-      "Generation failed",
+      "生成失败",
         error.message || "启动演示文稿时出现问题。"
     );
   };
@@ -607,7 +613,7 @@ const UploadPage = () => {
           variant={generationMode}
           references={
             generationMode === "smart" && communityReference
-              ? [{ id: String(communityReference.id), label: communityReference.title || "Community design" }]
+              ? [{ id: String(communityReference.id), label: communityReference.title || "社区设计" }]
               : []
           }
           onRemoveReference={() =>

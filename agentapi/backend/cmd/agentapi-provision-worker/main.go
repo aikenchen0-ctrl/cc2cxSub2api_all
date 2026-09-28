@@ -88,6 +88,10 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, err
 	}
+	appCredentialFile, err := requiredSecretFile("SUB2API_APP_CREDENTIAL")
+	if err != nil {
+		return config{}, err
+	}
 	nginxDir := strings.TrimSpace(os.Getenv("AGENTAPI_NGINX_CONFIG_DIR"))
 	nginxContainer := strings.TrimSpace(os.Getenv("AGENTAPI_NGINX_CONTAINER"))
 	if nginxDir == "" || nginxContainer == "" {
@@ -126,6 +130,7 @@ func loadConfig() (config, error) {
 	return config{
 		MainURL:                mainURL,
 		ProvisioningCredential: workerCredentialValue,
+		AppCredentialFile:      appCredentialFile,
 		SSOSecretFile:          ssoSecretFile,
 		StateDir:               stateDir,
 		ProvisionerPath:        firstNonEmpty(os.Getenv("AGENTAPI_PROVISION_BIN"), "/usr/local/bin/agentapi-provision"),

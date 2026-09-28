@@ -129,7 +129,7 @@ export function useTemplateSummaries({
               ? error.message
               : "The template service could not be reached. Please try again.";
           setError(message);
-          toast.error("Could not load templates", { description: message });
+          toast.error("无法加载模板", { description: message });
         }
       } finally {
         if (!cancelled) {

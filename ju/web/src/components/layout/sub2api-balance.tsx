@@ -6,6 +6,8 @@ import { useUserStore } from "@/stores/use-user-store";
 type BalanceResponse = { balance: number; recharge_url?: string };
 
 const money = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const balanceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatBalance = (value: number) => `￥${balanceFormat.format(value)}`;
 
 export function Sub2APIBalance() {
     const user = useUserStore((state) => state.user);
@@ -77,7 +79,7 @@ export function Sub2APIBalance() {
     return (
         <>
             <button type="button" onClick={openRecharge} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border/70 px-2.5 text-xs font-medium text-foreground/70 transition hover:text-foreground" aria-label="Sub2API 账户余额，点击前往充值" title="Sub2API 账户余额">
-                <span>余额</span><span className={insufficient ? "font-semibold tabular-nums text-red-600 dark:text-red-400" : "font-semibold tabular-nums"}>{balance === null ? "--" : money.format(balance)}</span>
+                <span className={insufficient ? "font-semibold tabular-nums text-red-600 dark:text-red-400" : "font-semibold tabular-nums"}>{balance === null ? "￥--" : formatBalance(balance)}</span><span>充值</span>
             </button>
             {dialogOpen ? (
                 <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/55 p-5 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}>

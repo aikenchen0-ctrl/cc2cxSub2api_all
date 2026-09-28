@@ -122,11 +122,11 @@ export const IMAGE_PROVIDERS: Record<string, ImageProviderOption> = {
   "gpt-image-1.5": {
     value: "gpt-image-1.5",
     label: "GPT Image 1.5",
-    description: "OpenAI's image generation model",
+    description: "OpenAI 图片生成模型",
     icon: "/providers/openai.png",
     requiresApiKey: true,
     apiKeyField: "OPENAI_API_KEY",
-    apiKeyFieldLabel: "OpenAI API Key",
+    apiKeyFieldLabel: "OpenAI API 密钥",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+openai+api+key&ie=UTF-8",
   },
   gemini_flash: {
@@ -146,7 +146,7 @@ export const IMAGE_PROVIDERS: Record<string, ImageProviderOption> = {
     icon: "/providers/gemini-color.svg",
     requiresApiKey: true,
     apiKeyField: "GOOGLE_API_KEY",
-    apiKeyFieldLabel: "Google API Key",
+    apiKeyFieldLabel: "Google API 密钥",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+google+AI+studio+api+key&sxsrf=ANbL-n5_hUGaEiG9v6k9VxZWyv0mqO0Jew%3A1776339625724",
   },
   comfyui: {
@@ -189,13 +189,13 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   codex: {
     value: "codex",
     label: "ChatGPT",
-    description: "ChatGPT Plus/Pro via OAuth",
+    description: "通过 OAuth 使用 ChatGPT Plus/Pro",
     icon: "/providers/openai.png",
   },
   openai: {
     value: "openai",
     label: "OpenAI",
-    description: "OpenAI's latest text generation model",
+    description: "OpenAI 最新文本生成模型",
     url: "https://api.openai.com/v1",
     icon: "/providers/openai.png",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+openai+api+key&ie=UTF-8",
@@ -203,7 +203,7 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   deepseek: {
     value: "deepseek",
     label: "DeepSeek",
-    description: "DeepSeek models via DeepSeek API",
+    description: "通过 DeepSeek API 使用 DeepSeek 模型",
     url: "https://api.deepseek.com/v1",
     icon: "/providers/deepseek-color.svg",
     getApiKeyUrl: "https://platform.deepseek.com/api_keys",
@@ -211,7 +211,7 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   google: {
     value: "google",
     label: "Google",
-    description: "Google's primary text generation model",
+    description: "Google 主要文本生成模型",
     url: "https://api.google.com/v1",
     icon: "/providers/gemini-color.svg",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+google+AI+studio+api+key&sxsrf=ANbL-n5_hUGaEiG9v6k9VxZWyv0mqO0Jew%3A1776339625724",
@@ -219,27 +219,27 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   vertex: {
     value: "vertex",
     label: "Vertex AI",
-    description: "Google Vertex AI models",
+    description: "Google Vertex AI 模型",
     icon: "/providers/vertexai-color.svg",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+vertex+ai+api+key",
   },
   azure: {
     value: "azure",
     label: "Azure OpenAI",
-    description: "Azure-hosted OpenAI deployments",
+    description: "托管在 Azure 上的 OpenAI 部署",
     icon: "/providers/azure-color.svg",
     getApiKeyUrl: "https://www.google.com/search?q=azure+openai+api+key",
   },
   bedrock: {
     value: "bedrock",
     label: "Amazon Bedrock",
-    description: "AWS Bedrock foundation models",
+    description: "AWS Bedrock 基础模型",
     icon: "/providers/bedrock-color.svg",
   },
   openrouter: {
     value: "openrouter",
     label: "OpenRouter",
-    description: "Many models through OpenRouter’s OpenAI-compatible API",
+    description: "通过 OpenRouter 的 OpenAI 兼容接口使用多种模型",
     url: "https://openrouter.ai/api/v1",
     icon: "/providers/openrouter-color.svg",
     getApiKeyUrl: "https://openrouter.ai/keys",
@@ -247,7 +247,7 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   cerebras: {
     value: "cerebras",
     label: "Cerebras",
-    description: "Cerebras Cloud via OpenAI-compatible API",
+    description: "通过 OpenAI 兼容接口使用 Cerebras Cloud",
     url: "https://api.cerebras.ai/v1",
     icon: "/providers/cerebras-color.svg",
     getApiKeyUrl: "https://inference-docs.cerebras.ai",
@@ -255,13 +255,13 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   litellm: {
     value: "litellm",
     label: "LiteLLM",
-    description: "OpenAI-compatible LiteLLM proxy or gateway",
+    description: "兼容 OpenAI 的 LiteLLM 代理或网关",
     icon: "/providers/litellm-logo.svg",
   },
   fireworks: {
     value: "fireworks",
     label: "Fireworks",
-    description: "Fireworks AI via OpenAI-compatible API",
+    description: "通过 OpenAI 兼容接口使用 Fireworks AI",
     url: "https://api.fireworks.ai/inference/v1",
     icon: "/providers/fireworks-color.svg",
     getApiKeyUrl: "https://fireworks.ai/account/api-keys",
@@ -269,7 +269,7 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   together: {
     value: "together",
     label: "Together AI",
-    description: "Together AI via OpenAI-compatible API",
+    description: "通过 OpenAI 兼容接口使用 Together AI",
     url: "https://api.together.ai/v1",
     icon: "/providers/together-color.svg",
     getApiKeyUrl: "https://api.together.xyz/settings/api-keys",
@@ -277,14 +277,14 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   lmstudio: {
     value: "lmstudio",
     label: "LM Studio",
-    description: "Local LM Studio OpenAI-compatible server",
+    description: "本地 LM Studio OpenAI 兼容服务器",
     url: "http://localhost:1234/v1",
     icon: "/providers/lm-studio.svg",
   },
   anthropic: {
     value: "anthropic",
     label: "Anthropic",
-    description: "Anthropic's Claude models",
+    description: "Anthropic Claude 模型",
     url: "https://api.anthropic.com/v1",
     icon: "/providers/claude-color.svg",
     getApiKeyUrl: "https://www.google.com/search?q=how+to+get+anthropic+api+key&sxsrf=ANbL-n7lsueZQ88L56HhqC1ch2PGD0rbNQ%3A1776339632265",
@@ -292,13 +292,13 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
   ollama: {
     value: "ollama",
     label: "Ollama",
-    description: "Ollama's primary text generation model",
+    description: "Ollama 主要文本生成模型",
     icon: "/providers/ollama.svg",
   },
   custom: {
     value: "custom",
-    label: "Custom",
-    description: "OpenAI-compatible LLM",
+    label: "自定义",
+    description: "兼容 OpenAI 的大语言模型",
     icon: "/providers/custom.svg",
   },
 
@@ -306,31 +306,31 @@ export const LLM_PROVIDERS: Record<string, LLMProviderOption> = {
 
 export const DALLE_3_QUALITY_OPTIONS = [
   {
-    label: "Standard",
+    label: "标准",
     value: "standard",
-    description: "Faster generation with lower cost",
+    description: "生成更快，成本更低",
   },
   {
     label: "HD",
     value: "hd",
-    description: "Higher quality images with increased cost",
+    description: "图片质量更高，成本也更高",
   },
 ];
 
 export const GPT_IMAGE_1_5_QUALITY_OPTIONS = [
   {
-    label: "Low",
+    label: "低",
     value: "low",
-    description: "Fastest and most cost-effective",
+    description: "速度最快，成本最低",
   },
   {
-    label: "Medium",
+    label: "中",
     value: "medium",
-    description: "Balanced quality and speed",
+    description: "兼顾质量与速度",
   },
   {
-    label: "High",
+    label: "高",
     value: "high",
-    description: "Best quality with longer generation time",
+    description: "质量最佳，生成时间较长",
   },
 ];

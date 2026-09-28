@@ -11,32 +11,32 @@ import { Select, SelectItem, SelectContent, SelectTrigger, SelectValue } from '.
 
 const DALLE_3_QUALITY_OPTIONS = [
     {
-        label: "Standard",
+        label: "标准",
         value: "standard",
-        description: "Faster generation with lower cost",
+        description: "成本更低但生成速度更快",
     },
     {
         label: "HD",
         value: "hd",
-        description: "Higher quality images with increased cost",
+        description: "成本更高但图像质量更佳",
     },
 ];
 
 const GPT_IMAGE_1_5_QUALITY_OPTIONS = [
     {
-        label: "Low",
+        label: "低",
         value: "low",
-        description: "Fastest and most cost-effective",
+        description: "最快且最具性价比",
     },
     {
-        label: "Medium",
+        label: "中",
         value: "medium",
-        description: "Balanced quality and speed",
+        description: "质量和速度均衡",
     },
     {
-        label: "High",
+        label: "高",
         value: "high",
-        description: "Best quality with longer generation time",
+        description: "长时间生成以获得最佳质量",
     },
 ];
 const renderQualitySelector = (llmConfig: LLMConfig, input_field_changed: (value: string, field: string) => void) => {
@@ -44,7 +44,7 @@ const renderQualitySelector = (llmConfig: LLMConfig, input_field_changed: (value
         return (
             <div className="w-[295px]">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                    DALL·E 3 Image Quality
+                    DALL·E 3 图像质量
                 </label>
                 <div className="">
                     <Select value={llmConfig.DALL_E_3_QUALITY} onValueChange={(value) => input_field_changed(value, "dall_e_3_quality")}>
@@ -88,7 +88,7 @@ const renderQualitySelector = (llmConfig: LLMConfig, input_field_changed: (value
         return (
             <div className="w-[295px]">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                    GPT Image 1.5 Quality
+                    GPT 图像 1.5 质量
                 </label>
                 <div className="">
                     <Select
@@ -143,7 +143,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                 <div>
                     <h4 className="text-xl font-normal text-[#191919]">图片生成设置</h4>
                     <p className="mt-2 text-sm max-w-[205px] text-gray-500">
-                        Choosing where images come from.
+                        选择图片来源。
                     </p>
                 </div>
                 <div className='flex items-center gap-4'>
@@ -154,7 +154,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                             {/* Image Provider Selection */}
                             <div className="my-8">
                                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                                    Select Image Provider
+                                    选择图像提供商
                                 </label>
                                 <div className="w-full">
                                     <Popover
@@ -173,7 +173,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                                         {llmConfig.IMAGE_PROVIDER
                                                             ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]
                                                                 ?.label || llmConfig.IMAGE_PROVIDER
-                                                            : "Select image provider"}
+                                                            : "选择图像提供商"}
                                                     </span>
                                                 </div>
                                                 <ChevronsUpDown className="w-4 h-4 text-gray-500" />
@@ -293,7 +293,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                             <div className="space-y-4 w-[295px]">
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Open WebUI URL
+                                                        Open WebUI 地址
                                                     </label>
                                                     <div className="relative">
                                                         <input
@@ -311,17 +311,17 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                                     </div>
                                                     <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
                                                         <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-                                                        Image model is configured in Open WebUI admin settings
+                                                        图像模型已在 Open WebUI 管理设置中配置
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        API Key (optional)
+                                                        API 密钥（可选）
                                                     </label>
                                                     <div className="relative">
                                                         <input
                                                             type="text"
-                                                            placeholder="Open WebUI API key"
+                                                        placeholder="Open WebUI API 密钥"
                                                             className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                                             value={llmConfig.OPEN_WEBUI_IMAGE_API_KEY || ""}
                                                             onChange={(e) => {
@@ -343,7 +343,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                             <div className=" space-y-4 w-[295px]">
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        ComfyUI Server URL
+                                                        ComfyUI 服务器 URL
                                                     </label>
                                                     <div className="relative">
                                                         <input
@@ -361,17 +361,16 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                                     </div>
                                                     <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
                                                         <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-                                                        Use your machine IP address (not localhost) when
-                                                        running in Docker
+                                                        运行 Docker 时使用您的机器 IP 地址（不要使用 localhost）
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Workflow JSON
+                                                        工作流 JSON
                                                     </label>
                                                     <div className="relative">
                                                         <textarea
-                                                            placeholder='Paste your ComfyUI workflow JSON here (export via "Export (API)" in ComfyUI)'
+                                                            placeholder='在此处粘贴您的 ComfyUI 工作流 JSON（通过 ComfyUI 中的"导出 (API)"导出）'
                                                             className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors font-mono text-xs"
                                                             rows={6}
                                                             value={llmConfig.COMFYUI_WORKFLOW || ""}
@@ -384,8 +383,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                                         />
                                                     </div>
                                                     <p className="mt-2 text-sm text-gray-500">
-                                                        Export your workflow from ComfyUI using &quot;Export
-                                                        (API)&quot; and paste the JSON here.
+                                                        使用 ComfyUI 的"导出 (API)"导出工作流，并将 JSON 粘贴在此处。
                                                     </p>
                                                 </div>
                                             </div>
@@ -401,7 +399,7 @@ const ImageSelectionConfig = ({ isImageGenerationDisabled, openImageProviderSele
                                             <div className="relative">
                                                 <input
                                                     type="text"
-                                                    placeholder={`Enter your ${provider.apiKeyFieldLabel}`}
+                                                    placeholder={`请输入您的${provider.apiKeyFieldLabel}`}
                                                     className="w-full px-4 py-2.5 h-12 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                                     value={getApiKeyValue(provider.apiKeyField || "")}
                                                     onChange={(e) =>

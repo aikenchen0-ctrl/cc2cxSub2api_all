@@ -94,15 +94,15 @@ export default function OpenAICompatibleImageFields({
         setModels([]);
         setModelsChecked(true);
         notify.error(
-          "Could not load models",
+          "无法加载模型",
           message
         );
       }
     } catch (error) {
       console.error("Error fetching models:", error);
       notify.error(
-        "Could not load models",
-        "Something went wrong while contacting the provider. Check your network and try again."
+        "无法加载模型",
+        "与提供商联系时出错。请检查网络连接并重试。"
       );
       setModels([]);
       setModelsChecked(true);
@@ -128,7 +128,7 @@ export default function OpenAICompatibleImageFields({
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-2 py-3 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                placeholder="Key for your image endpoint"
+                placeholder="图像端点的密钥"
               />
               <button
                 type="button"
@@ -143,7 +143,7 @@ export default function OpenAICompatibleImageFields({
               value={baseUrl}
               onChange={(e) => onBaseUrlChange(e.target.value)}
               className="mt-2 w-full rounded-lg border border-gray-300 px-2 py-3 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Base URL (include /v1)"
+              placeholder="基础 URL（包含/v1）"
             />
           </div>
           {(!modelsChecked || (modelsChecked && models.length === 0)) && (
@@ -160,10 +160,10 @@ export default function OpenAICompatibleImageFields({
               {modelsLoading ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Checking for models...
+                  正在查找模型...
                 </span>
               ) : (
-                "Check models"
+                "检查模型"
               )}
             </button>
           )}
@@ -183,7 +183,7 @@ export default function OpenAICompatibleImageFields({
                       className="flex h-12 w-full justify-between rounded-lg border border-gray-300 px-4 py-4 outline-none transition-colors hover:border-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     >
                       <span className="truncate text-sm font-medium text-gray-900">
-                        {model || "Select a model"}
+                        {model || "选择一个模型"}
                       </span>
                       <ChevronUp className="h-4 w-4 text-gray-500" />
                     </Button>
@@ -229,7 +229,7 @@ export default function OpenAICompatibleImageFields({
     <div className="w-full space-y-6">
       <p className="-mt-2 mb-2 flex items-center gap-2 text-sm text-gray-500">
         <span className="block h-1 w-1 rounded-full bg-gray-400" />
-        Use an endpoint that supports OpenAI-style{" "}
+        使用支持 OpenAI 风格的端点{" "}
         <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1/images/generations</code>。地址中请包含{" "}
         <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/v1</code>。
       </p>
@@ -240,7 +240,7 @@ export default function OpenAICompatibleImageFields({
           <input
             type="text"
             required
-            placeholder="Enter your URL"
+            placeholder="请输入您的 URL"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             value={baseUrl}
             onChange={(e) => onBaseUrlChange(e.target.value)}
@@ -254,7 +254,7 @@ export default function OpenAICompatibleImageFields({
           <input
             type="text"
             required
-            placeholder="Enter your API Key"
+            placeholder="输入您的 API 密钥"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
@@ -277,10 +277,10 @@ export default function OpenAICompatibleImageFields({
             {modelsLoading ? (
               <div className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Checking for models...
+                正在查找模型...
               </div>
             ) : (
-              "Check for available models"
+              "检查可用模型"
             )}
           </button>
         </div>
@@ -289,7 +289,7 @@ export default function OpenAICompatibleImageFields({
       {modelsChecked && models.length === 0 && (
         <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
           <p className="text-sm text-yellow-800">
-            No models found. Please make sure your API key is valid and has access to models.
+            未找到模型。请确保您的 API 密钥有效且有权访问模型。
           </p>
         </div>
       )}
@@ -301,7 +301,7 @@ export default function OpenAICompatibleImageFields({
             <input
               type="text"
               required
-              placeholder="e.g. dall-e-3, gpt-image-1"
+              placeholder="例如：dall-e-3, gpt-image-1"
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               value={model}
               onChange={(e) => onModelChange(e.target.value)}
@@ -327,7 +327,7 @@ export default function OpenAICompatibleImageFields({
                   aria-expanded={openModelSelect}
                   className="flex h-12 w-full justify-between rounded-lg border border-gray-300 px-4 py-4 font-normal outline-none transition-colors hover:border-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 >
-                  <span className="text-sm font-medium text-gray-900">{model || "Select a model"}</span>
+                  <span className="text-sm font-medium text-gray-900">{model || "选择一个模型"}</span>
                   <ChevronUp className="h-4 w-4 text-gray-500" />
                 </Button>
               </PopoverTrigger>

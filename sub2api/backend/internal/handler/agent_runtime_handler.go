@@ -260,6 +260,11 @@ func (h *AgentRuntimeHandler) ListOwnerUsage(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	items := ownerUsageItems(logs, ownerID, requestID)
+	response.Paginated(c, items, result.Total, 1, params.PageSize)
+}
+
+func ownerUsageItems(logs []service.UsageLog, ownerID int64, requestID string) []gin.H {
 	items := make([]gin.H, 0, len(logs))
 	for _, item := range logs {
 		if item.UserID != ownerID || item.RequestID != requestID {
@@ -294,7 +299,7 @@ func (h *AgentRuntimeHandler) ListOwnerUsage(c *gin.Context) {
 			"cache_ttl_overridden": item.CacheTTLOverridden, "created_at": item.CreatedAt,
 		})
 	}
-	response.Paginated(c, items, result.Total, 1, params.PageSize)
+	return items
 }
 
 func agentRuntimeIdentity(c *gin.Context) (string, int64, bool) {

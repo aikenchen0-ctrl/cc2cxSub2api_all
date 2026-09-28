@@ -177,7 +177,7 @@ function ungroupedComponent(
   const inheritedRotation = parentRotation + rotation;
   return {
     id: `${idBase}_part_${index + 1}`,
-    description: "Ungrouped component element",
+    description: "未组合组件元素",
     position,
     ...(inheritedRotation !== 0 ? { rotation: inheritedRotation } : {}),
     elements: [ungroupedElement(element, sourceBox)],

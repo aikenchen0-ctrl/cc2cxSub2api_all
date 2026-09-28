@@ -23,10 +23,10 @@ const LoadingStates: React.FC<LoadingStatesProps> = ({ type, message }) => {
 
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-gray-900">
-                Loading Layouts
+                加载布局中
               </h3>
               <p className="text-gray-600">
-                {message || "Discovering and loading layout components..."}
+                {message || "正在发现并加载布局组件..."}
               </p>
             </div>
 
@@ -62,11 +62,11 @@ const LoadingStates: React.FC<LoadingStatesProps> = ({ type, message }) => {
 
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-gray-900">
-                Something went wrong
+                发生错误
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 {message ||
-                  "Failed to load layouts. Please check your layout files and try again."}
+                  "加载布局失败。请检查您的布局文件并重试。"}
               </p>
             </div>
           </CardContent>
@@ -86,11 +86,10 @@ const LoadingStates: React.FC<LoadingStatesProps> = ({ type, message }) => {
 
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-gray-700">
-                No Layouts Found
+                未找到布局
               </h3>
               <p className="text-gray-500 text-sm leading-relaxed">
-                No valid layout files were discovered. Make sure your layout
-                components export both a default component and a Schema.
+                未发现有效的布局文件。请确保您的布局组件同时导出默认组件和 Schema。
               </p>
             </div>
 

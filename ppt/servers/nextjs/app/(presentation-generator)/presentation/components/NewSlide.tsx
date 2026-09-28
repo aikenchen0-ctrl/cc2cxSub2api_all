@@ -198,7 +198,7 @@ const NewSlideV1 = ({
       if (slideCount >= MAX_NUMBER_OF_SLIDES) {
         notify.warning(
       "已达到页面数量上限",
-          `You can have up to ${MAX_NUMBER_OF_SLIDES} slides.`
+          `您最多可以有${MAX_NUMBER_OF_SLIDES}张幻灯片。`
         );
         return;
       }
@@ -334,7 +334,7 @@ const NewSlideV1 = ({
             id="choose-slide-layout-title"
             className="text-base font-medium leading-tight text-[#191919]"
           >
-            Choose Slide Layout
+            选择幻灯片布局
           </h2>
           <p className="mt-1 text-xs font-normal leading-none text-[#7A7A85]">
             {loading ? "正在加载布局" : layoutCountText}
@@ -367,7 +367,7 @@ const NewSlideV1 = ({
           </div>
         ) : (
           <div className="flex h-56 items-center justify-center rounded-lg border border-dashed border-[#D9D9E1] bg-[#FAFAFB] text-sm text-[#7A7A85]">
-            No layouts available.
+            暂无可用布局
           </div>
         )}
       </div>

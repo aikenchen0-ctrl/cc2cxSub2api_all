@@ -193,14 +193,14 @@ function makeBulletListElement(marker: Marker): SlideElement {
   const items = [
     [
       {
-        text: "Clarify the goal and audience",
+        text: "明确目标和受众",
         font: { ...baseFont, bold: true },
       },
     ],
-    [{ text: "Show the strongest supporting point", font: { ...baseFont } }],
+    [{ text: "展示最有力的支持点", font: { ...baseFont } }],
     [
       {
-        text: "Close with the next action",
+        text: "以下一步行动结尾",
         font: { ...baseFont, italic: true },
       },
     ],
@@ -260,7 +260,7 @@ function createDefaultTextInsertElements(kind?: string): SlideElement[] {
       return [
         makeTextElement({
           name: "slide_title",
-          text: "Add a clear slide title",
+          text: "添加清晰的幻灯片标题",
           x: 109,
           y: 109,
           width: 986,
@@ -273,7 +273,7 @@ function createDefaultTextInsertElements(kind?: string): SlideElement[] {
       return [
         makeTextElement({
           name: "slide_subtitle",
-          text: "Add a concise supporting subtitle",
+          text: "添加简洁的支持副标题",
           x: 122,
           y: 154,
           width: 870,
@@ -293,7 +293,7 @@ function createDefaultTextInsertElements(kind?: string): SlideElement[] {
       return [
         makeTextElement({
           name: "quote",
-          text: '"Add a memorable quote or customer insight here."',
+          text: '在此处添加一句难忘的引言或客户洞察。',
           x: 122,
           y: 147,
           width: 858,
@@ -308,7 +308,7 @@ function createDefaultTextInsertElements(kind?: string): SlideElement[] {
       return [
         makeTextElement({
           name: "body_text",
-          text: "Add body text here. Use this space for a short paragraph or supporting detail.",
+          text: "在此处添加正文文本。使用此空间输入简短段落或补充说明。",
           x: 122,
           y: 154,
           width: 858,
@@ -365,7 +365,7 @@ function chartExample(chartType: ChartType) {
   switch (chartType) {
     case "donut":
       return {
-        title: "Revenue Share by Segment",
+        title: "各细分市场的收入占比",
         categories: ["Enterprise", "Mid-market", "Small business", "Consumer"],
         values: [42, 28, 18, 12],
         seriesName: "Revenue Share",
@@ -373,7 +373,7 @@ function chartExample(chartType: ChartType) {
       };
     case "horizontal_bar":
       return {
-        title: "Qualified Leads by Channel",
+        title: "各渠道合格线索",
         categories: ["Email", "Search", "Social", "Referral"],
         values: [68, 54, 47, 38],
         seriesName: "Qualified Leads",
@@ -381,7 +381,7 @@ function chartExample(chartType: ChartType) {
       };
     case "polar_area":
       return {
-        title: "Support Tickets by Priority",
+        title: "按优先级查看支持工单",
         categories: ["Critical", "High", "Medium", "Low"],
         values: [18, 32, 46, 24],
         seriesName: "Ticket Volume",
@@ -389,7 +389,7 @@ function chartExample(chartType: ChartType) {
       };
     case "radar":
       return {
-        title: "Product Readiness Score",
+        title: "产品就绪评分",
         categories: ["Design", "Reliability", "Speed", "Security", "Usability"],
         values: [82, 74, 88, 69, 91],
         seriesName: "Readiness Score",
@@ -397,7 +397,7 @@ function chartExample(chartType: ChartType) {
       };
     case "scatter":
       return {
-        title: "Campaign Conversion Results",
+        title: "活动转化结果",
         categories: ["Campaign A", "Campaign B", "Campaign C", "Campaign D"],
         values: [42, 57, 63, 76],
         seriesName: "Conversions",
@@ -405,7 +405,7 @@ function chartExample(chartType: ChartType) {
       };
     default:
       return {
-        title: "Quarterly Revenue Trend",
+        title: "季度收入趋势",
         categories: ["Q1", "Q2", "Q3", "Q4"],
         values: [38, 54, 47, 68],
         seriesName: "Revenue",
@@ -438,7 +438,7 @@ function makeChartElement(chartType: ChartType): SlideElement {
       position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "bar",
-      title: "Weekly Website Visits\nJun 10-16",
+      title: "6 月 10 日至 16 日的网站访问次数",
       color: "4D20C5",
       axis_color: "D8D8D8",
       grid_color: "D8D8D8",
@@ -472,7 +472,7 @@ function makeChartElement(chartType: ChartType): SlideElement {
       position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "line",
-      title: "Revenue Growth\n2021-2026",
+      title: "2021-2026 收入增长",
       color: "4D20C5",
       axis_color: "D8D8D8",
       grid_color: "D8D8D8",
@@ -506,7 +506,7 @@ function makeChartElement(chartType: ChartType): SlideElement {
       position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "area",
-      title: "Monthly Active Users\n2021-2026",
+      title: "2021-2026 月活跃用户数",
       color: "7555F6",
       axis_color: "D8D8D8",
       grid_color: "D8D8D8",
@@ -533,7 +533,7 @@ function makeChartElement(chartType: ChartType): SlideElement {
       position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "pie",
-      title: "Revenue Mix by Offering",
+      title: "按产品组合划分的收入构成",
       color: "7555F6",
       axis_color: "D8D8D8",
       grid_color: "D8D8D8",
@@ -557,7 +557,7 @@ function makeChartElement(chartType: ChartType): SlideElement {
       position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { width: 538, height: 410 },
       chart_type: chartType,
-      title: "Quarterly Revenue by Segment",
+      title: "按部门划分的季度收入",
       color: "7F22FE",
       axis_color: "D0D5DD",
       grid_color: "D0D5DD",
@@ -718,7 +718,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         })),
         rows: [
           {
-            label: "Research & Discovery",
+            label: "研究与发现",
             items: [
               {
                 name: "Research & Discovery",
@@ -728,7 +728,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             ],
           },
           {
-            label: "Content Planning",
+            label: "内容规划",
             items: [
               {
                 name: "Content Planning",
@@ -738,17 +738,17 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             ],
           },
           {
-            label: "Strategy Development",
+            label: "策略制定",
             items: [
               {
-                name: "Strategy Development",
+                name: "战略制定",
                 start: { column: 2, offset: 0.34 },
                 end: { column: 4, offset: 0.86 },
               },
             ],
           },
           {
-            label: "Design & Production",
+            label: "设计与制作",
             items: [{
               name: "Design & Production",
               start: { column: 4, offset: 0 },
@@ -756,7 +756,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             }],
           },
           {
-            label: "Content Creation",
+            label: "内容创作",
             items: [{
               name: "Content Creation",
               start: { column: 5, offset: 0 },
@@ -764,7 +764,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             }],
           },
           {
-            label: "Campaign Launch",
+            label: "活动发布",
             items: [{
               name: "Campaign Launch",
               start: { column: 5, offset: 0.52 },
@@ -772,7 +772,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             }],
           },
           {
-            label: "Performance Tracking",
+            label: "性能跟踪",
             items: [{
               name: "Performance Tracking",
               start: { column: 4, offset: 0.3 },
@@ -780,7 +780,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             }],
           },
           {
-            label: "Optimization",
+            label: "优化",
             items: [{
               name: "Optimization",
               start: { column: 6, offset: 0.9 },
@@ -788,7 +788,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
             }],
           },
           {
-            label: "Final Review",
+            label: "最终审查",
             items: [{
               name: "Final Review",
               start: { column: 6, offset: 0.56 },
@@ -828,40 +828,40 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover,
               color: "FFFFFF",
             },
-            heading: "Discover",
-            description: "Research the challenge and identify key needs.",
+            heading: "探索",
+            description: "研究挑战并确定关键需求",
           },
           {
             icon: {
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define,
               color: "FFFFFF",
             },
-            heading: "Define",
-            description: "Set clear goals, priorities, and direction.",
+            heading: "定义",
+            description: "设定明确的目标、优先级和方向",
           },
           {
             icon: {
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan,
               color: "FFFFFF",
             },
-            heading: "Plan",
-            description: "Build the strategy, timeline, and action plan.",
+            heading: "规划",
+            description: "制定战略、时间表和行动计划",
           },
           {
             icon: {
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute,
               color: "FFFFFF",
             },
-            heading: "Execute",
-            description: "Put the plan into action and track progress.",
+            heading: "执行",
+            description: "执行计划并跟踪进度",
           },
           {
             icon: {
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure,
               color: "FFFFFF",
             },
-            heading: "Measure",
-            description: "Review results against key performance indicators.",
+            heading: "衡量",
+            description: "将结果与关键绩效指标进行对比",
           },
         ],
       },
@@ -881,28 +881,28 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         type: "roadmap",
         items: [
           {
-            heading: "Discover",
-            description: "Research the challenge and identify key needs.",
+            heading: "探索",
+            description: "研究挑战并确定关键需求",
           },
           {
-            heading: "Define",
-            description: "Set clear goals, priorities, and direction.",
+            heading: "定义",
+            description: "设定明确的目标、优先级和方向",
           },
           {
-            heading: "Plan",
-            description: "Build the strategy, timeline, and action plan.",
+            heading: "规划",
+            description: "制定战略、时间表和行动计划",
           },
           {
-            heading: "Execute",
-            description: "Put the plan into action and track progress.",
+            heading: "执行",
+            description: "执行计划并跟踪进度",
           },
           {
-            heading: "Measure",
-            description: "Review results against key performance indicators.",
+            heading: "衡量",
+            description: "将结果与关键绩效指标进行对比",
           },
           {
-            heading: "Review",
-            description: "Capture lessons and decide the next direction.",
+            heading: "复盘",
+            description: "总结经验教训并决定下一步方向",
           },
         ],
       },
@@ -922,7 +922,7 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         type: "milestone_timeline",
         items: Array.from({ length: 7 }, (_, index) => ({
           heading: String(2020 + index),
-          description: "Defined the project vision, objectives, and strategic direction.",
+          description: "定义项目愿景、目标和战略方向",
         })),
       },
       colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "7CA2E5", "D6D6D6"],
@@ -942,28 +942,28 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         items: [
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "FFFFFF" },
-            heading: "Drive Growth",
-            description: "Expand customer reach, improve engagement, and increase revenue.",
+            heading: "推动增长",
+            description: "扩大客户覆盖面，提升参与度，增加收入。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "FFFFFF" },
-            heading: "Enter the Market",
-            description: "Launch strategically and establish a strong market presence.",
+            heading: "进入市场",
+            description: "战略启动并建立强大的市场地位。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan, color: "FFFFFF" },
-            heading: "Build the Solution",
-            description: "Develop products, services, and experiences.",
+            heading: "构建解决方案",
+            description: "开发产品、服务和体验。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "FFFFFF" },
-            heading: "Understand Market",
-            description: "Identify customer needs, market trends, and competitive gaps.",
+            heading: "了解市场",
+            description: "识别客户需求、市场趋势和竞争差距。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure, color: "FFFFFF" },
-            heading: "Define the Vision",
-            description: "Set clear goals, priorities, and a long-term direction.",
+            heading: "明确愿景",
+            description: "设定明确的目标、优先级和长期方向。",
           },
         ],
       },
@@ -976,71 +976,71 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
 
   if (infographicType === "supply_chain") {
     const entries = [
-      ["SOURCING", "Raw materials\nSupplier network"],
-      ["PROCUREMENT", "Purchasing\nQuality & cost"],
-      ["PRODUCTION", "Manufacturing\nQuality control"],
-      ["DISTRIBUTION", "Warehousing\nLogistics & delivery"],
-      ["END MARKET", "Retail / B2B\nCustomer delivery"],
+      ["资源获取", "原材料\n供应商网络"],
+      ["采购", "采购管理\n质量与成本"],
+      ["生产", "制造\n质量控制"],
+      ["配送", "仓储\n物流与交付"],
+      ["终端市场", "零售 / 企业客户\n客户交付"],
     ] as const;
     return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 300 }, data: { type: "supply_chain", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "supply_chain" };
   }
 
   if (infographicType === "stair_step_blocks") {
     const entries = [
-      ["Foundation", "Establish core capabilities, clear processes, resources, and operating structures."],
-      ["Optimize", "Streamline workflows, improve efficiency, reduce bottlenecks, and strengthen performance."],
-      ["Scale", "Expand capacity, customer reach, technology, and operational capabilities to support growth."],
-      ["Accelerate", "Invest in innovation, new opportunities, partnerships, and high-impact growth initiatives."],
-      ["Lead", "Build market leadership through continuous improvement and differentiation."],
+      ["基础", "建立核心能力、清晰流程、资源和运营结构。"],
+      ["优化", "精简工作流、提升效率、减少瓶颈并增强绩效。"],
+      ["扩展", "扩大产能、客户覆盖、技术和运营能力以支持增长。"],
+      ["加速", "投资创新、新机会、合作关系和高影响力增长举措。"],
+      ["引领", "通过持续改进和差异化建立市场领导地位。"],
     ] as const;
     return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 350 }, data: { type: "stair_step_blocks", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0"], text_color: null, decorative: false, name: "stair_step_blocks" };
   }
 
   if (infographicType === "maturity_model") {
     const entries = [
-      ["Initial", "Capabilities are continuously refined through automation, innovation, advanced analytics, and proactive performance management."],
-      ["Developing", "Performance is actively measured through KPIs and data, enabling teams to identify gaps and manage outcomes."],
-      ["Defined", "Core processes are standardized, documented, and consistently applied, with clearer roles and governance."],
-      ["Managed", "Basic processes and responsibilities are emerging, but execution varies across teams."],
-      ["Optimized", "Processes are largely informal and reactive, with limited standardization or clear ownership."],
+      ["初始阶段", "流程大多依赖临时响应，标准化程度有限，职责归属尚不清晰。"],
+      ["发展阶段", "基础流程和职责逐步形成，但不同团队的执行方式仍有差异。"],
+      ["规范阶段", "核心流程已实现标准化、文档化和一致执行，角色与治理更加清晰。"],
+      ["管理阶段", "通过关键指标和数据主动衡量绩效，帮助团队识别差距并管理结果。"],
+      ["优化阶段", "通过自动化、创新、高级分析和主动绩效管理持续优化能力。"],
     ] as const;
     return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 390 }, data: { type: "maturity_model", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0"], text_color: null, decorative: false, name: "maturity_model" };
   }
 
   if (infographicType === "pillar_framework") {
     const entries = [
-      ["Customer", "Strengthen customer relationships, improve experience, and deliver greater value across key touchpoints.", "Experience & Value"],
-      ["Growth", "Expand market presence, develop new opportunities, and build sustainable revenue streams.", "Revenue & Market"],
-      ["Operations", "Simplify processes, improve productivity, and build scalable operating capabilities.", "Efficiency & Scale"],
-      ["Innovation", "Leverage technology, data, and innovation to create new solutions and differentiation.", "Digital & New Ideas"],
-      ["People", "Develop capabilities, strengthen leadership, and create a culture of ownership and continuous improvement.", "Talent & Culture"],
+      ["客户", "加强客户关系、改善体验，并在关键触点创造更大价值。", "体验与价值"],
+      ["增长", "扩大市场影响力、发掘新机会并建立可持续收入来源。", "收入与市场"],
+      ["运营", "简化流程、提升生产力并建立可扩展的运营能力。", "效率与规模"],
+      ["创新", "运用技术、数据和创新打造新解决方案与差异化优势。", "数字化与新思路"],
+      ["人才", "发展能力、强化领导力并营造担当和持续改进的文化。", "人才与文化"],
     ] as const;
-    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 380 }, data: { type: "pillar_framework", title: "Growth & Transformation Framework", items: entries.map(([heading, description, focus], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description, focus })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "pillar_framework" };
+    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 380 }, data: { type: "pillar_framework", title: "增长与转型框架", items: entries.map(([heading, description, focus], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description, focus })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "pillar_framework" };
   }
 
   if (infographicType === "transformation_hub") {
-    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 300 }, data: { type: "transformation_hub", center_label: "Business\nTransformation", items: ["Strategy", "Customer", "People", "Process", "Technology", "Data"].map((heading) => ({ heading })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "transformation_hub" };
+    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 300 }, data: { type: "transformation_hub", center_label: "业务\n转型", items: ["战略", "客户", "人才", "流程", "技术", "数据"].map((heading) => ({ heading })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "transformation_hub" };
   }
 
   if (infographicType === "diagonal_circles") {
     const entries = [
-      ["Strategy", "Defines the organization's direction, priorities, objectives, and investment focus."],
-      ["People", "Builds the skills, leadership, accountability, and culture required to execute strategy."],
-      ["Customer", "Focuses on customer needs, experience, engagement, and value creation."],
-      ["Process", "Improves workflows, standardization, efficiency, and governance."],
-      ["Technology", "Enables digital transformation through systems, automation, integration, and data-driven capabilities."],
+      ["战略", "明确组织方向、优先事项、目标和投资重点。"],
+      ["人才", "建立执行战略所需的技能、领导力、责任机制和文化。"],
+      ["客户", "聚焦客户需求、体验、互动和价值创造。"],
+      ["流程", "改善工作流、标准化、效率和治理。"],
+      ["技术", "通过系统、自动化、集成和数据驱动能力推动数字化转型。"],
     ] as const;
     return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 430 }, data: { type: "diagonal_circles", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "diagonal_circles" };
   }
 
   if (infographicType === "risk_matrix") {
     const entries = [
-      ["Identify", "Detect potential risks across operations, technology, finance, people, and external factors."],
-      ["Prioritize", "Rank risks by severity to focus attention and resources on the most critical areas."],
-      ["Assess", "Evaluate likelihood, impact, and exposure to understand each risk."],
-      ["Respond", "Define mitigation actions, controls, owners, and contingency plans for priority risks."],
+      ["识别", "发现运营、技术、财务、人才和外部因素中的潜在风险。"],
+      ["排序", "按严重程度排列风险，将注意力和资源集中到最关键领域。"],
+      ["评估", "评估发生概率、影响和暴露程度，全面了解每项风险。"],
+      ["应对", "为重点风险明确缓解措施、控制机制、负责人和应急计划。"],
     ] as const;
-    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 370 }, data: { type: "risk_matrix", center_label: "RISK", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "risk_matrix" };
+    return { type: "infographic", position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION }, size: { width: 720, height: 370 }, data: { type: "risk_matrix", center_label: "风险", items: entries.map(([heading, description], index) => ({ icon: { url: Object.values(INFOGRAPHIC_EXAMPLE_ICON_URLS)[index % 5], color: "FFFFFF" }, heading, description })) }, colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"], text_color: null, decorative: false, name: "risk_matrix" };
   }
 
   if (infographicType === "chevron_process") {
@@ -1052,24 +1052,24 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         type: "chevron_process",
         items: [
           {
-            heading: "Discover",
-            description: "Understand the business, market, and key challenges.",
+            heading: "探索",
+            description: "了解业务、市场和关键挑战。",
           },
           {
-            heading: "Analyze",
-            description: "Evaluate data, trends, competitors, and opportunities.",
+            heading: "分析",
+            description: "评估数据、趋势、竞争对手和机会。",
           },
           {
-            heading: "Define",
-            description: "Prioritize strategic issues and define objectives.",
+            heading: "定义",
+            description: "优先处理战略问题并定义目标。",
           },
           {
-            heading: "Design",
-            description: "Develop solutions, initiatives, and strategic priorities.",
+            heading: "设计",
+            description: "制定解决方案、举措和战略优先级。",
           },
           {
-            heading: "Implement",
-            description: "Build the roadmap, actions, owners, and next steps.",
+            heading: "实施",
+            description: "制定路线图、行动项、负责人及下一步计划。",
           },
         ],
       },
@@ -1091,28 +1091,28 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
           "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=900&q=80",
         items: [
           {
-            heading: "Discover",
-            description: "Understand the business, market, and key challenges.",
+            heading: "探索",
+            description: "了解业务、市场和关键挑战。",
           },
           {
-            heading: "Analyze",
-            description: "Review data, identify patterns, and evaluate opportunities.",
+            heading: "分析",
+            description: "审查数据，识别模式并评估机会。",
           },
           {
-            heading: "Plan",
-            description: "Define priorities, develop the approach, and establish clear actions.",
+            heading: "规划",
+            description: "确定优先级，制定方案并明确行动项。",
           },
           {
-            heading: "Execute",
-            description: "Implement the recommended actions and track progress.",
+            heading: "执行",
+            description: "实施推荐行动并跟踪进度。",
           },
           {
-            heading: "Optimize",
-            description: "Measure performance and improve the plan.",
+            heading: "优化",
+            description: "衡量绩效并优化计划。",
           },
           {
-            heading: "Finalize",
-            description: "Capture outcomes, decisions, and next steps.",
+            heading: "定稿",
+            description: "记录成果、决策及下一步计划。",
           },
         ],
       },
@@ -1133,23 +1133,23 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         items: [
           {
             value: 57,
-            heading: "Awareness",
-            description: "Implement the recommended actions and track progress.",
+            heading: "认知",
+            description: "实施推荐行动并跟踪进度。",
           },
           {
             value: 42,
-            heading: "Interest",
-            description: "Users showing engagement with the offering.",
+            heading: "兴趣",
+            description: "展示对解决方案的参与度用户。",
           },
           {
             value: 36,
-            heading: "Consideration",
-            description: "Prospects evaluating the solution.",
+            heading: "考虑",
+            description: "正在评估解决方案的潜在客户。",
           },
           {
             value: 27,
-            heading: "Intent",
-            description: "Users showing strong purchase interest.",
+            heading: "意向",
+            description: "表现出强烈购买意向的用户。",
           },
         ],
       },
@@ -1170,23 +1170,23 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         items: [
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "FFFFFF" },
-            heading: "Foundation",
-            description: "Establish strong processes, capabilities, and resources.",
+            heading: "基础",
+            description: "建立强大的流程、能力和资源。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "FFFFFF" },
-            heading: "Efficiency",
-            description: "Streamline operations, reduce gaps, and optimize costs.",
+            heading: "效率",
+            description: "精简运营，消除差距，优化成本。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan, color: "FFFFFF" },
-            heading: "Growth",
-            description: "Enter new markets, strengthen offerings, and increase reach.",
+            heading: "增长",
+            description: "开拓新市场，强化产品，扩大影响力。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "FFFFFF" },
-            heading: "Innovation",
-            description: "Develop new ideas, solutions, and competitive advantages.",
+            heading: "创新",
+            description: "开发新理念、解决方案及竞争优势。",
           },
         ],
       },
@@ -1207,28 +1207,28 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         items: [
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure, color: "FFFFFF" },
-            heading: "Foundation",
-            description: "Establish strong processes, capabilities, and resources.",
+            heading: "基础",
+            description: "建立强大的流程、能力和资源。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "FFFFFF" },
-            heading: "Efficiency",
-            description: "Streamline operations, reduce gaps, and optimize costs.",
+            heading: "效率",
+            description: "精简运营，消除差距，优化成本。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "FFFFFF" },
-            heading: "Growth",
-            description: "Enter new markets, strengthen offerings, and increase reach.",
+            heading: "增长",
+            description: "开拓新市场，强化产品，扩大影响力。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan, color: "FFFFFF" },
-            heading: "Innovation",
-            description: "Develop new ideas, solutions, and competitive advantages.",
+            heading: "创新",
+            description: "开发新理念、解决方案及竞争优势。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "FFFFFF" },
-            heading: "Leadership",
-            description: "Build long-term resilience, market leadership, and value creation.",
+            heading: "领导力",
+            description: "构建长期韧性、市场领导地位与价值创造能力。",
           },
         ],
       },
@@ -1254,23 +1254,23 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure, color: "FFFFFF" },
-            heading: "Awareness",
-            description: "Customer discovers the brand through marketing and referrals.",
+            heading: "认知",
+            description: "客户通过营销和推荐发现品牌。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "FFFFFF" },
-            heading: "Consideration",
-            description: "Customer explores options, compares alternatives.",
+            heading: "考虑",
+            description: "客户探索选项并比较替代方案。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "FFFFFF" },
-            heading: "Purchase",
-            description: "Customer makes a decision and completes the transaction.",
+            heading: "购买",
+            description: "客户做出决策并完成交易。",
           },
           {
             icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "FFFFFF" },
-            heading: "Experience",
-            description: "Customer uses the product or service and interacts with support.",
+            heading: "体验",
+            description: "客户使用产品或服务并与支持团队互动。",
           },
         ],
       },
@@ -1283,14 +1283,14 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
 
   if (infographicType === "before_after") {
     const beforeItems = [
-      ["Manual Processes", "Time-consuming workflows."],
-      ["Limited Visibility", "Data is difficult to access."],
-      ["Fragmented Workflows", "Teams work in silos."],
+      ["手动流程", "工作流耗时较长。"],
+      ["可见性有限", "数据难以获取。"],
+      ["流程割裂", "团队各自为战。"],
     ] as const;
     const afterItems = [
-      ["Automated Processes", "Faster, streamlined operations."],
-      ["Faster Decisions", "Quicker, data-driven actions."],
-      ["Connected Workflows", "Better team collaboration."],
+      ["自动化流程", "运营更快、更精简。"],
+      ["更快决策", "更快速地采取数据驱动行动。"],
+      ["协同流程", "团队协作更加顺畅。"],
     ] as const;
     const beforeIcons = [
       INFOGRAPHIC_EXAMPLE_ICON_URLS.measure,
@@ -1308,8 +1308,8 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
       size: { width: 720, height: 460 },
       data: {
         type: "before_after",
-        before_label: "Before",
-        after_label: "After",
+        before_label: "之前",
+        after_label: "之后",
         items: beforeItems.flatMap(([beforeHeading, beforeDescription], index) => [
           {
             icon: { url: beforeIcons[index], color: "FFFFFF" },
@@ -1337,26 +1337,26 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
       size: { width: 720, height: 420 },
       data: {
         type: "impact_effort_matrix",
-        x_axis_label: "Impact",
-        y_axis_label: "Effort",
-        low_label: "Low",
-        high_label: "High",
+        x_axis_label: "影响力",
+        y_axis_label: "工作量",
+        low_label: "低",
+        high_label: "高",
         items: [
           {
-            heading: "Quick Wins",
-            description: "High-impact initiatives that require relatively low effort, making them ideal for immediate execution and fast results.",
+            heading: "快速见效",
+            description: "高影响力且需较少投入的举措，适合立即执行并快速见效。",
           },
           {
-            heading: "Strategic Priorities",
-            description: "High-impact initiatives that require significant investment, planning, and resources but can drive long-term business value.",
+            heading: "战略重点",
+            description: "高影响力但需大量投资、规划和资源的举措，可驱动长期商业价值。",
           },
           {
-            heading: "Deprioritize",
-            description: "Low-impact initiatives requiring substantial effort or resources, making them less suitable for immediate focus.",
+            heading: "降低优先级",
+            description: "需要大量努力或资源、不适合立即着手的重点工作。",
           },
           {
-            heading: "Fill-ins",
-            description: "Low-impact initiatives that are easy to implement and can be addressed when resources are available.",
+            heading: "补充事项",
+            description: "易于实施且可在资源到位时处理的重点工作。",
           },
         ],
       },
@@ -1369,11 +1369,11 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
 
   if (infographicType === "comparison_matrix") {
     const criteria = [
-      "Market Access",
-      "Investment Required",
-      "Speed to Market",
-      "Control",
-      "Scalability",
+      "市场准入",
+      "所需投资",
+      "上市速度",
+      "控制力",
+      "可扩展性",
     ];
     return {
       type: "infographic",
@@ -1383,11 +1383,11 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
         type: "comparison_matrix",
         criteria,
         items: [
-          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure, color: "111111" }, heading: "Organic Growth", values: ["Moderate", "Low", "Slow", "High", "High"] },
-          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "111111" }, heading: "Product Innovation", values: ["High", "Low", "Fast", "Low", "High"] },
-          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "111111" }, heading: "Strategic Partnership", values: ["Low", "Low", "Slow", "Fast", "High"] },
-          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "111111" }, heading: "Acquisition", values: ["Moderate", "Low", "Slow", "High", "High"] },
-          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan, color: "111111" }, heading: "Market Expansion", values: ["Moderate", "Low", "Slow", "High", "High"] },
+          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure, color: "111111" }, heading: "自然增长", values: ["中等", "Low", "慢", "High", "High"] },
+          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define, color: "111111" }, heading: "产品创新", values: ["High", "Low", "快", "Low", "High"] },
+          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover, color: "111111" }, heading: "战略合作", values: ["Low", "Low", "慢", "快", "High"] },
+          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute, color: "111111" }, heading: "收购", values: ["中等", "Low", "慢", "High", "High"] },
+          { icon: { url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan, color: "111111" }, heading: "市场拓展", values: ["中等", "Low", "慢", "High", "High"] },
         ],
       },
       colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"],
@@ -1405,17 +1405,17 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
       data: {
         type: "org_chart",
         items: [
-          { id: "ceo", parent_id: null, heading: "Aarav Sharma", description: "Chief Executive Officer" },
-          { id: "coo", parent_id: "ceo", heading: "Nisha Kapoor", description: "Chief Operating Officer" },
-          { id: "cfo", parent_id: "ceo", heading: "Rohan Mehta", description: "Chief Financial Officer" },
-          { id: "cmo", parent_id: "ceo", heading: "Priya Malhotra", description: "Chief Marketing Officer" },
-          { id: "operations", parent_id: "coo", heading: "Rohan Thapa", description: "Operations Manager" },
-          { id: "product", parent_id: "cmo", heading: "Vikram Joshi", description: "Product Manager" },
-          { id: "finance", parent_id: "cmo", heading: "Rahul Nair", description: "Finance Manager" },
-          { id: "ops-executive", parent_id: "operations", heading: "Sneha Gurung", description: "Operations Executive" },
-          { id: "analyst", parent_id: "operations", heading: "Amit Shrestha", description: "Process Analyst" },
-          { id: "finance-executive", parent_id: "finance", heading: "Aditya Rao", description: "Finance Executive" },
-          { id: "accountant", parent_id: "finance", heading: "Dev Sharma", description: "Accountant" },
+          { id: "ceo", parent_id: null, heading: "张伟", description: "首席执行官" },
+          { id: "coo", parent_id: "ceo", heading: "李娜", description: "首席运营官" },
+          { id: "cfo", parent_id: "ceo", heading: "王强", description: "首席财务官" },
+          { id: "cmo", parent_id: "ceo", heading: "刘芳", description: "首席营销官" },
+          { id: "operations", parent_id: "coo", heading: "陈杰", description: "运营经理" },
+          { id: "product", parent_id: "cmo", heading: "杨帆", description: "产品经理" },
+          { id: "finance", parent_id: "cmo", heading: "赵磊", description: "财务经理" },
+          { id: "ops-executive", parent_id: "operations", heading: "周敏", description: "运营主管" },
+          { id: "analyst", parent_id: "operations", heading: "吴昊", description: "流程分析师" },
+          { id: "finance-executive", parent_id: "finance", heading: "郑宇", description: "财务高管" },
+          { id: "accountant", parent_id: "finance", heading: "孙浩", description: "会计员" },
         ],
       },
       colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"],
@@ -1433,19 +1433,19 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
       data: {
         type: "decision_tree",
         items: [
-          { id: "decision", parent_id: null, heading: "Market Expansion Decision" },
-          { id: "demand", parent_id: "decision", heading: "Market Demand" },
-          { id: "competitive", parent_id: "decision", heading: "Competitive Position" },
-          { id: "feasibility", parent_id: "decision", heading: "Investment Feasibility" },
-          { id: "readiness", parent_id: "decision", heading: "Operational Readiness" },
-          { id: "market-demand", parent_id: "demand", heading: "Market Demand" },
-          { id: "growth", parent_id: "demand", heading: "Growth Potential" },
-          { id: "competition", parent_id: "competitive", heading: "Competition Level" },
-          { id: "saturation", parent_id: "competitive", heading: "Market Saturation" },
-          { id: "capacity", parent_id: "feasibility", heading: "Limited capacity" },
-          { id: "funding", parent_id: "feasibility", heading: "Funding required" },
-          { id: "ready", parent_id: "readiness", heading: "Fully ready" },
-          { id: "partial", parent_id: "readiness", heading: "Partially ready" },
+          { id: "decision", parent_id: null, heading: "市场拓展决策" },
+          { id: "demand", parent_id: "decision", heading: "市场需求" },
+          { id: "competitive", parent_id: "decision", heading: "竞争地位" },
+          { id: "feasibility", parent_id: "decision", heading: "投资可行性" },
+          { id: "readiness", parent_id: "decision", heading: "运营准备度" },
+          { id: "market-demand", parent_id: "demand", heading: "市场需求" },
+          { id: "growth", parent_id: "demand", heading: "增长潜力" },
+          { id: "competition", parent_id: "competitive", heading: "竞争程度" },
+          { id: "saturation", parent_id: "competitive", heading: "市场饱和度" },
+          { id: "capacity", parent_id: "feasibility", heading: "能力有限" },
+          { id: "funding", parent_id: "feasibility", heading: "需要资金" },
+          { id: "ready", parent_id: "readiness", heading: "准备充分" },
+          { id: "partial", parent_id: "readiness", heading: "部分准备" },
         ],
       },
       colors: ["FFFFFF", "102E79", "24468E", "385EAA", "4D73BE", "6388D0", "D6D6D6"],
@@ -1468,8 +1468,8 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.discover,
               color: "FFFFFF",
             },
-            heading: "Discover",
-            description: "Research the challenge and identify key needs.",
+            heading: "探索",
+            description: "研究挑战并确定关键需求",
             items: [],
           },
           {
@@ -1477,8 +1477,8 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.define,
               color: "FFFFFF",
             },
-            heading: "Define",
-            description: "Set clear goals, priorities, and direction.",
+            heading: "定义",
+            description: "设定明确的目标、优先级和方向",
             items: [],
           },
           {
@@ -1486,8 +1486,8 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.plan,
               color: "FFFFFF",
             },
-            heading: "Plan",
-            description: "Build the strategy, timeline, and action plan.",
+            heading: "规划",
+            description: "制定战略、时间表和行动计划",
             items: [],
           },
           {
@@ -1495,8 +1495,8 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.execute,
               color: "FFFFFF",
             },
-            heading: "Execute",
-            description: "Put the plan into action and track progress.",
+            heading: "执行",
+            description: "执行计划并跟踪进度",
             items: [],
           },
           {
@@ -1504,9 +1504,9 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
               url: INFOGRAPHIC_EXAMPLE_ICON_URLS.measure,
               color: "FFFFFF",
             },
-            heading: "Measure",
+            heading: "衡量",
             description:
-              "Review results against key performance indicators.",
+              "将结果与关键绩效指标进行对比",
             items: [],
           },
         ],
@@ -1562,18 +1562,18 @@ function makeSimpleTableElement(): SlideElement {
     position: { x: 122, y: 128 },
     size: { width: 819, height: 186 },
     columns: [
-      makeTableCell({ text: "Metric", font: headerFont, color: headerFill }),
-      makeTableCell({ text: "Current", font: headerFont, color: headerFill }),
-      makeTableCell({ text: "Target", font: headerFont, color: headerFill }),
+      makeTableCell({ text: "指标", font: headerFont, color: headerFill }),
+      makeTableCell({ text: "当前", font: headerFont, color: headerFill }),
+      makeTableCell({ text: "目标", font: headerFont, color: headerFill }),
     ],
     rows: [
       [
-        makeTableCell({ text: "Activation", font: baseFont, color: bodyFill }),
+        makeTableCell({ text: "激活", font: baseFont, color: bodyFill }),
         makeTableCell({ text: "68%", font: baseFont, color: bodyFill }),
         makeTableCell({ text: "75%", font: baseFont, color: bodyFill }),
       ],
       [
-        makeTableCell({ text: "Retention", font: baseFont, color: bodyFill }),
+        makeTableCell({ text: "留存", font: baseFont, color: bodyFill }),
         makeTableCell({ text: "42%", font: baseFont, color: bodyFill }),
         makeTableCell({ text: "50%", font: baseFont, color: bodyFill }),
       ],
@@ -1635,13 +1635,13 @@ function createDefaultImageInsertContent(kind?: string): EditorInsertContent {
         components: [
           {
             id: "image_text",
-            description: "Image with heading and supporting text",
+            description: "带标题和支持性文本的图像",
             position: { x: 122, y: 128 },
             elements: [
               makeImageElement({ x: 0, y: 0, width: 486, height: 371 }),
               makeTextElement({
                 name: "image_heading",
-                text: "Add a heading",
+                text: "添加标题",
                 x: 525,
                 y: 15,
                 width: 442,
@@ -1651,7 +1651,7 @@ function createDefaultImageInsertContent(kind?: string): EditorInsertContent {
               }),
               makeTextElement({
                 name: "image_supporting_text",
-                text: "Add supporting text that explains why this visual matters.",
+                text: "添加说明性文字，解释该视觉元素的重要性",
                 x: 525,
                 y: 108,
                 width: 442,
@@ -1669,7 +1669,7 @@ function createDefaultImageInsertContent(kind?: string): EditorInsertContent {
         components: [
           {
             id: "image_grid",
-            description: "Two-by-two image grid",
+            description: "两列图像网格",
             position: { x: 128, y: 122 },
             elements: [
               makeImageElement({
@@ -1718,70 +1718,70 @@ const DEFAULT_VECTOR_LINE_STROKE: Stroke = {
 
 export const ELEMENT_INSERT_GROUPS = [
   {
-    label: "Basic Shapes",
+    label: "基本形状",
     items: [
-      { id: "vector-rectangle", label: "Rectangle" },
-      { id: "vector-rounded-rectangle", label: "Rounded Rect" },
-      { id: "vector-capsule", label: "Capsule" },
-      { id: "vector-circle", label: "Circle" },
-      { id: "vector-ellipse", label: "Ellipse" },
-      { id: "vector-triangle", label: "Triangle" },
-      { id: "vector-right-triangle", label: "Right Triangle" },
-      { id: "vector-diamond", label: "Diamond" },
-      { id: "vector-parallelogram", label: "Parallelogram" },
-      { id: "vector-trapezoid", label: "Trapezoid" },
-      { id: "vector-pentagon", label: "Pentagon" },
-      { id: "vector-hexagon", label: "Hexagon" },
-      { id: "vector-octagon", label: "Octagon" },
-      { id: "vector-teardrop", label: "Teardrop" },
+      { id: "vector-rectangle", label: "矩形" },
+      { id: "vector-rounded-rectangle", label: "圆角矩形" },
+      { id: "vector-capsule", label: "胶囊形" },
+      { id: "vector-circle", label: "圆形" },
+      { id: "vector-ellipse", label: "椭圆" },
+      { id: "vector-triangle", label: "三角形" },
+      { id: "vector-right-triangle", label: "直角三角形" },
+      { id: "vector-diamond", label: "钻石" },
+      { id: "vector-parallelogram", label: "平行四边形" },
+      { id: "vector-trapezoid", label: "梯形" },
+      { id: "vector-pentagon", label: "五边形" },
+      { id: "vector-hexagon", label: "六边形" },
+      { id: "vector-octagon", label: "八边形" },
+      { id: "vector-teardrop", label: "泪滴" },
     ],
   },
   {
-    label: "Lines & Arrows",
+    label: "线条与箭头",
     items: [
-      { id: "vector-line", label: "Line" },
-      { id: "vector-line-arrow", label: "Arrow" },
-      { id: "vector-line-arrow-both", label: "Double Arrow" },
-      { id: "vector-line-stealth", label: "Stealth Arrow" },
-      { id: "vector-line-filled", label: "Filled Arrow" },
-      { id: "vector-line-filled-both", label: "Filled Double" },
-      { id: "vector-line-circle-arrow", label: "Circle + Arrow" },
-      { id: "vector-line-square-arrow", label: "Square + Arrow" },
-      { id: "vector-line-diamond-arrow", label: "Diamond + Arrow" },
+      { id: "vector-line", label: "线" },
+      { id: "vector-line-arrow", label: "箭头" },
+      { id: "vector-line-arrow-both", label: "双向箭头" },
+      { id: "vector-line-stealth", label: "隐形箭头" },
+      { id: "vector-line-filled", label: "实心箭头" },
+      { id: "vector-line-filled-both", label: "实心双箭头" },
+      { id: "vector-line-circle-arrow", label: "圆圈加箭头" },
+      { id: "vector-line-square-arrow", label: "方块加箭头" },
+      { id: "vector-line-diamond-arrow", label: "菱形加箭头" },
     ],
   },
   {
-    label: "Block Arrows",
+    label: "块状箭头",
     items: [
-      { id: "vector-arrow", label: "Right Arrow" },
-      { id: "vector-arrow-left", label: "Left Arrow" },
-      { id: "vector-arrow-up", label: "Up Arrow" },
-      { id: "vector-arrow-down", label: "Down Arrow" },
-      { id: "vector-arrow-left-right", label: "Left–Right Arrow" },
-      { id: "vector-arrow-up-down", label: "Up–Down Arrow" },
-      { id: "vector-chevron-right", label: "Chevron" },
-      { id: "vector-notched-arrow", label: "Notched Arrow" },
-      { id: "vector-bent-arrow", label: "Bent Arrow" },
-      { id: "vector-four-way-arrow", label: "Four-Way Arrow" },
+      { id: "vector-arrow", label: "右箭头" },
+      { id: "vector-arrow-left", label: "左箭头" },
+      { id: "vector-arrow-up", label: "上箭头" },
+      { id: "vector-arrow-down", label: "下箭头" },
+      { id: "vector-arrow-left-right", label: "左右箭头" },
+      { id: "vector-arrow-up-down", label: "上下箭头" },
+      { id: "vector-chevron-right", label: "角标" },
+      { id: "vector-notched-arrow", label: "带缺口的箭头" },
+      { id: "vector-bent-arrow", label: "弯曲箭头" },
+      { id: "vector-four-way-arrow", label: "四向箭头" },
     ],
   },
   {
-    label: "Symbols",
+    label: "符号",
     items: [
-      { id: "vector-plus", label: "Plus" },
-      { id: "vector-cross", label: "Cross" },
-      { id: "vector-lightning", label: "Lightning" },
-      { id: "vector-home", label: "Home" },
-      { id: "vector-speech-bubble", label: "Speech Bubble" },
-      { id: "vector-cloud", label: "Cloud" },
-      { id: "vector-heart", label: "Heart" },
-      { id: "vector-star", label: "Star" },
-      { id: "vector-bookmark", label: "Bookmark" },
-      { id: "vector-shield", label: "Shield" },
-      { id: "vector-flag", label: "Flag" },
-      { id: "vector-moon", label: "Moon" },
-      { id: "vector-sun", label: "Sun" },
-      { id: "vector-play", label: "Play" },
+      { id: "vector-plus", label: "加号" },
+      { id: "vector-cross", label: "交叉" },
+      { id: "vector-lightning", label: "闪电" },
+      { id: "vector-home", label: "主页" },
+      { id: "vector-speech-bubble", label: "对话气泡" },
+      { id: "vector-cloud", label: "云朵" },
+      { id: "vector-heart", label: "爱心" },
+      { id: "vector-star", label: "星星" },
+      { id: "vector-bookmark", label: "书签" },
+      { id: "vector-shield", label: "盾牌" },
+      { id: "vector-flag", label: "旗帜" },
+      { id: "vector-moon", label: "月亮" },
+      { id: "vector-sun", label: "太阳" },
+      { id: "vector-play", label: "播放" },
     ],
   },
 ] as const;

@@ -101,7 +101,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
 
           <h3 className="text-xl font-normal text-[#191919]">OpenAI API 密钥</h3>
           <p className="mt-2 text-sm max-w-[205px] text-gray-500">
-            Your API key will be stored locally and never shared
+            您的 API 密钥将本地存储且绝不共享
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -111,14 +111,14 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
             <div className="flex flex-col justify-start gap-2">
 
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                OpenAI API Key
+                OpenAI API 密钥
               </label>
               <input
                 type="text"
                 value={openaiApiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 className="w-full px-2 py-3 outline-none border  border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                placeholder="Enter your API key"
+                placeholder="输入您的 Google API 密钥"
               />
             </div>
 
@@ -137,10 +137,10 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
                 {modelsLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Checking for models...
+                    正在查找模型...
                   </span>
                 ) : (
-                  "Check for available models"
+                  "检查可用模型"
                 )}
               </button>
 
@@ -151,7 +151,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
             {modelsChecked && availableModels.length === 0 && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm text-yellow-800">
-                  No models found. Please make sure your API key is valid and has access to OpenAI models.
+                  未找到模型。请确保您的 API 密钥有效且有权访问 OpenAI 模型。
                 </p>
               </div>
             )}
@@ -160,7 +160,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
             {modelsChecked && availableModels.length > 0 ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Select OpenAI Model
+                  选择 OpenAI 模型
                 </label>
                 <div className="w-full">
                   <Popover
@@ -178,7 +178,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
                           <span className="text-sm font-medium text-gray-900">
                             {openaiModel
                               ? availableModels.find(model => model === openaiModel) || openaiModel
-                              : "Select a model"}
+                              : "选择一个模型"}
                           </span>
                         </div>
                         <ChevronsUpDown className="w-4 h-4 text-gray-500" />
@@ -245,7 +245,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
           <h4 className="text-xl font-normal text-[#191919]">模型控制</h4>
           <p className="mt-2 text-sm max-w-[205px] text-gray-500">
 
-            Configure web access, image generation, and advanced AI features.
+            配置 Web 访问、图像生成和高级 AI 功能
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -257,7 +257,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
                 onCheckedChange={(checked) => onInputChange(checked, "web_grounding")}
               />
               <label className="text-sm font-medium text-gray-700">
-                Enable Web Grounding
+                启用 Web 定位
               </label>
             </div>
             <div className="flex items-center  mb-4 gap-2.5 ">
@@ -266,7 +266,7 @@ const isImageGenerationDisabled = llmConfig?.DISABLE_IMAGE_GENERATION ?? false;
                 onCheckedChange={(checked) => onInputChange(checked, "disable_image_generation")}
               />
               <label className="text-sm font-medium text-gray-700">
-                Disable Image Generation
+                禁用图像生成
               </label>
             </div>
 

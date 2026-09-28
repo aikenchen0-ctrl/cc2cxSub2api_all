@@ -440,8 +440,8 @@ export function TextToolbar({
           <Divider />
           <div style={textToolbarStyles.fontSizeControl}>
             <input
-              aria-label="Font size"
-              title="Font size"
+              aria-label="字体大小"
+              title="字体大小"
               type="text"
               inputMode={numericInputMode(fontSizeInputOptions)}
               value={fontSizeDraft}
@@ -484,8 +484,8 @@ export function TextToolbar({
             <span style={textToolbarStyles.fontSizeStepper}>
               <button
                 type="button"
-                aria-label="Increase font size"
-                title="Increase font size"
+                aria-label="增大字体"
+                title="增大字体"
                 onClick={() => stepFontSize(1)}
                 style={textToolbarStyles.fontSizeStepButton}
               >
@@ -493,8 +493,8 @@ export function TextToolbar({
               </button>
               <button
                 type="button"
-                aria-label="Decrease font size"
-                title="Decrease font size"
+                aria-label="减小字体"
+                title="减小字体"
                 onClick={() => stepFontSize(-1)}
                 style={textToolbarStyles.fontSizeStepButton}
               >
@@ -504,8 +504,8 @@ export function TextToolbar({
           </div>
           <Divider />
           <label
-            aria-label="Text color"
-            title="Text color"
+            aria-label="文字颜色"
+            title="文字颜色"
             style={textToolbarStyles.colorControl}
             onMouseEnter={() => setHoveredControl("color")}
             onMouseLeave={() => setHoveredControl(null)}
@@ -518,7 +518,7 @@ export function TextToolbar({
               }}
             />
             <DeferredColorInput
-              aria-label="Text color"
+              aria-label="文字颜色"
               value={font.color}
               onCommit={(color) => updateFont({ color })}
               style={textToolbarStyles.hiddenInput}
@@ -527,7 +527,7 @@ export function TextToolbar({
           <Divider />
           <div style={textToolbarStyles.modeGroup}>
             <ToolbarButton
-              title="Bold"
+              title="粗体"
               controlId="bold"
               hoveredControl={hoveredControl}
               pressed={font.bold ?? false}
@@ -537,7 +537,7 @@ export function TextToolbar({
               <Bold size={18} strokeWidth={2.25} aria-hidden="true" />
             </ToolbarButton>
             <ToolbarButton
-              title="Italic"
+              title="斜体"
               controlId="italic"
               hoveredControl={hoveredControl}
               pressed={font.italic ?? false}
@@ -547,7 +547,7 @@ export function TextToolbar({
               <Italic size={18} strokeWidth={2.25} aria-hidden="true" />
             </ToolbarButton>
             <ToolbarButton
-              title="Underline"
+              title="下划线"
               controlId="underline"
               hoveredControl={hoveredControl}
               pressed={font.underline ?? false}
@@ -561,8 +561,8 @@ export function TextToolbar({
             <ToolbarButton
               title={
                 selectionIsLatex
-                  ? "Convert LaTeX to text"
-                  : "Convert selected text to LaTeX"
+                  ? "将 LaTeX 转换为文本"
+                  : "将选中文本转换为 LaTeX"
               }
               controlId="latex"
               disabled={!latexToggleRange}
@@ -585,8 +585,8 @@ export function TextToolbar({
             <ToolbarButton
               title={
                 disableAlignment
-                  ? "Alignment is unavailable for list text"
-                  : "Horizontal alignment"
+                  ? "列表文本不支持对齐"
+                  : "水平对齐"
               }
               controlId="horizontal-alignment"
               disabled={disableAlignment}
@@ -617,7 +617,7 @@ export function TextToolbar({
             <>
               <div style={textToolbarStyles.settingsControlWrap}>
                 <ToolbarButton
-                  title="List marker"
+                  title="列表标记"
                   controlId="list-marker"
                   hoveredControl={hoveredControl}
                   pressed={openPanel === "marker"}
@@ -649,7 +649,7 @@ export function TextToolbar({
           ) : null}
           <div style={textToolbarStyles.settingsControlWrap}>
             <ToolbarButton
-              title="Settings"
+              title="设置"
               controlId="settings"
               hoveredControl={hoveredControl}
               setHoveredControl={setHoveredControl}
@@ -911,10 +911,10 @@ function FontFamilyPicker({
     >
       <button
         type="button"
-        aria-label="Font family"
+        aria-label="字体族"
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="Font family"
+        title="字体族"
         style={textToolbarStyles.fontTrigger}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
@@ -932,7 +932,7 @@ function FontFamilyPicker({
         <FloatingToolbarPanel
           ref={menuPanelRef}
           role="listbox"
-          aria-label="Font family"
+          aria-label="字体族"
           style={textToolbarStyles.fontMenu}
           onWheel={(event) => event.stopPropagation()}
           onScroll={(event) => event.stopPropagation()}
@@ -942,7 +942,7 @@ function FontFamilyPicker({
             <input
               ref={searchInputRef}
               data-font-search-input="true"
-              aria-label="Search fonts"
+              aria-label="搜索字体"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -958,8 +958,8 @@ function FontFamilyPicker({
             />
             <button
               type="button"
-              aria-label="Clear font search"
-              title="Clear"
+              aria-label="清除字体搜索"
+              title="清除"
               style={textToolbarStyles.fontSearchClear}
               onClick={() => {
                 setQuery("");
@@ -1025,8 +1025,8 @@ function FontMenuSection({
         <span>{title}</span>
         <button
           type="button"
-          aria-label="Swap font source"
-          title="Swap font source"
+          aria-label="交换字体源"
+          title="交换字体源"
           style={textToolbarStyles.fontSourceSwapButton}
           onMouseDown={(event) => event.preventDefault()}
           onClick={onSwap}
@@ -1137,7 +1137,7 @@ function TextSettingsPanel({
       onMouseDown={(event) => event.stopPropagation()}
     >
       <SettingsSliderRow
-        label="Opacity"
+        label="不透明度"
         icon={<OpacityIcon />}
         value={opacity}
         valueLabel={formatOpacity(opacity)}
@@ -1147,7 +1147,7 @@ function TextSettingsPanel({
         onChange={onOpacityChange}
       />
       <SettingsSliderRow
-        label="Letter spacing"
+        label="字间距"
         icon={<LetterSpacingIcon />}
         value={letterSpacing}
         valueLabel={formatSettingsLetterSpacing(letterSpacing)}
@@ -1157,7 +1157,7 @@ function TextSettingsPanel({
         onChange={onLetterSpacingChange}
       />
       <SettingsSliderRow
-        label="Line height"
+        label="行高"
         icon={<LineHeightIcon />}
         value={lineHeight}
         valueLabel={formatLineHeight(lineHeight)}
@@ -1179,27 +1179,27 @@ function ListMarkerPanel({
 }) {
   return (
     <FloatingToolbarPanel
-      aria-label="List marker"
+      aria-label="列表标记"
       style={textToolbarStyles.markerPanel}
       onMouseDown={(event) => event.stopPropagation()}
     >
       <div style={textToolbarStyles.settingsBulletActions}>
         <SettingsPanelButton
-          label="Bullet list"
+          label="项目符号列表"
           pressed={marker === "bullet"}
           onClick={() => onChange("bullet")}
         >
           <List size={19} strokeWidth={2.2} aria-hidden="true" />
         </SettingsPanelButton>
         <SettingsPanelButton
-          label="Numbered list"
+          label="编号列表"
           pressed={marker === "number"}
           onClick={() => onChange("number")}
         >
           <ListOrdered size={19} strokeWidth={2.2} aria-hidden="true" />
         </SettingsPanelButton>
         <SettingsPanelButton
-          label="No list"
+          label="无列表"
           pressed={marker === "none"}
           onClick={() => onChange("none")}
         >

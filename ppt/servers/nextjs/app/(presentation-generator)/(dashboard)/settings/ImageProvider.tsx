@@ -61,7 +61,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
             return (
                 <div className="w-[205px] mr-0 ml-auto">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        DALL·E 3 Image Quality
+                        DALL·E 3 图像质量
                     </label>
                     <div className="">
                         <Select value={llmConfig.DALL_E_3_QUALITY || 'standard'} onValueChange={(value) => input_field_changed(value, "DALL_E_3_QUALITY")}>
@@ -84,7 +84,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
             return (
                 <div className="w-[205px]">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GPT Image 1.5 Quality
+                        GPT 图像 1.5 质量
                     </label>
                     <div className="">
                         <Select
@@ -118,7 +118,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
         <div className="space-y-6 bg-[#F9F8F8] p-7 rounded-[12px] ">
             {/* API Key Input */}
             <div className="mb-4  bg-white p-10 pt-5 rounded-[12px]">
-                <ToolTip content="Enable/Disable Image Generation" className='flex justify-end items-center'>
+                <ToolTip content="启用/禁用图像生成" className='flex justify-end items-center'>
                     <div className='flex justify-end items-center'>
                         <Switch
                             checked={!isImageGenerationDisabled}
@@ -136,11 +136,11 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                         <div className='w-[60px] h-[60px] px-[13.5px] py-[14.2px] rounded-[4px] flex items-center justify-center'
                             style={{ backgroundColor: '#F4F3FF' }}
                         >
-                            <img src="/image-markup.svg" className='w-full h-full object-cover' alt='image-markup' />
+                            <img src="/image-markup.svg" className='w-full h-full object-cover' alt='图像标注' />
                         </div>
                         <h3 className="text-xl font-normal text-[#191919] py-2.5">图片生成设置</h3>
                         <p className=" text-sm  text-gray-500">
-                            Choosing where images come from
+                            选择图像来源
                         </p>
                     </div>
                     <div className=' '>
@@ -152,7 +152,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                     {/* Image Provider Selection */}
                                     <div className="">
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Select Image Provider
+                                            选择图像提供商
                                         </label>
                                         <div className="w-full">
                                             <Popover
@@ -261,7 +261,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                     <div className=" space-y-4">
                                                         <div className='w-[205px]'>
                                                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                                ComfyUI Server URL
+                                                                ComfyUI 服务器 URL
                                                             </label>
                                                             <div className="relative">
                                                                 <input
@@ -290,7 +290,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                     <div className="space-y-4">
                                                         <div className='w-[205px]'>
                                                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                                Open WebUI URL
+                                                                Open WebUI 地址
                                                             </label>
                                                             <div className="relative">
                                                                 <input
@@ -320,7 +320,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                     <div className="relative">
                                                         <input
                                                             type={showApiKey ? 'text' : 'password'}
-                                                            placeholder={`Enter your ${provider.apiKeyFieldLabel}`}
+                                                            placeholder={`请输入您的${provider.apiKeyFieldLabel}`}
                                                             className="w-full px-4 pr-12 py-2.5 h-12 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                                             value={getFieldValue(provider.apiKeyField)}
                                                             onChange={(e) =>
@@ -334,7 +334,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                                             type="button"
                                                             onClick={() => setShowApiKey((prev) => !prev)}
                                                             className='absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500'
-                                                            aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                                                            aria-label={showApiKey ? '隐藏 API 密钥' : '显示 API 密钥'}
                                                             aria-pressed={showApiKey}
                                                         >
                                                             {showApiKey ? <EyeOff className='w-4 h-4' aria-hidden="true" /> : <Eye className='w-4 h-4' aria-hidden="true" />}
@@ -354,7 +354,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                             {llmConfig.IMAGE_PROVIDER === "open_webui" && (
                                 <div className='w-[205px]'>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        API Key (optional)
+                                        API 密钥（可选）
                                     </label>
                                     <div className="relative">
                                         <input
@@ -370,7 +370,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                             type="button"
                                             onClick={() => setShowApiKey((prev) => !prev)}
                                             className='absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500'
-                                            aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                                            aria-label={showApiKey ? '隐藏 API 密钥' : '显示 API 密钥'}
                                             aria-pressed={showApiKey}
                                         >
                                             {showApiKey ? <EyeOff className='w-4 h-4' aria-hidden="true" /> : <Eye className='w-4 h-4' aria-hidden="true" />}
@@ -380,11 +380,11 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                             )}
                             {llmConfig.IMAGE_PROVIDER === "comfyui" && <div className='w-full'>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Workflow JSON
+                                    工作流 JSON
                                 </label>
                                 <div className="relative">
                                     <textarea
-                                        placeholder='Paste your ComfyUI workflow JSON here (export via "Export (API)" in ComfyUI)'
+                                        placeholder='在此处粘贴您的 ComfyUI 工作流 JSON（通过 ComfyUI 中的"导出 (API)"导出）'
                                         className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors font-mono text-xs"
                                         rows={3}
                                         value={llmConfig.COMFYUI_WORKFLOW || ""}
@@ -410,7 +410,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                     <>
                         <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
                             <p className="text-sm text-yellow-800">
-                                No models found. Please make sure your provider credentials are valid and the selected provider is reachable.
+                                未找到模型。请确保您的提供商凭据有效且所选提供商可访问
                             </p>
                         </div>
                         <div className="flex w-full justify-end">
@@ -418,7 +418,7 @@ const ImageProvider = ({ llmConfig, setLlmConfig }: { llmConfig: LLMConfig, setL
                                 <label className="mb-2 block text-sm font-medium text-gray-700">图片模型 ID</label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. dall-e-3, gpt-image-1"
+                                    placeholder="例如：dall-e-3, gpt-image-1"
                                     className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     value={llmConfig.OPENAI_COMPAT_IMAGE_MODEL || ""}
                                     onChange={(e) => {

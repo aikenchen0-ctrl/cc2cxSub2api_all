@@ -25,7 +25,7 @@ function ConfigurationLoadingScreen() {
       <div className="flex flex-col items-center gap-7 whitespace-nowrap text-center">
         <div aria-hidden="true" className="configuration-loader" />
         <p className="font-syne text-[18px] font-normal leading-normal tracking-[-0.54px] text-[#191919]">
-          Loading 永恒PPT...
+          正在加载永恒 PPT...
         </p>
       </div>
 
@@ -123,8 +123,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         if (!cancelled && !status?.linked) {
           dispatch(setLLMConfig({ ...config, LLM: '' }));
           notify.warning(
-            "Provider setup required",
-            "永恒PPT 云端连接已断开，请选择文本提供商后继续。",
+            "需要提供商设置",
+            "永恒 PPT 云端连接已断开，请选择文本提供商后继续",
             { id: "provider-setup-required" }
           );
           router.replace('/');
@@ -139,8 +139,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           );
         } else if (!cancelled && selectedProvider === 'presenton') {
           notify.error(
-            "无法验证永恒PPT云端连接",
-            "Your current page has been kept open. Try again after checking the backend service.",
+            "无法验证永恒 PPT 云端连接",
+            "当前页面保持打开状态。请检查后端服务后重试",
             { id: "presenton-status-unavailable" }
           );
         } else if (!cancelled) {
@@ -263,10 +263,10 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
           console.error('Failed to fetch cloud provider status:', error);
           const backendUnavailable = isBackendConnectionError(error);
           notify.error(
-            backendUnavailable ? "Cannot reach backend" : "无法验证永恒PPT云端连接",
+            backendUnavailable ? "后端连接失败" : "无法验证永恒 PPT 云端连接",
             backendUnavailable
               ? error.message
-              : "Your current page has been kept open. Refresh after checking the backend service.",
+              : "当前页面已保持打开状态，请检查后端服务后刷新。",
             { id: backendUnavailable ? "backend-unreachable" : "presenton-status-unavailable" }
           );
           setIsLoading(false);
@@ -336,7 +336,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         if (!runtime.configured) {
           notify.error(
             "实例尚未配置",
-            "请联系管理员在设置中配置 AI 服务商。"
+            "请联系管理员在设置中配置 AI 服务商"
           );
           setIsLoading(false);
           return;

@@ -166,7 +166,7 @@ const OutlineContent: React.FC<OutlineContentProps> = ({
                 aria-disabled={hasReachedSlideLimit}
                 title={
                   hasReachedSlideLimit
-                    ? `Maximum ${MAX_NUMBER_OF_SLIDES} slides`
+                    ? `最大${MAX_NUMBER_OF_SLIDES}幻灯片`
                     : undefined
                 }
                 variant="outline"
@@ -177,8 +177,8 @@ const OutlineContent: React.FC<OutlineContentProps> = ({
                 )}
               >
                 {hasReachedSlideLimit
-                  ? `Maximum ${MAX_NUMBER_OF_SLIDES} slides reached`
-                  : "+ Add New Slide"}
+                  ? `最大${MAX_NUMBER_OF_SLIDES}幻灯片已到达`
+                  : "+ 添加新幻灯片"}
               </Button>
             </div>
           )}
@@ -194,7 +194,7 @@ const OutlineContent: React.FC<OutlineContentProps> = ({
             onClick={onAddSlide}
             className="border-blue-200 text-blue-600"
           >
-            + Add First Slide
+            + 添加第一张幻灯片
           </Button>
         </div>
       )}

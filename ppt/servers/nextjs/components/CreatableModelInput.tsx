@@ -62,7 +62,7 @@ export default function CreatableModelInput({
   return (
     <div className="w-full">
       <label className="mb-2 block text-sm font-medium text-gray-700">
-        {providerLabel} model ID
+        {providerLabel} 模型 ID
       </label>
       <Popover
         open={open}
@@ -166,8 +166,7 @@ export default function CreatableModelInput({
         </PopoverContent>
       </Popover>
       <p className="mt-1.5 text-xs text-gray-500">
-        Discovered models are suggestions. Custom aliases and provider-specific
-        model IDs are accepted.
+        已发现的模型仅为建议。支持自定义别名及特定提供商的模型 ID。
       </p>
     </div>
   );

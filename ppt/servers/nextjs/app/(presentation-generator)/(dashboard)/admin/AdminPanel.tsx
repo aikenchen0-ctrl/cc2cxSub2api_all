@@ -521,7 +521,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <div>
                     <h2 className="text-sm font-semibold text-[#101323]">账号</h2>
                     <p className="mt-0.5 text-xs text-[#667085]">
-                      {users.length} account{users.length === 1 ? "" : "s"}
+                      {users.length} 个账号
                     </p>
                   </div>
                 </div>
@@ -543,7 +543,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                     <div>
                       <p className="text-sm font-semibold text-[#101323]">{user.username}</p>
                       <p className="mt-1 text-xs text-[#667085]">
-                        {user.role === "admin" ? "Administrator" : "User"}
+                        {user.role === "admin" ? "管理员" : "用户"}
                         {user.created_at
                           ? ` · ${new Date(user.created_at).toLocaleDateString()}`
                           : ""}
@@ -621,7 +621,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                           {isVisible ? key.token : maskedKey(key.token)}
                         </code>
                         <p className="mt-1 text-[11px] text-[#98A2B3]">
-                          Created {new Date(key.created_at).toLocaleDateString()}
+                          已创建 {new Date(key.created_at).toLocaleDateString()}
                         </p>
                       </div>
                       <button
@@ -682,19 +682,18 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   重置密码
                 </DialogTitle>
                 <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
-                  Set a new password for{" "}
-                  <span className="font-semibold text-[#344054]">{dialog.user.username}</span>.
-                  Existing sessions will be signed out.
+                  为设置新密码{" "}
+                  <span className="font-semibold text-[#344054]">{dialog.user.username}</span>现有会话将登出
                 </DialogDescription>
                 <label className="pt-4 text-xs font-semibold text-[#344054]" htmlFor="reset-password">
-                  New password
+                  新密码
                 </label>
                 <input
                   id="reset-password"
                   autoFocus
                   className={inputClass}
                   type="password"
-                  placeholder="Minimum 8 characters"
+                  placeholder="最少 8 个字符"
                   minLength={8}
                   maxLength={128}
                   value={resetPasswordValue}
@@ -761,7 +760,7 @@ export default function AdminPanel({ embedded = false }: AdminPanelProps) {
                   <AlertTriangle className="h-5 w-5 text-[#D92D20]" />
                 </div>
                 <DialogTitle className="text-xl font-semibold leading-7 text-[#101323]">
-                  撤销 API 密钥？
+                  确定要撤销 API 密钥吗？
                 </DialogTitle>
                 <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
                   使用此密钥的应用将立即失去 API 和 MCP 访问权限，且无法撤销。

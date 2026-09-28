@@ -37,7 +37,7 @@ import { MixpanelEvent, trackEvent } from '@/utils/mixpanel'
 const FALLBACK_THEME: Theme = {
   id: 'standard',
   name: 'Standard',
-  description: 'Standard theme',
+  description: '标准主题',
   user: 'system',
   logo: '',
   logo_url: '',
@@ -160,8 +160,8 @@ const ThemePanel: React.FC = () => {
       } catch (error: any) {
         console.error('Failed to load user fonts', error)
         notify.error(
-          'Could not load fonts',
-          error?.message || 'Your uploaded fonts could not be loaded right now.'
+          '无法加载字体',
+          error?.message || '当前无法加载上传的字体。'
         )
       }
     }
@@ -318,8 +318,8 @@ const ThemePanel: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to upload logo', error)
       notify.error(
-        'Could not upload logo',
-        error?.message || 'Something went wrong while uploading your logo. Please try again.'
+        '无法上传 Logo',
+        error?.message || '上传 Logo 时出错，请重试。'
       )
     } finally {
       setIsLogoUploading(false)
@@ -365,7 +365,7 @@ const ThemePanel: React.FC = () => {
     const newTheme: Theme = {
       id: `custom-${Date.now()}`,
       name: 'New Custom Theme',
-      description: 'Start with a blank canvas',
+      description: '从空白画布开始',
       user: 'local',
       logo: '',
       logo_url: '',
@@ -462,12 +462,12 @@ const ThemePanel: React.FC = () => {
             has_logo: Boolean(updated.logo_url),
             font_name: updated.data?.fonts?.textFont?.name || "",
           })
-          notify.success('Theme updated', 'Your theme changes were saved.')
+          notify.success('主题已更新', '您的主题更改已保存。')
         } catch (error: any) {
           console.error('Failed to update theme', error)
           notify.error(
-            'Could not update theme',
-            error?.message || 'Something went wrong while saving your theme changes.'
+            '无法更新主题',
+            error?.message || '保存主题更改时出错。'
           )
         }
       })()
@@ -482,7 +482,7 @@ const ThemePanel: React.FC = () => {
       })
       const params: ThemeParams = {
         name: selectedTheme.name,
-        description: selectedTheme.description || `Custom version of ${selectedTheme.name}`,
+        description: selectedTheme.description || `的自定义版本${selectedTheme.name}`,
         logo: customBrandLogoId || null,
         logo_url: customBrandLogo || null,
         company_name: themeCompanyName || null,
@@ -506,12 +506,12 @@ const ThemePanel: React.FC = () => {
         has_logo: Boolean(created.logo_url),
         font_name: created.data?.fonts?.textFont?.name || "",
       })
-      notify.success('Theme saved', 'Your new theme was created and is ready to use.')
+      notify.success('主题已保存', '您的新主题已创建并准备就绪。')
     } catch (error: any) {
       console.error('Failed to save theme', error)
       notify.error(
-        'Could not save theme',
-        error?.message || 'Something went wrong while creating your theme.'
+        '无法保存主题',
+        error?.message || '创建主题时出错。'
       )
     }
   }
@@ -527,12 +527,12 @@ const ThemePanel: React.FC = () => {
         pathname,
         theme_id: themeId,
       })
-      notify.success("Theme deleted", "The theme was removed from your library.")
+      notify.success("主题已删除", "主题已从您的库中移除。")
     } catch (error: any) {
       console.error('Failed to delete theme', error)
       notify.error(
-        'Could not delete theme',
-        error?.message || 'Something went wrong while deleting the theme.'
+        '无法删除主题',
+        error?.message || '删除主题时出错。'
       )
     }
   }
@@ -566,14 +566,14 @@ const ThemePanel: React.FC = () => {
         }))
       }
       notify.success(
-        'Font uploaded',
-        `Font "${font_name}" is now available for your themes.`
+        '字体已上传',
+        `字体"${font_name}“”现已可用于您的主题。`
       )
     } catch (error: any) {
       console.error('Failed to upload font', error)
       notify.error(
-        'Could not upload font',
-        error?.message || 'Something went wrong while uploading the font file.'
+        '无法上传字体',
+        error?.message || '上传字体文件时出错。'
       )
     } finally {
       setIsFontUploading(false)
@@ -587,7 +587,7 @@ const ThemePanel: React.FC = () => {
     >
       <Label className="flex text-xl font-medium text-[#191919] items-center gap-2 pb-5">
 
-        {step === 1 ? 'Brand Colors' : 'Palette'}
+        {step === 1 ? '品牌颜色' : '色板'}
         <RefreshCcw onClick={() => refeshTheme(step === 1 ? {
 
         } : {
@@ -609,7 +609,7 @@ const ThemePanel: React.FC = () => {
           >
             <ColorPickerComponent
               colorKey="primary"
-              label="Primary Color"
+              label="主色"
               currentColor={customColors['primary']}
               onColorChange={handleColorChange}
               showColorPicker={showColorPicker}
@@ -617,7 +617,7 @@ const ThemePanel: React.FC = () => {
             />
             <ColorPickerComponent
               colorKey="background"
-              label="Background Color"
+              label="背景色"
               currentColor={customColors['background']}
               onColorChange={handleColorChange}
               showColorPicker={showColorPicker}
@@ -635,7 +635,7 @@ const ThemePanel: React.FC = () => {
           >
             <ColorPickerComponent
               colorKey="background_text"
-              label="Background Text"
+              label="背景文字"
               currentColor={customColors['background_text']}
               onColorChange={handleColorChange}
               showColorPicker={showColorPicker}
@@ -643,7 +643,7 @@ const ThemePanel: React.FC = () => {
             />
             <ColorPickerComponent
               colorKey="primary_text"
-              label="Primary Text"
+              label="主文字"
               currentColor={customColors['primary_text']}
               onColorChange={handleColorChange}
               showColorPicker={showColorPicker}
@@ -654,7 +654,7 @@ const ThemePanel: React.FC = () => {
         {step === 2 && <div className='px-2.5'>
           <ColorPickerComponent
             colorKey="card"
-            label="Card Color"
+            label="卡片颜色"
             currentColor={customColors['card']}
             onColorChange={handleColorChange}
             showColorPicker={showColorPicker}
@@ -765,7 +765,7 @@ const ThemePanel: React.FC = () => {
       }}
     >
       <Label className="flex text-xl font-medium text-[#191919] items-center gap-2 px-2.5">
-        Typography
+        排版
       </Label>
 
 
@@ -866,23 +866,23 @@ const ThemePanel: React.FC = () => {
     <div className="space-y-4 px-5">
       <Label className="flex text-xl font-medium text-[#191919] items-center gap-2">
 
-        Logo
+        标志
         {/* <RefreshCcw className='w-5 h-5 text-[#808080] hover:text-[#191919] duration-300 transition-all cursor-pointer' /> */}
       </Label>
       <div className="space-y-2">
         <Label className="flex text-base items-center gap-2">
 
-          Company Name
+          公司名称
         </Label>
         <Input
           defaultValue={themeCompanyName}
-          placeholder="Enter company name"
+          placeholder="输入公司名称"
           onBlur={(e) => setThemeCompanyName(e.target.value)}
         />
       </div>
       <Label className="flex text-base items-center gap-2">
 
-        Brand Logo
+        品牌 Logo
       </Label>
 
       <div className="space-y-2 bg-[#F6F6F9] rounded-md p-1 cursor-pointer"
@@ -906,7 +906,7 @@ const ThemePanel: React.FC = () => {
             <div className="space-y-2">
               <img
                 src={customBrandLogo}
-                alt="Brand Logo"
+                alt="品牌 Logo"
                 className="mx-auto h-16 w-auto object-contain"
               />
               <Button
@@ -918,7 +918,7 @@ const ThemePanel: React.FC = () => {
                   setCustomBrandLogoId('')
                 }}
               >
-                Remove Logo
+                移除 Logo
               </Button>
             </div>
           ) : (
@@ -970,7 +970,7 @@ const ThemePanel: React.FC = () => {
       <div className='py-[28px] flex justify-between'>
 
         <h3 className=" text-[28px]  tracking-[-0.84px] font-unbounded font-normal text-[#101828] flex items-center gap-2">
-          Themes
+          主题
         </h3>
         <Link
           href="/theme?tab=new-theme"
@@ -1111,7 +1111,7 @@ const ThemePanel: React.FC = () => {
                           background: 'linear-gradient(270deg, #D5CAFC 2.4%, #E3D2EB 27.88%, #F4DCD3 69.23%, #FDE4C2 100%)'
                         }}
                       >
-                        {currentStep === 1 ? 'Generate theme palette' : currentStep === 2 ? 'Continue to Fonts' : currentStep === 3 ? 'Continue to Design' : 'Save as Custom Theme'}
+                        {currentStep === 1 ? '生成主题色板' : currentStep === 2 ? '继续字体' : currentStep === 3 ? '继续设计' : '保存为自定义主题'}
                         <ChevronRight className='w-4 h-4' />
                       </button>
                     </div>

@@ -100,16 +100,16 @@ const WebSearchProvider = ({
               <Search className="h-7 w-7 text-[#5146E5]" />
             </div>
             <h3 className="py-2.5 text-xl font-normal text-[#191919]">
-              Web Search Settings
+              网页搜索设置
             </h3>
             <p className="text-sm text-gray-500">
-              Choose a provider to enable web search, or leave it disabled.
+              选择一个提供商以启用网页搜索，或保持禁用状态。
             </p>
           </div>
           {isWebSearchEnabled && <div className="w-full max-w-[720px] space-y-4">
                 <div className="ml-auto w-[222px]">
                   <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Provider
+                    提供商
                   </label>
                   <div className="w-full">
                     <Popover open={openProviderSelect} onOpenChange={setOpenProviderSelect}>
@@ -123,7 +123,7 @@ const WebSearchProvider = ({
                           <span className="truncate text-sm font-medium text-gray-900">
                             {selected
                               ? WEB_SEARCH_PROVIDERS[selected]?.label || selected
-                              : "Select web search provider"}
+                              : "选择网络搜索提供商"}
                           </span>
                           <ChevronUp className="h-4 w-4 text-gray-500" />
                         </Button>
@@ -175,8 +175,7 @@ const WebSearchProvider = ({
 
                 {selected === "auto" && (
                   <div className="rounded-lg border border-[#D9D6FE] bg-[#F4F3FF] p-3 text-xs text-[#5146E5]">
-                    Model-native web grounding is preferred when available.
-                    Otherwise, external search fallback is used.
+                    当可用时，优先使用原生模型网页定位。否则使用外部搜索回退。
                   </div>
                 )}
 
@@ -221,7 +220,7 @@ const WebSearchProvider = ({
                         type="button"
                         className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                         onClick={() => setShowApiKey((value) => !value)}
-                        aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                        aria-label={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"}
                         aria-pressed={showApiKey}
                       >
                         {showApiKey ? (
@@ -237,7 +236,7 @@ const WebSearchProvider = ({
                 {selected && selected !== "auto" && (
                   <div>
                     <label className="mb-2 block text-sm font-medium text-[#4C5554]">
-                      Maximum results
+                      最大结果数
                     </label>
                     <input
                       type="number"

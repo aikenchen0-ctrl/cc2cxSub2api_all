@@ -85,10 +85,10 @@ const AdvanceSettings = ({
     return (
         <>
             <div className={cn(!compact && "ml-auto")}>
-                <ToolTip content="Advanced settings">
+                <ToolTip content="高级设置">
                     <button
-                        aria-label="Advanced settings"
-                        title="Advanced settings"
+                        aria-label="高级设置"
+                        title="高级设置"
                         type="button"
                         onClick={handleOpenAdvanced}
                         className={cn(
@@ -120,14 +120,14 @@ const AdvanceSettings = ({
                     <div
                         role="dialog"
                         aria-modal="true"
-                        aria-label="Advanced settings"
+                        aria-label="高级设置"
                         className="relative mx-auto mt-[108px] w-[calc(100vw-2rem)] max-w-[640px] overflow-visible min-[1800px]:max-w-[720px] min-[2200px]:max-w-[800px]"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <button
                             type="button"
                             onClick={handleCloseAdvanced}
-                            aria-label="Close advanced settings"
+                            aria-label="关闭高级设置"
                             className="absolute -top-[62px] right-2 flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[#E7E7EC] bg-white text-[#2C2B35] shadow-sm transition hover:bg-[#F8F8FB] min-[1800px]:h-[56px] min-[1800px]:w-[56px]"
                         >
                             <X className="h-3.5 w-3.5 min-[1800px]:h-4 min-[1800px]:w-4" />
@@ -137,7 +137,7 @@ const AdvanceSettings = ({
                             <div className="flex items-start justify-between gap-4 bg-[#F8F8FA] px-6 py-[22px] min-[1800px]:px-8 min-[1800px]:py-7">
                                 <div>
                                     <h2 className="font-syne text-lg font-semibold leading-none text-[#191919] min-[1800px]:text-xl min-[2200px]:text-2xl">
-                                        Advanced Settings
+                                        高级设置
                                     </h2>
                                     <p className="mt-1 text-sm text-[#808080] min-[1800px]:text-base">调整演示文稿生成方式</p>
                                 </div>
@@ -163,7 +163,7 @@ const AdvanceSettings = ({
                                             htmlFor="advanced-instructions"
                                             className="block font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base"
                                         >
-                                            Write instructions
+                                            编写说明
                                         </label>
                                         <Textarea
                                             id="advanced-instructions"
@@ -173,7 +173,7 @@ const AdvanceSettings = ({
                                             onChange={(event) =>
                                                 setAdvancedDraft((prev) => ({ ...prev, instructions: event.target.value }))
                                             }
-                                            placeholder="Guide the AI: define audience, tone, key points, or constraints."
+                                            placeholder="引导 AI：定义受众、语气、要点或限制。"
                                             className="mt-1 min-h-[64px] resize-none border-0 bg-transparent p-0 text-sm leading-[1.3] text-[#242430] shadow-none placeholder:text-[#7C7B87] focus-visible:ring-0 focus-visible:ring-offset-0 min-[1800px]:min-h-[80px] min-[1800px]:text-base"
                                         />
                                     </div>
@@ -226,7 +226,7 @@ const AdvanceSettings = ({
 
                                 <div className="flex items-center justify-between gap-3">
                                     <label className="font-syne text-sm font-semibold leading-none text-[#1F1D2A] min-[1800px]:text-base">
-                                        Include Table of Content
+                                        包含目录
                                     </label>
                                     <Switch
                                         checked={advancedDraft.includeTableOfContents}

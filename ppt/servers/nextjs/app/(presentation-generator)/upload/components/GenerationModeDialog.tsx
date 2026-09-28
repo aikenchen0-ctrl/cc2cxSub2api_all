@@ -48,8 +48,7 @@ export default function GenerationModeDialog({
             }}
           >
             <DialogPrimitive.Description className="sr-only">
-              标准模式使用固定布局，智能模式会根据内容自适应。
-              layouts.
+              标准模式使用固定布局，智能模式会根据内容自适应。布局
             </DialogPrimitive.Description>
             <div className="sticky top-0 z-10 border-b border-[#EDEEEF] bg-[#F9FAFB] px-4 py-4 sm:px-8">
               <DialogPrimitive.Title className="text-xl font-medium tracking-[-0.2px] text-[#808080]">
@@ -79,12 +78,11 @@ export default function GenerationModeDialog({
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
                   <p className="text-xl font-medium text-[#333333]">标准模式</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
-                    Fixed layout
+                    固定布局
                   </p>
                 </div>
                 <p className="mb-2 py-1.5 text-base font-medium text-[#666666]">
-                  A rigid, predefined layout with fixed structure, ensuring
-                  consistency, clarity, and predictable results.
+                  具有固定结构的刚性预定义布局，确保一致性、清晰度和可预测的结果。
                 </p>
                 <Button
                   type="button"
@@ -113,12 +111,11 @@ export default function GenerationModeDialog({
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
                   <p className="text-xl font-medium text-[#333333]">智能模式</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
-                    Flexible layout
+                    灵活布局
                   </p>
                 </div>
                 <p className="mb-2 py-1.5 text-base font-medium text-[#666666]">
-                  A smart adaptive layout with flexible structure, balancing
-                  consistency and content.
+                  具有灵活结构的智能自适应布局，兼顾一致性与内容。
                 </p>
                 <Button
                   type="button"

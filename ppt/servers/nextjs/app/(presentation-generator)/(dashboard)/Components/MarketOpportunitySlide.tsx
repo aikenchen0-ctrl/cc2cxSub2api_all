@@ -1,37 +1,37 @@
 import * as z from "zod";
 
 export const slideLayoutId = "product-overview-market-opportunity-slide";
-export const slideLayoutName = "Product Overview Market Opportunity Slide";
+export const slideLayoutName = "产品概览与市场机会";
 export const slideLayoutDescription =
-  "A market opportunity slide with title and intro text on the left, four bullet lines extending toward the right, and concentric value circles as the visual focal point.";
+  "市场机会幻灯片：左侧为标题和简介，四条要点向右延伸，并以同心数值圆作为视觉焦点。";
 
 const BulletSchema = z.object({
   text: z.string().min(12).max(46).meta({
-    description: "Bullet text shown on the left side of a line.",
+    description: "行左侧显示的要点文本。",
   }),
 });
 
 export const Schema = z.object({
-  title: z.string().min(8).max(22).default("Market Opportunity").meta({
-    description: "Main heading shown at the top-left.",
+  title: z.string().min(4).max(22).default("市场机会").meta({
+    description: "左上角显示的主标题。",
   }),
   subtitle: z.string().min(40).max(110).default(
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt."
+    "洞察市场趋势与客户需求，识别高潜力增长空间，并制定清晰可执行的业务策略。"
   ).meta({
-    description: "Supporting text under the main heading.",
+    description: "主标题下方的说明文字。",
   }),
   bullets: z
     .array(BulletSchema)
     .min(4)
     .max(4)
     .default([
-      { text: "Ut enim ad minim veniam, quis" },
-      { text: "Ut enim ad minim veniam, quis" },
-      { text: "Ut enim ad minim veniam, quis" },
-      { text: "Ut enim ad minim veniam, quis" },
+      { text: "目标市场规模持续扩大" },
+      { text: "核心客户需求日益明确" },
+      { text: "差异化优势逐步形成" },
+      { text: "增长路径清晰可执行" },
     ])
     .meta({
-      description: "Four bullet-line entries shown on the left.",
+      description: "左侧显示的四个项目符号条目。",
     }),
   values: z
     .array(z.string().min(2).max(6))
@@ -39,7 +39,7 @@ export const Schema = z.object({
     .max(4)
     .default(["$33", "$20", "$120", "$200"])
     .meta({
-      description: "Four values shown from outer to inner circles.",
+      description: "从外圈到内圈显示的四个数值。",
     }),
 });
 

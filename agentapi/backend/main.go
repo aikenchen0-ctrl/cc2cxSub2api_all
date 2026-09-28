@@ -225,7 +225,7 @@ func (s *Server) runSettlementReconciler(ctx context.Context) {
 }
 
 func (s *Server) reconcilePendingInBackground(parent context.Context) {
-	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" {
+	if strings.TrimSpace(s.cfg.AppCredential) == "" || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(parent, s.cfg.MainRequestTimeout)
@@ -259,7 +259,7 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 		mu := s.userSettlementMutex(ownerID)
 		mu.Lock()
-		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, task.MainUserID, task.RequestID)
+		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
 		if relayErr == nil && status >= 200 && status < 300 {
 			_, upstreamStatus := videoTaskIdentity(body)
@@ -315,7 +315,7 @@ func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
 		ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 		mu := s.userSettlementMutex(ownerID)
 		mu.Lock()
-		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, task.MainUserID, task.RequestID)
+		status, _, body, relayErr := s.main.RelayModelMethod(ctx, http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
 		if relayErr == nil && status >= 200 && status < 300 {
 			_, imageStatus := imageTaskIdentity(body)
@@ -354,7 +354,8 @@ func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
 }
 
 func (s *Server) reconcilePaidRechargeOrders(ctx context.Context) {
-	if !s.cfg.PaymentEnabled || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+	payment := s.paymentConfig()
+	if !payment.Enabled || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
 		return
 	}
 	orders, err := s.store.PaidPendingRechargeOrders(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
@@ -918,6 +919,7 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 	if logo == "" {
 		logo = "/logo.svg"
 	}
+	payment := s.paymentConfig()
 	settings := map[string]any{
 		"registration_enabled": true, "email_verify_enabled": false,
 		"force_email_on_third_party_signup": false, "registration_email_suffix_whitelist": []string{},
@@ -931,9 +933,9 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 		// The public flag only tells the UI whether this AgentAPI instance has
 		// enabled its signed webhook bridge. It never exposes a secret or a main
 		// site credential. A verified payment still requires synced owner credit.
-		"payment_enabled": s.cfg.PaymentEnabled, "payment_provider": s.cfg.PaymentProvider,
-		"payment_currency": s.cfg.PaymentCurrency, "payment_min_amount_cents": s.cfg.PaymentMinCents,
-		"payment_max_amount_cents": s.cfg.PaymentMaxCents, "payment_balance_disabled": true,
+		"payment_enabled": payment.Enabled, "payment_provider": payment.Provider,
+		"payment_currency": payment.Currency, "payment_min_amount_cents": payment.MinAmountCents,
+		"payment_max_amount_cents": payment.MaxAmountCents, "payment_balance_disabled": true,
 		"risk_control_enabled": false, "table_default_page_size": 20, "table_page_size_options": []int{20, 50, 100},
 		"custom_menu_items": []any{}, "custom_endpoints": []any{},
 		"linuxdo_oauth_enabled": false, "wechat_oauth_enabled": false, "oidc_oauth_enabled": false,
@@ -1293,6 +1295,7 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
+	payment := s.paymentConfig()
 	switch r.Method {
 	case http.MethodGet:
 		if err := s.store.ExpireRechargeOrders(s.cfg.AgentID); err != nil {
@@ -1305,11 +1308,11 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 			return
 		}
 		s.writeData(w, http.StatusOK, requestID, map[string]any{
-			"enabled":          s.cfg.PaymentEnabled,
-			"provider":         s.cfg.PaymentProvider,
-			"currency":         s.cfg.PaymentCurrency,
-			"min_amount_cents": s.cfg.PaymentMinCents,
-			"max_amount_cents": s.cfg.PaymentMaxCents,
+			"enabled":          payment.Enabled,
+			"provider":         payment.Provider,
+			"currency":         payment.Currency,
+			"min_amount_cents": payment.MinAmountCents,
+			"max_amount_cents": payment.MaxAmountCents,
 			"items":            orders,
 			"total":            len(orders),
 		})
@@ -1319,7 +1322,7 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
 		}
-		if !s.cfg.PaymentEnabled {
+		if !payment.Enabled {
 			s.writeError(w, http.StatusGone, requestID, "PAYMENT_DISABLED", "recharge is not enabled for this AgentAPI instance")
 			return
 		}
@@ -1329,14 +1332,14 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 			return
 		}
 		amountCents, err := amountFromPayload(payload)
-		if err != nil || amountCents < s.cfg.PaymentMinCents || amountCents > s.cfg.PaymentMaxCents {
-			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_AMOUNT", fmt.Sprintf("amount must be between %s and %s %s", formatCents(s.cfg.PaymentMinCents), formatCents(s.cfg.PaymentMaxCents), s.cfg.PaymentCurrency))
+		if err != nil || amountCents < payment.MinAmountCents || amountCents > payment.MaxAmountCents {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_AMOUNT", fmt.Sprintf("amount must be between %s and %s %s", formatCents(payment.MinAmountCents), formatCents(payment.MaxAmountCents), payment.Currency))
 			return
 		}
 		requestKey := requestIDFrom(r, payload)
-		provider := strings.TrimSpace(s.cfg.PaymentProvider)
-		currency := strings.ToUpper(strings.TrimSpace(s.cfg.PaymentCurrency))
-		expiresAt := time.Now().UTC().Add(s.cfg.PaymentOrderTTL)
+		provider := strings.TrimSpace(payment.Provider)
+		currency := strings.ToUpper(strings.TrimSpace(payment.Currency))
+		expiresAt := time.Now().UTC().Add(time.Duration(payment.OrderTTLSeconds) * time.Second)
 		order, created, err := s.store.CreateRechargeOrder(s.cfg.AgentID, session.MainUserID, amountCents, currency, provider, "", requestKey, expiresAt)
 		if err != nil {
 			status := http.StatusInternalServerError
@@ -1351,8 +1354,8 @@ func (s *Server) handleAgentRecharge(w http.ResponseWriter, r *http.Request, req
 			s.writeError(w, status, requestID, reason, "failed to create recharge order")
 			return
 		}
-		if created && strings.TrimSpace(s.cfg.PaymentCheckoutURLTemplate) != "" {
-			checkoutURL := paymentCheckoutURL(s.cfg.PaymentCheckoutURLTemplate, order)
+		if created && strings.TrimSpace(payment.CheckoutURLTemplate) != "" {
+			checkoutURL := paymentCheckoutURL(payment.CheckoutURLTemplate, payment.MerchantID, order)
 			if updated, updateErr := s.store.SetRechargePaymentURL(s.cfg.AgentID, order.OrderNo, checkoutURL); updateErr == nil {
 				order = updated
 			} else {
@@ -1385,11 +1388,12 @@ func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, re
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "payment webhook requires POST")
 		return
 	}
-	if !s.cfg.PaymentEnabled {
+	payment := s.paymentConfig()
+	if !payment.Enabled {
 		s.writeError(w, http.StatusNotFound, requestID, "PAYMENT_DISABLED", "payment webhook is disabled")
 		return
 	}
-	secret := strings.TrimSpace(s.cfg.PaymentWebhookSecret)
+	secret := strings.TrimSpace(payment.WebhookSecret)
 	if secret == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "PAYMENT_WEBHOOK_NOT_CONFIGURED", "payment webhook secret is not configured")
 		return
@@ -1419,6 +1423,7 @@ func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, re
 		Status          string `json:"status"`
 		AmountCents     int64  `json:"amount_cents"`
 		Currency        string `json:"currency"`
+		MerchantID      string `json:"merchant_id"`
 		ProviderTradeNo string `json:"provider_trade_no"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -1428,9 +1433,14 @@ func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, re
 	payload.OrderNo = strings.TrimSpace(payload.OrderNo)
 	payload.Status = strings.ToLower(strings.TrimSpace(payload.Status))
 	payload.Currency = strings.ToUpper(strings.TrimSpace(payload.Currency))
+	payload.MerchantID = strings.TrimSpace(payload.MerchantID)
 	payload.ProviderTradeNo = strings.TrimSpace(payload.ProviderTradeNo)
 	if payload.OrderNo == "" || payload.AmountCents <= 0 || payload.Currency == "" || payload.ProviderTradeNo == "" || len(payload.ProviderTradeNo) > 256 {
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAYMENT_EVENT", "order_no, status, amount_cents, currency and provider_trade_no are required")
+		return
+	}
+	if payment.MerchantID != "" && payload.MerchantID != payment.MerchantID {
+		s.writeError(w, http.StatusBadRequest, requestID, "PAYMENT_MERCHANT_MISMATCH", "payment event merchant_id does not match this instance")
 		return
 	}
 	if err := s.store.ExpireRechargeOrders(s.cfg.AgentID); err != nil {
@@ -1438,7 +1448,7 @@ func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	payloadHash := sha256.Sum256(body)
-	result, err := s.store.RecordPaymentEvent(s.cfg.AgentID, s.cfg.PaymentProvider, eventID, payload.OrderNo, payload.Status, payload.AmountCents, payload.Currency, payload.ProviderTradeNo, hex.EncodeToString(payloadHash[:]))
+	result, err := s.store.RecordPaymentEvent(s.cfg.AgentID, payment.Provider, eventID, payload.OrderNo, payload.Status, payload.AmountCents, payload.Currency, payload.ProviderTradeNo, hex.EncodeToString(payloadHash[:]))
 	if err != nil {
 		status := http.StatusBadRequest
 		reason := "PAYMENT_EVENT_REJECTED"
@@ -1494,7 +1504,7 @@ func (s *Server) paymentAdminOrders(w http.ResponseWriter, r *http.Request, requ
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load recharge orders")
 		return
 	}
-	s.writeData(w, http.StatusOK, requestID, map[string]any{"enabled": s.cfg.PaymentEnabled, "items": orders, "total": len(orders)})
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"enabled": s.paymentConfig().Enabled, "items": orders, "total": len(orders)})
 }
 
 func (s *Server) paymentAdminAllocate(w http.ResponseWriter, r *http.Request, requestID, actorID string) {
@@ -1559,12 +1569,13 @@ func (s *Server) paymentAdminAllocate(w http.ResponseWriter, r *http.Request, re
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"order": order, "allocated": order.Status == "allocated"})
 }
 
-func paymentCheckoutURL(template string, order RechargeOrder) string {
+func paymentCheckoutURL(template, merchantID string, order RechargeOrder) string {
 	return strings.NewReplacer(
 		"{order_no}", url.QueryEscape(order.OrderNo),
 		"{amount}", formatCents(order.AmountCents),
 		"{amount_cents}", strconv.FormatInt(order.AmountCents, 10),
 		"{currency}", url.QueryEscape(order.Currency),
+		"{merchant_id}", url.QueryEscape(strings.TrimSpace(merchantID)),
 	).Replace(template)
 }
 
@@ -1643,6 +1654,130 @@ func validPaymentTimestamp(raw string, now time.Time) bool {
 	return stamp.After(now.Add(-10*time.Minute)) && stamp.Before(now.Add(10*time.Minute))
 }
 
+func (s *Server) paymentConfig() PaymentConfig {
+	config, err := s.store.PaymentConfig(s.cfg.AgentID)
+	if err == nil {
+		return config
+	}
+	slog.Error("failed to load instance payment config", "agent_id", s.cfg.AgentID, "error", err)
+	return PaymentConfig{
+		Enabled:             false,
+		Provider:            firstNonEmpty(strings.TrimSpace(s.cfg.PaymentProvider), "manual"),
+		Currency:            firstNonEmpty(strings.ToUpper(strings.TrimSpace(s.cfg.PaymentCurrency)), "CNY"),
+		MinAmountCents:      s.cfg.PaymentMinCents,
+		MaxAmountCents:      s.cfg.PaymentMaxCents,
+		OrderTTLSeconds:     int64(s.cfg.PaymentOrderTTL / time.Second),
+		CheckoutURLTemplate: strings.TrimSpace(s.cfg.PaymentCheckoutURLTemplate),
+	}
+}
+
+func validatePaymentConfig(config PaymentConfig, effectiveSecret string) error {
+	if config.Provider == "" || len(config.Provider) > 64 {
+		return fmt.Errorf("provider must contain 1 to 64 characters")
+	}
+	for _, r := range config.Provider {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)) {
+			return fmt.Errorf("provider may contain only letters, numbers, dot, underscore and hyphen")
+		}
+	}
+	if len(config.Currency) != 3 {
+		return fmt.Errorf("currency must be a three-letter code")
+	}
+	for _, r := range config.Currency {
+		if r < 'A' || r > 'Z' {
+			return fmt.Errorf("currency must be a three-letter uppercase code")
+		}
+	}
+	if len(config.MerchantID) > 256 || strings.ContainsAny(config.MerchantID, "\r\n\x00") {
+		return fmt.Errorf("merchant_id must be at most 256 bytes and contain no line breaks")
+	}
+	if config.MinAmountCents <= 0 || config.MaxAmountCents < config.MinAmountCents || config.MaxAmountCents > 100000000000 {
+		return fmt.Errorf("payment amount limits are invalid")
+	}
+	if config.OrderTTLSeconds < 60 || config.OrderTTLSeconds > 7*24*60*60 {
+		return fmt.Errorf("order_ttl_seconds must be between 60 and 604800")
+	}
+	if len(config.CheckoutURLTemplate) > 4096 || strings.ContainsAny(config.CheckoutURLTemplate, "\r\n\x00") {
+		return fmt.Errorf("checkout_url_template must be at most 4096 bytes and contain no line breaks")
+	}
+	if config.CheckoutURLTemplate != "" {
+		preview := paymentCheckoutURL(config.CheckoutURLTemplate, config.MerchantID, RechargeOrder{OrderNo: "preview", AmountCents: config.MinAmountCents, Currency: config.Currency})
+		parsed, err := url.Parse(preview)
+		if err != nil || parsed.Host == "" || parsed.Scheme != "https" && parsed.Scheme != "http" {
+			return fmt.Errorf("checkout_url_template must produce an http or https URL")
+		}
+	}
+	if config.Enabled && strings.TrimSpace(effectiveSecret) == "" {
+		return fmt.Errorf("webhook_secret is required when payments are enabled")
+	}
+	return nil
+}
+
+func (s *Server) paymentAdminConfig(w http.ResponseWriter, r *http.Request, requestID, actorID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	switch r.Method {
+	case http.MethodGet:
+		config := s.paymentConfig()
+		config.WebhookSecret = ""
+		s.writeData(w, http.StatusOK, requestID, config)
+	case http.MethodPut, http.MethodPatch:
+		if !sameOrigin(r) {
+			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
+			return
+		}
+		var payload struct {
+			Enabled             bool    `json:"enabled"`
+			Provider            string  `json:"provider"`
+			Currency            string  `json:"currency"`
+			MerchantID          string  `json:"merchant_id"`
+			WebhookSecret       *string `json:"webhook_secret"`
+			ClearWebhookSecret  bool    `json:"clear_webhook_secret"`
+			MinAmountCents      int64   `json:"min_amount_cents"`
+			MaxAmountCents      int64   `json:"max_amount_cents"`
+			OrderTTLSeconds     int64   `json:"order_ttl_seconds"`
+			CheckoutURLTemplate string  `json:"checkout_url_template"`
+		}
+		if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+			return
+		}
+		current := s.paymentConfig()
+		replaceSecret := payload.WebhookSecret != nil || payload.ClearWebhookSecret
+		secret := current.WebhookSecret
+		if payload.WebhookSecret != nil {
+			secret = strings.TrimSpace(*payload.WebhookSecret)
+		}
+		if payload.ClearWebhookSecret {
+			secret = ""
+		}
+		config := PaymentConfig{
+			Enabled:             payload.Enabled,
+			Provider:            strings.TrimSpace(payload.Provider),
+			Currency:            strings.ToUpper(strings.TrimSpace(payload.Currency)),
+			MerchantID:          strings.TrimSpace(payload.MerchantID),
+			WebhookSecret:       secret,
+			MinAmountCents:      payload.MinAmountCents,
+			MaxAmountCents:      payload.MaxAmountCents,
+			OrderTTLSeconds:     payload.OrderTTLSeconds,
+			CheckoutURLTemplate: strings.TrimSpace(payload.CheckoutURLTemplate),
+		}
+		if err := validatePaymentConfig(config, secret); err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAYMENT_CONFIG", err.Error())
+			return
+		}
+		updated, err := s.store.UpdatePaymentConfig(s.cfg.AgentID, config, replaceSecret)
+		if err != nil {
+			s.writeError(w, http.StatusInternalServerError, requestID, "PAYMENT_CONFIG_UPDATE_FAILED", "failed to save payment configuration")
+			return
+		}
+		updated.WebhookSecret = ""
+		s.recordAudit("agent_admin", actorID, "payment_config.update", "agent", s.cfg.AgentID, requestID, "success", "")
+		s.writeData(w, http.StatusOK, requestID, updated)
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported payment configuration operation")
+	}
+}
+
 func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.URL.Path == "/api/v1/agent/admin/wallet/credit" {
 		// There is intentionally no local top-up endpoint in owner_upstream mode.
@@ -1657,6 +1792,10 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		if ok {
 			s.writeError(w, http.StatusForbidden, requestID, "AGENT_ADMIN_REQUIRED", "agent administrator access required")
 		}
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/payment-config" {
+		s.paymentAdminConfig(w, r, requestID, session.MainUserID)
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/branding" {
@@ -1768,7 +1907,7 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_MODEL_POLICY", err.Error())
 				return
 			}
-			if s.cfg.ProvisioningControlEnabled || strings.HasPrefix(strings.TrimSpace(s.cfg.RuntimeControlCredential), "agt_ctl_") {
+			if s.managedRuntimeBridge() {
 				if s.main == nil {
 					if prior.Customized {
 						_, _ = s.store.UpdateAgentModelPolicy(s.cfg.AgentID, prior.Enabled)
@@ -2024,10 +2163,12 @@ func (s *Server) updateMappedUserStatus(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	if err := s.main.AdminUpdateUserStatus(r.Context(), mainUserID, status); err != nil {
-		s.recordAudit("agent_admin", actor.MainUserID, "user.status.update", "agent_user", mainUserID, requestID, "failed", "main_user_status_update_failed")
-		s.writeError(w, http.StatusBadGateway, requestID, "MAIN_USER_STATUS_UPDATE_FAILED", "Sub2API did not confirm the requested account status; AgentAPI access remains fail-closed until retried")
-		return
+	if s.managedRuntimeBridge() {
+		if err := s.main.AdminUpdateUserStatus(r.Context(), mainUserID, status); err != nil {
+			s.recordAudit("agent_admin", actor.MainUserID, "user.status.update", "agent_user", mainUserID, requestID, "failed", "main_user_status_update_failed")
+			s.writeError(w, http.StatusBadGateway, requestID, "MAIN_USER_STATUS_UPDATE_FAILED", "Sub2API did not confirm the requested account status; AgentAPI access remains fail-closed until retried")
+			return
+		}
 	}
 	if status == "active" {
 		updated, err = updateLocalStatus()
@@ -2246,7 +2387,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.handleVideoPoll(w, r, requestID, principal)
 			return
 		}
-		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, principal.ProxyMainUserID, requestID)
+		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(principal.ProxyMainUserID), requestID)
 		if err != nil {
 			s.writeMainError(w, requestID, err)
 			return
@@ -2277,7 +2418,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	}
 	chargeID := requestIDFrom(r, nil)
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
 		return
 	}
@@ -2353,7 +2494,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 
-	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), principal.ProxyMainUserID, chargeID)
+	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), s.relayBillingIdentity(principal.ProxyMainUserID), chargeID)
 	if relayErr != nil {
 		// A transport failure does not tell us whether Sub2API received and
 		// charged the request. Keep the reservation and reconcile it later.
@@ -2511,14 +2652,14 @@ func (s *Server) handleImageTaskPoll(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
 		return
 	}
 	ownerMu := s.userSettlementMutex(ownerID)
 	ownerMu.Lock()
 	defer ownerMu.Unlock()
-	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, task.MainUserID, task.RequestID)
+	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 	if relayErr != nil {
 		s.writeMainError(w, requestID, relayErr)
 		return
@@ -2560,14 +2701,14 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
-	if ownerID == "" || strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
+	if ownerID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main billing owner is not configured")
 		return
 	}
 	ownerMu := s.userSettlementMutex(ownerID)
 	ownerMu.Lock()
 	defer ownerMu.Unlock()
-	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, task.MainUserID, task.RequestID)
+	status, headers, data, relayErr := s.main.RelayModelMethod(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 	if relayErr != nil {
 		s.writeMainError(w, requestID, relayErr)
 		return
@@ -2672,7 +2813,7 @@ func videoTaskFailed(status string) bool {
 }
 
 func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, requestID, ownerID, sessionMainUserID, chargeID string, before int64, body []byte, contentType string) {
-	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, sessionMainUserID, chargeID)
+	resp, err := s.main.OpenModelResponse(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, contentType, s.relayBillingIdentity(sessionMainUserID), chargeID)
 	if err != nil {
 		if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, err.Error()); finalizeErr != nil {
 			slog.Error("failed to persist streaming pending settlement", "request_id", requestID, "error", finalizeErr)
@@ -2907,14 +3048,23 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 }
 
 func (s *Server) readMainBalance(ctx context.Context, mainUserID string) (int64, bool) {
-	if s.cfg.RuntimeControlCredential == "" {
-		return 0, false
-	}
 	user, err := s.main.AdminGetUser(ctx, mainUserID)
 	if err != nil {
 		return 0, false
 	}
 	return user.Balance, true
+}
+
+func (s *Server) managedRuntimeBridge() bool {
+	return strings.HasPrefix(strings.TrimSpace(s.cfg.AppCredential), "agt_model_") &&
+		strings.HasPrefix(strings.TrimSpace(s.cfg.RuntimeControlCredential), "agt_ctl_")
+}
+
+func (s *Server) relayBillingIdentity(proxyMainUserID string) string {
+	if s.managedRuntimeBridge() {
+		return strings.TrimSpace(proxyMainUserID)
+	}
+	return strings.TrimSpace(s.cfg.OwnerMainUserID)
 }
 
 func (s *Server) mainBalance(ctx context.Context, mainUserID string) (int64, bool) {
@@ -2928,9 +3078,6 @@ func (s *Server) syncOwnerBalance(ctx context.Context, requestID string) (AgentV
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 	if ownerID == "" {
 		return AgentView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
-	}
-	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
-		return AgentView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()
@@ -2950,9 +3097,6 @@ func (s *Server) syncAndAllocateRechargeOrder(ctx context.Context, requestID, or
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 	if ownerID == "" {
 		return RechargeOrder{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
-	}
-	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
-		return RechargeOrder{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()
@@ -2976,9 +3120,6 @@ func (s *Server) syncAndAllocateUser(ctx context.Context, requestID, mainUserID 
 	ownerID := strings.TrimSpace(s.cfg.OwnerMainUserID)
 	if ownerID == "" {
 		return AgentUserView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_OWNER_MISSING", Message: "billing owner is not configured"}
-	}
-	if strings.TrimSpace(s.cfg.RuntimeControlCredential) == "" {
-		return AgentUserView{}, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
 	}
 	mu := s.userSettlementMutex(ownerID)
 	mu.Lock()

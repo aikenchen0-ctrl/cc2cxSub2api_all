@@ -26,6 +26,7 @@ import { MixpanelEvent, trackEvent } from "@/utils/mixpanel";
 
 import Chat from "../../presentation/components/Chat";
 import {
+  DEFAULT_PRESENTATION_LANGUAGE,
   LanguageType,
   PresentationConfig,
   ToneType,
@@ -44,7 +45,7 @@ import TemplateSelection from "./TemplateSelection";
 
 const DEFAULT_OUTLINE_CONFIG: PresentationConfig = {
   slides: null,
-  language: LanguageType.Auto,
+  language: DEFAULT_PRESENTATION_LANGUAGE,
   prompt: "",
   tone: ToneType.Default,
   verbosity: VerbosityType.Standard,
@@ -152,7 +153,13 @@ const OutlinePage: React.FC = () => {
   const isOutlineReady =
     hasSelectedTemplate && hasOutlineStreamFinished && !outlineControlsBusy;
   const isOutlineAssistantVisible = !isTemplateStage && hasSelectedTemplate;
-  const isRegenerateDisabled = !isOutlineReady;
+  // Keep regeneration available when a completed outline is restored after a
+  // downstream presentation-generation failure. The stream-finished flag is
+  // local to this page session and resets on remount, while the saved outline
+  // remains valid and can be regenerated.
+  const canRegenerateOutline =
+    hasSelectedTemplate && outlines.length > 0 && !outlineControlsBusy;
+  const isRegenerateDisabled = !canRegenerateOutline;
   const outlineStreamFinished =
     !isTemplateStage &&
     !outlineControlsBusy &&
@@ -226,26 +233,26 @@ const OutlinePage: React.FC = () => {
     }
 
     if (!hasSelectedTemplate) {
-      toast.error("Please select a template first");
+      toast.error("请先选择一个模板");
       return;
     }
 
-    if (!isOutlineReady) {
+    if (!canRegenerateOutline) {
       return;
     }
 
     if (!draftConfig.language) {
-      toast.error("Please select language");
+      toast.error("请选择语言");
       return;
     }
 
     if (documentPaths.length > 0 && draftConfig.language === LanguageType.Auto) {
-      toast.error("Please choose a language before regenerating from documents");
+      toast.error("在从文档重新生成之前，请选择一种语言");
       return;
     }
 
     if (!draftConfig.prompt.trim() && documentPaths.length === 0) {
-      toast.error("No Prompt or Document Provided");
+      toast.error("未提供提示词或文档");
       return;
     }
 
@@ -298,11 +305,11 @@ const OutlinePage: React.FC = () => {
           "Failed to regenerate outline"
         ),
       });
-      toast.error("Outline Error", {
+      toast.error("大纲错误", {
         description:
           error instanceof Error
             ? error.message
-            : "Failed to regenerate outline.",
+            : "重新生成大纲失败。",
       });
     } finally {
       setIsRegeneratingOutline(false);
@@ -313,7 +320,7 @@ const OutlinePage: React.FC = () => {
     draftConfig,
     files,
     hasSelectedTemplate,
-    isOutlineReady,
+    canRegenerateOutline,
     outlineControlsBusy,
     presentation_id,
     selectedTemplateId,
@@ -383,7 +390,7 @@ const OutlinePage: React.FC = () => {
       />
 
       <OutlineStandardHeader
-        title={isTemplateStage ? "Select Template" : "Outline Generation"}
+        title={isTemplateStage ? "选择模板" : "大纲生成"}
         onBack={() => {
           if (isTemplateStage) {
             router.push("/dashboard");

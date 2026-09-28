@@ -61,7 +61,7 @@ export function useSlideEditorFontImport() {
                     ? caughtError.message
                     : "Font check failed.";
             setError(message);
-            notify.error("Font check failed", message);
+            notify.error("字体检查失败", message);
             return null;
         } finally {
             setIsCheckingFonts(false);
@@ -74,8 +74,8 @@ export function useSlideEditorFontImport() {
         );
         if (existingFont) {
             notify.warning(
-                "Font already added",
-                `Font "${fontName}" is already in your upload list.`
+                "字体已添加",
+                `字体"${fontName}" 已在您的上传列表中。`
             );
             return fontName;
         }
@@ -86,14 +86,14 @@ export function useSlideEditorFontImport() {
 
         if (!VALID_FONT_EXTENSIONS.includes(fileExtension)) {
             notify.error(
-                "Invalid font file",
-                "Please upload .ttf, .otf, .woff, .woff2, or .eot files."
+                "无效的字体文件",
+                "请上传 .ttf、.otf、.woff、.woff2 或 .eot 文件"
             );
             return null;
         }
 
         if (fontFile.size > MAX_FONT_SIZE_BYTES) {
-            notify.error("File too large", "Font file size must be less than 10MB.");
+            notify.error("文件过大", "字体文件大小必须小于 10MB");
             return null;
         }
 
@@ -106,7 +106,7 @@ export function useSlideEditorFontImport() {
                 file: fontFile,
             },
         ]);
-        notify.success("Font added", `Font "${fontName}" was added successfully.`);
+        notify.success("字体已添加", `字体"${fontName}" 已成功添加。`);
         return fontName;
     }, [uploadedFonts]);
 
@@ -114,12 +114,12 @@ export function useSlideEditorFontImport() {
         setUploadedFonts((current) =>
             current.filter((font) => font.fontName !== fontName)
         );
-        notify.info("Font removed", "The font was removed from your upload list.");
+        notify.info("字体已移除", "字体已从您的上传列表中移除");
     }, []);
 
     const prepareImport = useCallback(async (): Promise<PreparedSlideEditorImport | null> => {
         if (!file) {
-            notify.error("No PPTX selected", "Please choose a PPTX file first.");
+            notify.error("未选择 PPTX", "请先选择一个 PPTX 文件");
             return null;
         }
 
@@ -158,7 +158,7 @@ export function useSlideEditorFontImport() {
                     ? caughtError.message
                     : "Could not prepare this PPTX for the slide editor.";
             setError(message);
-            notify.error("Font preparation failed", message);
+            notify.error("字体准备失败", message);
             return null;
         } finally {
             setIsPreparingImport(false);

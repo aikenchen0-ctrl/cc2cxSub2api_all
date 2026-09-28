@@ -200,14 +200,14 @@ export const useTemplateCreation = () => {
         const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."));
 
         if (!validExtensions.includes(fileExtension)) {
-            notify.error("字体文件无效", "请上传 .ttf、.otf、.woff、.woff2 或 .eot 文件。 ");
+            notify.error("字体文件无效", "请上传 .ttf、.otf、.woff、.woff2 或 .eot 文件");
             return null;
         }
 
         // Validate file size (10MB limit)
         const maxSize = 10 * 1024 * 1024;
         if (file.size > maxSize) {
-            notify.error("文件过大", "字体文件大小必须小于 10MB。 ");
+            notify.error("文件过大", "字体文件大小必须小于 10MB");
             return null;
         }
 
@@ -666,18 +666,18 @@ export const useTemplateCreation = () => {
 
             if (failedCount > 0) {
                 notify.warning(
-                    "Some slides could not be generated",
-                    `${processedCount} of ${generatedSlides.length} slides were generated.`
+                    "部分幻灯片无法生成",
+                    `已生成 ${processedCount}/${generatedSlides.length} 张幻灯片。`
                 );
             } else if (blocksError) {
                 notify.warning(
-                    "Template generated",
-                    `Slides were saved, but template blocks were not generated. ${blocksError}`
+                    "模板已生成",
+                    `幻灯片已保存，但模板块未生成。${blocksError}`
                 );
             } else {
                 notify.success(
-                    "Template generated",
-                    "The template was generated and saved successfully."
+                    "模板已生成",
+                    "模板已成功生成并保存"
                 );
             }
 
@@ -795,8 +795,8 @@ export const useTemplateCreation = () => {
                     duration_ms: Date.now() - startedAt,
                 });
                 notify.success(
-                    "Slide regenerated",
-                    `Slide ${slideIndex + 1} was regenerated successfully.`
+                    "幻灯片已再生",
+                    `幻灯片${slideIndex + 1}已成功重新生成。`
                 );
             } catch (error) {
                 const errorMessage = error instanceof Error

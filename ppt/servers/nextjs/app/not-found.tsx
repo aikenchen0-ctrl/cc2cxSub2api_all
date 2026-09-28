@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "页面不存在 | PPT生成",
+  title: "页面不存在 | PPT 生成",
 };
 
 /**
@@ -29,14 +29,13 @@ export default function NotFound() {
           页面未找到
         </h1>
         <p className="mb-4 text-base text-gray-600 sm:text-lg">
-          It seems you&apos;ve found a page that doesn&apos;t exist. But don&apos;t worry, every
-          一份精彩的演示文稿可以从空白幻灯片开始！
+          似乎您访问了一个不存在的页面。但别担心，每一份精彩的演示文稿都可以从空白幻灯片开始！
         </p>
 
         <div className="mb-8 flex flex-col justify-center gap-3 sm:flex-row sm:space-x-4">
           <Link href="/dashboard" className="inline-flex sm:flex-1 sm:justify-center">
             <Button className="w-full rounded-md bg-indigo-600 px-6 py-2 text-white hover:bg-indigo-700 sm:w-auto">
-              Go to Homepage
+              返回首页
             </Button>
           </Link>
           <Link href="/" className="inline-flex sm:flex-1 sm:justify-center">

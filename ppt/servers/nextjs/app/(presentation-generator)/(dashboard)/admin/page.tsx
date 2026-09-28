@@ -2,7 +2,7 @@ import { requireAdminSession } from "@/utils/serverAuth";
 import AdminPanel from "./AdminPanel";
 
 export const metadata = {
-  title: "管理 | 永恒PPT",
+  title: "管理 | 永恒 PPT",
 };
 
 export default async function AdminPage() {

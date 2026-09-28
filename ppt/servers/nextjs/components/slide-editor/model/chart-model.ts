@@ -96,7 +96,7 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     ...withoutRemovedChartFields(element),
     type: "chart",
     chart_type: chartType,
-    data: data.length > 0 ? data : [{ label: "Item 1", value: 0 }],
+    data: data.length > 0 ? data : [{ label: "项目 1", value: 0 }],
     categories: normalizedCategories,
     series: normalizedSeries,
     colors: chartColors,

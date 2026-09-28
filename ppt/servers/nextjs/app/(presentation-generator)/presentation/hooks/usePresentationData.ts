@@ -32,8 +32,8 @@ export const usePresentationData = (
 
       if (data?.version === "v1-standard") {
         notify.warning(
-          "Unsupported presentation",
-          "This deck was created in an older 永恒PPT version. Downgrade to a compatible version to open it."
+          "不支持的演示文稿",
+          "此演示文稿是在旧版 PPT 中创建的。请将其降级为兼容版本以打开。"
         );
         setLoading(false);
         router.replace("/dashboard");

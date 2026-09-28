@@ -397,7 +397,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
       id="presentation-mode-wrapper"
       ref={rootRef}
       role="application"
-      aria-label="Presentation"
+      aria-label="演示文稿"
       data-fullscreen={isFullscreen ? "true" : "false"}
       className="fixed inset-0 z-[100] h-[100dvh] w-[100dvw] overflow-hidden bg-black font-syne text-white outline-none select-none"
       tabIndex={0}
@@ -405,7 +405,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
       onMouseMove={revealChrome}
     >
       <span className="sr-only">
-        Slide {activeSlideIndex + 1} of {slideCount}
+        第 {activeSlideIndex + 1} 张，共 {slideCount} 张幻灯片
       </span>
 
       {showSlideGrid ? (
@@ -418,7 +418,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
               setShowSlideGrid(false);
             }}
           >
-            Back
+            返回
           </button>
           <div className="absolute inset-0 overflow-y-auto px-5 pb-14 pt-[88px] sm:px-[49px] sm:pt-[96px]">
             <div
@@ -575,13 +575,13 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                   setShowSpeakerNotes(false);
                 }}
               >
-                Hide
+                隐藏
               </button>
               <div className="mx-auto mt-[105px] flex w-[262px] max-w-[calc(100%-40px)] flex-col items-start gap-6">
                 <div className="flex items-center gap-2">
                   <SpeakerNoteIcon className="size-5 text-white" />
                   <h2 className="text-[16px] font-medium leading-none tracking-[-0.16px] text-white">
-                    Speaker Note
+                    演讲者备注
                   </h2>
                 </div>
                 <div className="w-full">
@@ -596,7 +596,7 @@ const PresentationMode: React.FC<PresentationModeProps> = ({
                       currentSpeakerNote && "mt-6"
                     )}
                   >
-                    Add notes in the editor
+                    在编辑器中添加备注
                   </p>
                 </div>
               </div>

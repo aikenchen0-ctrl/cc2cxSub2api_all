@@ -123,8 +123,8 @@ const SlideActionBar = ({
 
   const notifySlideLimitReached = () => {
     notify.warning(
-      "Slide limit reached",
-      `You can have up to ${MAX_NUMBER_OF_SLIDES} slides.`
+      "已达到幻灯片数量限制",
+      `您最多可以有${MAX_NUMBER_OF_SLIDES}张幻灯片。`
     );
   };
 
@@ -136,8 +136,8 @@ const SlideActionBar = ({
 
     if (!templateId) {
       notify.error(
-        "Could not add blank slide",
-        "This slide does not have a template context."
+        "无法添加空白幻灯片",
+        "此幻灯片没有模板上下文"
       );
       return;
     }
@@ -267,8 +267,8 @@ const SlideActionBar = ({
 
     if (!templateId) {
       notify.error(
-        "Could not open templates",
-        "This slide does not have a template context."
+        "无法打开模板",
+        "此幻灯片没有模板上下文"
       );
       return;
     }
@@ -360,7 +360,7 @@ const SlideActionBar = ({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Speaker notes"
+                  aria-label="演讲者备注"
                   className={cn(
                     "flex h-8 w-10 shrink-0 items-center justify-center rounded-[6px] text-[#050505] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]",
                     isSpeakerPopoverOpen && "bg-[#F7F6F9]"
@@ -381,12 +381,12 @@ const SlideActionBar = ({
               >
                 <div className="border-b border-[#EDEEEF] px-5 py-4">
                   <p className="text-sm font-semibold text-[#191919]">
-                    Speaker notes
+                    演讲者备注
                   </p>
                 </div>
                 <div className="p-5">
                   <div className="max-h-[240px] min-h-[108px] overflow-auto whitespace-pre-wrap rounded-[12px] border border-[#EDEEEF] bg-[#FAFAFB] p-4 text-sm leading-relaxed text-[#333333]">
-                    {speakerNote || "No speaker notes for this slide."}
+                    {speakerNote || "此幻灯片没有演讲者备注。"}
                   </div>
                 </div>
               </PopoverContent>
@@ -401,7 +401,7 @@ const SlideActionBar = ({
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
-                aria-label="Slide actions"
+                aria-label="幻灯片操作"
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-[#050505] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]",
                   isSlideMenuOpen && "bg-[#F7F6F9]"

@@ -436,8 +436,8 @@ const PresentonMode = ({
                 // Keep setup usable by revealing the creatable model input.
                 setModelsChecked(true);
                 notify.error(
-                    "Could not load models",
-                    `${message} You can enter a model ID manually.`
+                    "无法加载模型",
+                    `${message}您可以手动输入模型 ID`
                 );
             }
         } catch (error) {
@@ -446,8 +446,8 @@ const PresentonMode = ({
                 ? error.message
                 : "The server could not list models. Check your API key or endpoint and try again.";
             notify.error(
-                llmConfig.LLM === "ollama" ? "Could not connect to Ollama" : "Could not load models",
-                `${message} You can enter a model ID manually.`
+                llmConfig.LLM === "ollama" ? "无法连接到 Ollama" : "无法加载模型",
+                `${message}您可以手动输入模型 ID`
             );
             setAvailableModels([]);
             setModelsChecked(true);
@@ -464,7 +464,7 @@ const PresentonMode = ({
             return (
                 <div className="w-full ">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        DALL·E 3 Image Quality
+                        DALL·E 3 图像质量
                     </label>
                     <div className="">
                         <Select value={llmConfig.DALL_E_3_QUALITY || 'standard'} onValueChange={(value) => {
@@ -496,7 +496,7 @@ const PresentonMode = ({
             return (
                 <div className="w-full">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GPT Image 1.5 Quality
+                        GPT 图像 1.5 质量
                     </label>
                     <div className="">
                         <Select
@@ -541,9 +541,9 @@ const PresentonMode = ({
             <div className="col-span-full rounded-[10px] border border-[#EDEEEF] bg-[#FBFBFD] p-4 shadow-[0_12px_28px_rgba(16,19,35,0.04)]">
                 <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-sm font-semibold text-[#191919]">{provider.label} setup</p>
+                        <p className="text-sm font-semibold text-[#191919]">{provider.label} 设置</p>
                         <p className="mt-1 text-xs leading-5 text-gray-500">
-                            Configure the selected image provider before continuing.
+                            在继续之前配置所选图像提供商。
                         </p>
                     </div>
                     {provider.getApiKeyUrl && (
@@ -552,7 +552,7 @@ const PresentonMode = ({
                             target="_blank"
                             className="flex shrink-0 items-center gap-1 rounded-full border border-[#EDEEEF] bg-white px-3 py-1.5 text-xs font-medium text-[#666666] transition-colors hover:border-[#D9D6FE] hover:text-[#7A5AF8]"
                         >
-                            Get API Key <ArrowUpRight className="h-3.5 w-3.5" />
+                            获取 API 密钥 <ArrowUpRight className="h-3.5 w-3.5" />
                         </a>
                     )}
                 </div>
@@ -587,7 +587,7 @@ const PresentonMode = ({
                         <>
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                                    ComfyUI Server URL
+                                    ComfyUI 服务器 URL
                                 </label>
                                 <input
                                     type="text"
@@ -604,10 +604,10 @@ const PresentonMode = ({
                             </div>
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                                    Workflow JSON
+                                    工作流 JSON
                                 </label>
                                 <textarea
-                                    placeholder='Paste your ComfyUI workflow JSON here (export via "Export (API)" in ComfyUI)'
+                                    placeholder='在此处粘贴您的 ComfyUI 工作流 JSON（通过 ComfyUI 中的"导出 (API)"导出）'
                                     className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono text-xs outline-none transition-colors focus:border-[#7A5AF8] focus:ring-2 focus:ring-[#7A5AF8]/20"
                                     rows={3}
                                     value={llmConfig.COMFYUI_WORKFLOW || ""}
@@ -624,7 +624,7 @@ const PresentonMode = ({
                         <>
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                                    Open WebUI URL
+                                    Open WebUI 地址
                                 </label>
                                 <input
                                     type="text"
@@ -641,12 +641,12 @@ const PresentonMode = ({
                             </div>
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                                    API Key (optional)
+                                    API 密钥（可选）
                                 </label>
                                 <div className="relative">
                                     <input
                                         type={showApiKey ? "text" : "password"}
-                                        placeholder="API key"
+                                        placeholder="API 密钥"
                                         className="h-12 w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-12 outline-none transition-colors focus:border-[#7A5AF8] focus:ring-2 focus:ring-[#7A5AF8]/20"
                                         value={llmConfig.OPEN_WEBUI_IMAGE_API_KEY || ""}
                                         onChange={(e) => {
@@ -674,7 +674,7 @@ const PresentonMode = ({
                             <div className="relative">
                                 <input
                                     type={showApiKey ? "text" : "password"}
-                                    placeholder={`Enter your ${provider.apiKeyFieldLabel}`}
+                                    placeholder={`请输入您的${provider.apiKeyFieldLabel}`}
                                     className="h-12 w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-12 outline-none transition-colors focus:border-[#7A5AF8] focus:ring-2 focus:ring-[#7A5AF8]/20"
                                     value={getFieldValue(provider.apiKeyField)}
                                     onChange={(e) => {
@@ -727,7 +727,7 @@ const PresentonMode = ({
                         provider: "codex",
                         validation_error: "Please sign in to ChatGPT to continue.",
                     });
-                    notify.error("Sign in required", "Please sign in to ChatGPT to continue.");
+                    notify.error("需要登录", "请登录 ChatGPT 以继续。");
                     return;
                 }
             }
@@ -739,7 +739,7 @@ const PresentonMode = ({
                     web_search_provider: llmConfig.WEB_SEARCH_PROVIDER || "auto",
                     validation_error: validationError,
                 });
-                notify.warning("Cannot save yet", validationError);
+                notify.warning("暂无法保存", validationError);
                 return;
             }
             setSavingConfig(true);
@@ -789,7 +789,7 @@ const PresentonMode = ({
                 web_search_provider: llmConfig.WEB_GROUNDING ? (llmConfig.WEB_SEARCH_PROVIDER || "auto") : "disabled",
             });
 
-            notify.success("Configuration saved", "Your configuration was saved successfully.");
+            notify.success("配置已保存", "配置保存成功");
             trackEvent(MixpanelEvent.Onboarding_Step_Continued, {
                 from_step: "web_search",
                 to_step: "finish",
@@ -800,7 +800,7 @@ const PresentonMode = ({
             setStep(3)
             // router.push("/upload");
         } catch (error) {
-            notify.error("Could not save configuration", error instanceof Error ? error.message : "Failed to save configuration");
+            notify.error("无法保存配置", error instanceof Error ? error.message : "保存配置失败");
 
         }
         finally {
@@ -812,7 +812,7 @@ const PresentonMode = ({
         if (llmConfig.LLM === 'codex') {
             const isAuthenticated = await checkCurrentAuthStatus();
             if (!isAuthenticated) {
-                notify.error("Sign in required", "Please sign in to ChatGPT to continue.");
+                notify.error("需要登录", "请登录 ChatGPT 以继续。");
                 return false;
             }
         }
@@ -827,7 +827,7 @@ const PresentonMode = ({
                 provider: llmConfig.LLM || "",
                 validation_error: validationError,
             });
-            notify.warning("Cannot continue yet", validationError);
+            notify.warning("尚未就绪", validationError);
             return false;
         }
         return true;
@@ -860,7 +860,7 @@ const PresentonMode = ({
                     image_provider: llmConfig.IMAGE_PROVIDER || "",
                     validation_error: validationError,
                 });
-                notify.warning("Cannot continue yet", validationError);
+                notify.warning("尚未就绪", validationError);
                 return;
             }
             trackEvent(MixpanelEvent.Onboarding_Step_Continued, {
@@ -902,8 +902,8 @@ const PresentonMode = ({
                 : null;
             if (!statusPayload?.linked) {
                 notify.warning(
-                    "请先连接永恒PPT",
-                    "请先登录永恒PPT云端，再继续。"
+                    "请先连接永恒 PPT",
+                    "请先登录永恒 PPT 云端以继续。"
                 );
                 return;
             }
@@ -921,8 +921,8 @@ const PresentonMode = ({
             router.push('/upload');
         } catch (error) {
             notify.error(
-                "无法选择永恒PPT",
-                error instanceof Error ? error.message : "Please try again."
+                "无法选择永恒 PPT",
+                error instanceof Error ? error.message : "请重试。"
             );
         } finally {
             setSavingConfig(false);
@@ -939,7 +939,7 @@ const PresentonMode = ({
         return (
             <div className="col-span-full rounded-[10px] border border-[#EDEEEF] bg-[#FBFBFD] p-4 shadow-[0_12px_28px_rgba(16,19,35,0.04)]">
                 <div className="mb-4">
-                    <p className="text-sm font-semibold text-[#191919]">{selectedWebProvider.label} setup</p>
+                    <p className="text-sm font-semibold text-[#191919]">{selectedWebProvider.label} 设置</p>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
                         {selectedWebProvider.description}
                     </p>
@@ -948,7 +948,7 @@ const PresentonMode = ({
                 <div className="space-y-4">
                     {selectedWebProvider.value === "auto" && (
                         <div className="rounded-lg border border-[#D9D6FE] bg-[#F4F3FF] p-3 text-xs leading-5 text-[#5146E5]">
-                            永恒PPT 会在可用时使用模型原生联网能力；如果所选文本模型不支持，联网搜索会保持关闭，直到你选择外部提供商。
+                            永恒 PPT 将在可用时启用模型原生联网能力；若所选文本模型不支持，联网搜索将保持关闭，直至您选择外部提供商。
                         </div>
                     )}
 
@@ -978,7 +978,7 @@ const PresentonMode = ({
                                     value={getFieldValue(selectedWebProvider.apiKeyField)}
                                     onChange={(event) => setLlmConfig(prev => ({ ...prev, [selectedWebProvider.apiKeyField!]: event.target.value }))}
                                     className="h-12 w-full rounded-lg border border-gray-300 px-4 pr-12 outline-none transition-colors focus:border-[#7A5AF8] focus:ring-2 focus:ring-[#7A5AF8]/20"
-                                    placeholder={`Enter your ${selectedWebProvider.apiKeyLabel}`}
+                                    placeholder={`请输入您的${selectedWebProvider.apiKeyLabel}`}
                                 />
                                 <button
                                     type="button"
@@ -994,7 +994,7 @@ const PresentonMode = ({
                     {selectedWebProvider.value !== "auto" && (
                         <div>
                             <label className="mb-2 block text-sm font-medium text-gray-700">
-                                Maximum results
+                                最大结果数
                             </label>
                             <input
                                 type="number"
@@ -1091,18 +1091,18 @@ const PresentonMode = ({
 
     return (
         <div className='w-full max-w-[660px] font-syne pb-10'>
-            <p className='px-2.5 py-0.5 w-fit text-[#7A5AF8] rounded-[50px]  border border-[#EDEEEF] text-[10px] font-medium mb-5 font-syne'>永恒PPT</p>
+            <p className='px-2.5 py-0.5 w-fit text-[#7A5AF8] rounded-[50px]  border border-[#EDEEEF] text-[10px] font-medium mb-5 font-syne'>永恒 PPT</p>
             <div className=''>
 
                 <h2 className='mb-4 text-black text-[26px] font-normal font-unbounded '>
-                    {providerStep === 1 ? "Choose how you want to create" : providerStep === 2 ? "Choose your image provider" : "Configure web search"}
+                    {providerStep === 1 ? "选择创建方式" : providerStep === 2 ? "选择您的图像提供商" : "配置网页搜索"}
                 </h2>
                 <p className='text-[#000000CC] text-xl font-normal font-syne'>
                     {providerStep === 1
-                        ? "使用你的永恒PPT账号，或配置自己的 AI 提供商。"
+                        ? "使用您的永恒 PPT 账号，或配置自己的 AI 提供商。"
                         : providerStep === 2
-                            ? "选择永恒PPT的视觉生成方式，或继续但不生成图片。"
-                            : "Add current web context to presentations, or continue with web search disabled."}
+                            ? "选择永恒 PPT 的视觉生成方式，或继续但不生成图片。"
+                            : "将当前网页上下文添加到演示文稿中，或继续但禁用网络搜索。"}
                 </p>
             </div>
 
@@ -1112,7 +1112,7 @@ const PresentonMode = ({
                     <div className="my-8 flex items-center gap-4" aria-hidden="true">
                         <div className="h-px flex-1 bg-[#E8E6EC]" />
                         <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#938D9B]">
-                            Or configure your own providers
+                            或配置您的自有提供商
                         </span>
                         <div className="h-px flex-1 bg-[#E8E6EC]" />
                     </div>
@@ -1144,7 +1144,7 @@ const PresentonMode = ({
 
                         <h3 className="text-xl font-normal text-[#191919] pb-1.5">文本生成设置</h3>
                         <p className=" text-sm  text-gray-500">
-                            Choosing where text content comes from
+                            选择文本内容的来源
                         </p>
                     </div>
                 </div>
@@ -1160,19 +1160,19 @@ const PresentonMode = ({
                         </TabsTrigger>
                         <TabsTrigger value="local" className="h-12 gap-2 rounded-[8px] border border-transparent px-4 text-sm font-semibold text-[#5F6062] transition-all hover:text-[#191919] data-[state=active]:border-[#D9D6FE] data-[state=active]:bg-white data-[state=active]:text-[#191919] data-[state=active]:shadow-[0_8px_24px_rgba(16,19,35,0.08)]">
                             <Laptop className="h-4 w-4" />
-                            Local
+                            本地
                         </TabsTrigger>
                         <TabsTrigger value="other" className="h-12 gap-2 rounded-[8px] border border-transparent px-4 text-sm font-semibold text-[#5F6062] transition-all hover:text-[#191919] data-[state=active]:border-[#D9D6FE] data-[state=active]:bg-white data-[state=active]:text-[#191919] data-[state=active]:shadow-[0_8px_24px_rgba(16,19,35,0.08)]">
                             <Blocks className="h-4 w-4" />
-                            AI Providers
+                            AI 提供商
                         </TabsTrigger>
                     </TabsList>
                     <p className="mt-3 text-xs leading-relaxed text-gray-500">
                         {textProviderTab === "chatgpt"
-                            ? "Connect your ChatGPT account and choose a supported model."
+                            ? "连接您的 ChatGPT 账户并选择支持的模型。"
                             : textProviderTab === "local"
-                                ? "Run models on your machine with Ollama or LM Studio."
-                                : "Connect hosted AI providers using an API key or custom endpoint."}
+                                ? "在您的机器上运行 Ollama 或 LM Studio 中的模型。"
+                                : "使用 API 密钥或自定义端点连接托管的 AI 提供商。"}
                     </p>
                     <TabsContent value="chatgpt" className="mt-6">
                         <CodexConfig
@@ -1243,7 +1243,7 @@ const PresentonMode = ({
                     <div className="flex w-full flex-col justify-start">
 
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Text Provider
+                            选择文本提供商
                         </label>
                         <Popover
                             open={openProviderSelect}
@@ -1261,7 +1261,7 @@ const PresentonMode = ({
                                             {llmConfig.LLM && OTHER_PROVIDER_VALUES.has(llmConfig.LLM)
                                                 ? LLM_PROVIDERS[llmConfig.LLM]
                                                     ?.label || llmConfig.LLM
-                                                : "Select text provider"}
+                                                : "选择文本提供商"}
                                         </span>
                                     </div>
                                     <ChevronUp className="w-4 h-4 text-gray-500" />
@@ -1364,7 +1364,7 @@ const PresentonMode = ({
                                                 [currentApiKeyField]: e.target.value
                                             }))}
                                             className="col-start-1 row-start-1 h-12 w-full rounded-lg border border-gray-300 py-3 pl-3 pr-12 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                            placeholder={`Enter your ${providerApiKeyLabel}`}
+                                            placeholder={`请输入您的${providerApiKeyLabel}`}
                                         />
                                         <button
                                             type="button"
@@ -1385,7 +1385,7 @@ const PresentonMode = ({
                                         CUSTOM_LLM_URL: e.target.value
                                     }))}
                                     className="w-full mt-2 px-2 py-3 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                    placeholder="OpenAI-compatible URL"
+                                    placeholder="兼容 OpenAI 的 URL"
                                 />
                             )}
                             {llmConfig.LLM === 'deepseek' && (
@@ -1412,7 +1412,7 @@ const PresentonMode = ({
                                     <CollapsibleContent className="space-y-3 overflow-hidden">
                                         <div className="space-y-1.5 border-t border-gray-100 pt-3">
                                             <label className="block text-sm font-medium text-gray-700">
-                                                DeepSeek base URL (optional)
+                                                DeepSeek 基础 URL（可选）
                                             </label>
                                             <input
                                                 type="text"
@@ -1431,7 +1431,7 @@ const PresentonMode = ({
                             {llmConfig.LLM === 'litellm' && (
                                 <>
                                     <label className="mt-3 block text-sm font-medium text-gray-700 mb-2">
-                                        LiteLLM base URL
+                                        LiteLLM 基础 URL
                                     </label>
                                     <input
                                         type="text"
@@ -1441,17 +1441,17 @@ const PresentonMode = ({
                                             LITELLM_BASE_URL: e.target.value
                                         }))}
                                         className="w-full px-2 py-3 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                        placeholder="e.g. http://host.docker.internal:4000/v1"
+                                        placeholder="例如：http://host.docker.internal:4000/v1"
                                     />
                                     <p className="mt-1.5 text-xs text-gray-500">
-                                        OpenAI-compatible root (usually ends with /v1); /v1 is added if omitted. API key above is optional for local proxies with no auth.
+                                        兼容 OpenAI 的根路径（通常以 /v1 结尾）；如果未指定，会自动添加/v1。对于无需认证的本地代理，API 密钥为可选配置。
                                     </p>
                                 </>
                             )}
                             {llmConfig.LLM === 'lmstudio' && (
                                 <>
                                     <label className="mt-3 block text-sm font-medium text-gray-700 mb-2">
-                                        LM Studio base URL
+                                        LM Studio 基础 URL
                                     </label>
                                     <input
                                         type="text"
@@ -1464,14 +1464,14 @@ const PresentonMode = ({
                                         placeholder="http://localhost:1234/v1"
                                     />
                                     <p className="mt-1.5 text-xs text-gray-500">
-                                        Defaults to localhost:1234/v1, and /v1 is added automatically when omitted.
+                                        默认值为 localhost:1234/v1，如果未指定，会自动添加/v1。
                                     </p>
                                 </>
                             )}
                             {llmConfig.LLM === 'fireworks' && (
                                 <>
                                     <label className="mt-3 block text-sm font-medium text-gray-700 mb-2">
-                                        Fireworks base URL (optional)
+                                        Fireworks 基础 URL（可选）
                                     </label>
                                     <input
                                         type="text"
@@ -1488,7 +1488,7 @@ const PresentonMode = ({
                             {llmConfig.LLM === 'together' && (
                                 <>
                                     <label className="mt-3 block text-sm font-medium text-gray-700 mb-2">
-                                        Together base URL (optional)
+                                        Together 基础 URL（可选）
                                     </label>
                                     <input
                                         type="text"
@@ -1540,10 +1540,10 @@ const PresentonMode = ({
                                 {modelsLoading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        Checking for models...
+                                        正在查找模型...
                                     </span>
                                 ) : (
-                                    "Validate & Load Models"
+                                    "验证并加载模型"
                                 )}
                             </button>
                         )}
@@ -1584,7 +1584,7 @@ const PresentonMode = ({
             {providerStep === 2 && <>
             {/* Image Provider */}
             <div className={`p-3 border border-[#EDEEEF] rounded-[11px] relative mt-5 bg-white ${llmConfig.DISABLE_IMAGE_GENERATION ? "bg-[#F9FAFB]" : ""}`}>
-                <ToolTip content="Enable/Disable Image Generation" className='flex justify-end items-center absolute top-3 right-3'>
+                <ToolTip content="启用/禁用图像生成" className='flex justify-end items-center absolute top-3 right-3'>
                     <div className='flex justify-end items-center'>
                         <Switch
                             checked={!llmConfig.DISABLE_IMAGE_GENERATION}
@@ -1607,13 +1607,13 @@ const PresentonMode = ({
                     <div className='w-[74px] h-[74px] px-[13.5px] py-[14.2px] rounded-[4px] flex items-center justify-center'
                         style={{ backgroundColor: '#F4F3FF' }}
                     >
-                        <img src="/image-markup.svg" className='w-full h-full object-cover' alt='image-markup' />
+                        <img src="/image-markup.svg" className='w-full h-full object-cover' alt='图像标注' />
                     </div>
                     <div>
 
                         <h3 className="text-xl font-normal text-[#191919] ">图片生成设置</h3>
                         <p className=" text-sm  text-gray-500">
-                            Choosing where images come from
+                            选择图像来源
                         </p>
                     </div>
                 </div>
@@ -1622,7 +1622,7 @@ const PresentonMode = ({
                         {/* Image Provider Selection */}
                         <div className="w-full">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Select Image Provider
+                                选择图像提供商
                             </label>
                             <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
                                 {imageProviderRows.map((row, rowIndex) => (
@@ -1672,7 +1672,7 @@ const PresentonMode = ({
 
             {providerStep === 3 && (
                 <div className={`relative rounded-[11px] border border-[#EDEEEF] p-3 ${llmConfig.WEB_GROUNDING ? "bg-white" : "bg-[#F9FAFB]"}`}>
-                    <ToolTip content="Enable/Disable Web Search" className='absolute right-3 top-3 flex items-center justify-end'>
+                    <ToolTip content="启用/禁用网页搜索" className='absolute right-3 top-3 flex items-center justify-end'>
                         <div className='flex items-center justify-end'>
                             <Switch
                                 checked={!!llmConfig.WEB_GROUNDING}
@@ -1765,11 +1765,11 @@ const PresentonMode = ({
                     className='border font-syne border-[#EDEEEF] bg-[#7C51F8]  rounded-[58px] px-5 py-2.5 text-white text-xs  font-semibold'>
                     {providerStep === 1
                         ? llmConfig.LLM === "presenton"
-                            ? "Continue with 永恒PPT"
-                            : "Continue to image provider"
+                            ? "使用 永恒 PPT 继续"
+                            : "继续前往图像提供商"
                         : providerStep === 2
-                            ? llmConfig.DISABLE_IMAGE_GENERATION ? "Disable image generation & Continue" : "Continue to web search"
-                            : llmConfig.WEB_GROUNDING ? "Save & Finish" : "Disable web search & Finish"}
+                            ? llmConfig.DISABLE_IMAGE_GENERATION ? "禁用图像生成并继续" : "继续前往网络搜索"
+                            : llmConfig.WEB_GROUNDING ? "保存并结束" : "禁用网页搜索并结束"}
                 </button>
             </div>
         </div>

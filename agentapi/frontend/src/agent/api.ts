@@ -136,10 +136,12 @@ export interface AgentTaskHistoryResponse {
   page_size: number
 }
 
-// Current records are sourced from the per-Agent Owner runtime API. Keep the
-// earlier admin-usage label readable for snapshots persisted by older builds.
+// Current records are sourced from the public Owner-scoped usage API. Keep the
+// earlier runtime/admin labels readable for snapshots persisted by older builds.
 export function isAuthoritativeAgentUsageSource(source?: string): boolean {
-  return source === 'sub2api_owner_runtime_usage' || source === 'sub2api_admin_usage'
+  return source === 'sub2api_owner_usage'
+    || source === 'sub2api_owner_runtime_usage'
+    || source === 'sub2api_admin_usage'
 }
 
 export interface AgentAPIKeyView {
@@ -272,6 +274,32 @@ export interface PublicSettings {
   payment_max_amount_cents?: number
 }
 
+export interface PaymentConfig {
+  enabled: boolean
+  provider: string
+  currency: string
+  merchant_id?: string
+  webhook_secret_configured: boolean
+  min_amount_cents: number
+  max_amount_cents: number
+  order_ttl_seconds: number
+  checkout_url_template?: string
+  updated_at?: string
+}
+
+export interface PaymentConfigUpdate {
+  enabled: boolean
+  provider: string
+  currency: string
+  merchant_id: string
+  webhook_secret?: string
+  clear_webhook_secret?: boolean
+  min_amount_cents: number
+  max_amount_cents: number
+  order_ttl_seconds: number
+  checkout_url_template: string
+}
+
 export interface LoginResponse {
   access_token: ''
   refresh_token: ''
@@ -339,6 +367,9 @@ export const agentAPI = {
   getBranding: async () => (await agentClient.get<{ name: string; site_name: string; site_logo: string }>('/agent/admin/branding')).data,
   updateBranding: async (payload: { name?: string; site_name?: string; site_logo?: string }) =>
     (await agentClient.put<{ name: string; site_name: string; site_logo: string }>('/agent/admin/branding', payload)).data,
+  getPaymentConfig: async () => (await agentClient.get<PaymentConfig>('/agent/admin/payment-config')).data,
+  updatePaymentConfig: async (payload: PaymentConfigUpdate) =>
+    (await agentClient.put<PaymentConfig>('/agent/admin/payment-config', payload)).data,
   getAdminModelPolicy: async () =>
     (await agentClient.get<AgentModelPolicy>('/agent/admin/model-policy')).data,
   updateAdminModelPolicy: async (enabled: string[]) =>

@@ -82,7 +82,7 @@ export function TemplateV2InfographicToolbarControls({
     <>
       {isMeter ? (
         <InlineNumberInput
-          label="Value"
+          label="数值"
           value={value}
           onCommit={(nextValue) => commitDataChange({ value: nextValue })}
         />
@@ -91,24 +91,24 @@ export function TemplateV2InfographicToolbarControls({
       {isMeter ? (
         <div className="relative">
           <ToolbarIconButton
-            title="Range"
+            title="范围"
             open={openPanel === "infographic-range"}
             onClick={() => onToggle("infographic-range")}
           >
             <span className="text-[11px] font-semibold leading-none" aria-hidden>
-              Min
+              最小值
             </span>
           </ToolbarIconButton>
           {openPanel === "infographic-range" ? (
             <Panel className="w-[230px] space-y-3 p-3">
               <NumberField
-                label="Min"
+                label="最小值"
                 value={minValue}
                 step={1}
                 onCommit={(min_value) => commitDataChange({ min_value })}
               />
               <NumberField
-                label="Max"
+                label="最大值"
                 value={maxValue}
                 step={1}
                 onCommit={(max_value) => commitDataChange({ max_value })}
@@ -133,7 +133,7 @@ export function TemplateV2InfographicToolbarControls({
       ) : null}
 
       {onEdit ? (
-        <ToolbarIconButton title="Edit infographic" open={false} onClick={onEdit}>
+        <ToolbarIconButton title="编辑信息图" open={false} onClick={onEdit}>
           <Pencil size={15} strokeWidth={1.8} aria-hidden />
         </ToolbarIconButton>
       ) : null}
@@ -171,7 +171,7 @@ function InfographicItemsControl({
 
   return (
     <div className="relative">
-      <ToolbarIconButton title="Items" open={open} onClick={onToggle}>
+      <ToolbarIconButton title="项目" open={open} onClick={onToggle}>
         <PlusCircle size={16} strokeWidth={1} aria-hidden />
       </ToolbarIconButton>
       {open ? (

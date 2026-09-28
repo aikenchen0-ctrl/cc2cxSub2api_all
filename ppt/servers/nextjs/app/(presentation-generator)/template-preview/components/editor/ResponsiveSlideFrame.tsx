@@ -101,7 +101,7 @@ export function ResponsiveSlideFrame({
           <div className="absolute inset-0 z-20 flex items-end justify-center rounded-[8.944px] bg-white pb-[28px]">
             <div className="flex h-[32px] items-center gap-[6px] rounded-full bg-white px-[12px] text-[12px] font-normal text-[#666666] shadow-[0_8px_24px_rgba(122,90,248,0.18)]">
               <Sparkles className="h-[14px] w-[14px] text-[#7A5AF8]" />
-              Generating slides...
+              正在生成幻灯片...
             </div>
           </div>
         ) : null}

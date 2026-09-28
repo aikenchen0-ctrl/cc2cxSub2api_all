@@ -16,6 +16,12 @@
             @refresh="handleManualRefresh"
             @create="showCreate = true"
           >
+            <template #beforeCreate>
+              <button class="btn btn-primary" @click="showRefreshModelsConfirm = true">
+                <Icon name="sync" size="md" />
+                <span>{{ t('admin.accounts.refreshModels') }}</span>
+              </button>
+            </template>
             <template #after>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
@@ -473,6 +479,58 @@
     <TempUnschedStatusModal :show="showTempUnsched" :account="tempUnschedAcc" @close="showTempUnsched = false" @reset="handleTempUnschedReset" />
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.accounts.deleteAccount')" :message="t('admin.accounts.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
     <ConfirmDialog :show="showCreateShadowDialog" :title="t('admin.accounts.createSparkShadow')" :message="t('admin.accounts.createSparkShadowConfirm', { name: creatingShadowAcc?.name })" @confirm="confirmCreateSparkShadow" @cancel="showCreateShadowDialog = false" />
+    <ConfirmDialog
+      :show="showRefreshModelsConfirm"
+      :title="t('admin.accounts.refreshModelsConfirmTitle')"
+      :message="t('admin.accounts.refreshModelsConfirmMessage')"
+      :confirm-text="t('common.confirm')"
+      :cancel-text="t('common.cancel')"
+      @confirm="confirmRefreshModels"
+      @cancel="showRefreshModelsConfirm = false"
+    />
+    <BaseDialog
+      :show="showRefreshModelsProgress"
+      :title="t('admin.accounts.refreshModelsProgressTitle')"
+      width="wide"
+      @close="closeRefreshModelsProgress"
+    >
+      <div v-if="modelRefreshJob" class="space-y-4">
+        <div class="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200">
+          {{ t('admin.accounts.refreshModelsProgressSummary', {
+            completed: modelRefreshJob.completed,
+            total: modelRefreshJob.total,
+            succeeded: modelRefreshJob.succeeded,
+            failed: modelRefreshJob.failed
+          }) }}
+        </div>
+        <div class="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          <div
+            v-for="item in modelRefreshJob.items"
+            :key="item.account_id"
+            class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-dark-700"
+          >
+            <Icon
+              :name="modelRefreshStatusIcon(item.status)"
+              size="md"
+              :class="[modelRefreshStatusClass(item.status), { 'animate-spin': item.status === 'refreshing' }]"
+            />
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ item.account_name }}</div>
+              <div class="truncate text-xs text-gray-500 dark:text-gray-400">
+                {{ item.upstream_url || t('admin.accounts.refreshModelsUnknownUpstream') }}
+              </div>
+            </div>
+            <span class="shrink-0 text-sm font-medium" :class="modelRefreshStatusClass(item.status)">
+              {{ modelRefreshStatusLabel(item.status) }}
+              <span v-if="item.status === 'success' && item.model_count">（{{ item.model_count }}）</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="closeRefreshModelsProgress">{{ t('common.close') }}</button>
+      </template>
+    </BaseDialog>
     <ConfirmDialog :show="showExportDataDialog" :title="t('admin.accounts.dataExport')" :message="t('admin.accounts.dataExportConfirmMessage')" :confirm-text="t('admin.accounts.dataExportConfirm')" :cancel-text="t('common.cancel')" @confirm="handleExportData" @cancel="showExportDataDialog = false">
       <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
         <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" v-model="includeProxyOnExport" />
@@ -503,6 +561,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
@@ -533,6 +592,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountListItem, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
+import type { AccountModelRefreshJob, AccountModelRefreshStatus } from '@/api/admin/accounts'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -598,6 +658,10 @@ const bulkEditTarget = ref<AccountBulkEditTarget | null>(null)
 const showTempUnsched = ref(false)
 const showDeleteDialog = ref(false)
 const showCreateShadowDialog = ref(false)
+const showRefreshModelsConfirm = ref(false)
+const showRefreshModelsProgress = ref(false)
+const modelRefreshJob = ref<AccountModelRefreshJob | null>(null)
+let modelRefreshPollTimer: ReturnType<typeof setTimeout> | null = null
 const showReAuth = ref(false)
 const showTest = ref(false)
 const showStats = ref(false)
@@ -2447,6 +2511,74 @@ const confirmCreateSparkShadow = async () => {
     appStore.showError(error?.response?.data?.message || t('admin.accounts.createSparkShadowFailed'))
   }
 }
+
+const clearModelRefreshPollTimer = () => {
+  if (modelRefreshPollTimer !== null) {
+    clearTimeout(modelRefreshPollTimer)
+    modelRefreshPollTimer = null
+  }
+}
+
+const pollModelRefreshJob = async (jobId: string) => {
+  clearModelRefreshPollTimer()
+  if (!showRefreshModelsProgress.value) return
+  try {
+    modelRefreshJob.value = await adminAPI.accounts.getModelRefreshJob(jobId)
+    if (modelRefreshJob.value.status === 'running' && showRefreshModelsProgress.value) {
+      modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(jobId), 1000)
+    } else if (modelRefreshJob.value.status === 'completed') {
+      void reload()
+    }
+  } catch (error) {
+    console.error('Failed to poll account model refresh job:', error)
+  }
+}
+
+const confirmRefreshModels = async () => {
+  showRefreshModelsConfirm.value = false
+  showRefreshModelsProgress.value = true
+  try {
+    modelRefreshJob.value = await adminAPI.accounts.startModelRefreshJob()
+    if (modelRefreshJob.value.status === 'running') {
+      modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(modelRefreshJob.value!.id), 500)
+    } else {
+      void reload()
+    }
+  } catch (error) {
+    showRefreshModelsProgress.value = false
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.refreshModelsStartFailed')))
+  }
+}
+
+const closeRefreshModelsProgress = () => {
+  showRefreshModelsProgress.value = false
+  clearModelRefreshPollTimer()
+}
+
+const modelRefreshStatusLabel = (status: AccountModelRefreshStatus): string => {
+  const keys: Record<AccountModelRefreshStatus, string> = {
+    pending: 'admin.accounts.refreshModelsPending',
+    refreshing: 'admin.accounts.refreshModelsRefreshing',
+    success: 'admin.accounts.refreshModelsSuccess',
+    failed: 'admin.accounts.refreshModelsFailed'
+  }
+  return t(keys[status])
+}
+
+const modelRefreshStatusIcon = (status: AccountModelRefreshStatus): 'clock' | 'refresh' | 'checkCircle' | 'xCircle' => {
+  if (status === 'refreshing') return 'refresh'
+  if (status === 'success') return 'checkCircle'
+  if (status === 'failed') return 'xCircle'
+  return 'clock'
+}
+
+const modelRefreshStatusClass = (status: AccountModelRefreshStatus): string => {
+  if (status === 'refreshing') return 'text-blue-600 dark:text-blue-300'
+  if (status === 'success') return 'text-emerald-600 dark:text-emerald-300'
+  if (status === 'failed') return 'text-rose-600 dark:text-rose-300'
+  return 'text-gray-400 dark:text-gray-500'
+}
+
 const handleDelete = (a: Account) => { deletingAcc.value = a; showDeleteDialog.value = true }
 const confirmDelete = async () => { if(!deletingAcc.value) return; try { await adminAPI.accounts.delete(deletingAcc.value.id); showDeleteDialog.value = false; deletingAcc.value = null; reload() } catch (error) { console.error('Failed to delete account:', error) } }
 const handleToggleSchedulable = async (a: Account) => {
@@ -2561,6 +2693,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearModelRefreshPollTimer()
   upstreamBillingRateAbortController?.abort()
   if (usageBatchFlushTimer !== null) {
     clearTimeout(usageBatchFlushTimer)

@@ -86,7 +86,7 @@ function defaultLayoutItem(): RawRecord {
     type: "text",
     position: { x: 0, y: 0 },
     size: { width: 1, height: 1 },
-    runs: [{ text: "New item" }],
+    runs: [{ text: "新项" }],
     font: {
       family: "Arial",
       size: 18,

@@ -175,7 +175,7 @@ export function OutlineItem({
         <div
           {...attributes}
           {...listeners}
-          aria-label={`Move slide ${index}`}
+          aria-label={`移动幻灯片${index}`}
           className="relative flex touch-none select-none items-center justify-center cursor-grab active:cursor-grabbing"
         >
           <Grip aria-hidden="true" className="h-6 w-6 text-[#191919]" />
@@ -186,7 +186,7 @@ export function OutlineItem({
           className="flex min-w-0 basis-full flex-col gap-[10px]"
         >
           <p className="flex h-[22px] w-fit items-center rounded-[80px] border border-[#EDEEEF] bg-white px-2.5 font-unbounded text-[10px] font-light tracking-[-0.1px] text-black">
-            Slide: {index}
+            幻灯片： {index}
           </p>
 
           {isStreaming ? (
@@ -213,14 +213,14 @@ export function OutlineItem({
               onBlur={handleMarkdownBlur}
               onKeyDown={handleMarkdownKeyDown}
               spellCheck={false}
-              placeholder="Enter markdown content here..."
+              placeholder="在此输入 Markdown 内容..."
               className="min-h-[140px] resize-y rounded-[8px] border-[#D8D8DF] bg-[#FBFBFC] px-3 py-3 font-mono text-[13px] leading-6 text-[#191919] shadow-none focus-visible:border-[#7A5AF8] focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/20"
             />
           ) : (
             <div
               role="button"
               tabIndex={0}
-              aria-label={`Edit slide ${index} markdown`}
+              aria-label={`编辑幻灯片${index} markdown`}
               onClick={handleStartMarkdownEdit}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {

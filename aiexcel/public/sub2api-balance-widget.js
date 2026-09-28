@@ -1,6 +1,7 @@
 (() => {
   const hosts = new WeakSet();
   const format = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const balanceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function mount(host) {
     if (!(host instanceof HTMLElement) || hosts.has(host)) return;
@@ -16,7 +17,7 @@
       .dialog button,.dialog a{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 13px;border:1px solid #d1d5db;border-radius:9px;background:#fff;color:#374151;font:inherit;text-decoration:none;cursor:pointer}
       .dialog a{border-color:#2563eb;background:#2563eb;color:white}.dialog a[aria-disabled=true]{opacity:.5;pointer-events:none}
       @media(prefers-color-scheme:dark){.dialog{background:#17191d;color:#f3f4f6}.dialog p{color:#cbd5e1}.dialog button{background:#22252b;color:#f3f4f6;border-color:#454a54}}
-    </style><button class="pill" type="button" aria-label="查看账户余额"><span>余额</span><strong class="amount">--</strong></button>
+    </style><button class="pill" type="button" aria-label="查看账户余额并前往充值"><strong class="amount">￥--</strong><span>充值</span></button>
     <div class="overlay" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="balance-title">
       <h2 id="balance-title">余额不足</h2><p>当前账户余额为 <strong class="amount low"></strong>，暂时无法继续使用 AI 服务。请前往充值后重试。</p>
       <div class="actions"><button type="button" data-close>稍后</button><a data-recharge target="_blank" rel="noopener noreferrer">前往充值</a></div>
@@ -47,10 +48,10 @@
         const balance = Number(result.balance);
         if (!Number.isFinite(balance)) return;
         pill.style.display = "";
-        const text = format.format(balance);
+        const text = `￥${balanceFormat.format(balance)}`;
         const insufficient = balance <= 0;
         amount.textContent = text;
-        dialogAmount.textContent = text;
+        dialogAmount.textContent = format.format(balance);
         amount.classList.toggle("low", insufficient);
         rechargeUrl = "";
         const rawRechargeUrl = typeof result.recharge_url === "string" ? result.recharge_url.trim() : "";

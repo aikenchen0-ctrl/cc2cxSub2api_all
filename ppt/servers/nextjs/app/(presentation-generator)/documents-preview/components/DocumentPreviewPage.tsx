@@ -132,7 +132,7 @@ const DocumentsPreviewPage: React.FC = () => {
         });
       } catch (error) {
         console.error("Error reading files:", error);
-        notify.error("Could not read document", "Failed to read document content.");
+        notify.error("无法读取文档", "读取文档内容失败。");
       }
       setDownloadingDocuments([]);
     }
@@ -141,7 +141,7 @@ const DocumentsPreviewPage: React.FC = () => {
   const handleCreatePresentation = async () => {
     try {
       setShowLoading({
-        message: "Generating presentation outline...",
+        message: "正在生成演示文稿大纲...",
         show: true,
         duration: 40,
         progress: true,
@@ -173,9 +173,9 @@ const DocumentsPreviewPage: React.FC = () => {
       router.replace("/outline");
     } catch (error: any) {
       console.error("Error in radar presentation creation:", error);
-      notify.error("Creation failed", error.message || "Something went wrong while creating the presentation.");
+      notify.error("创建失败", error.message || "创建演示文稿时出错。");
       setShowLoading({
-        message: "Error in radar presentation creation.",
+        message: "雷达演示文稿创建出错。",
         show: true,
         duration: 10,
         progress: false,
@@ -250,10 +250,10 @@ const DocumentsPreviewPage: React.FC = () => {
                   <img
                     className="h-6 w-6 border border-gray-200"
                     src={getIconFromFile(key)}
-                    alt="Document icon"
+                    alt="文档图标"
                   />
                   <span className="text-sm h-6 text-[#2E2E2E] overflow-hidden">
-                    {key.split("/").pop() ?? "file.txt"}
+                    {key.split("/").pop() ?? "文件.txt"}
                   </span>
                 </div>
               ))}
@@ -276,7 +276,7 @@ const DocumentsPreviewPage: React.FC = () => {
       <div className="flex mt-6 gap-4 font-instrument_sans">
         {!isOpen && (
           <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
-            <ToolTip content="Open Panel">
+            <ToolTip content="打开面板">
               <Button
                 onClick={() => setIsOpen(true)}
                 className="bg-[#5146E5] text-white p-3 shadow-lg"

@@ -29,8 +29,8 @@ export const FONT_OPTIONS: any[] = [
 export const DEFAULT_THEMES: any[] = [
   {
     id: "edge-yellow",
-    name: "Edge Yellow",
-    description: "Yellow and dark theme for professionalish and edge.",
+    name: "锋芒黄",
+    description: "黄色与深色主题，专业且边缘感强",
     logo: null,
     logo_url: null,
     company_name: null,
@@ -64,8 +64,8 @@ export const DEFAULT_THEMES: any[] = [
   },
   {
     id: "light-rose",
-    name: "Light Rose",
-    description: "Rose background with punchy font",
+    name: "浅玫瑰",
+    description: "玫瑰色背景搭配醒目字体",
     logo: null,
     logo_url: null,
     company_name: null,
@@ -99,8 +99,8 @@ export const DEFAULT_THEMES: any[] = [
   },
   {
     id: "mint-blue",
-    name: "Mint Blue",
-    description: "Mint Greent with blue heading.",
+    name: "薄荷蓝",
+    description: "薄荷绿配蓝色标题",
     logo: null,
     logo_url: null,
     company_name: null,
@@ -134,8 +134,8 @@ export const DEFAULT_THEMES: any[] = [
   },
   {
     id: "professional-blue",
-    name: "Professional Blue",
-    description: "Clean and professional blue theme",
+    name: "专业蓝",
+    description: "简洁专业的蓝色主题",
     logo: null,
     logo_url: null,
     company_name: null,
@@ -169,8 +169,8 @@ export const DEFAULT_THEMES: any[] = [
   },
   {
     id: "professional-dark",
-    name: "Professional Dark",
-    description: "Clean and professional for dark corporate usage.",
+    name: "专业深色",
+    description: "简洁专业，适用于深色企业环境",
     logo: null,
     logo_url: null,
     company_name: null,

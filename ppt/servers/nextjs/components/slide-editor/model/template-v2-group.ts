@@ -61,7 +61,7 @@ export function groupTemplateV2ComponentsInUi<TUi extends RawRecord>(
   const groupId = uniqueComponentId("group", sourceComponents);
   const groupedComponent = {
     id: groupId,
-    description: "Grouped components",
+    description: "组合组件",
     position: { x: groupBox.x, y: groupBox.y },
     elements: [
       {

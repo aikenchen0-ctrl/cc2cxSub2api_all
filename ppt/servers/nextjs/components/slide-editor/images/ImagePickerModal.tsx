@@ -147,7 +147,7 @@ export function ImagePickerModal({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Could not load generated images.",
+              : "无法加载生成的图像。",
           );
         }
       })
@@ -177,7 +177,7 @@ export function ImagePickerModal({
           urls.map((url) => ({ prompt: starterQuery, url })),
         );
         if (!urls.length) {
-          setError("No starter images found. Try searching for something else.");
+          setError("未找到起始图像。尝试搜索其他内容。");
         }
       })
       .catch((loadError: unknown) => {
@@ -185,7 +185,7 @@ export function ImagePickerModal({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Could not load starter stock images.",
+              : "无法加载起始库存图像。",
           );
         }
       })
@@ -220,7 +220,7 @@ export function ImagePickerModal({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Could not load uploaded images.",
+              : "无法加载上传的图像。",
           );
         }
       })
@@ -251,13 +251,13 @@ export function ImagePickerModal({
       setDiscoverImages(
         urls.map((url) => ({ prompt: query.trim(), url })),
       );
-      if (!urls.length) setError("No images found. Try different keywords.");
+      if (!urls.length) setError("未找到图片。请尝试不同的关键词。");
     } catch (searchError: unknown) {
       setDiscoverImages([]);
       setError(
         searchError instanceof Error
           ? searchError.message
-          : "Stock image search failed.",
+          : "库存图像搜索失败。",
       );
     } finally {
       setIsWorking(false);
@@ -293,8 +293,8 @@ export function ImagePickerModal({
       );
       if (images.length < variationCount) {
         notify.warning(
-          "Some variants failed",
-          `Generated ${images.length} of ${variationCount} requested images.`,
+          "部分变体失败",
+          `请求生成 ${variationCount} 张图片，已生成 ${images.length} 张。`,
         );
       }
     } catch (generationError: unknown) {
@@ -303,7 +303,7 @@ export function ImagePickerModal({
           ? generationError.message
           : "Image generation failed.";
       setError(message);
-      notify.error("Image generation failed", message);
+      notify.error("图像生成失败", message);
     } finally {
       setIsWorking(false);
     }
@@ -318,11 +318,11 @@ export function ImagePickerModal({
   const uploadFile = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("Please upload a valid image file.");
+      setError("请上传有效的图像文件。");
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setError("Image files must be smaller than 5MB.");
+      setError("图像文件大小必须小于 5MB。");
       return;
     }
 
@@ -337,12 +337,12 @@ export function ImagePickerModal({
         image,
         ...previous.filter((item) => item.id !== image.id),
       ]);
-      notify.success("Image uploaded", "Select it from your image library.");
+      notify.success("图像已上传", "从您的图像库中选择它。");
     } catch (uploadError: unknown) {
       const message =
         uploadError instanceof Error ? uploadError.message : "Image upload failed.";
       setError(message);
-      notify.error("Upload failed", message);
+      notify.error("上传失败", message);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -366,11 +366,11 @@ export function ImagePickerModal({
       setUploadedImages((previous) =>
         previous.filter((candidate) => candidate.id !== image.id),
       );
-      notify.success("Image deleted", "The upload was removed from your library.");
+      notify.success("图片已删除", "上传的文件已从您的库中移除。");
     } catch (deleteError: unknown) {
       notify.error(
-        "Could not delete image",
-        deleteError instanceof Error ? deleteError.message : "Delete failed.",
+        "无法删除图片",
+        deleteError instanceof Error ? deleteError.message : "删除失败。",
       );
     }
   };
@@ -395,16 +395,16 @@ export function ImagePickerModal({
             <header className="flex h-[85px] flex-none items-center justify-between border-b border-[#EDEEEF] bg-white px-6 shadow-[0_4px_7px_rgba(0,0,0,0.04)]">
               <div>
                 <DialogPrimitive.Title className="text-[18px] font-normal leading-normal">
-                  Change Image
+                  更换图片
                 </DialogPrimitive.Title>
                 <DialogPrimitive.Description className="mt-0.5 text-[14px] font-normal tracking-[-0.42px] text-[#808080]">
-                  Choose an image from the library or upload your own.
+                  从库中选择一张图片或上传自己的图片。
                 </DialogPrimitive.Description>
               </div>
               <button
                 type="button"
-                aria-label="Upload an image"
-                title="Upload an image"
+                aria-label="上传图片"
+                title="上传图片"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
                 className="flex h-9 w-[100px] items-center justify-center rounded-full border border-[#EDEEEF] bg-white transition hover:bg-[#F9FAFB] disabled:cursor-wait"
@@ -414,7 +414,7 @@ export function ImagePickerModal({
                 ) : (
                   <Upload className="size-4 mr-1.5" strokeWidth={1.8} aria-hidden="true" />
                 )}
-                Upload
+                上传
               </button>
               <input
                 ref={fileInputRef}
@@ -430,7 +430,7 @@ export function ImagePickerModal({
                 <PickerNavButton
                   active={view === "discover"}
                   icon={<ImagePlus className="size-4" strokeWidth={1.7} />}
-                  label="Discover Image"
+                  label="发现图片"
                   onClick={() => {
                     setView("discover");
                     setIsLoadingLibrary(false);
@@ -440,7 +440,7 @@ export function ImagePickerModal({
                 <PickerNavButton
                   active={view === "uploads"}
                   icon={<Grid2X2 className="size-4" strokeWidth={1.7} />}
-                  label="Use Your Image"
+                  label="使用您的图片"
                   onClick={() => {
                     setView("uploads");
                     setError(null);
@@ -496,10 +496,10 @@ export function ImagePickerModal({
                       images={discoverImages}
                       emptyMessage={
                         generationDisabled && !stockProvider
-                          ? "Image generation is disabled in Settings."
+                          ? "图片生成功能已在设置中关闭。"
                           : stockProvider
-                            ? `Search ${providerLabel} for an image.`
-                            : "Generate images to see them here. Start by describing what you want to create above."
+                            ? `在 ${providerLabel} 中搜索图片。`
+                            : "生成的图片会显示在这里，请先在上方描述您想创建的内容。"
                       }
                       onSelect={chooseImage}
                     />
@@ -508,7 +508,7 @@ export function ImagePickerModal({
                       compact
                       currentSource={currentSource}
                       images={uploadedImages}
-                      emptyMessage="Upload an image to add it to your library."
+                      emptyMessage="上传图片以将其添加到您的库中。"
                       onDelete={deleteUploadedImage}
                       onSelect={chooseImage}
                     />
@@ -529,7 +529,7 @@ export function ImagePickerModal({
           </div>
 
           <DialogPrimitive.Close
-            aria-label="Close image picker"
+            aria-label="关闭图像选择器"
             className="absolute right-3 top-3 flex size-11 items-center justify-center rounded-full bg-white text-[#191919] shadow-sm transition hover:bg-[#F6F6F9] sm:-right-[68px] sm:top-0 sm:size-[52px]"
           >
             <X className="size-5" strokeWidth={1.5} aria-hidden="true" />
@@ -593,7 +593,7 @@ function DiscoverControls({
 
   if (isStock) {
     return (
-      <div className="flex h-[41px] flex-none gap-2.5" aria-label={`Search ${providerLabel}`}>
+      <div className="flex h-[41px] flex-none gap-2.5" aria-label={`搜索${providerLabel}`}>
         <label className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[8px] border border-[rgba(219,219,219,0.6)] bg-white px-2.5">
           <Search className="size-3.5 flex-none" strokeWidth={1.8} aria-hidden="true" />
           <textarea
@@ -603,13 +603,13 @@ function DiscoverControls({
             onKeyDown={(event) => {
               if (event.key === "Enter" && canRun) onRun();
             }}
-            placeholder="Search Image"
+            placeholder="搜索图像"
             className="h-full min-w-0 flex-1 bg-transparent text-[14px] font-normal outline-none placeholder:text-[#999]"
           />
         </label>
         <button
           type="button"
-          aria-label={`Search ${providerLabel}`}
+          aria-label={`搜索${providerLabel}`}
           onClick={onRun}
           disabled={!canRun}
           className="flex w-[132px] items-center justify-center rounded-[38.4px] bg-[#EDEEEF] px-[12.8px] py-2 text-[#191919] transition hover:bg-[#E1E1E5] disabled:cursor-not-allowed disabled:text-[#999]"
@@ -621,7 +621,7 @@ function DiscoverControls({
   }
 
   return (
-    <div className="flex h-[76px] flex-none gap-2.5" aria-label={`Generate with ${providerLabel}`}>
+    <div className="flex h-[76px] flex-none gap-2.5" aria-label={`使用生成${providerLabel}`}>
       <textarea
         autoFocus
         value={query}
@@ -631,14 +631,14 @@ function DiscoverControls({
             onRun();
           }
         }}
-        placeholder="Describe your image"
+        placeholder="描述您的图像"
         className="min-w-0 flex-1 resize-none rounded-[8px] border border-[rgba(219,219,219,0.6)] bg-white px-2.5 py-3 text-[14px] font-normal outline-none shadow-[0_4px_7px_rgba(0,0,0,0.04)] placeholder:text-[#999] focus:border-[#B9BBC1]"
       />
       <div className="flex w-[150px] flex-none flex-col gap-2.5">
         <div className="flex h-[34px] items-center rounded-full border border-[#EDEEEF] bg-white">
           <button
             type="button"
-            aria-label="Fewer variations"
+            aria-label="更少的变体"
             disabled={variationCount <= 1 || isWorking}
             onClick={() => onVariationChange(-1)}
             className="flex h-full w-9 items-center justify-center rounded-l-full hover:bg-[#F9FAFB] disabled:opacity-35"
@@ -646,11 +646,11 @@ function DiscoverControls({
             <Minus className="size-3.5" />
           </button>
           <span className="flex h-4 flex-1 items-center justify-center border-x border-[#EDEEEF] text-[12px] font-semibold">
-            {variationCount} {variationCount === 1 ? "Variation" : "Variations"}
+            {variationCount} {variationCount === 1 ? "变体" : "变体"}
           </span>
           <button
             type="button"
-            aria-label="More variations"
+            aria-label="更多变体"
             disabled={variationCount >= 4 || isWorking}
             onClick={() => onVariationChange(1)}
             className="flex h-full w-9 items-center justify-center rounded-r-full hover:bg-[#F9FAFB] disabled:opacity-35"
@@ -660,7 +660,7 @@ function DiscoverControls({
         </div>
         <button
           type="button"
-          aria-label={`Generate ${variationCount} image variations with ${providerLabel}`}
+          aria-label={`生成${variationCount}图像变体${providerLabel}`}
           onClick={onRun}
           disabled={!canRun}
           className="flex h-8 items-center justify-center rounded-[38.4px] bg-[#EDEEEF] px-[12.8px] py-2 text-[#191919] transition hover:bg-[#E1E1E5] disabled:cursor-not-allowed disabled:text-[#999]"
@@ -720,7 +720,7 @@ function ImageResults({
         >
           <button
             type="button"
-            aria-label="Use this image"
+            aria-label="使用此图像"
             onClick={() => onSelect(image)}
             className="absolute inset-0 h-full w-full overflow-hidden rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#191919]"
           >
@@ -739,7 +739,7 @@ function ImageResults({
           {onDelete && image.deletable && image.id ? (
             <button
               type="button"
-              aria-label="Delete uploaded image"
+              aria-label="删除上传的图像"
               onClick={(event) => {
                 event.stopPropagation();
                 onDelete(image);

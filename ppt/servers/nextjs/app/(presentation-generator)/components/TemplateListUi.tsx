@@ -47,7 +47,7 @@ export function TemplateThumbnailPreview({
       )}
     >
       <div
-        aria-label={`${templateName} thumbnail`}
+        aria-label={`${templateName}缩略图`}
         className={cn(
           "h-full w-full rounded-[12px] border border-[#EDEEEF] bg-white bg-contain bg-center bg-no-repeat",
           !selectionPage && "shadow-sm"
@@ -107,7 +107,7 @@ export const TemplateListCard = memo(function TemplateListCard({
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
-      aria-label={`${showArrow ? "Open" : "Select"} ${template.name} template`}
+      aria-label={`${showArrow ? "Open" : "Select"} ${template.name}模板`}
       className={cn(
         "group relative overflow-hidden border bg-white shadow-none outline-none transition-all duration-200",
         selectionPage ? "rounded-[12px]" : "rounded-[22px]",
@@ -137,7 +137,7 @@ export const TemplateListCard = memo(function TemplateListCard({
       )}
       {isSuggested && (
         <span className="absolute right-3.5 top-[52px] z-50 rounded-full border border-[#DDD7FF] bg-white/95 px-2.5 py-1 font-syne text-[10px] font-semibold text-[#6553E8] shadow-sm backdrop-blur">
-          Suggested
+          建议
         </span>
       )}
       <TemplatePreviewStage selectionPage={selectionPage}>
@@ -242,7 +242,7 @@ export const ProcessingTemplateListCard = memo(
       <Card
         role="group"
         aria-disabled="true"
-        aria-label={`${templateName} template is processing`}
+        aria-label={`${templateName}模板正在处理中`}
         className={cn(
           "relative overflow-hidden rounded-[22px] border border-[#E8E9EC] bg-white",
           "cursor-not-allowed opacity-90 shadow-sm"
@@ -332,7 +332,7 @@ export function TemplateTabSwitcher({
           color: tab === "custom" ? "#5146E5" : "#3A3A3A",
         }}
       >
-        Custom
+        自定义
       </button>
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -354,7 +354,7 @@ export function TemplateTabSwitcher({
           color: tab === "default" ? "#5146E5" : "#3A3A3A",
         }}
       >
-        Built-in
+        内置
       </button>
     </div>
   );

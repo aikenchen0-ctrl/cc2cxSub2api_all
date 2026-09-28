@@ -122,7 +122,7 @@ export const useOutlineStreaming = (
           if (!scheduleRetry("invalid SSE payload")) {
             resetStreamingState();
             notify.error(
-              "Stream parse failed",
+              "解析流失败",
               "我已经尽力了，但还是没有生成成功。请稍后再试。"
             );
           }

@@ -13,9 +13,9 @@ import {
 type ObjectFitMode = "cover" | "contain" | "fill";
 
 const FIT_OPTIONS: Array<{ value: ObjectFitMode; label: string }> = [
-  { value: "cover", label: "Fill" },
-  { value: "contain", label: "Contain" },
-  { value: "fill", label: "Stretch" },
+  { value: "cover", label: "填充" },
+  { value: "contain", label: "包含" },
+  { value: "fill", label: "拉伸" },
 ];
 
 function PatternIcon() {

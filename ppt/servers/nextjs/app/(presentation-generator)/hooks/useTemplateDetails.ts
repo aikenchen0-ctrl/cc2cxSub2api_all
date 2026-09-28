@@ -49,7 +49,7 @@ export function useTemplateDetails(templateId: string) {
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "Failed to load template"
+              : "模板加载失败"
           );
         }
       } finally {

@@ -595,6 +595,47 @@ func TestSyncUpstreamModelCatalogDoesNotUseConfiguredModelsForRealUpstreamFailur
 	}
 }
 
+func TestSyncUpstreamModelCatalogUsesConfiguredModelsForInsufficientBalance(t *testing.T) {
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusForbidden,
+			Body:       io.NopCloser(strings.NewReader(`{"code":"INSUFFICIENT_BALANCE","message":"Insufficient account balance"}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(`{
+				"provider": {
+					"api": "https://provider.example/v1",
+					"models": {
+						"gpt-5": {
+							"reasoning": true,
+							"modalities": {"input":["text"],"output":["text"]},
+							"limit": {"context":128000,"output":8192}
+						}
+					}
+				}
+			}`)),
+		},
+	}}
+	svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+
+	catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), &Account{
+		ID: 98, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":       "key",
+			"base_url":      "https://provider.example/v1",
+			"model_mapping": map[string]any{"gpt-5": "gpt-5"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5"}, catalog.Models)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://provider.example/v1/models", upstream.requests[0].URL.String())
+	require.Equal(t, modelsDevRegistryURL, upstream.requests[1].URL.String())
+}
+
 func TestSyncUpstreamModelCatalogRequiresConfiguredModelsForUnsupportedListEndpoint(t *testing.T) {
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusMethodNotAllowed,

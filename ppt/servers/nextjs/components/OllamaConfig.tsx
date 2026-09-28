@@ -138,24 +138,24 @@ export default function OllamaConfig({
       }
 
       notify.success(
-        "Connected to Ollama",
+        "已连接到 Ollama",
         pulled.length > 0
-          ? `Found ${pulled.length} downloaded model${pulled.length === 1 ? "" : "s"}. ${libraryOnly.length} more available in library.`
-          : "Ollama is reachable. Browse the library to download models."
+          ? `找到${pulled.length}已下载的模型${pulled.length === 1 ? "" : "s"}. ${libraryOnly.length}库中还有更多。`
+          : "Ollama 已就绪。浏览库以下载模型。"
       );
 
       if (reachable.usedFallback) {
         notify.success(
-          "Using in-container Ollama",
+          "正在使用容器内的 Ollama",
           requestedUrl
-            ? "host.docker.internal did not respond, so 永恒PPT switched Ollama URL to localhost."
-            : "host.docker.internal did not respond, so this check used localhost."
+            ? "host.docker.internal 无响应，因此 永恒 PPT 已将 Ollama URL 切换为 localhost。"
+            : "host.docker.internal 未响应，因此该检查使用了 localhost。"
         );
       }
       if (!reachable.usedFallback && requestedUrl && reachable.resolvedUrl !== requestedUrl) {
         notify.success(
-          "Updated Ollama URL",
-          `Using ${reachable.resolvedUrl} for Ollama checks.`
+          "已更新 Ollama 地址",
+          `使用${reachable.resolvedUrl}针对 Ollama 的检查。`
         );
       }
     } catch (error) {
@@ -164,11 +164,11 @@ export default function OllamaConfig({
       setResolvedOllamaUrl(null);
       onInputChange("", "ollama_model");
       setModelsCheckError(
-        error instanceof Error ? error.message : "Check the Ollama URL and try again."
+        error instanceof Error ? error.message : "检查 Ollama URL 并重试。"
       );
       notify.error(
-        "Could not connect to Ollama",
-        error instanceof Error ? error.message : "Check the Ollama URL and try again."
+        "无法连接到 Ollama",
+        error instanceof Error ? error.message : "检查 Ollama URL 并重试。"
       );
     } finally {
       setOllamaModelsLoading(false);
@@ -225,14 +225,14 @@ export default function OllamaConfig({
                 )
               );
               onInputChange(modelName, "ollama_model");
-              notify.success("Model downloaded", `${modelName} is ready to use.`);
+              notify.success("模型已下载", `${modelName}已准备好使用。`);
               break;
             case "error":
               setPullError(event.detail || "Pull failed");
               setPullDone(true);
               setPullCancelled(false);
               abortControllerRef.current = null;
-              notify.error("Pull failed", event.detail || "Unknown error");
+              notify.error("拉取失败", event.detail || "未知错误");
               break;
           }
         },
@@ -363,7 +363,7 @@ export default function OllamaConfig({
     <div className="space-y-6">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Ollama URL
+          Ollama 地址
         </label>
         <input
           type="text"
@@ -384,9 +384,9 @@ export default function OllamaConfig({
           }}
         />
         <p className="mt-2 text-sm text-gray-500">
-          Required for generation. Use {defaultOllamaUrl}
+          生成所需。使用 {defaultOllamaUrl}
           {!isElectronRuntime
-            ? ", or click Check models to detect localhost when Ollama runs in the same container."
+            ? "或点击“检测模型”以在 Ollama 在同一容器中运行时检测 localhost。"
             : "."}
         </p>
         <Button
@@ -399,10 +399,10 @@ export default function OllamaConfig({
           {ollamaModelsLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Checking models...
+              正在检查模型...
             </>
           ) : (
-            "Check models"
+            "检查模型"
           )}
         </Button>
       </div>
@@ -410,7 +410,7 @@ export default function OllamaConfig({
       {modelsChecked && combinedModels.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Choose an Ollama model
+            选择 Ollama 模型
           </label>
           <Popover open={openModelSelect} onOpenChange={setOpenModelSelect}>
             <PopoverTrigger asChild>
@@ -423,9 +423,9 @@ export default function OllamaConfig({
                 <div className="min-w-0">
                   <span
                     className="block truncate text-sm font-medium text-[#191919]"
-                    title={selectedModel ? modelInlineLabel(selectedModel) : "Select a model"}
+                    title={selectedModel ? modelInlineLabel(selectedModel) : "选择一个模型"}
                   >
-                    {selectedModel ? modelInlineLabel(selectedModel) : "Select a model"}
+                    {selectedModel ? modelInlineLabel(selectedModel) : "选择一个模型"}
                   </span>
                   {selectedModel && renderModelBadges(selectedModel)}
                 </div>
@@ -442,7 +442,7 @@ export default function OllamaConfig({
                 <CommandList>
                   <CommandEmpty>未找到模型。</CommandEmpty>
                   {pulledModels.length > 0 && (
-                    <CommandGroup heading="Downloaded">
+                    <CommandGroup heading="已下载">
                       {pulledModels.map((model) => (
                         <CommandItem
                           key={model.name}
@@ -469,14 +469,14 @@ export default function OllamaConfig({
                           </div>
                           <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-[#CFEBD5] bg-[#ECFDF0] px-2 py-0.5 text-[10px] font-semibold text-[#1C7A34]">
                             <HardDrive className="w-3 h-3" />
-                            Downloaded
+                            已下载
                           </span>
                         </CommandItem>
                       ))}
                     </CommandGroup>
                   )}
                   {libraryModels.length > 0 && (
-                    <CommandGroup heading="Available in Library">
+                    <CommandGroup heading="模型库中可用">
                       {libraryModels.map((model) => (
                         <CommandItem
                           key={model.name}
@@ -501,7 +501,7 @@ export default function OllamaConfig({
                           </div>
                           <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-[#D8E5FF] bg-[#EEF4FF] px-2 py-0.5 text-[10px] font-semibold text-[#2456C3]">
                             <Download className="h-3 w-3" />
-                            Download
+                            下载
                           </span>
                         </CommandItem>
                       ))}
@@ -518,7 +518,7 @@ export default function OllamaConfig({
         <p className="text-sm text-gray-500">
           {modelsCheckError
             ? modelsCheckError
-            : "Ollama is reachable, but no models are installed. Pull a model in Ollama, then check again."}
+            : "Ollama 可访问，但未安装任何模型。请在 Ollama 中拉取一个模型，然后再次检查。"}
         </p>
       )}
 
@@ -533,18 +533,18 @@ export default function OllamaConfig({
             <DialogTitle className="flex items-center gap-2">
               <Download className="w-5 h-5" />
               {pullDone && pullCancelled
-                ? "Download Cancelled"
+                ? "下载已取消"
                 : pullDone && !pullError
-                ? "Download Complete"
+                ? "下载完成"
                 : pullError
-                  ? "Download Failed"
-                  : `Downloading ${pullingModel}`}
+                  ? "下载失败"
+                  : `下载中${pullingModel}`}
             </DialogTitle>
             <DialogDescription>
               {pullDone && pullCancelled
-                ? `${pullingModel} download was cancelled.`
+                ? `${pullingModel}下载已取消。`
                 : pullDone && !pullError
-                ? `${pullingModel} is ready to use.`
+                ? `${pullingModel}已准备好使用。`
                 : pullError
                   ? pullError
                   : pullStatus}
@@ -582,15 +582,14 @@ export default function OllamaConfig({
             {pullDone && pullCancelled && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <p className="text-sm text-amber-700">
-                  Download was cancelled before completion.
+                  在下载完成之前已取消。
                 </p>
               </div>
             )}
             {pullDone && !pullError && !pullCancelled && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-sm text-green-700">
-                  {pullingModel} has been downloaded and selected as your active
-                  model.
+                  {pullingModel} 已下载并选为当前活动模型。
                 </p>
               </div>
             )}
@@ -603,7 +602,7 @@ export default function OllamaConfig({
                   onClick={handleCancelPull}
                 >
                   <X className="mr-1.5 h-3.5 w-3.5" />
-                  Cancel
+                  取消
                 </Button>
               ) : (
                 <Button
@@ -612,7 +611,7 @@ export default function OllamaConfig({
                   size="sm"
                   onClick={() => setPullDialogOpen(false)}
                 >
-                  Close
+                  关闭
                 </Button>
               )}
             </div>

@@ -24,6 +24,6 @@ def test_codex_unsupported_model_falls_back_to_lowest_gpt_5_6_model(
     monkeypatch.setattr(llm_provider, "get_llm_provider", lambda: LLMProvider.CODEX)
     monkeypatch.setattr(llm_provider, "get_codex_model_env", lambda: model)
 
-    assert DEFAULT_CODEX_MODEL == "gpt-5.6-luna"
+    assert DEFAULT_CODEX_MODEL == "gpt-5.6-sol"
     assert model not in SUPPORTED_CODEX_MODELS
     assert llm_provider.get_model() == DEFAULT_CODEX_MODEL

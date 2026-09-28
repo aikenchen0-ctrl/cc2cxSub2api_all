@@ -64,14 +64,14 @@ export function LegacyPresentationsTable({
     if (deletedIds.length > 0) {
       onPresentationsDeleted(deletedIds);
       notify.success(
-        "Legacy presentations deleted",
-        `${deletedIds.length} presentation${deletedIds.length === 1 ? " was" : "s were"} removed.`
+        "已删除的旧版演示文稿",
+        `已移除 ${deletedIds.length} 个演示文稿。`
       );
     }
     if (deletedIds.length !== presentations.length) {
       notify.error(
-        "Some presentations could not be deleted",
-        "Please try again."
+        "某些演示文稿无法删除",
+        "请重试。"
       );
     }
     setIsDeleting(false);
@@ -85,7 +85,7 @@ export function LegacyPresentationsTable({
           id="legacy-presentations-heading"
           className="font-syne text-base font-medium text-[#191919]"
         >
-          Legacy Presentation
+          旧版演示文稿
         </h2>
         <div className="flex items-center gap-2.5">
           <button
@@ -112,15 +112,14 @@ export function LegacyPresentationsTable({
           aria-hidden="true"
         />
         <p className="text-[#4C4C4C]">
-          These presentations were created in an older format and can&apos;t be
-          opened in 永恒PPT 0.9.2-beta. {" "}
+          这些演示文稿是使用旧格式创建的，无法在永恒 PPT 0.9.2-beta 中打开。 {" "}
           <a
             href={LEGACY_RELEASE_URL}
             target="_blank"
             rel="noreferrer"
             className="text-[#C4320A] underline decoration-[#C4320A] underline-offset-2"
           >
-            Download 永恒PPT v0.8.10-beta to access them
+            下载 永恒 PPT v0.8.10-beta 以访问它们
           </a>
           .
         </p>
@@ -139,7 +138,7 @@ export function LegacyPresentationsTable({
               className="grid h-[50px] grid-cols-[minmax(280px,1fr)_272px_272px] border-b border-[#EDEEEF] text-sm text-[#333333]"
             >
               <div className="flex min-w-0 items-center px-4 font-syne font-medium">
-                <span className="truncate">{presentation.title || "Untitled presentation"}</span>
+                <span className="truncate">{presentation.title || "未命名的演示文稿"}</span>
               </div>
               <div className="flex items-center px-4 font-medium">
                 {formatLegacyDate(presentation.created_at)}
@@ -147,7 +146,7 @@ export function LegacyPresentationsTable({
               <div className="flex items-center px-4">
                 <span className="flex items-center gap-1.5 text-xs font-medium text-[#C4320A]">
                   <LockKeyhole className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-                  Not Accessible
+                  不可访问
                 </span>
               </div>
             </div>
@@ -174,15 +173,13 @@ export function LegacyPresentationsTable({
               id="delete-legacy-title"
               className="font-syne text-[24px] font-medium leading-[30px] tracking-[-0.02em] text-[#191919]"
             >
-              Delete legacy presentations?
+              删除旧版演示文稿吗？
             </DialogTitle>
             <DialogDescription
               id="delete-legacy-description"
               className="max-w-[296px] pt-1 text-[15px] leading-6 text-[#667085]"
             >
-              This will permanently delete all {presentations.length} legacy
-              presentation{presentations.length === 1 ? "" : "s"}. This action
-              cannot be undone.
+              这将永久删除所有 {presentations.length} 旧版演示文稿{presentations.length === 1 ? "" : "s"}。此操作无法撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-row border-t border-[#EAECF0] p-0 sm:space-x-0">
@@ -192,7 +189,7 @@ export function LegacyPresentationsTable({
               disabled={isDeleting}
               className="h-[56px] flex-1 rounded-none rounded-bl-[24px] px-4 text-sm font-medium text-[#344054] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -206,10 +203,10 @@ export function LegacyPresentationsTable({
                     className="h-4 w-4 animate-spin"
                     aria-hidden="true"
                   />
-                  Deleting...
+                  删除中...
                 </>
               ) : (
-                "Delete"
+                "删除"
               )}
             </button>
           </DialogFooter>

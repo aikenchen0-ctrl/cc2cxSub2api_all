@@ -165,8 +165,8 @@ export default function CodexConfig({
                             onInputChange(DEFAULT_CODEX_MODEL, "codex_model");
                         }
                         notify.success(
-                            "Signed in to ChatGPT",
-                            "Your ChatGPT account is connected and ready to use."
+                            "已登录 ChatGPT",
+                            "您的 ChatGPT 账户已连接并准备就绪。"
                         );
                     } else if (pollData.status === "failed") {
                         stopPolling();
@@ -176,8 +176,8 @@ export default function CodexConfig({
                         setAuthStatus("unauthenticated");
                         applyProfile({});
                         notify.error(
-                            "Sign-in failed",
-                            "Authentication did not complete. Please try signing in again."
+                            "登录失败",
+                            "认证未完成，请重新尝试登录。"
                         );
                     }
                 } catch {
@@ -190,8 +190,8 @@ export default function CodexConfig({
                 error_message: sanitizeAnalyticsError(err, "Failed to initiate auth"),
             });
             notify.error(
-                "Sign-in failed",
-                "Could not start the sign-in flow. Please try again."
+                "登录失败",
+                "无法启动登录流程，请重试。"
             );
             setAuthStatus("unauthenticated");
             applyProfile({});
@@ -230,8 +230,8 @@ export default function CodexConfig({
                 onInputChange(DEFAULT_CODEX_MODEL, "codex_model");
             }
             notify.success(
-                "Signed in to ChatGPT",
-                "Your ChatGPT account is connected and ready to use."
+                "已登录 ChatGPT",
+                "您的 ChatGPT 账户已连接并准备就绪。"
             );
         } catch (err: any) {
             trackEvent(MixpanelEvent.Codex_SignIn_Failed, {
@@ -239,8 +239,8 @@ export default function CodexConfig({
                 error_message: sanitizeAnalyticsError(err, "Exchange failed"),
             });
             notify.error(
-                "Sign-in failed",
-                err.message || "The verification code could not be accepted. Please try again."
+                "登录失败",
+                err.message || "无法接受验证码，请重试。"
             );
         } finally {
             setIsExchanging(false);
@@ -289,13 +289,13 @@ export default function CodexConfig({
             syncStoreAfterCodexSignOut();
             router.replace("/settings");
             notify.success(
-                "Signed out",
-                "You have been disconnected from ChatGPT."
+                "已登出",
+                "您已与 ChatGPT 断开连接。"
             );
         } catch {
             notify.error(
-                "Sign-out failed",
-                "Could not disconnect from ChatGPT. Please try again."
+                "注销失败",
+                "无法从 ChatGPT 断开连接。请重试。"
             );
         } finally {
             setIsLoggingOut(false);
@@ -332,13 +332,13 @@ export default function CodexConfig({
             const data = await res.json();
             applyProfile(data);
             notify.success(
-                "Session refreshed",
-                "Your ChatGPT connection was renewed successfully."
+                "会话已刷新",
+                "您的 ChatGPT 连接已成功刷新。"
             );
         } catch {
             notify.error(
-                "Session refresh failed",
-                "Your ChatGPT session could not be renewed. Please sign in again."
+                "会话刷新失败",
+                "您的 ChatGPT 会话无法刷新。请重新登录。"
             );
             setAuthStatus("unauthenticated");
             applyProfile({});
@@ -366,18 +366,18 @@ export default function CodexConfig({
                         onClick={handleCancelPolling}
                         className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 ml-auto"
                     >
-                        Cancel
+                        取消
                     </button>
                 </div>
 
                 <div className="space-y-2">
                     <p className="text-xs text-gray-400">
-                        Paste redirect URL or code if not redirected automatically
+                        如果未自动跳转，请粘贴重定向 URL 或代码
                     </p>
                     <div className="flex gap-2">
                         <input
                             type="text"
-                            placeholder="Paste URL or code…"
+                            placeholder="粘贴 URL 或代码…"
                             className="flex-1 px-2 py-2 outline-none border border-gray-300 rounded-lg text-xs focus:border-gray-400 transition-colors"
                             value={manualCode}
                             onChange={(e) => setManualCode(e.target.value)}
@@ -390,7 +390,7 @@ export default function CodexConfig({
                             {isExchanging ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                                "Submit"
+                                "提交"
                             )}
                         </button>
                     </div>
@@ -409,7 +409,7 @@ export default function CodexConfig({
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
                             <p className="text-sm font-medium text-gray-800 truncate">
-                                {username || email || (accountId ? `Account ${accountId}` : "ChatGPT Account")}
+                                {username || email || (accountId ? `账户${accountId}` : "ChatGPT 账户")}
                             </p>
 
                         </div>
@@ -451,7 +451,7 @@ export default function CodexConfig({
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Select GPT Model
+                        选择 GPT 模型
                     </label>
                     <Popover open={openModelSelect} onOpenChange={setOpenModelSelect}>
                         <PopoverTrigger asChild>
@@ -464,7 +464,7 @@ export default function CodexConfig({
                                 <span className="text-sm text-gray-900">
                                     {codexModel
                                         ? (CODEX_MODELS.find((m) => m.id === codexModel)?.name ?? codexModel)
-                                        : "Select a model"}
+                                        : "选择一个模型"}
                                 </span>
                                 <ChevronUp className="w-4 h-4 text-gray-400" />
                             </Button>
@@ -518,7 +518,7 @@ export default function CodexConfig({
             onClick={handleSignIn}
             className="mt-8 py-2.5 px-3.5 bg-[#EDEEEF] hover:bg-[#E4E5E6] rounded-[48px] text-xs font-semibold text-[#101323] transition-colors"
         >
-            Sign in with ChatGPT
+            使用 ChatGPT 登录
         </button>
     );
 }

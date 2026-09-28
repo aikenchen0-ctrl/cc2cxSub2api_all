@@ -80,7 +80,7 @@ export function ChartColorPaletteCard({
         {onClose ? (
           <button
             type="button"
-            aria-label="Close color palette"
+            aria-label="关闭颜色面板"
             style={styles.closeButton}
             onClick={onClose}
           >
@@ -103,8 +103,8 @@ export function ChartColorPaletteCard({
         {onAddColor ? (
           <button
             type="button"
-            aria-label="Add chart color"
-            title="Add chart color"
+            aria-label="添加图表颜色"
+            title="添加图表颜色"
             style={styles.addSwatch}
             onClick={onAddColor}
           >
@@ -118,8 +118,8 @@ export function ChartColorPaletteCard({
       <div style={styles.heading}>系统颜色</div>
       <div style={styles.systemGrid}>
         <label
-          aria-label="Custom chart color"
-          title="Custom color"
+          aria-label="自定义图表颜色"
+          title="自定义颜色"
           style={{
             ...styles.swatch,
             ...styles.customSwatch,

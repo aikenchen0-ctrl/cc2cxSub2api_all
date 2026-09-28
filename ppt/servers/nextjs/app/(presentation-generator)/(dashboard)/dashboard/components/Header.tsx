@@ -43,7 +43,7 @@ const Header = () => {
               <img
                 src="/project-icon.jpg"
                 data-sub2api-site-logo
-                alt="永恒PPT"
+                alt="永恒 PPT"
                 className="h-[40px] w-[40px]"
               />
             </Link>

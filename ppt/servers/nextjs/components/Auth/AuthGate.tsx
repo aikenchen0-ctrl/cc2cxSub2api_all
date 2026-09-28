@@ -380,7 +380,7 @@ export default function AuthGate() {
     status.authenticated ||
     !hasMetSplashDuration
   ) {
-    return <PresentonSplashLoader message="Preparing your workspace..." />;
+    return <PresentonSplashLoader message="正在准备您的工作区..." />;
   }
 
   return (
@@ -392,7 +392,7 @@ export default function AuthGate() {
               <Image
                 src="/project-icon.jpg"
                 data-sub2api-site-logo
-                alt="PPT生成"
+                alt="PPT 生成"
                 width={161}
                 height={166}
                 className="h-10 w-auto object-contain"

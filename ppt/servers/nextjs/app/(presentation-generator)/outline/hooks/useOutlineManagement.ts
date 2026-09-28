@@ -31,13 +31,13 @@ export const useOutlineManagement = (outlines: { content: string }[] | null) => 
     if (!outlines) return;
     if (outlines.length >= MAX_NUMBER_OF_SLIDES) {
       notify.warning(
-        "Slide limit reached",
-        `You can have up to ${MAX_NUMBER_OF_SLIDES} outline slides.`
+        "已达到幻灯片数量限制",
+        `您最多可以有${MAX_NUMBER_OF_SLIDES}大纲幻灯片。`
       );
       return;
     }
 
-    const updatedOutlines = [...outlines, { content: "Outline title" }];
+    const updatedOutlines = [...outlines, { content: "大纲标题" }];
     dispatch(setOutlines(updatedOutlines));
   }, [outlines, dispatch]);
 

@@ -151,51 +151,51 @@ function createInfographicToolbarItem(
       return {
         id: `node-${Date.now().toString(36)}-${index + 1}`,
         parent_id: typeof root?.id === "string" ? root.id : null,
-        heading: "New item",
-        description: type === "org_chart" ? "Role" : null,
+        heading: "新项目",
+        description: type === "org_chart" ? "角色" : null,
       };
     }
     case "comparison_matrix":
       return {
         icon,
-        heading: `Option ${index + 1}`,
+        heading: `选项 ${index + 1}`,
         values: readInfographicArray(data.criteria).map(() => ""),
       };
     case "mind_map":
       return {
         icon,
-        heading: `Node ${index + 1}`,
-        description: "Add a description.",
+        heading: `节点 ${index + 1}`,
+        description: "添加描述。",
         items: [],
       };
     case "before_after": {
       const pair = Math.floor(index / 2) + 1;
       return {
         icon,
-        heading: `${index % 2 === 0 ? "Before" : "After"} ${pair}`,
-        description: "Add a description.",
+        heading: `${index % 2 === 0 ? "之前" : "之后"} ${pair}`,
+        description: "添加描述。",
       };
     }
     case "conversion_funnel":
       return {
         value: Math.max(0, readInfographicNumber(previous?.value, 60) - 10),
-        heading: `Stage ${index + 1}`,
-        description: "Add a description.",
+        heading: `阶段 ${index + 1}`,
+        description: "添加描述。",
       };
     case "pillar_framework":
       return {
         icon,
-        heading: `Pillar ${index + 1}`,
-        description: "Add a description.",
-        focus: "Focus area",
+        heading: `支柱 ${index + 1}`,
+        description: "添加描述。",
+        focus: "重点领域",
       };
     case "transformation_hub":
-      return { heading: `Capability ${index + 1}` };
+      return { heading: `能力 ${index + 1}` };
     default:
       return {
         icon: typeUsesToolbarIcons(type) ? icon : null,
         heading: toolbarItemHeading(type, index, previous),
-        description: "Add a description.",
+        description: "添加描述。",
       };
   }
 }
@@ -209,22 +209,22 @@ function toolbarItemHeading(
     const previousHeading = Number(previous?.heading);
     return Number.isFinite(previousHeading)
       ? String(previousHeading + 1)
-      : `Milestone ${index + 1}`;
+      : `里程碑 ${index + 1}`;
   }
   if (type === "stair_step_blocks") {
-    return `Step ${String(index + 1).padStart(2, "0")}`;
+    return `步骤 ${String(index + 1).padStart(2, "0")}`;
   }
-  if (type === "pillar_framework") return `Pillar ${index + 1}`;
-  if (type === "transformation_hub") return `Capability ${index + 1}`;
-  if (type === "conversion_funnel") return `Stage ${index + 1}`;
-  if (type === "roadmap") return `Stop ${index + 1}`;
-  if (type === "pyramid") return `Level ${index + 1}`;
-  if (type === "segmented_wheel") return `Segment ${index + 1}`;
-  if (type === "customer_journey") return `Stage ${index}`;
-  if (type === "diagonal_circles") return `Pillar ${index + 1}`;
-  if (type === "maturity_model") return `Level ${index + 1}`;
-  if (type === "supply_chain") return `Stage ${index + 1}`;
-  return `Step ${index + 1}`;
+  if (type === "pillar_framework") return `支柱 ${index + 1}`;
+  if (type === "transformation_hub") return `能力 ${index + 1}`;
+  if (type === "conversion_funnel") return `阶段 ${index + 1}`;
+  if (type === "roadmap") return `节点 ${index + 1}`;
+  if (type === "pyramid") return `层级 ${index + 1}`;
+  if (type === "segmented_wheel") return `分区 ${index + 1}`;
+  if (type === "customer_journey") return `阶段 ${index}`;
+  if (type === "diagonal_circles") return `支柱 ${index + 1}`;
+  if (type === "maturity_model") return `层级 ${index + 1}`;
+  if (type === "supply_chain") return `阶段 ${index + 1}`;
+  return `步骤 ${index + 1}`;
 }
 
 function typeUsesToolbarIcons(type: InfographicType) {

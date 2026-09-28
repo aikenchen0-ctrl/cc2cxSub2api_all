@@ -107,12 +107,12 @@ export const EditComparisonPreview = ({
 
   const cards = [
     {
-      label: "Original",
+      label: "原文",
       slides: preview.originalSlides,
       version: "original" as const,
     },
     {
-      label: "Modified",
+      label: "修改版",
       slides: preview.modifiedSlides,
       version: "modified" as const,
     },
@@ -132,7 +132,7 @@ export const EditComparisonPreview = ({
           <SmartHtmlSlide
             html={htmlContent}
             fonts={fonts}
-            title={`${label} slide preview ${index + 1}`}
+            title={`${label}幻灯片预览${index + 1}`}
           />
         </div>
       );
@@ -160,7 +160,7 @@ export const EditComparisonPreview = ({
         />
         <span className="font-semibold text-[#191919]">选择编辑内容</span>
         <span className="ml-auto text-[11px] font-medium leading-[normal] text-[#7A5AF8]">
-          {preview.changeCount} {preview.changeCount === 1 ? "Change" : "Changes"}
+          {preview.changeCount} {preview.changeCount === 1 ? "更改" : "变更"}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-[5px]">
@@ -177,7 +177,7 @@ export const EditComparisonPreview = ({
                 : "border-[#EDEEEF]",
             )}
             aria-pressed={selectedVersion === card.version}
-            aria-label={`Restore ${card.label.toLowerCase()} slide state`}
+            aria-label={`恢复${card.label.toLowerCase()}幻灯片状态`}
           >
             <span className="mb-[7px] flex items-center justify-center gap-1 truncate text-center text-[13px] font-medium leading-[normal] text-[#191919]">
               {isApplying && selectedVersion === card.version && (

@@ -121,6 +121,20 @@ type PaymentEventResult struct {
 	Created bool
 }
 
+type PaymentConfig struct {
+	Enabled             bool   `json:"enabled"`
+	Provider            string `json:"provider"`
+	Currency            string `json:"currency"`
+	MerchantID          string `json:"merchant_id,omitempty"`
+	WebhookSecret       string `json:"-"`
+	WebhookSecretSet    bool   `json:"webhook_secret_configured"`
+	MinAmountCents      int64  `json:"min_amount_cents"`
+	MaxAmountCents      int64  `json:"max_amount_cents"`
+	OrderTTLSeconds     int64  `json:"order_ttl_seconds"`
+	CheckoutURLTemplate string `json:"checkout_url_template,omitempty"`
+	UpdatedAt           string `json:"updated_at,omitempty"`
+}
+
 type AuditEvent struct {
 	ID         int64  `json:"id"`
 	ActorType  string `json:"actor_type"`
@@ -388,6 +402,20 @@ func (s *Store) migrate() error {
 			payload_hash TEXT NOT NULL,
 			created_at INTEGER NOT NULL,
 			UNIQUE(agent_id, provider, event_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS payment_config (
+			agent_id TEXT PRIMARY KEY,
+			enabled INTEGER NOT NULL DEFAULT 0,
+			provider TEXT NOT NULL DEFAULT 'manual',
+			currency TEXT NOT NULL DEFAULT 'CNY',
+			merchant_id TEXT NOT NULL DEFAULT '',
+			webhook_secret_cipher TEXT NOT NULL DEFAULT '',
+			min_amount_cents INTEGER NOT NULL DEFAULT 100,
+			max_amount_cents INTEGER NOT NULL DEFAULT 1000000,
+			order_ttl_seconds INTEGER NOT NULL DEFAULT 1800,
+			checkout_url_template TEXT NOT NULL DEFAULT '',
+			updated_at INTEGER NOT NULL,
+			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_settlements_agent_user ON settlements(agent_id, proxy_main_user_id, created_at DESC)`,
 		`CREATE TABLE IF NOT EXISTS consumed_sso_tickets (
@@ -824,6 +852,28 @@ func (s *Store) UpsertAgent(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("upsert agent config: %w", err)
 	}
+	var paymentConfigExists int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM payment_config WHERE agent_id=?`, cfg.AgentID).Scan(&paymentConfigExists); err != nil {
+		return fmt.Errorf("read existing payment config: %w", err)
+	}
+	// Payment environment variables seed a new instance only. Once an instance
+	// exists, the encrypted SQLite row managed by the administrator console is
+	// authoritative and must remain usable after the bootstrap secret is removed
+	// from the process environment.
+	if paymentConfigExists == 0 && cfg.PaymentEnabled && strings.TrimSpace(cfg.PaymentWebhookSecret) == "" {
+		return fmt.Errorf("AGENT_PAYMENT_WEBHOOK_SECRET is required when seeding an enabled payment configuration")
+	}
+	secretCipher, secretErr := s.encrypt(cfg.PaymentWebhookSecret)
+	if secretErr != nil {
+		return fmt.Errorf("encrypt initial payment webhook secret: %w", secretErr)
+	}
+	if _, err = tx.Exec(`
+		INSERT INTO payment_config(agent_id, enabled, provider, currency, merchant_id, webhook_secret_cipher, min_amount_cents, max_amount_cents, order_ttl_seconds, checkout_url_template, updated_at)
+		VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(agent_id) DO NOTHING
+	`, cfg.AgentID, boolInt(cfg.PaymentEnabled), strings.TrimSpace(cfg.PaymentProvider), strings.ToUpper(strings.TrimSpace(cfg.PaymentCurrency)), secretCipher, cfg.PaymentMinCents, cfg.PaymentMaxCents, int64(cfg.PaymentOrderTTL/time.Second), strings.TrimSpace(cfg.PaymentCheckoutURLTemplate), now); err != nil {
+		return fmt.Errorf("initialize payment config: %w", err)
+	}
 
 	if _, err = tx.Exec(`
 		INSERT INTO agent_wallets (agent_id, available_cents, allocated_cents, owner_main_user_id, billing_status, version, updated_at)
@@ -838,6 +888,64 @@ func (s *Store) UpsertAgent(cfg Config) error {
 		return fmt.Errorf("upsert agent wallet: %w", err)
 	}
 	return tx.Commit()
+}
+
+func (s *Store) PaymentConfig(agentID string) (PaymentConfig, error) {
+	var config PaymentConfig
+	var enabled int
+	var secretCipher string
+	var updatedAt int64
+	err := s.db.QueryRow(`SELECT enabled, provider, currency, merchant_id, webhook_secret_cipher, min_amount_cents, max_amount_cents, order_ttl_seconds, checkout_url_template, updated_at FROM payment_config WHERE agent_id=?`, strings.TrimSpace(agentID)).Scan(
+		&enabled, &config.Provider, &config.Currency, &config.MerchantID, &secretCipher, &config.MinAmountCents, &config.MaxAmountCents, &config.OrderTTLSeconds, &config.CheckoutURLTemplate, &updatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PaymentConfig{}, errNotFound
+	}
+	if err != nil {
+		return PaymentConfig{}, err
+	}
+	config.Enabled = enabled != 0
+	config.WebhookSecretSet = secretCipher != ""
+	config.WebhookSecret, err = s.decrypt(secretCipher)
+	if err != nil {
+		return PaymentConfig{}, fmt.Errorf("decrypt payment webhook secret: %w", err)
+	}
+	config.UpdatedAt = time.Unix(updatedAt, 0).UTC().Format(time.RFC3339)
+	return config, nil
+}
+
+func (s *Store) UpdatePaymentConfig(agentID string, config PaymentConfig, replaceSecret bool) (PaymentConfig, error) {
+	agentID = strings.TrimSpace(agentID)
+	current, err := s.PaymentConfig(agentID)
+	if err != nil {
+		return PaymentConfig{}, err
+	}
+	secret := current.WebhookSecret
+	if replaceSecret {
+		secret = strings.TrimSpace(config.WebhookSecret)
+	}
+	secretCipher, err := s.encrypt(secret)
+	if err != nil {
+		return PaymentConfig{}, err
+	}
+	now := s.clock().UTC().Unix()
+	result, err := s.db.Exec(`UPDATE payment_config SET enabled=?, provider=?, currency=?, merchant_id=?, webhook_secret_cipher=?, min_amount_cents=?, max_amount_cents=?, order_ttl_seconds=?, checkout_url_template=?, updated_at=? WHERE agent_id=?`,
+		boolInt(config.Enabled), strings.TrimSpace(config.Provider), strings.ToUpper(strings.TrimSpace(config.Currency)), strings.TrimSpace(config.MerchantID), secretCipher,
+		config.MinAmountCents, config.MaxAmountCents, config.OrderTTLSeconds, strings.TrimSpace(config.CheckoutURLTemplate), now, agentID)
+	if err != nil {
+		return PaymentConfig{}, err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return PaymentConfig{}, errNotFound
+	}
+	return s.PaymentConfig(agentID)
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func agentConfigStatus(cfg Config) string {

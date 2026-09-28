@@ -36,31 +36,25 @@ func TestProvisionCreatesSecretSafeIdempotentBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	controlCredential, err := os.ReadFile(filepath.Join(first.RuntimeSecretDir, "agent_control_credential"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	modelCredential, err := os.ReadFile(filepath.Join(first.RuntimeSecretDir, "agent_model_credential"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	sessionSecret, err := os.ReadFile(filepath.Join(first.RuntimeSecretDir, "session_secret"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	controlSum := sha256.Sum256([]byte(strings.TrimSpace(string(controlCredential))))
-	modelSum := sha256.Sum256([]byte(strings.TrimSpace(string(modelCredential))))
-	if first.ControlTokenHash != hex.EncodeToString(controlSum[:]) || first.ModelTokenHash != hex.EncodeToString(modelSum[:]) ||
-		!strings.HasPrefix(string(controlCredential), "agt_ctl_") || !strings.HasPrefix(string(modelCredential), "agt_model_") {
-		t.Fatal("generated runtime credential metadata does not match the file-backed secrets")
+	if first.ControlTokenHash != "" || first.ModelTokenHash != "" {
+		t.Fatal("new bundles must not generate legacy runtime credential metadata")
 	}
-	for _, secret := range []string{"admin-secret", "app-secret", "sso-secret", strings.TrimSpace(string(controlCredential)), strings.TrimSpace(string(modelCredential))} {
+	for _, name := range []string{"agent_control_credential", "agent_model_credential"} {
+		if _, err := os.Stat(filepath.Join(first.RuntimeSecretDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("new bundle unexpectedly generated %s: %v", name, err)
+		}
+	}
+	for _, secret := range []string{"admin-secret", "app-secret", "sso-secret"} {
 		if strings.Contains(string(compose), secret) || strings.Contains(string(env), secret) {
 			t.Fatalf("secret leaked into bundle")
 		}
 	}
 	secretDir := filepath.ToSlash(first.RuntimeSecretDir)
-	if !strings.Contains(string(compose), "${SUB2API_SSO_SECRET_FILE:?") || strings.Contains(string(compose), "SUB2API_ADMIN_KEY") || !strings.Contains(string(compose), secretDir+"/agent_control_credential") || !strings.Contains(string(compose), secretDir+"/agent_model_credential") || !strings.Contains(string(env), `AGENT_ID="agt_0123456789abcdef0123456789abcdef"`) || !strings.Contains(string(env), `AGENT_DOMAIN="agent01.cc2.cx"`) || !strings.Contains(string(env), "AGENT_PROVISIONING_CONTROL_ENABLED=true") {
+	if !strings.Contains(string(compose), "${SUB2API_SSO_SECRET_FILE:?") || !strings.Contains(string(compose), "${SUB2API_APP_CREDENTIAL_FILE:?") || strings.Contains(string(compose), "SUB2API_ADMIN_KEY") || strings.Contains(string(compose), "agent_control_credential") || strings.Contains(string(compose), "agent_model_credential") || !strings.Contains(string(compose), secretDir+"/session_secret") || !strings.Contains(string(env), `AGENT_ID="agt_0123456789abcdef0123456789abcdef"`) || !strings.Contains(string(env), `AGENT_DOMAIN="agent01.cc2.cx"`) || !strings.Contains(string(env), "AGENT_PROVISIONING_CONTROL_ENABLED=false") {
 		t.Fatalf("unexpected bundle: %s\n%s", compose, env)
 	}
 	if _, err := os.Stat(filepath.Join(first.BundlePath, "secrets")); !os.IsNotExist(err) {
@@ -91,7 +85,7 @@ func TestProvisionCreatesSecretSafeIdempotentBundle(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, secret := range [][]byte{controlCredential, modelCredential, sessionSecret} {
+		for _, secret := range [][]byte{sessionSecret} {
 			if strings.Contains(string(data), strings.TrimSpace(string(secret))) {
 				return os.ErrPermission
 			}
@@ -107,6 +101,18 @@ func TestProvisionMigratesLegacyBundleSecretsOutOfPackage(t *testing.T) {
 	req := validRequest()
 	generated, err := provision(dir, req)
 	if err != nil {
+		t.Fatal(err)
+	}
+	controlCredential := "agt_ctl_legacy-control-credential"
+	modelCredential := "agt_model_legacy-model-credential"
+	controlSum := sha256.Sum256([]byte(controlCredential))
+	modelSum := sha256.Sum256([]byte(modelCredential))
+	generated.ControlTokenHash = hex.EncodeToString(controlSum[:])
+	generated.ModelTokenHash = hex.EncodeToString(modelSum[:])
+	if err := os.WriteFile(filepath.Join(generated.RuntimeSecretDir, "agent_control_credential"), []byte(controlCredential+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(generated.RuntimeSecretDir, "agent_model_credential"), []byte(modelCredential+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	legacyDir := filepath.Join(generated.BundlePath, "secrets")
@@ -155,8 +161,8 @@ func TestProvisionMigratesLegacyBundleSecretsOutOfPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(compose), filepath.ToSlash(migrated.RuntimeSecretDir)+"/agent_control_credential") {
-		t.Fatalf("compose manifest was not migrated to the external secret path: %s", compose)
+	if !strings.Contains(string(compose), filepath.ToSlash(migrated.RuntimeSecretDir)+"/session_secret") || strings.Contains(string(compose), "agent_control_credential") || strings.Contains(string(compose), "agent_model_credential") {
+		t.Fatalf("compose manifest did not switch to the zero-schema secret layout: %s", compose)
 	}
 }
 

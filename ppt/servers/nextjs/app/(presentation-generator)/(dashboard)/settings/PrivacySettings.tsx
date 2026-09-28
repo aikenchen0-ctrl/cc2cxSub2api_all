@@ -68,10 +68,10 @@ const PrivacySettings = () => {
     <div className="w-full space-y-6">
       <div className="bg-[#F9F8F8] p-7 rounded-[20px]">
         <h4 className="text-sm font-semibold text-[#191919] mb-1">
-          Usage analytics
+          使用分析
         </h4>
         <p className="text-xs text-[#6B7280] mb-6 leading-relaxed max-w-lg">
-          Share anonymous usage data to help us improve 永恒PPT. No personal information or presentation content is collected.
+          分享匿名使用数据以帮助我们改进永恒 PPT。不会收集任何个人信息或演示内容。
         </p>
 
         <div className="flex items-center justify-between gap-4 rounded-[10px] bg-white border border-[#EDEEEF] p-4">
@@ -80,11 +80,11 @@ const PrivacySettings = () => {
               htmlFor="tracking-toggle"
               className="text-sm font-medium text-[#191919] cursor-pointer select-none block"
             >
-              Share anonymous usage data
+              分享匿名使用数据
             </label>
             <p className="text-xs text-[#9CA3AF] mt-0.5">
               {trackingEnabled
-                ? "Anonymous usage data is being shared."
+                ? "正在共享匿名使用数据。"
                 : "不会共享匿名使用数据"}
             </p>
           </div>

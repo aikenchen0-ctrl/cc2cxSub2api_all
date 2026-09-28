@@ -96,7 +96,7 @@ export default function VertexAzureManualFields({
               value={llmConfig.VERTEX_MODEL || ''}
               onChange={(e) => onPatch({ VERTEX_MODEL: e.target.value })}
               className={inputClass}
-              placeholder="e.g. gemini-2.5-flash"
+              placeholder="例如：gemini-2.5-flash"
             />
           </div>
 
@@ -125,7 +125,7 @@ export default function VertexAzureManualFields({
                     value={llmConfig.VERTEX_PROJECT || ''}
                     onChange={(e) => onPatch({ VERTEX_PROJECT: e.target.value })}
                     className={inputClass}
-                    placeholder="Optional"
+                    placeholder="可选"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -135,7 +135,7 @@ export default function VertexAzureManualFields({
                     value={llmConfig.VERTEX_LOCATION || ''}
                     onChange={(e) => onPatch({ VERTEX_LOCATION: e.target.value })}
                     className={inputClass}
-                    placeholder="e.g. us-central1"
+                    placeholder="例如：美西"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -145,7 +145,7 @@ export default function VertexAzureManualFields({
                     value={llmConfig.VERTEX_BASE_URL || ''}
                     onChange={(e) => onPatch({ VERTEX_BASE_URL: e.target.value })}
                     className={inputClass}
-                    placeholder="Optional"
+                    placeholder="可选"
                   />
                 </div>
               </div>
@@ -174,7 +174,7 @@ export default function VertexAzureManualFields({
               value={llmConfig.AZURE_OPENAI_MODEL || ''}
               onChange={(e) => onPatch({ AZURE_OPENAI_MODEL: e.target.value })}
               className={inputClass}
-              placeholder="e.g. gpt-5.4-mini"
+              placeholder="例如：GPT-5.4-mini"
             />
           </div>
 
@@ -185,7 +185,7 @@ export default function VertexAzureManualFields({
               value={llmConfig.AZURE_OPENAI_API_VERSION || ''}
               onChange={(e) => onPatch({ AZURE_OPENAI_API_VERSION: e.target.value })}
               className={inputClass}
-              placeholder="e.g. 2024-12-01-preview"
+              placeholder="例如：2024-12-01 预览版"
             />
           </div>
         </>

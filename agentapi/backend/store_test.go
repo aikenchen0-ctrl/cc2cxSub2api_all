@@ -29,6 +29,100 @@ func testStore(t *testing.T) *Store {
 	return store
 }
 
+func TestPaymentConfigIsInstanceScopedAndEncryptsWebhookSecret(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentapi.db")
+	store, err := OpenStore(path, "instance-encryption-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{
+		AgentID: "agent-a", AgentName: "Agent A", SiteName: "Agent A",
+		PaymentProvider: "manual", PaymentCurrency: "CNY", PaymentMinCents: 100,
+		PaymentMaxCents: 100000, PaymentOrderTTL: 30 * time.Minute,
+	}
+	if err := store.UpsertAgent(cfg); err != nil {
+		t.Fatal(err)
+	}
+	wantSecret := "provider-webhook-secret-a"
+	updated, err := store.UpdatePaymentConfig(cfg.AgentID, PaymentConfig{
+		Enabled: true, Provider: "stripe-cn", Currency: "CNY", MerchantID: "merchant-a",
+		WebhookSecret: wantSecret, MinAmountCents: 200, MaxAmountCents: 200000,
+		OrderTTLSeconds: 900, CheckoutURLTemplate: "https://pay.example/{merchant_id}/{order_no}",
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.Enabled || !updated.WebhookSecretSet || updated.WebhookSecret != wantSecret || updated.MerchantID != "merchant-a" {
+		t.Fatalf("unexpected payment config: %+v", updated)
+	}
+	var storedCipher string
+	if err := store.db.QueryRow(`SELECT webhook_secret_cipher FROM payment_config WHERE agent_id=?`, cfg.AgentID).Scan(&storedCipher); err != nil {
+		t.Fatal(err)
+	}
+	if storedCipher == "" || storedCipher == wantSecret || strings.Contains(storedCipher, wantSecret) {
+		t.Fatalf("payment secret was not encrypted at rest: %q", storedCipher)
+	}
+	if _, err := store.PaymentConfig("agent-b"); !errors.Is(err, errNotFound) {
+		t.Fatalf("another instance unexpectedly read agent-a payment config: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenStore(path, "instance-encryption-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	loaded, err := reopened.PaymentConfig(cfg.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.WebhookSecret != wantSecret || loaded.Provider != "stripe-cn" || loaded.MerchantID != "merchant-a" {
+		t.Fatalf("payment config did not persist per instance: %+v", loaded)
+	}
+}
+
+func TestPaymentConfigBootstrapRequiresSecretButStoredConfigSurvivesRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentapi.db")
+	store, err := OpenStore(path, "instance-encryption-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootstrap := Config{
+		AgentID: "agent-payment-restart", AgentName: "Agent", SiteName: "Agent",
+		PaymentEnabled: true, PaymentProvider: "manual", PaymentCurrency: "CNY",
+		PaymentMinCents: 100, PaymentMaxCents: 100000, PaymentOrderTTL: 30 * time.Minute,
+	}
+	if err := store.UpsertAgent(bootstrap); err == nil || !strings.Contains(err.Error(), "required when seeding") {
+		t.Fatalf("enabled payment bootstrap without secret error = %v, want rejection", err)
+	}
+
+	bootstrap.PaymentWebhookSecret = "bootstrap-payment-secret"
+	if err := store.UpsertAgent(bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := OpenStore(path, "instance-encryption-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = restarted.Close() })
+	bootstrap.PaymentWebhookSecret = ""
+	if err := restarted.UpsertAgent(bootstrap); err != nil {
+		t.Fatalf("restart rejected persisted payment configuration: %v", err)
+	}
+	loaded, err := restarted.PaymentConfig(bootstrap.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.Enabled || loaded.WebhookSecret != "bootstrap-payment-secret" {
+		t.Fatalf("persisted payment configuration changed during restart: %+v", loaded)
+	}
+}
+
 func TestUsersPageReturnsStablePagesAndAgentScopedTotals(t *testing.T) {
 	store := testStore(t)
 	for id := 43; id <= 52; id++ {
@@ -254,6 +348,103 @@ func TestWalletIdempotencyKeyCannotBeReusedAcrossUsersOrAmounts(t *testing.T) {
 	}
 	if err := store.Consume("agent-test", "42", 30, "consume-key", "test"); !errors.Is(err, errIdempotencyConflict) {
 		t.Fatalf("different amount reused key: %v", err)
+	}
+}
+
+func TestRechargePaymentValidationAndLedgerReconciliation(t *testing.T) {
+	store := testStore(t)
+	order, created, err := store.CreateRechargeOrder(
+		"agent-test",
+		"42",
+		200,
+		"CNY",
+		"manual",
+		"",
+		"recharge-validation",
+		time.Now().Add(time.Hour),
+	)
+	if err != nil || !created {
+		t.Fatalf("create recharge order: order=%+v created=%v err=%v", order, created, err)
+	}
+
+	rejected := []struct {
+		name        string
+		eventID     string
+		status      string
+		amountCents int64
+		currency    string
+		provider    string
+		providerTxn string
+		payloadHash string
+	}{
+		{name: "amount", eventID: "evt-wrong-amount", status: "paid", amountCents: 201, currency: "CNY", provider: "manual", providerTxn: "trade-wrong-amount", payloadHash: "hash-wrong-amount"},
+		{name: "currency", eventID: "evt-wrong-currency", status: "paid", amountCents: 200, currency: "USD", provider: "manual", providerTxn: "trade-wrong-currency", payloadHash: "hash-wrong-currency"},
+		{name: "provider", eventID: "evt-wrong-provider", status: "paid", amountCents: 200, currency: "CNY", provider: "other", providerTxn: "trade-wrong-provider", payloadHash: "hash-wrong-provider"},
+		{name: "status", eventID: "evt-wrong-status", status: "processing", amountCents: 200, currency: "CNY", provider: "manual", providerTxn: "trade-wrong-status", payloadHash: "hash-wrong-status"},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := store.RecordPaymentEvent("agent-test", tc.provider, tc.eventID, order.OrderNo, tc.status, tc.amountCents, tc.currency, tc.providerTxn, tc.payloadHash); err == nil {
+				t.Fatalf("invalid %s payment event was accepted", tc.name)
+			}
+			stored, lookupErr := store.RechargeOrder("agent-test", order.OrderNo)
+			if lookupErr != nil {
+				t.Fatal(lookupErr)
+			}
+			if stored.Status != "pending" {
+				t.Fatalf("invalid %s payment event changed order state: %+v", tc.name, stored)
+			}
+			user, userErr := store.User("agent-test", "42")
+			if userErr != nil {
+				t.Fatal(userErr)
+			}
+			if user.BalanceCents != 0 {
+				t.Fatalf("invalid %s payment event credited user: %+v", tc.name, user)
+			}
+		})
+	}
+
+	paid, err := store.RecordPaymentEvent("agent-test", "manual", "evt-paid", order.OrderNo, "paid", 200, "CNY", "trade-paid", "hash-paid")
+	if err != nil || !paid.Created || paid.Order.Status != "paid_pending_allocation" {
+		t.Fatalf("record verified payment: result=%+v err=%v", paid, err)
+	}
+	allocated, err := store.AllocateRechargeOrder("agent-test", order.OrderNo)
+	if err != nil || allocated.Status != "allocated" {
+		t.Fatalf("allocate verified recharge: order=%+v err=%v", allocated, err)
+	}
+	if _, err := store.AllocateRechargeOrder("agent-test", order.OrderNo); err != nil {
+		t.Fatalf("replay verified recharge allocation: %v", err)
+	}
+
+	var ledgerRows int
+	var userAllocation, agentAllocation int64
+	if err := store.db.QueryRow(`
+		SELECT COUNT(*),
+			COALESCE(SUM(CASE WHEN kind='user_allocate' THEN amount_cents ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN kind='agent_allocate' THEN amount_cents ELSE 0 END), 0)
+		FROM wallet_ledger
+		WHERE agent_id=? AND order_id=?
+	`, "agent-test", order.OrderNo).Scan(&ledgerRows, &userAllocation, &agentAllocation); err != nil {
+		t.Fatal(err)
+	}
+	if ledgerRows != 2 || userAllocation != 200 || agentAllocation != -200 {
+		t.Fatalf("recharge ledger does not reconcile: rows=%d user=%d agent=%d", ledgerRows, userAllocation, agentAllocation)
+	}
+
+	agent, err := store.Agent("agent-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := store.User("agent-test", "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var userWalletTotal int64
+	if err := store.db.QueryRow(`SELECT COALESCE(SUM(balance_cents), 0) FROM agent_user_wallets WHERE agent_id=?`, "agent-test").Scan(&userWalletTotal); err != nil {
+		t.Fatal(err)
+	}
+	if user.BalanceCents < 0 || user.BalanceCents != 200 || userWalletTotal != agent.WalletAllocated || agent.WalletAvailable != 800 {
+		t.Fatalf("wallet invariant failed: agent=%+v user=%+v user_total=%d", agent, user, userWalletTotal)
 	}
 }
 

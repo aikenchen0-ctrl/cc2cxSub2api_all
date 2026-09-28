@@ -148,11 +148,12 @@ func loadSatelliteUserKey(c *gin.Context, apiKeyService satelliteUserKeyResolver
 	if c != nil {
 		slug = strings.TrimSpace(c.GetHeader(HeaderSatelliteApp))
 	}
-	// AgentAPI is deliberately not allowed to use the shared satellite app
-	// credential. Its model credential is bound in the Sub2API database to one
-	// agent and one Owner account. X-Sub2API-On-Behalf-Of still identifies the
-	// active mapped Session user; the owner account is only the billing key.
-	if slug == "agentapi" || strings.HasPrefix(strings.TrimSpace(presented), "agt_") {
+	// Managed AgentAPI deployments may still use a database-backed agt_model_
+	// credential. Ordinary AgentAPI deployments use the same shared satellite
+	// credential contract as every other satellite and set On-Behalf-Of to the
+	// configured Owner. This keeps the default AgentAPI path independent from
+	// agent_runtime_* and agent_provisioning_* tables.
+	if strings.HasPrefix(strings.TrimSpace(presented), "agt_") {
 		if slug != "agentapi" {
 			AbortWithError(c, http.StatusUnauthorized, "AGENT_RUNTIME_SATELLITE_REQUIRED", "Agent runtime credentials require the agentapi satellite identity")
 			return nil, true

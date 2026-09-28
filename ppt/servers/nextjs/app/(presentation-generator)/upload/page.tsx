@@ -7,7 +7,7 @@ import { Metadata } from "next";
 export const metadata: Metadata = {
   title: "PPT 生成",
   description:
-    "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+    "开源 AI 演示文稿生成器，支持自定义布局和多模型（OpenAI、Gemini、Ollama），可导出 PDF/PPTX。免费的 Gamma 替代品。",
   alternates: {
     canonical: "https://presenton.ai/create",
   },
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PPT 生成",
     description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+      "开源 AI 演示文稿生成器，支持自定义布局和多模型（OpenAI、Gemini、Ollama），可导出 PDF/PPTX。免费的 Gamma 替代品。",
     type: "website",
     url: "https://presenton.ai/create",
     siteName: "PPT生成",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PPT 生成",
     description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+      "开源 AI 演示文稿生成器，支持自定义布局和多模型（OpenAI、Gemini、Ollama），可导出 PDF/PPTX。免费的 Gamma 替代品。",
     site: "@presenton_ai",
     creator: "@presenton_ai",
   },

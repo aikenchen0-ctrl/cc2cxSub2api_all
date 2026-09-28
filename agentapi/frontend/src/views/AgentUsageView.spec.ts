@@ -18,7 +18,7 @@ describe('AgentUsageView', () => {
       actual_cents: 12,
       settlement_status: 'confirmed',
       model: 'gpt-5.5',
-      usage_source: 'sub2api_owner_runtime_usage',
+      usage_source: 'sub2api_owner_usage',
       input_tokens: 1000,
       output_tokens: 250,
       cache_creation_tokens: 40,

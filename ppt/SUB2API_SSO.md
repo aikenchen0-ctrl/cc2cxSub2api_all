@@ -49,9 +49,14 @@ from the repository root:
 
 ```powershell
 docker build -t ppt:sub2api-integration -f ppt/Dockerfile ppt
-docker compose -f ppt/docker-compose.yml -f ppt/docker-compose.sub2api.yml up -d --no-deps production
+docker compose --env-file ppt/.env.sub2api -f ppt/docker-compose.yml -f ppt/docker-compose.sub2api.yml up -d --no-deps production
 docker compose -f sub2api/deploy/docker-compose.yml -f sub2api/deploy/docker-compose.override.yml up -d --no-deps sub2api
 ```
+
+The `--env-file ppt/.env.sub2api` argument is required. Compose interpolation
+happens before a service-level `env_file` is loaded; omitting it would replace
+the satellite credential and SSO secret with empty values from the base Compose
+file. The override fails fast when either required secret is missing.
 
 Build the portal image `sub2api:ppt-integration` from `sub2api/Dockerfile` before
 the last command. Back up the PPT data directory and portal database before

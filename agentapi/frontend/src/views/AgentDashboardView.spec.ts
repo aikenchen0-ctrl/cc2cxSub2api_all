@@ -14,7 +14,7 @@ function usage(overrides: Partial<AgentUsageView> = {}): AgentUsageView {
     actual_cents: 0,
     settlement_status: 'confirmed',
     model: 'gpt-5.5',
-    usage_source: 'sub2api_owner_runtime_usage',
+    usage_source: 'sub2api_owner_usage',
     input_tokens: 1000,
     output_tokens: 250,
     total_cost_usd_nanos: 150_000_000,

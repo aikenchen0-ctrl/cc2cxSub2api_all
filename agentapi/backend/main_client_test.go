@@ -218,7 +218,7 @@ func TestRuntimeAgentUpdatesUsesScopedIDOnlyStream(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, MainRequestTimeout: time.Second}
+	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	updates, err := NewMainClient(cfg).RuntimeAgentUpdates(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +248,7 @@ func TestRuntimeUpdateUserStatusSendsOnlyStatusToScopedEndpoint(t *testing.T) {
 	}))
 	defer upstream.Close()
 	credential := "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, MainRequestTimeout: time.Second}
+	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	if err := NewMainClient(cfg).RuntimeUpdateUserStatus(t.Context(), "43", "disabled"); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestRuntimeFindUsageDecodesOwnerScopedUsage(t *testing.T) {
 	}))
 	defer upstream.Close()
 	credential := "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, MainRequestTimeout: time.Second}
+	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-usage")
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +335,7 @@ func TestRuntimeFindUsageDecodesOwnerScopedUsage(t *testing.T) {
 		t.Fatalf("unexpected decoded usage: %+v", items)
 	}
 	usage := items[0]
-	if usage.Snapshot.Source != "sub2api_owner_runtime_usage" || usage.Snapshot.InputTokens != 1000 || usage.Snapshot.OutputTokens != 250 || usage.Snapshot.CacheCreationTokens != 12 || usage.Snapshot.CacheReadTokens != 34 {
+	if usage.Snapshot.Source != "sub2api_owner_usage" || usage.Snapshot.InputTokens != 1000 || usage.Snapshot.OutputTokens != 250 || usage.Snapshot.CacheCreationTokens != 12 || usage.Snapshot.CacheReadTokens != 34 {
 		t.Fatalf("usage token facts were not decoded: %+v", usage.Snapshot)
 	}
 	if usage.Snapshot.InputCostNanos != 123 || usage.Snapshot.OutputCostNanos != 456 || usage.Snapshot.UpstreamModel != "provider-gpt-5.5" || usage.Snapshot.UpstreamResponseModel != "provider-gpt-5.5-2026-01" || usage.Snapshot.UpstreamModelMismatch == nil || !*usage.Snapshot.UpstreamModelMismatch {
@@ -343,6 +343,79 @@ func TestRuntimeFindUsageDecodesOwnerScopedUsage(t *testing.T) {
 	}
 	if usage.Snapshot.ServiceTier != "priority" || usage.Snapshot.ReasoningEffort != "high" || usage.Snapshot.InboundEndpoint != "/v1/responses" || usage.Snapshot.DurationMs != 900 || usage.Snapshot.FirstTokenMs != 120 || usage.Snapshot.ImageSizeBreakdown["1024x1024"] != 2 {
 		t.Fatalf("usage request metadata was not decoded: %+v", usage.Snapshot)
+	}
+}
+
+func TestAdminFindUsageUsesZeroSchemaOwnerBridgeWithoutRuntimeCredential(t *testing.T) {
+	var gotPath, gotAuthorization, gotOwner, gotSatellite string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.String()
+		gotAuthorization = r.Header.Get("Authorization")
+		gotOwner = r.Header.Get("X-Sub2API-On-Behalf-Of")
+		gotSatellite = r.Header.Get("X-Sub2API-Satellite")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
+			"id": 88, "request_id": "req-owner-usage", "model": "gpt-5.5", "total_cost": 0.30, "actual_cost": 0.25,
+		}}}})
+	}))
+	defer upstream.Close()
+	cfg := Config{
+		MainModelBaseURL: upstream.URL, AppCredential: "satellite-app-secret",
+		OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second,
+	}
+	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-owner-usage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/sub2api/usage?request_id=req-owner-usage" || gotAuthorization != "Bearer satellite-app-secret" || gotOwner != "42" || gotSatellite != "agentapi" {
+		t.Fatalf("unexpected zero-schema usage bridge request: path=%q auth=%q owner=%q satellite=%q", gotPath, gotAuthorization, gotOwner, gotSatellite)
+	}
+	if len(items) != 1 || items[0].ActualCents != 25 || items[0].Snapshot.Source != "sub2api_owner_usage" {
+		t.Fatalf("unexpected zero-schema usage result: %+v", items)
+	}
+}
+
+func TestOrdinaryOwnerBridgeIgnoresStaleRuntimeCredential(t *testing.T) {
+	var balanceCalls, usageCalls, runtimeCalls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/sub2api/balance":
+			balanceCalls++
+		case "/v1/sub2api/usage":
+			usageCalls++
+		default:
+			runtimeCalls++
+			http.Error(w, "ordinary mode reached legacy runtime endpoint", http.StatusInternalServerError)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer satellite-app-secret" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
+			t.Errorf("ordinary bridge headers are incorrect: %v", r.Header)
+		}
+		if r.URL.Path == "/v1/sub2api/balance" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"balance": 12.34}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
+			"id": 90, "request_id": "req-stale-control", "actual_cost": 0.12,
+		}}}})
+	}))
+	defer upstream.Close()
+	cfg := Config{
+		MainAPIBaseURL: upstream.URL + "/api/v1", MainModelBaseURL: upstream.URL,
+		AppCredential: "satellite-app-secret", RuntimeControlCredential: "agt_ctl_stale-migration-secret-0123456789abcdef",
+		OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second,
+		ProvisioningControlEnabled: false,
+	}
+	client := NewMainClient(cfg)
+	owner, err := client.AdminGetUser(t.Context(), "42")
+	if err != nil || owner.Balance != 1234 {
+		t.Fatalf("ordinary owner balance did not use satellite bridge: owner=%+v err=%v", owner, err)
+	}
+	items, err := client.AdminFindUsage(t.Context(), "req-stale-control")
+	if err != nil || len(items) != 1 || items[0].ActualCents != 12 {
+		t.Fatalf("ordinary usage did not use satellite bridge: items=%+v err=%v", items, err)
+	}
+	if balanceCalls != 1 || usageCalls != 1 || runtimeCalls != 0 {
+		t.Fatalf("stale runtime credential changed ordinary routing: balance=%d usage=%d runtime=%d", balanceCalls, usageCalls, runtimeCalls)
 	}
 }
 
@@ -356,7 +429,7 @@ func TestAdminFindUsagePreservesZeroActualCostInsteadOfUsingStandardCost(t *test
 	}))
 	defer upstream.Close()
 
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", MainRequestTimeout: time.Second}
+	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-zero-actual")
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +447,7 @@ func TestAdminFindUsageFallsBackOnlyWhenActualCostFieldIsAbsent(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", MainRequestTimeout: time.Second}
+	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-legacy-dto")
 	if err != nil {
 		t.Fatal(err)

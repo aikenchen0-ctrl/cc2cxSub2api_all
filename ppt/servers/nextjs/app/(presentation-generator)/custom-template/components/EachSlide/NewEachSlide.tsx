@@ -139,7 +139,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
             </div>
             <div>
               <h3 className="text-base font-semibold text-[#111827] tracking-tight">
-                {compiledLayout?.layoutId || slide.layout_name || slide.v2Layout?.id || `Slide ${index + 1}`}
+                {compiledLayout?.layoutId || slide.layout_name || slide.v2Layout?.id || `幻灯片${index + 1}`}
               </h3>
               {(compiledLayout?.layoutDescription || slide.layout_description) && (
                 <p className="text-sm text-[#6B7280] mt-0.5 line-clamp-1 max-w-[300px]">
@@ -154,7 +154,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
             {/* Primary Actions Group */}
             <div className="flex items-center bg-gray-50/80 rounded-lg p-1 gap-0.5">
               {/* Schema Button */}
-              <ToolTip content="Edit content schema">
+              <ToolTip content="编辑内容架构">
                 <button
                   onClick={() => {
                     if (isSchemaEditorOpen) {
@@ -181,7 +181,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
 
             {/* Undo/Redo Group */}
             <div className="flex items-center bg-gray-50/80 rounded-lg p-1 gap-0.5">
-              <ToolTip content={canUndo ? "Undo (Ctrl+Z)" : "Nothing to undo"}>
+              <ToolTip content={canUndo ? "撤销 (Ctrl+Z)" : "无法撤销"}>
                 <button
                   onClick={undo}
                   disabled={!canUndo || !supportsReactEditing}
@@ -197,7 +197,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
                   <Undo className="w-4 h-4" />
                 </button>
               </ToolTip>
-              <ToolTip content={canRedo ? "Redo (Ctrl+Shift+Z)" : "Nothing to redo"}>
+              <ToolTip content={canRedo ? "重做 (Ctrl+Shift+Z)" : "无法重做"}>
                 <button
                   onClick={redo}
                   disabled={!canRedo || !supportsReactEditing}
@@ -219,7 +219,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
             <div className="w-px h-6 bg-gray-200 mx-1" />
 
             {/* Re-Construct Button */}
-            <ToolTip content="Re-Design this slide">
+            <ToolTip content="重新设计此幻灯片">
               <button
                 onClick={handleRetrySlide}
                 disabled={!isSlideReady}
@@ -236,13 +236,13 @@ const EachSlide: React.FC<EachSlideProps> = ({
                 } : undefined}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                Re-Construct
+                重构
               </button>
 
             </ToolTip>
 
             {/* Delete Button */}
-            <ToolTip content="Delete slide">
+            <ToolTip content="删除幻灯片">
               <button
                 onClick={handleDeleteSlide}
                 disabled={!isSlideReady}
@@ -275,7 +275,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
       {/* Slide Content */}
       <div className="p-4">
         <SlideErrorBoundary
-          label={`Slide ${index + 1}`}
+          label={`幻灯片${index + 1}`}
           resetKey={`${slide.processing}:${slide.processed}:${slide.react}`}
         >
           <div className="relative">
@@ -315,11 +315,10 @@ const EachSlide: React.FC<EachSlideProps> = ({
               <Trash2 className="h-5 w-5 text-[#D92D20]" />
             </div>
             <DialogTitle className="text-xl font-semibold leading-7 text-[#101323]">
-              Delete slide {index + 1}?
+              删除幻灯片 {index + 1}?
             </DialogTitle>
             <DialogDescription className="pt-1 text-sm leading-6 text-[#667085]">
-              This slide will be permanently removed from the template. This
-              action cannot be undone.
+              此操作将永久从模板中移除该幻灯片，且无法撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-row border-t border-[#EAECF0] p-4 sm:justify-end sm:space-x-0">
@@ -328,7 +327,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
               className="h-10 rounded-full border border-[#E1E1E5] px-5 text-xs font-semibold text-[#344054] transition hover:bg-[#F9FAFB]"
               onClick={() => setIsDeleteDialogOpen(false)}
             >
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -336,7 +335,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
               onClick={confirmDeleteSlide}
             >
               <Trash2 className="h-4 w-4" />
-              Delete slide
+              删除幻灯片
             </button>
           </DialogFooter>
         </DialogContent>

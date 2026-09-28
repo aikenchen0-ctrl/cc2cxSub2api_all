@@ -121,6 +121,33 @@ func TestAgentRuntimeUsageIsOwnerScopedAndReturnsOnlySafeUsageFacts(t *testing.T
 	}
 }
 
+func TestSatelliteUserUsageUsesAuthenticatedKeyOwnerAndExistingUsageLogs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &agentRuntimeUsageRepo{rows: []service.UsageLog{
+		{ID: 91, UserID: 42, RequestID: "req-satellite-usage", Model: "gpt-5.5", TotalCost: .30, ActualCost: .25},
+		{ID: 92, UserID: 99, RequestID: "req-satellite-usage", Model: "must-not-leak"},
+	}}
+	handler := &GatewayHandler{usageService: service.NewUsageService(repo, nil, nil, nil)}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{UserID: 42, User: &service.User{ID: 42}})
+		c.Next()
+	})
+	router.GET("/v1/sub2api/usage", handler.SatelliteUserUsage)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/sub2api/usage?request_id=req-satellite-usage", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("satellite usage status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if repo.filters.UserID != 42 || repo.filters.RequestID != "req-satellite-usage" {
+		t.Fatalf("usage query escaped authenticated owner scope: %+v", repo.filters)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"model":"gpt-5.5"`) || strings.Contains(body, "must-not-leak") {
+		t.Fatalf("satellite usage returned an unsafe result: %s", body)
+	}
+}
+
 func TestAgentRuntimeModelPolicyUpdatesValidatedPerAgentScope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &agentProvisioningHandlerRepoStub{}

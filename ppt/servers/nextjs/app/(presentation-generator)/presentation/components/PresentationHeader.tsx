@@ -576,7 +576,7 @@ const PresentationHeader = ({
             }}
             src="/project-icon.jpg"
             data-sub2api-site-logo
-            alt="永恒PPT"
+            alt="永恒 PPT"
             className="w-10 h-10 cursor-pointer rounded-lg object-cover"
           />
           {presentationData && !isStreaming && !isEditingTitle ? (
@@ -779,7 +779,7 @@ const PresentationHeader = ({
               onClick={handleReGenerate}
               className="h-auto flex-1 rounded-none rounded-br-2xl border-l border-gray-100 px-4 py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600"
             >
-              Regenerate
+              重新生成
             </Button>
           </DialogFooter>
         </DialogContent>

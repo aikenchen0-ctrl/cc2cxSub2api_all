@@ -994,7 +994,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
     ...baseElement(raw),
     type: "chart",
     chart_type: chartType,
-    data: data.length > 0 ? data : [{ label: "Data", value: 0 }],
+    data: data.length > 0 ? data : [{ label: "数据", value: 0 }],
     title: truncateString(readString(raw.title) ?? "", 80) || null,
     title_color: readColor(readValue(raw, "title_color") ?? raw.titleColor),
     legend_color: readColor(readValue(raw, "legend_color") ?? raw.legendColor),
@@ -1173,7 +1173,7 @@ function adaptInfographicData(
           80,
         ),
       }));
-    const safeColumns = columns.length > 0 ? columns : [{ label: "Phase 1" }];
+    const safeColumns = columns.length > 0 ? columns : [{ label: "第一阶段" }];
     const rows = readArray(data, "rows")
       .map(asRecord)
       .filter((item): item is UnknownRecord => Boolean(item))
@@ -1205,7 +1205,7 @@ function adaptInfographicData(
     return {
       type,
       columns: safeColumns,
-      rows: rows.length > 0 ? rows : [{ label: "Workstream", items: [] }],
+      rows: rows.length > 0 ? rows : [{ label: "工作流", items: [] }],
     };
   }
 
@@ -1236,11 +1236,11 @@ function adaptInfographicData(
           ? items
           : type === "pyramid"
             ? [
-                { heading: "Foundation" },
-                { heading: "Efficiency" },
-                { heading: "Innovation" },
+                { heading: "基础" },
+                { heading: "效率" },
+                { heading: "创新" },
               ]
-            : [{ heading: "Milestone" }],
+            : [{ heading: "里程碑" }],
     };
   }
 
@@ -1251,24 +1251,24 @@ function adaptInfographicData(
     return {
       type,
       center_image: truncateString(readString(data.center_image) ?? "", 2000) || null,
-      items: items.length > 0 ? items : [{ heading: "Step 1" }],
+      items: items.length > 0 ? items : [{ heading: "步骤 1" }],
     };
   }
 
   if (type === "pillar_framework") {
     const items = readArray(data, "items").map(adaptInfographicTextItem).filter((item): item is NonNullable<typeof item> => Boolean(item));
-    return { type, title: truncateString(readString(data.title) ?? "Growth & Transformation Framework", 120), items: items.length > 0 ? items : [{ heading: "Customer", focus: "Experience & Value" }] };
+    return { type, title: truncateString(readString(data.title) ?? "增长与转型框架", 120), items: items.length > 0 ? items : [{ heading: "客户", focus: "体验与价值" }] };
   }
 
   if (type === "transformation_hub") {
     const items = readArray(data, "items").map(adaptInfographicTextItem).filter((item): item is NonNullable<typeof item> => Boolean(item));
-    return { type, center_label: truncateString(readString(data.center_label) ?? "Business Transformation", 120), items: items.length > 0 ? items : [{ heading: "Strategy" }, { heading: "Process" }] };
+    return { type, center_label: truncateString(readString(data.center_label) ?? "业务转型", 120), items: items.length > 0 ? items : [{ heading: "战略" }, { heading: "流程" }] };
   }
 
   if (type === "risk_matrix") {
     const items = readArray(data, "items").map(adaptInfographicTextItem).filter((item): item is NonNullable<typeof item> => Boolean(item));
-    const defaults = ["Identify", "Prioritize", "Assess", "Respond"];
-    return { type, center_label: truncateString(readString(data.center_label) ?? "RISK", 4), items: defaults.map((heading, index) => items[index] ?? { heading }) };
+    const defaults = ["识别", "排序", "评估", "应对"];
+    return { type, center_label: truncateString(readString(data.center_label) ?? "风险", 4), items: defaults.map((heading, index) => items[index] ?? { heading }) };
   }
 
   if (type === "conversion_funnel") {
@@ -1281,7 +1281,7 @@ function adaptInfographicData(
           0,
           100,
         ),
-        heading: truncateString(readString(item.heading) ?? `Stage ${index + 1}`, 80),
+        heading: truncateString(readString(item.heading) ?? `阶段 ${index + 1}`, 80),
         description: truncateString(readString(item.description) ?? "", 280) || null,
       }));
     return {
@@ -1289,7 +1289,7 @@ function adaptInfographicData(
       items:
         items.length > 0
           ? items
-          : [{ value: 50, heading: "Stage 1", description: null }],
+          : [{ value: 50, heading: "阶段 1", description: null }],
     };
   }
 
@@ -1300,12 +1300,12 @@ function adaptInfographicData(
     const evenItems = items.slice(0, items.length - (items.length % 2));
     return {
       type,
-      before_label: truncateString(readString(data.before_label) ?? "Before", 80),
-      after_label: truncateString(readString(data.after_label) ?? "After", 80),
+      before_label: truncateString(readString(data.before_label) ?? "之前", 80),
+      after_label: truncateString(readString(data.after_label) ?? "之后", 80),
       items:
         evenItems.length >= 2
           ? evenItems
-          : [{ heading: "Before" }, { heading: "After" }],
+          : [{ heading: "之前" }, { heading: "之后" }],
     };
   }
 
@@ -1313,13 +1313,13 @@ function adaptInfographicData(
     const items = readArray(data, "items")
       .map(adaptInfographicTextItem)
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
-    const defaults = ["Quick Wins", "Strategic Priorities", "Deprioritize", "Fill-ins"];
+    const defaults = ["快速见效", "战略重点", "降低优先级", "补充事项"];
     return {
       type,
-      x_axis_label: truncateString(readString(data.x_axis_label) ?? "Impact", 80),
-      y_axis_label: truncateString(readString(data.y_axis_label) ?? "Effort", 80),
-      low_label: truncateString(readString(data.low_label) ?? "Low", 40),
-      high_label: truncateString(readString(data.high_label) ?? "High", 40),
+      x_axis_label: truncateString(readString(data.x_axis_label) ?? "影响力", 80),
+      y_axis_label: truncateString(readString(data.y_axis_label) ?? "工作量", 80),
+      low_label: truncateString(readString(data.low_label) ?? "低", 40),
+      high_label: truncateString(readString(data.high_label) ?? "高", 40),
       items: defaults.map((heading, index) => items[index] ?? { heading }),
     };
   }
@@ -1328,7 +1328,7 @@ function adaptInfographicData(
     const criteria = readArray(data, "criteria")
       .map((value) => truncateString(readString(value) ?? "", 80))
       .filter(Boolean);
-    const safeCriteria = criteria.length > 0 ? criteria : ["Criterion 1"];
+    const safeCriteria = criteria.length > 0 ? criteria : ["标准 1"];
     const items = readArray(data, "items")
       .map(asRecord)
       .filter((item): item is UnknownRecord => Boolean(item))
@@ -1337,14 +1337,14 @@ function adaptInfographicData(
         const values = readArray(item, "values").map((value) => truncateString(readString(value) ?? "", 80));
         return {
           icon: normalizedIcon ?? undefined,
-          heading: truncateString(readString(item.heading) ?? `Option ${index + 1}`, 120),
+          heading: truncateString(readString(item.heading) ?? `选项 ${index + 1}`, 120),
           values: safeCriteria.map((_, valueIndex) => values[valueIndex] ?? ""),
         };
       });
     return {
       type,
       criteria: safeCriteria,
-      items: items.length > 0 ? items : [{ heading: "Option 1", values: safeCriteria.map(() => "") }],
+      items: items.length > 0 ? items : [{ heading: "选项 1", values: safeCriteria.map(() => "") }],
     };
   }
 
@@ -1355,12 +1355,12 @@ function adaptInfographicData(
       .map((item, index) => ({
         id: truncateString(readString(item.id) ?? `node-${index + 1}`, 80),
         parent_id: truncateString(readString(item.parent_id) ?? "", 80) || null,
-        heading: truncateString(readString(item.heading) ?? `Item ${index + 1}`, 120),
+        heading: truncateString(readString(item.heading) ?? `项目 ${index + 1}`, 120),
         description: truncateString(readString(item.description) ?? "", 240) || null,
       }));
     return {
       type,
-      items: items.length > 0 ? items : [{ id: "node-1", parent_id: null, heading: type === "org_chart" ? "Leader" : "Decision", description: null }],
+      items: items.length > 0 ? items : [{ id: "node-1", parent_id: null, heading: type === "org_chart" ? "负责人" : "决策", description: null }],
     };
   }
 
@@ -1371,7 +1371,7 @@ function adaptInfographicData(
     return {
       type,
       items:
-        items.length > 0 ? items : [{ heading: "Core idea", items: [] }],
+        items.length > 0 ? items : [{ heading: "核心理念", items: [] }],
     };
   }
 

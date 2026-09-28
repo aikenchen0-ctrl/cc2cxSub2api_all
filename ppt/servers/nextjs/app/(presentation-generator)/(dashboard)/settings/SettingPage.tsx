@@ -124,7 +124,7 @@ const SettingsPage = () => {
       notify.error(
         "无法保存设置",
         error?.message ||
-        `Unable to reach ${provider} with the provided API key. Please verify your settings and try again.`
+        `无法连接${provider}请使用提供的 API 密钥。请检查您的设置并重试。`
       );
       return false;
     }
@@ -169,7 +169,7 @@ const SettingsPage = () => {
       const isAuthenticated = await checkCurrentAuthStatus();
       if (!isAuthenticated) {
         requestChatGptReauth({
-          message: "Please sign in to ChatGPT again from Settings.",
+          message: "请在设置中重新登录 ChatGPT",
           source: "settings-save",
         });
         return;
@@ -179,8 +179,8 @@ const SettingsPage = () => {
       const isConnected = await checkPresentonAuthStatus();
       if (!isConnected) {
         notify.warning(
-          "请先连接永恒PPT",
-          "请先登录永恒PPT云端，再将其选为文本提供商。"
+          "请先连接永恒 PPT",
+          "请先登录永恒 PPT 云端，再将其选为文本提供商"
         );
         setSelectedProvider("text-provider");
         return;
@@ -212,7 +212,7 @@ const SettingsPage = () => {
         ...prev,
         isLoading: true,
         isDisabled: true,
-        text: "Saving Configuration...",
+        text: "保存配置...",
       }));
       trackEvent(MixpanelEvent.Settings_SaveConfiguration_API_Call);
       if (
@@ -230,7 +230,7 @@ const SettingsPage = () => {
       await handleSaveLLMConfig(llmConfig);
       notify.success(
         "设置已保存",
-        "Your configuration was saved successfully."
+        "配置保存成功"
       );
       setButtonState((prev) => ({
         ...prev,
@@ -382,8 +382,8 @@ const SettingsPage = () => {
           notify.warning(
             "需要配置服务",
             !llmConfig.LLM
-              ? "Choose and configure a text provider before opening other pages."
-              : "Complete the selected text provider configuration and save it before leaving Settings.",
+              ? "选择并配置文本提供商后再打开其他页面"
+              : "完成所选文本提供商的配置并保存后离开设置",
             { id: "provider-setup-required" }
           );
           e.preventDefault();
@@ -426,7 +426,7 @@ const SettingsPage = () => {
           <div className="sticky right-0 top-0 z-40 mb-4 bg-white/90 py-[28px] backdrop-blur">
             <div className="flex  gap-3 items-center ">
               <h3 className=" text-[28px] tracking-[-0.84px] font-unbounded font-normal text-black flex items-center gap-2">
-                Settings
+                设置
               </h3>
               <p className="text-[10px] px-2.5 py-0.5 rounded-[50px] text-[#7A5AF8] border border-[#EDEEEF]  font-medium ">
                 {textSummary} · {imageSummary} · {webSearchSummary}
@@ -441,7 +441,7 @@ const SettingsPage = () => {
             >
               <p className="text-sm font-semibold">请选择文本服务商以继续</p>
               <p className="mt-1 text-xs leading-5">
-                永恒PPT云端连接已断开。请在下方选择文本提供商并保存配置后再打开其他页面。
+                永恒 PPT 云端连接已断开。请在下方选择文本提供商并保存配置后再打开其他页面
               </p>
             </div>
           )}
@@ -459,7 +459,7 @@ const SettingsPage = () => {
               <div>
                 <h4 className="font-unbounded text-lg font-normal text-black">退出登录</h4>
                 <p className="mt-2 font-syne text-sm leading-relaxed text-[#494A4D]">
-                  End your session on this deployment. You will need to sign in again to use the app and access the API.
+                  在此部署中结束会话。您将需要重新登录才能使用应用程序并访问 API
                 </p>
               </div>
               <LogoutButton

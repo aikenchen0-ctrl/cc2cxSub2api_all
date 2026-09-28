@@ -112,7 +112,7 @@ type SlideAddedOptions = {
 
 const DEFAULT_LOADING_STATE: LoadingState = {
   isLoading: true,
-  message: "Loading presentation",
+  message: "正在加载演示文稿",
   showProgress: false,
   duration: 0,
   extra_info: "",
@@ -120,7 +120,7 @@ const DEFAULT_LOADING_STATE: LoadingState = {
 
 const STREAM_LOADING_STATE: LoadingState = {
   isLoading: true,
-  message: "Creating your presentation",
+  message: "正在为您创建演示文稿",
   showProgress: true,
   duration: 90,
   extra_info: "This can take a few minutes depending on slide count.",
@@ -810,7 +810,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           <AlertCircle className="w-16 h-16 mb-4 text-red-500" />
           <h2 className="text-xl font-semibold mb-2">出了点问题</h2>
           <p className="text-center mb-4">
-            We couldn't load your presentation. Please try again.
+            无法加载您的演示文稿。请重试。
           </p>
           <div className="flex gap-2 justify-center items-center">
             <Button
@@ -822,7 +822,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                 window.location.reload();
               }}
             >
-              Refresh Page
+              刷新页面
             </Button>
             <Button
               onClick={() => {
@@ -833,7 +833,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                 router.push("/upload");
               }}
             >
-              Go to Upload
+              前往上传
             </Button>
           </div>
         </div>
@@ -889,7 +889,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                 <span>导航方式：</span>
                 <span
                   className="flex items-center gap-1"
-                  aria-label="arrow keys"
+                  aria-label="方向键"
                 >
                   {NAVIGATION_HINT_KEYS.map((key) => (
                     <kbd
@@ -903,7 +903,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                 <span>或使用左侧缩略图</span>
                 <button
                   type="button"
-                  aria-label="Dismiss navigation hint"
+                  aria-label="关闭导航提示"
                   onClick={dismissNavigationHint}
                   className="pointer-events-auto ml-1 flex h-7 w-7 items-center justify-center rounded-full text-[#667085] transition hover:bg-[#F0F1F4] hover:text-[#101323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]"
                 >
@@ -967,12 +967,12 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
             }}
           >
             <Sparkles className="h-4 w-4 text-[#7A5AF8]" aria-hidden="true" />
-            AI Assistant
+            人工智能助手
           </button>
 
           <button
             type="button"
-            aria-label="Close AI Assistant"
+            aria-label="关闭 AI 助手"
             onClick={closeMobileAssistant}
             className={cn(
               "inset-0 z-[60] bg-black/35 xl:hidden",
@@ -983,7 +983,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           <div
             id="presentation-mobile-assistant"
             role={isMobileAssistantOpen ? "dialog" : undefined}
-            aria-label={isMobileAssistantOpen ? "AI Assistant" : undefined}
+            aria-label={isMobileAssistantOpen ? "人工智能助手" : undefined}
             aria-modal={isMobileAssistantOpen ? true : undefined}
             className={cn(
               "h-screen w-[calc(100vw-16px)] max-w-[375px] shrink-0 flex-col bg-white shadow-[-12px_0_32px_rgba(16,24,40,0.18)] transition-[width] duration-200 xl:relative xl:z-auto xl:h-full xl:max-w-none xl:self-start xl:border-l xl:border-[#EDEEEF] xl:shadow-none",
@@ -996,7 +996,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
             {isRightPanelOpen ? (
               <button
                 type="button"
-                aria-label="Close tools panel"
+                aria-label="关闭工具面板"
                 onClick={() => setIsRightPanelOpen(false)}
                 className="absolute -left-[10px] top-1/2 z-[80] hidden h-[36px] w-[16px] -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#E8E5FF] bg-[#FEFEFF] text-[#6938EF] shadow-[0_10px_26px_rgba(52,48,96,0.10)] transition-[border-color,box-shadow,color] hover:border-[#D9D6FE] hover:text-[#5925DC] hover:shadow-[0_12px_30px_rgba(52,48,96,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] focus-visible:ring-offset-2 xl:flex"
               >
@@ -1010,12 +1010,12 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#EDEEEF] px-4 xl:hidden">
               <div className="flex items-center gap-2 text-sm font-semibold text-[#101323]">
                 <Sparkles className="h-4 w-4 text-[#7A5AF8]" aria-hidden="true" />
-                AI Assistant
+                人工智能助手
               </div>
               <button
                 ref={mobileAssistantCloseRef}
                 type="button"
-                aria-label="Close AI Assistant"
+                aria-label="关闭 AI 助手"
                 onClick={closeMobileAssistant}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-[#667085] transition hover:bg-[#F6F6F9] hover:text-[#101323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]"
               >

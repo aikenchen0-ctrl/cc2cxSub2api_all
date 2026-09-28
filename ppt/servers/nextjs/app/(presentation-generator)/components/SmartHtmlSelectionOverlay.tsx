@@ -42,7 +42,7 @@ export default function SmartHtmlSelectionOverlay({
             style={{ top: selectionRect.top > 28 ? -22 : 2 }}
           >
             <Sparkles className="h-3 w-3" />
-            AI edit
+            AI 编辑
           </span>
         </div>
       )}

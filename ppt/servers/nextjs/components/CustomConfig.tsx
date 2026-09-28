@@ -99,13 +99,13 @@ export default function CustomConfig({
       {/* URL Input */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          OpenAI Compatible URL
+          兼容 OpenAI 的 URL
         </label>
         <div className="relative">
           <input
             type="text"
             required
-            placeholder="Enter your URL"
+            placeholder="请输入您的 URL"
             className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             value={customLlmUrl}
             onChange={(e) => onUrlChange(e.target.value)}
@@ -116,13 +116,13 @@ export default function CustomConfig({
       {/* API Key Input */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          OpenAI Compatible API Key
+          兼容 OpenAI 的 API 密钥
         </label>
         <div className="relative">
           <input
             type="text"
             required
-            placeholder="Enter your API Key"
+            placeholder="输入您的 API 密钥"
             className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             value={customLlmApiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
@@ -144,10 +144,10 @@ export default function CustomConfig({
             {customModelsLoading ? (
               <div className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Checking for models...
+                正在查找模型...
               </div>
             ) : (
-              "Check for available models"
+              "检查可用模型"
             )}
           </button>
         </div>
@@ -157,7 +157,7 @@ export default function CustomConfig({
       {customModelsChecked && customModels.length === 0 && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
-            No models found. Please make sure your API key is valid and has access to models.
+            未找到模型。请确保您的 API 密钥有效且有权访问模型。
           </p>
         </div>
       )}
@@ -167,12 +167,11 @@ export default function CustomConfig({
         <div className="mb-4">
           <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-800">
-              <strong>重要提示：</strong> 仅支持具有结构化
-              JSON schema output support will work reliably.
+              <strong>重要提示：</strong> 仅支持具有结构化 JSON schema 输出，否则将不可靠工作。
             </p>
           </div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Model
+            选择模型
           </label>
           <div className="w-full">
             <Popover
@@ -187,7 +186,7 @@ export default function CustomConfig({
                   className="w-full h-12 px-4 py-4 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors hover:border-gray-400 justify-between"
                 >
                   <span className="text-sm font-medium text-gray-900">
-                    {customModel || "Select a model"}
+                    {customModel || "选择一个模型"}
                   </span>
                   <ChevronsUpDown className="w-4 h-4 text-gray-500" />
                 </Button>
@@ -236,7 +235,7 @@ export default function CustomConfig({
       <div>
         <div className="flex items-center justify-between mb-4 bg-green-50 p-2 rounded-sm">
           <label className="text-sm font-medium text-gray-700">
-            Disable Thinking
+            禁用思考
           </label>
           <Switch
             checked={disableThinking}
@@ -245,7 +244,7 @@ export default function CustomConfig({
         </div>
         <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
           <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-          If enabled, Thinking will be disabled.
+          如果启用，将禁用思考功能。
         </p>
       </div>
     </div >

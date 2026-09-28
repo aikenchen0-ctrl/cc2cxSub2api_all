@@ -103,7 +103,7 @@ export class DashboardApi {
       console.error("Error deleting presentation:", error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : "Failed to delete presentation",
+        message: error instanceof Error ? error.message : "删除演示文稿失败",
       };
     }
   }

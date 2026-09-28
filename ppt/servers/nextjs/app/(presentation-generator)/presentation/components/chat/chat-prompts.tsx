@@ -71,7 +71,7 @@ export const suggestions: {
         </defs>
       </svg>
     ),
-    suggestion: "Improve this slide content",
+    suggestion: "优化此幻灯片的内容",
   },
   {
     id: "rewrite",
@@ -86,7 +86,7 @@ export const suggestions: {
         />
       </svg>
     ),
-    suggestion: "Rewrite this content professionally",
+    suggestion: "以专业表达重写此内容",
   },
   {
     id: "notes",
@@ -103,93 +103,93 @@ export const suggestions: {
 ];
 
 export const outlineQuickPrompts = [
-  "Expand outline",
-  "Shorten outline",
-  "Reorder sections",
-  "Merge similar slides",
-  "Split large sections",
-  "Improve conclusion",
-  "Improve introduction",
+  "扩展大纲",
+  "精简大纲",
+  "重新排列章节",
+  "合并相似幻灯片",
+  "拆分较长章节",
+  "优化结论",
+  "优化开场",
 ];
 
 export const presentationQuickPrompts = [
   "创建执行摘要",
-  "Strengthen the story flow",
+  "增强叙事逻辑",
   "添加数据和引用",
   "创建演讲者备注",
 ];
 
 export const templateV2QuickPrompts = [
-  "Improve this slide's layout",
-  "Rewrite this slide for executives",
+  "优化此幻灯片版式",
+  "面向管理层重写此幻灯片",
   "添加辅助视觉素材",
-  "Make the deck visually consistent",
+  "统一整套演示文稿的视觉风格",
   "添加数据和来源引用",
   "为此页面创建演讲者备注",
 ];
 
 export const editorQuickPrompts = [
-  "Rewrite for executives",
-  "Improve slide layout",
+  "面向管理层重写",
+  "优化幻灯片版式",
   "添加数据和引用",
-  "Create speaker notes",
-  "Make the deck consistent",
+  "创建演讲者备注",
+  "统一整套演示文稿",
 ];
 
 export const outlineEditorQuickPrompts = [
-  "Strengthen the story flow",
-  "Make the outline concise",
-  "Reorder the sections",
-  "Merge similar slides",
-  "Improve the conclusion",
+  "增强叙事逻辑",
+  "精简大纲",
+  "重新排列章节",
+  "合并相似幻灯片",
+  "优化结论",
 ];
 
 export const quickPromptGroups = [
   {
-    label: "Popular",
+    label: "热门",
     prompts: [
-      "Make it shorter",
-      "Make this smaller",
+      "缩短内容",
+      "缩小此元素",
   "生成新图片并替换当前图片",
     ],
   },
   {
     label: "添加数据",
-    prompts: ["Add data and citations", "Add a chart", "Add a table"],
+    prompts: ["添加数据和引用", "添加图表", "添加表格"],
   },
   {
     label: "添加视觉素材",
     prompts: [
-      "Generate a new image and replace this one",
-      "Add a chart",
-      "Add a table",
+      "生成新图片并替换当前图片",
+      "添加图表",
+      "添加表格",
     ],
   },
 ];
 
 export const outlineQuickPromptGroups = [
   {
-    label: "Popular",
+    label: "热门",
     prompts: [
-      "Make the outline shorter",
-      "Expand the outline",
-      "Strengthen the story flow",
+      "精简大纲",
+      "扩展大纲",
+      "增强叙事逻辑",
     ],
   },
   {
-    label: "Structure",
+    label: "结构",
     prompts: [
-      "Reorder the sections",
-      "Merge similar slides",
-      "Split large sections",
+      "重新排列章节",
+      "合并相似幻灯片",
+      "拆分较长章节",
     ],
   },
   {
-    label: "Refine Content",
+    label: "润色内容",
     prompts: [
-      "Rewrite for executives",
-      "Improve the introduction",
-      "Improve the conclusion",
+      "面向管理层重写",
+      "优化开场",
+      "优化结论",
     ],
   },
 ];

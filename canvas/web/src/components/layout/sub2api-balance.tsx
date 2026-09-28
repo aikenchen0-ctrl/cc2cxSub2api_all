@@ -13,6 +13,8 @@ const money = new Intl.NumberFormat("zh-CN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
 });
+const balanceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatBalance = (value: number) => `￥${balanceFormat.format(value)}`;
 
 export function Sub2APIBalance() {
     const token = useUserStore((state) => state.token);
@@ -91,10 +93,10 @@ export function Sub2APIBalance() {
                 aria-label="查看 Sub2API 账户余额并前往充值"
                 title="Sub2API 账户余额"
             >
-                <span>余额</span>
                 <span className={insufficient ? "font-semibold tabular-nums text-red-600 dark:text-red-400" : "font-semibold tabular-nums"}>
-                    {balance === null ? "--" : money.format(balance)}
+                    {balance === null ? "￥--" : formatBalance(balance)}
                 </span>
+                <span>充值</span>
             </button>
             {dialogOpen ? (
                 <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/55 p-5 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}>

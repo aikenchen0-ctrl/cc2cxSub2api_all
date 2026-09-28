@@ -122,7 +122,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     </div>
                     <div className="flex-1">
                       <h3 className="text-[#4C4C4C] text-sm font-medium line-clamp-1"> {selectedFile.name}</h3>
-                      <p className="text-xs font-normal text-[#808080] tracking-[-0.12px]">Presentation ( {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)</p>
+                      <p className="text-xs font-normal text-[#808080] tracking-[-0.12px]">演示文稿（ {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)</p>
                     </div>
 
                   </div>
@@ -144,7 +144,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                       <p className="text-sm font-medium text-[#9A9AA6] tracking-[-0.1px]">处理中</p>
                       {slides.length > 0 ? (
                         <p className="text-sm font-medium text-[#9A9AA6] tracking-[-0.1px]">
-                          {completedSlides}/{slides.length} Slides
+                          {completedSlides}/{slides.length} 幻灯片
                         </p>
                       ) : null}
                       <style jsx>{`
@@ -186,8 +186,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         {isProcessingPptx
                           ? processingLabel
                           : !selectedFile
-                            ? "Select a PPTX file"
-                            : "Check Fonts"}
+                            ? "选择 PPTX 文件"
+                            : "检查字体"}
                         <ChevronRight className="w-3.5 h-3.5 text-black" />
                       </button>
                     </div>
@@ -217,7 +217,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8.5" cy="8.17041" r="4.5" fill="#EBE9FE" />
             </svg>
-            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">5min Generation</p>
+            <p className="md:text-sm text-[10px] font-normal text-[#3A3A3A] ">5 分钟生成</p>
           </li>
         </ul>
 

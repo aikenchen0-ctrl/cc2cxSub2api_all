@@ -78,6 +78,12 @@ English
 {language}
 
 {slide_number_section}
+# Required Structured Output:
+Generate a complete slide payload matching this schema. This is a real
+presentation-generation request, including for title or divider slides whose
+source outline may be only a few words.
+{response_schema}
+
 # SLIDE CONTENT: START
 {content}
 # SLIDE CONTENT: END
@@ -156,12 +162,20 @@ def _get_slide_number_section(slide_number: Optional[int]) -> str:
 
 
 def get_user_prompt(
-    outline: str, language: Optional[str], slide_number: Optional[int] = None
+    outline: str,
+    language: Optional[str],
+    slide_number: Optional[int] = None,
+    response_schema: Optional[dict] = None,
 ):
     return SLIDE_CONTENT_USER_PROMPT.format(
         current_date_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         language=_resolve_prompt_language(language),
         slide_number_section=_get_slide_number_section(slide_number),
+        response_schema=(
+            json.dumps(response_schema, ensure_ascii=False)
+            if response_schema
+            else "Return a valid JSON object with all requested slide fields."
+        ),
         content=outline,
     )
 
@@ -187,7 +201,12 @@ def get_messages(
             ),
         ),
         UserMessage(
-            content=get_user_prompt(outline, language, slide_number),
+            content=get_user_prompt(
+                outline,
+                language,
+                slide_number,
+                response_schema,
+            ),
         ),
     ]
 

@@ -118,7 +118,7 @@ func LoadConfig() (Config, error) {
 		SiteLogo:                      strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
 		BrandSync:                     envBool("AGENT_BRAND_SYNC", false),
 		AgentDisabled:                 !envBool("AGENT_ENABLED", true),
-		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", strings.HasPrefix(agentID, "agt_")),
+		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", false),
 		ProvisioningControlStaleAfter: envDuration("AGENT_PROVISIONING_CONTROL_STALE_AFTER", 90*time.Second),
 		BillingMode:                   firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "owner_upstream"),
 		OwnerMainUserID:               strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
@@ -166,19 +166,12 @@ func LoadConfig() (Config, error) {
 	if cfg.PaymentOrderTTL <= 0 {
 		return Config{}, fmt.Errorf("AGENT_PAYMENT_ORDER_TTL must be greater than zero")
 	}
-	if cfg.PaymentEnabled && strings.TrimSpace(cfg.PaymentWebhookSecret) == "" {
-		return Config{}, fmt.Errorf("AGENT_PAYMENT_WEBHOOK_SECRET is required when AGENT_PAYMENT_ENABLED=true")
-	}
-
-	if strings.HasPrefix(cfg.AgentID, "agt_") {
+	if cfg.ProvisioningControlEnabled {
 		if strings.TrimSpace(cfg.AgentDomain) == "" {
-			return Config{}, fmt.Errorf("AGENT_DOMAIN is required for managed Agent IDs")
+			return Config{}, fmt.Errorf("AGENT_DOMAIN is required when provisioning control is enabled")
 		}
 		if !managedAgentDomainPattern.MatchString(strings.ToLower(cfg.AgentDomain)) {
-			return Config{}, fmt.Errorf("AGENT_DOMAIN must be a valid DNS hostname for managed Agent IDs")
-		}
-		if !cfg.ProvisioningControlEnabled {
-			return Config{}, fmt.Errorf("AGENT_PROVISIONING_CONTROL_ENABLED cannot be disabled for a managed Agent ID")
+			return Config{}, fmt.Errorf("AGENT_DOMAIN must be a valid DNS hostname when provisioning control is enabled")
 		}
 	}
 	if cfg.AppCredential == "" {

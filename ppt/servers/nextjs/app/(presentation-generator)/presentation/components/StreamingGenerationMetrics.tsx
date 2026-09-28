@@ -32,8 +32,8 @@ export default function StreamingGenerationMetrics({
       className="hidden h-[38px] shrink-0 items-center rounded-[80px] border border-[#E4E2EB] bg-[#F6F6F9] px-3 font-syne sm:flex"
       title={
         metrics.estimated
-          ? "Live token counts are estimated until the provider reports final usage."
-          : `Final usage from ${metrics.model || "the selected model"}`
+          ? "提供商报告最终用量前，令牌计数仅为估算值"
+          : `来自最终用量${metrics.model || "the selected model"}`
       }
     >
       <div className="flex items-center gap-2 text-[11px] font-semibold text-[#555766]">
@@ -44,11 +44,11 @@ export default function StreamingGenerationMetrics({
           }`}
         />
         <span className="whitespace-nowrap">
-          In {formatTokens(metrics.input_tokens, metrics.estimated)}
+          进入 {formatTokens(metrics.input_tokens, metrics.estimated)}
         </span>
         <span className="h-3.5 w-px bg-[#D8D8DF]" aria-hidden="true" />
         <span className="whitespace-nowrap">
-          Out {formatTokens(metrics.output_tokens, metrics.estimated)}
+          退出 {formatTokens(metrics.output_tokens, metrics.estimated)}
         </span>
         {metrics.supports_thinking ? (
           <>
@@ -59,11 +59,11 @@ export default function StreamingGenerationMetrics({
               }`}
               title={
                 thinkingPending
-                  ? "Reasoning is enabled; waiting for thinking-token usage."
+                  ? "已启用推理；等待思考令牌使用"
                   : undefined
               }
             >
-              Think{" "}
+              思考{" "}
               {formatTokens(
                 metrics.thinking_tokens,
                 metrics.thinking_tokens_estimated

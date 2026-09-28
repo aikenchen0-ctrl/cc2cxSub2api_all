@@ -808,12 +808,12 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-800 text-base font-semibold">
 
-                        Schema Editor
+                        模式编辑器
                     </div>
                     <div className="flex items-center gap-2">
                         {hasChanges && (
                             <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-600 rounded border border-amber-200">
-                                Unsaved
+                                未保存
                             </span>
                         )}
                         <Button
@@ -823,7 +823,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                             className="h-7 px-3 text-[11px] bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             <Save className="w-3 h-3 mr-1" />
-                            Save
+                            保存
                         </Button>
                         <button
                             onClick={handleCancel}
@@ -845,7 +845,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                         <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
                                 <span className="text-lg font-medium text-[#111827]">
-                                    Character Limits
+                                    字符限制
                                 </span>
                                 <span className="text-sm px-1.5 py-0.5 bg-gray-50 text-gray-700 rounded">
                                     {fields.length}
@@ -862,12 +862,12 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                     }}
                                     className="text-[10px] font-medium text-gray-400 hover:text-violet-600 transition-colors"
                                 >
-                                    {areAllCollapsed ? 'Expand all' : 'Collapse all'}
+                                    {areAllCollapsed ? '展开全部' : '收起全部'}
                                 </button>
                             )}
                         </div>
                         <p className="text-sm text-gray-600 py-1">
-                            Set min/max character limits for each field. This controls how much text AI generates for your slide.
+                            为每个字段设置最小/最大字符限制。这控制 AI 为您的幻灯片生成的文本量。
                         </p>
                     </div>
 
@@ -934,7 +934,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
                                                     {isHighlighted && (
                                                         <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded">
                                                             <MousePointer2 className="w-2.5 h-2.5" />
-                                                            clicked
+                                                            已点击
                                                         </span>
                                                     )}
                                                 </div>

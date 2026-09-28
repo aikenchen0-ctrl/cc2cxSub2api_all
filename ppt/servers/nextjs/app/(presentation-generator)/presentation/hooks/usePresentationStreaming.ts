@@ -461,7 +461,7 @@ export const usePresentationStreaming = (
                     index: slideIndex,
                     layout: "smart-html",
                     layout_group: "smart-html",
-                    content: { title: `Slide ${slideIndex + 1}` },
+                    content: { title: `幻灯片${slideIndex + 1}` },
                     html_content: html,
                   };
             const normalizedSlide = normalizeBackendAssetUrls(incomingSlide);

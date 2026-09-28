@@ -147,6 +147,7 @@ type UpstreamModelSyncError struct {
 	Kind       UpstreamModelSyncErrorKind
 	Message    string
 	StatusCode int
+	Code       string
 	Err        error
 }
 
@@ -212,15 +213,16 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	liveListAvailable := err == nil
 	if err != nil {
 		configuredModels := configuredUpstreamModelsForCapabilitySync(account)
-		if !upstreamModelListEndpointUnsupported(err) || len(configuredModels) == 0 {
+		if (!upstreamModelListEndpointUnsupported(err) && !upstreamModelListInsufficientBalance(err)) || len(configuredModels) == 0 {
 			return nil, err
 		}
 		models = configuredModels
 		body = nil
-		slog.Info("upstream model list endpoint unavailable; using configured models for capability sync",
+		slog.Info("upstream model list unavailable; using configured models for capability sync",
 			"account_id", upstreamModelSyncAccountID(account),
 			"platform", upstreamModelSyncPlatform(account),
 			"status_code", upstreamModelSyncStatusCode(err),
+			"error_code", upstreamModelSyncErrorCode(err),
 			"model_count", len(models),
 		)
 	}
@@ -328,6 +330,18 @@ func upstreamModelSyncStatusCode(err error) int {
 func upstreamModelListEndpointUnsupported(err error) bool {
 	statusCode := upstreamModelSyncStatusCode(err)
 	return statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed
+}
+
+func upstreamModelSyncErrorCode(err error) string {
+	var syncErr *UpstreamModelSyncError
+	if errors.As(err, &syncErr) {
+		return strings.TrimSpace(syncErr.Code)
+	}
+	return ""
+}
+
+func upstreamModelListInsufficientBalance(err error) bool {
+	return strings.EqualFold(upstreamModelSyncErrorCode(err), "INSUFFICIENT_BALANCE")
 }
 
 func configuredUpstreamModelsForCapabilitySync(account *Account) []string {
@@ -763,10 +777,15 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		var errorPayload struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(body, &errorPayload)
 		return nil, nil, &UpstreamModelSyncError{
 			Kind:       UpstreamModelSyncErrorUpstream,
 			Message:    fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
 			StatusCode: resp.StatusCode,
+			Code:       strings.TrimSpace(errorPayload.Code),
 			Err:        fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
 		}
 	}

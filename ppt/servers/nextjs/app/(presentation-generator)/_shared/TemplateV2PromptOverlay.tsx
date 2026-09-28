@@ -103,7 +103,7 @@ export function TemplateV2PromptOverlay({
     <div className="pointer-events-none absolute inset-0 z-20 font-syne">
       <div className="absolute inset-0 bg-white" aria-hidden="true" />
       <div className="absolute left-[76px] top-[76px] text-[44px] font-medium leading-none text-[#191919]/[0.04]">
-        New page
+        新建页面
       </div>
       <div
         aria-hidden="true"
@@ -146,7 +146,7 @@ export function TemplateV2PromptOverlay({
               htmlFor={inputId}
               className="block text-[18px] font-normal leading-[22px] text-[#333333]"
             >
-              Write prompt
+              撰写提示词
             </label>
             <input
               id={inputId}
@@ -154,7 +154,7 @@ export function TemplateV2PromptOverlay({
               disabled={submitting}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Start with your idea... we'll handle the slides"
+              placeholder="从您的想法开始……我们将处理幻灯片"
               className="mt-3 h-8 w-full border-0 bg-transparent p-0 text-[18px] font-normal leading-8 text-[#191919] outline-none placeholder:text-[#9B9BA1] disabled:cursor-wait"
             />
           </div>

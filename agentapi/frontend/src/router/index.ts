@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAgentSession } from '@/agent/session'
+import { applyPageTitle } from '@/agent/branding'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
@@ -27,7 +28,7 @@ router.beforeEach(async (to) => {
   if (!auth.initialized) {
     await auth.checkAuth()
   }
-  document.title = `${String(to.meta.title || 'AgentAPI')} · AgentAPI`
+  applyPageTitle(String(to.meta.title || ''))
   if (to.meta.requiresAuth !== false && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }

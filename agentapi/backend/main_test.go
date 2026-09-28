@@ -38,21 +38,22 @@ func makeSSOTicket(t *testing.T, secret string, payload map[string]any) string {
 func testServer(t *testing.T, upstream *httptest.Server) *Server {
 	t.Helper()
 	cfg := Config{
-		Addr:                     ":0",
-		DatabasePath:             ":memory:",
-		MainAPIBaseURL:           upstream.URL + "/api/v1",
-		MainModelBaseURL:         upstream.URL + "/v1",
-		RuntimeControlCredential: testRuntimeControlCredential,
-		AppCredential:            "app-secret",
-		SatelliteSlug:            "agentapi",
-		SessionSecret:            "session-secret",
-		CookieName:               "agentapi_session",
-		AgentID:                  "agent-test",
-		AgentName:                "Agent Test",
-		SiteName:                 "Agent Test",
-		OwnerMainUserID:          "42",
-		MaxRequestCostCents:      100,
-		MainRequestTimeout:       0,
+		Addr:                       ":0",
+		DatabasePath:               ":memory:",
+		MainAPIBaseURL:             upstream.URL + "/api/v1",
+		MainModelBaseURL:           upstream.URL + "/v1",
+		RuntimeControlCredential:   testRuntimeControlCredential,
+		AppCredential:              "app-secret",
+		SatelliteSlug:              "agentapi",
+		SessionSecret:              "session-secret",
+		CookieName:                 "agentapi_session",
+		AgentID:                    "agent-test",
+		AgentName:                  "Agent Test",
+		SiteName:                   "Agent Test",
+		OwnerMainUserID:            "42",
+		MaxRequestCostCents:        100,
+		MainRequestTimeout:         0,
+		ProvisioningControlEnabled: false,
 	}
 	// http.Client treats a zero timeout as no timeout; use the normal value for
 	// the production client path.
@@ -67,9 +68,23 @@ func testServer(t *testing.T, upstream *httptest.Server) *Server {
 	if _, err := store.UpsertUser(cfg.AgentID, "42", "u@example.com", "User"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{cfg: cfg, store: store, main: NewMainClient(cfg), webDir: "", settleByUser: map[string]*sync.Mutex{}}
+	legacyClientConfig := cfg
+	legacyClientConfig.ProvisioningControlEnabled = true
+	s := &Server{cfg: cfg, store: store, main: NewMainClient(legacyClientConfig), webDir: "", settleByUser: map[string]*sync.Mutex{}}
 	t.Cleanup(func() { _ = store.Close() })
 	return s
+}
+
+func enableTestPayment(t *testing.T, server *Server, secret string) PaymentConfig {
+	t.Helper()
+	updated, err := server.store.UpdatePaymentConfig(server.cfg.AgentID, PaymentConfig{
+		Enabled: true, Provider: "manual", Currency: "CNY", WebhookSecret: secret,
+		MinAmountCents: 100, MaxAmountCents: 100000, OrderTTLSeconds: int64((30 * time.Minute) / time.Second),
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return updated
 }
 
 func envelope(data any) map[string]any {
@@ -611,6 +626,7 @@ func TestReadyEndpointChecksAgentAndModelCredential(t *testing.T) {
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.ProvisioningControlEnabled = false
 	server.cfg.RuntimeControlCredential = ""
 
 	ready := httptest.NewRecorder()
@@ -774,6 +790,7 @@ func TestAgentAdminModelPolicyFiltersDiscoveryAndBlocksDisabledRequests(t *testi
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
 	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
 	if err != nil {
 		t.Fatal(err)
@@ -890,6 +907,7 @@ func TestAgentModelPolicyRemainsUnchangedWhenMainSiteScopeCannotBeConfirmed(t *t
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
 	mainControl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 	}))
@@ -961,6 +979,7 @@ func TestConcurrentModelPolicyUpdateFailureCannotRollbackConfirmedNewerPolicy(t 
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
 	server.cfg.ProvisioningControlEnabled = true
 	server.main = NewMainClient(server.cfg)
 	server.setProvisioningState("active", time.Now().UTC())
@@ -1033,13 +1052,7 @@ func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T)
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.cfg.PaymentEnabled = true
-	server.cfg.PaymentProvider = "manual"
-	server.cfg.PaymentCurrency = "CNY"
-	server.cfg.PaymentWebhookSecret = "payment-secret"
-	server.cfg.PaymentMinCents = 100
-	server.cfg.PaymentMaxCents = 100000
-	server.cfg.PaymentOrderTTL = 30 * time.Minute
+	payment := enableTestPayment(t, server, "payment-secret")
 
 	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"u@example.com"}`), "", "", time.Now().Add(sessionTTL))
 	if err != nil {
@@ -1076,7 +1089,7 @@ func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T)
 		t.Fatalf("bad signature status=%d body=%s", badResponse.Code, badResponse.Body.String())
 	}
 
-	mac := hmac.New(sha256.New, []byte(server.cfg.PaymentWebhookSecret))
+	mac := hmac.New(sha256.New, []byte(payment.WebhookSecret))
 	_, _ = mac.Write(body)
 	valid := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhook", bytes.NewReader(body))
 	valid.Header.Set("X-Agent-Payment-Event-ID", "evt-1")
@@ -1109,6 +1122,57 @@ func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T)
 	if duplicateResponse.Code != http.StatusOK || !strings.Contains(duplicateResponse.Body.String(), `"duplicate":true`) {
 		t.Fatalf("duplicate webhook was not idempotent: status=%d body=%s", duplicateResponse.Code, duplicateResponse.Body.String())
 	}
+	replayedUser, err := server.store.User(server.cfg.AgentID, "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedUser.BalanceCents != 100 {
+		t.Fatalf("duplicate webhook credited the user twice: %+v", replayedUser)
+	}
+}
+
+func TestRechargeWebhookRejectsAnotherInstancesMerchant(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	payment := enableTestPayment(t, server, "merchant-isolation-secret")
+	payment.MerchantID = "merchant-a"
+	updated, err := server.store.UpdatePaymentConfig(server.cfg.AgentID, payment, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payment = updated
+
+	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "payer@example.com", "Payer"); err != nil {
+		t.Fatal(err)
+	}
+	order, _, err := server.store.CreateRechargeOrder(server.cfg.AgentID, "43", 100, "CNY", payment.Provider, "", "merchant-isolation-order", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(fmt.Sprintf(`{"order_no":%q,"status":"paid","amount_cents":100,"currency":"CNY","merchant_id":"merchant-b","provider_trade_no":"trade-other-merchant"}`, order.OrderNo))
+	mac := hmac.New(sha256.New, []byte(payment.WebhookSecret))
+	_, _ = mac.Write(body)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhook", bytes.NewReader(body))
+	request.Header.Set("X-Agent-Payment-Event-ID", "evt-other-merchant")
+	request.Header.Set("X-Agent-Payment-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "PAYMENT_MERCHANT_MISMATCH") {
+		t.Fatalf("merchant mismatch status=%d body=%s", response.Code, response.Body.String())
+	}
+	stored, err := server.store.RechargeOrder(server.cfg.AgentID, order.OrderNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != "pending" || upstreamCalls != 0 {
+		t.Fatalf("wrong merchant changed payment state: order=%+v upstream_calls=%d", stored, upstreamCalls)
+	}
 }
 
 func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T) {
@@ -1126,13 +1190,7 @@ func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T)
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.cfg.PaymentEnabled = true
-	server.cfg.PaymentProvider = "manual"
-	server.cfg.PaymentCurrency = "CNY"
-	server.cfg.PaymentWebhookSecret = "payment-secret"
-	server.cfg.PaymentMinCents = 100
-	server.cfg.PaymentMaxCents = 100000
-	server.cfg.PaymentOrderTTL = 30 * time.Minute
+	payment := enableTestPayment(t, server, "payment-secret")
 	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"u@example.com"}`), "", "", time.Now().Add(sessionTTL))
 	if err != nil {
 		t.Fatal(err)
@@ -1155,7 +1213,7 @@ func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T)
 	}
 	order := createdEnvelope.Data.Order
 	body := []byte(fmt.Sprintf(`{"order_no":%q,"status":"paid","amount_cents":100,"currency":"CNY","provider_trade_no":"trade-pending"}`, order.OrderNo))
-	mac := hmac.New(sha256.New, []byte(server.cfg.PaymentWebhookSecret))
+	mac := hmac.New(sha256.New, []byte(payment.WebhookSecret))
 	_, _ = mac.Write(body)
 	webhook := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhook", bytes.NewReader(body))
 	webhook.Header.Set("X-Agent-Payment-Event-ID", "evt-pending")
@@ -1264,13 +1322,16 @@ func TestModelRelayUsesSessionIdentityAndKeepsOwnerBilling(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
+		case "/v1/sub2api/balance":
+			if r.Header.Get("Authorization") != "Bearer app-secret" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "99" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
+				t.Errorf("ordinary owner balance headers = %v", r.Header)
+			}
 			adminReads++
 			balance := 10.0
 			if adminReads > 1 {
 				balance = 9.0
 			}
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 99, "email": "owner@example.com", "balance": balance}))
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": balance})
 		case "/v1/chat/completions":
 			modelHeader = r.Header.Clone()
 			w.Header().Set("Content-Type", "application/json")
@@ -1301,8 +1362,8 @@ func TestModelRelayUsesSessionIdentityAndKeepsOwnerBilling(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("relay status=%d body=%s", response.Code, response.Body.String())
 	}
-	if modelHeader.Get("X-Sub2API-On-Behalf-Of") != "42" {
-		t.Fatalf("upstream did not receive the mapped session identity: %v", modelHeader)
+	if modelHeader.Get("X-Sub2API-On-Behalf-Of") != "99" {
+		t.Fatalf("upstream did not receive the configured Owner billing identity: %v", modelHeader)
 	}
 	user, err := server.store.User(server.cfg.AgentID, "42")
 	if err != nil {
@@ -1324,16 +1385,16 @@ func TestModelRelayUsesSessionIdentityAndKeepsOwnerBilling(t *testing.T) {
 func TestModelRelayUsesRequestUsageInsteadOfSharedOwnerBalanceDelta(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
+		case "/v1/sub2api/balance":
 			// The owner balance includes an unrelated external charge after the
 			// request. It must not become this proxy user's usage.
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 99, "balance": 9.0}))
-		case "/api/v1/agent-runtime/usage":
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{{
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 9.0})
+		case "/v1/sub2api/usage":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
 				"id": 700, "request_id": "usage-authoritative", "model": "gpt-5.5", "actual_cost": 0.25, "total_cost": 0.31,
 				"input_tokens": 1000, "output_tokens": 25, "input_cost": 0.000001234, "upstream_model": "provider-gpt-5.5",
 				"ip_address": "192.0.2.123", "user": map[string]any{"email": "private@example.com"},
-			}}}))
+			}}}})
 		case "/v1/chat/completions":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ok"})
 		default:
@@ -1367,7 +1428,7 @@ func TestModelRelayUsesRequestUsageInsteadOfSharedOwnerBalanceDelta(t *testing.T
 	if err != nil || len(usage) != 1 || usage[0].ActualCents != 25 || usage[0].RequestID != "usage-authoritative" || usage[0].UsageID != "700" {
 		t.Fatalf("authoritative usage was not applied: %+v err=%v", usage, err)
 	}
-	if usage[0].Model != "gpt-5.5" || usage[0].Source != "sub2api_owner_runtime_usage" || usage[0].InputTokens != 1000 || usage[0].OutputTokens != 25 || usage[0].InputCostNanos != 1234 || usage[0].TotalCostNanos != 310_000_000 || usage[0].ActualCostNanos != 250_000_000 || usage[0].UpstreamModel != "provider-gpt-5.5" {
+	if usage[0].Model != "gpt-5.5" || usage[0].Source != "sub2api_owner_usage" || usage[0].InputTokens != 1000 || usage[0].OutputTokens != 25 || usage[0].InputCostNanos != 1234 || usage[0].TotalCostNanos != 310_000_000 || usage[0].ActualCostNanos != 250_000_000 || usage[0].UpstreamModel != "provider-gpt-5.5" {
 		t.Fatalf("authoritative usage details were not stored: %+v", usage[0])
 	}
 	encodedUsage, err := json.Marshal(usage[0])
@@ -1377,22 +1438,22 @@ func TestModelRelayUsesRequestUsageInsteadOfSharedOwnerBalanceDelta(t *testing.T
 	if strings.Contains(string(encodedUsage), "192.0.2.123") || strings.Contains(string(encodedUsage), "private@example.com") || strings.Contains(string(encodedUsage), "ip_address") {
 		t.Fatalf("admin-only usage fields leaked into the AgentAPI view: %s", encodedUsage)
 	}
-	if !strings.Contains(string(encodedUsage), `"usage_source":"sub2api_owner_runtime_usage"`) || !strings.Contains(string(encodedUsage), `"input_tokens":1000`) || strings.Contains(string(encodedUsage), `"MainUsageSnapshot"`) {
+	if !strings.Contains(string(encodedUsage), `"usage_source":"sub2api_owner_usage"`) || !strings.Contains(string(encodedUsage), `"input_tokens":1000`) || strings.Contains(string(encodedUsage), `"MainUsageSnapshot"`) {
 		t.Fatalf("main usage snapshot was not flattened into the user API DTO: %s", encodedUsage)
 	}
 }
 
 func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/usage" {
+		if r.URL.Path != "/v1/sub2api/usage" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{{
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
 			"id": 701, "request_id": "pending-usage", "model": "claude-sonnet", "actual_cost": 0.12, "total_cost": 0.15,
 			"input_tokens": 80, "output_tokens": 20, "cache_read_tokens": 10, "cache_read_cost": 0.000000019,
-		}}}))
+		}}}})
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
@@ -1416,7 +1477,7 @@ func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 		t.Fatalf("read reconciled usage: %+v err=%v", usage, err)
 	}
 	item := usage[0]
-	if item.Source != "sub2api_owner_runtime_usage" || item.UsageID != "701" || item.ActualCents != 12 || item.Model != "claude-sonnet" || item.InputTokens != 80 || item.OutputTokens != 20 || item.CacheReadTokens != 10 || item.CacheReadCostNanos != 19 {
+	if item.Source != "sub2api_owner_usage" || item.UsageID != "701" || item.ActualCents != 12 || item.Model != "claude-sonnet" || item.InputTokens != 80 || item.OutputTokens != 20 || item.CacheReadTokens != 10 || item.CacheReadCostNanos != 19 {
 		t.Fatalf("reconciler lost authoritative usage fields: %+v", item)
 	}
 }
@@ -2548,6 +2609,64 @@ func TestAgentAdminCanPersistBrandingWithoutExposingOwnerFields(t *testing.T) {
 	}
 }
 
+func TestAgentAdminPaymentConfigRetainsAndClearsEncryptedSecret(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("payment config must not call upstream: %s", r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie := &http.Cookie{Name: server.cfg.CookieName, Value: sessionID}
+
+	update := func(origin, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "https://agent.example.com/api/v1/agent/admin/payment-config", strings.NewReader(body))
+		req.Header.Set("Origin", origin)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+		return rec
+	}
+
+	configured := update("https://agent.example.com", `{"enabled":true,"provider":"stripe-cn","currency":"CNY","merchant_id":"merchant-a","webhook_secret":"top-secret","min_amount_cents":100,"max_amount_cents":100000,"order_ttl_seconds":900,"checkout_url_template":"https://pay.example/checkout?order={order_no}&merchant={merchant_id}"}`)
+	if configured.Code != http.StatusOK || !strings.Contains(configured.Body.String(), `"webhook_secret_configured":true`) || strings.Contains(configured.Body.String(), "top-secret") {
+		t.Fatalf("configure payment status=%d body=%s", configured.Code, configured.Body.String())
+	}
+
+	retained := update("https://agent.example.com", `{"enabled":true,"provider":"stripe-cn","currency":"CNY","merchant_id":"merchant-b","min_amount_cents":200,"max_amount_cents":200000,"order_ttl_seconds":1200,"checkout_url_template":"https://pay.example/checkout?order={order_no}&merchant={merchant_id}"}`)
+	if retained.Code != http.StatusOK || strings.Contains(retained.Body.String(), "top-secret") {
+		t.Fatalf("retain payment secret status=%d body=%s", retained.Code, retained.Body.String())
+	}
+	stored, err := server.store.PaymentConfig(server.cfg.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.WebhookSecret != "top-secret" || stored.MerchantID != "merchant-b" {
+		t.Fatalf("payment secret was not retained safely: %+v", stored)
+	}
+
+	foreign := update("https://attacker.example", `{"enabled":false,"provider":"manual","currency":"CNY","merchant_id":"","clear_webhook_secret":true,"min_amount_cents":100,"max_amount_cents":100000,"order_ttl_seconds":900,"checkout_url_template":""}`)
+	if foreign.Code != http.StatusForbidden || !strings.Contains(foreign.Body.String(), "CSRF_ORIGIN_REJECTED") {
+		t.Fatalf("foreign payment update status=%d body=%s", foreign.Code, foreign.Body.String())
+	}
+
+	cleared := update("https://agent.example.com", `{"enabled":false,"provider":"manual","currency":"CNY","merchant_id":"","clear_webhook_secret":true,"min_amount_cents":100,"max_amount_cents":100000,"order_ttl_seconds":900,"checkout_url_template":""}`)
+	if cleared.Code != http.StatusOK || !strings.Contains(cleared.Body.String(), `"webhook_secret_configured":false`) {
+		t.Fatalf("clear payment secret status=%d body=%s", cleared.Code, cleared.Body.String())
+	}
+	stored, err = server.store.PaymentConfig(server.cfg.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.WebhookSecret != "" || stored.WebhookSecretSet {
+		t.Fatalf("payment secret was not cleared: %+v", stored)
+	}
+}
+
 func TestAgentAdminAllocationSynchronizesOwnerAndAllocatesUnderOneLock(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/agent-runtime/owner" {
@@ -2618,6 +2737,7 @@ func TestAgentAdminMappedUserStatusUsesScopedRuntimeAPIAndGatesModels(t *testing
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
 	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
 		t.Fatal(err)
 	}
@@ -2694,6 +2814,35 @@ func TestAgentAdminMappedUserStatusUsesScopedRuntimeAPIAndGatesModels(t *testing
 	}
 }
 
+func TestAgentAdminMappedUserStatusIsInstanceLocalWithoutLegacyRuntimeBridge(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("ordinary instance status update must not call Sub2API: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "unexpected", http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.ProvisioningControlEnabled = false
+	server.main = NewMainClient(server.cfg)
+	server.cfg.RuntimeControlCredential = "agt_ctl_stale-value-must-not-activate-legacy-bridge"
+	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
+		t.Fatal(err)
+	}
+	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{"disabled", "active"} {
+		req := httptest.NewRequest(http.MethodPatch, "http://agent.local/api/v1/agent/admin/users/43/status", strings.NewReader(`{"status":"`+status+`"}`))
+		req.Header.Set("Origin", "http://agent.local")
+		req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"`+status+`"`) {
+			t.Fatalf("local status %s returned %d %s", status, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestAgentAdminMappedUserDisableRemainsLocallyBlockedWhenMainUpdateFails(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/agent-runtime/users/43/status" || r.Method != http.MethodPatch {
@@ -2704,6 +2853,7 @@ func TestAgentAdminMappedUserDisableRemainsLocallyBlockedWhenMainUpdateFails(t *
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
+	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
 	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
 		t.Fatal(err)
 	}

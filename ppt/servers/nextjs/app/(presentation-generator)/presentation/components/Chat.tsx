@@ -186,8 +186,8 @@ const buildMessageContextTags = ({
   if (typeof currentSlide === "number") {
     tags.push({
       id: "slide",
-      label: `Slide ${currentSlide + 1}`,
-      title: `Slide ${currentSlide + 1}`,
+      label: `幻灯片${currentSlide + 1}`,
+      title: `幻灯片${currentSlide + 1}`,
     });
   }
   if (templateTarget) {
@@ -198,7 +198,7 @@ const buildMessageContextTags = ({
     tags.push({
       id: "target",
       label,
-      title: `${label}. The selected element HTML is sent with the prompt.`,
+      title: `${label}. 选中的元素 HTML 已随提示发送。`,
     });
   }
   return tags;
@@ -236,8 +236,8 @@ const ContextTags = ({
               type="button"
               onClick={tag.onRemove}
               className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[#8069C5] transition-colors hover:bg-[#E4DFFF] hover:text-[#5235A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/40"
-              aria-label={`Remove ${tag.label} from context`}
-              title={`Remove ${tag.label} from context`}
+              aria-label={`移除${tag.label}上下文`}
+              title={`移除${tag.label}上下文`}
             >
               <X className="h-3 w-3" />
             </button>
@@ -426,8 +426,8 @@ const ConversationControls = ({
                         disabled={isBusy || isDeleting}
                         onClick={(event) => event.stopPropagation()}
                         className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#98A2B3] opacity-70 transition-colors hover:bg-white hover:text-[#344054] group-hover:opacity-100 data-[state=open]:bg-white data-[state=open]:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Conversation options for ${getConversationTitle(conversation)}`}
-                        title="Conversation options"
+                        aria-label={`对话选项为${getConversationTitle(conversation)}`}
+                        title="对话选项"
                       >
                         {isDeleting ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1330,9 +1330,9 @@ const Chat = ({
       }
       await onPresentationChanged?.();
       notify.success(
-        version === "original" ? "Original restored" : "Changes restored",
+        version === "original" ? "已还原原始版本" : "已还原的变更",
         `${preview.slideIndices.length} ${preview.slideIndices.length === 1 ? "slide" : "slides"
-        } updated.`,
+        }更新。`,
       );
     } catch (error) {
       dispatch(setPresentationData(presentationData as PresentationData));
@@ -1341,8 +1341,8 @@ const Chat = ({
         [messageId]: previousVersion,
       }));
       notify.error(
-        "Could not restore slides",
-        error instanceof Error ? error.message : "Please try again.",
+        "无法恢复幻灯片",
+        error instanceof Error ? error.message : "请重试。",
       );
     } finally {
       onChatMutationStateChange?.(false);
@@ -1367,7 +1367,7 @@ const Chat = ({
         "Failed to refresh presentation after tool mutation:",
         error
       );
-      notify.error("Refresh failed", "Changes were saved, but refresh failed.");
+      notify.error("刷新失败", "已保存更改，但刷新失败");
     } finally {
       refreshInFlightRef.current = false;
       if (refreshQueuedRef.current) {
@@ -1387,7 +1387,7 @@ const Chat = ({
       await onPresentationChanged();
     } catch (error) {
       console.error("Failed to refresh presentation after chat update:", error);
-      notify.error("Refresh failed", "Chat completed, but refresh failed.");
+      notify.error("刷新失败", "聊天已完成，但刷新失败");
     }
   };
 
@@ -1485,7 +1485,7 @@ const Chat = ({
       return;
     }
     if (variant !== "template-v2") {
-      notify.info("Attachments are available in Template V2 chat.");
+      notify.info("模板 V2 聊天中可附加文件。");
       return;
     }
 
@@ -1540,8 +1540,8 @@ const Chat = ({
       }
 
       notify.success(
-        "Attachment ready",
-        `${files.length} file${files.length === 1 ? "" : "s"} attached.`
+        "附件已就绪",
+        `${files.length}文件${files.length === 1 ? "" : "s"}附加。`
       );
       trackEvent(MixpanelEvent.AI_Assistant_Attachment_Added, {
         ...baseAnalyticsProps(),
@@ -1558,8 +1558,8 @@ const Chat = ({
         error_message: sanitizeAnalyticsError(error, "Attachment upload failed"),
       });
       notify.error(
-        "Could not attach file",
-        error instanceof Error ? error.message : "Upload failed."
+        "无法附加文件",
+        error instanceof Error ? error.message : "上传失败。"
       );
     } finally {
       setIsUploadingPastedImage(false);
@@ -1627,8 +1627,8 @@ const Chat = ({
 
     if (!activeResourceId) {
       notify.error(
-        `${resourceLabel.charAt(0).toUpperCase()}${resourceLabel.slice(1)} not ready`,
-        `The ${resourceLabel} is not ready yet.`
+        `${resourceLabel.charAt(0).toUpperCase()}${resourceLabel.slice(1)}尚未就绪`,
+        `${resourceLabel}尚未就绪。`
       );
       return;
     }
@@ -1650,8 +1650,8 @@ const Chat = ({
           error_message: sanitizeAnalyticsError(error, "Image processing failed"),
         });
         notify.error(
-          "Could not read image",
-          error instanceof Error ? error.message : "Image processing failed."
+          "无法读取图像",
+          error instanceof Error ? error.message : "图像处理失败。"
         );
         return;
       }
@@ -1966,7 +1966,7 @@ const Chat = ({
           content: message,
         },
       ]);
-      notify.error("Chat error", message);
+      notify.error("聊天错误", message);
     } finally {
       setHasChatMutationStarted(false);
       if (abortControllerRef.current === streamAbortController) {
@@ -2133,8 +2133,8 @@ const Chat = ({
         total_count: nextImages.length,
       });
       notify.success(
-        "Image pasted",
-        `${nextImages.length} image${nextImages.length === 1 ? "" : "s"} ready to use.`
+        "图片已粘贴",
+        `${nextImages.length} 张图片已可使用。`
       );
     } catch (error) {
       trackEvent(MixpanelEvent.AI_Assistant_Attachment_Failed, {
@@ -2144,8 +2144,8 @@ const Chat = ({
         error_message: sanitizeAnalyticsError(error, "Image upload failed"),
       });
       notify.error(
-        "Could not paste image",
-        error instanceof Error ? error.message : "Image upload failed."
+        "无法粘贴图像",
+        error instanceof Error ? error.message : "图片上传失败。"
       );
     } finally {
       setIsUploadingPastedImage(false);
@@ -2196,7 +2196,7 @@ const Chat = ({
     event.stopPropagation();
     setIsDraggingAttachment(false);
     if (files.length === 0) {
-      notify.warning("Drop unavailable", "Use the attach button for this file.");
+      notify.warning("不支持拖放", "请使用此文件的附加按钮。");
       return;
     }
     void processTemplateV2Files(files, "drop");
@@ -2237,7 +2237,7 @@ const Chat = ({
             id: "target",
             label: chatTargetReference,
             title: chatHtmlSelection
-              ? `${chatTargetReference}. The selected element HTML is sent with the prompt.`
+              ? `${chatTargetReference}. 选中的元素 HTML 已随提示发送。`
               : chatTargetReference,
             onRemove: clearChatTargetReference,
           },
@@ -2283,7 +2283,7 @@ const Chat = ({
           {isHistoryLoading && messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-[#999999]">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              Loading chat…
+              正在加载聊天...
             </div>
           ) : messages.length > 0 ? (
             <div className="flex flex-col gap-0">
@@ -2306,7 +2306,7 @@ const Chat = ({
                         {message.contextTags?.length ? (
                           <ContextTags
                             tags={message.contextTags}
-                            ariaLabel="Context sent with prompt"
+                            ariaLabel="随提示词发送的上下文"
                           />
                         ) : null}
                         <div className="flex min-h-[30px] w-fit max-w-full items-center gap-2.5 rounded-[8px] bg-[#F3F4F7] px-3 py-1.5 font-manrope text-[13px] font-medium leading-[normal] text-[#333333] [overflow-wrap:anywhere] [word-break:break-word]">
@@ -2411,7 +2411,7 @@ const Chat = ({
                               <ActivityStatusIcon
                                 activity={{
                                   id: "fallback",
-                                  label: "Understanding",
+                                  label: "理解",
                                   state: "running",
                                 }}
                               />
@@ -2449,8 +2449,8 @@ const Chat = ({
                                 className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-[#808080] transition-colors hover:text-[#333333]"
                                 aria-label={
                                   isEditPreviewExpanded
-                                    ? "Hide edit comparison"
-                                    : "Show edit comparison"
+                                    ? "隐藏编辑对比"
+                                    : "显示编辑对比"
                                 }
                                 aria-expanded={isEditPreviewExpanded}
                               >
@@ -2497,11 +2497,11 @@ const Chat = ({
           ) : (
             <div className="flex h-full items-center justify-center px-6 pb-4">
               <h3 className="-translate-y-2 text-center text-[22px] font-normal leading-[1.12] tracking-[-0.66px] text-[#4A4A4A]">
-                {isOutlineVariant ? "How can I improve" : "What can I do"}
+                {isOutlineVariant ? "如何改进" : "我能做什么"}
                 <br />
                 {isOutlineVariant
-                  ? "your outline today?"
-                  : "for your deck today?"}
+                  ? "今天的提纲？"
+                  : "今天为您的演示文稿准备就绪了吗？"}
               </h3>
             </div>
           )}
@@ -2660,8 +2660,8 @@ const Chat = ({
                       className="inline-flex h-[14px] w-[14px] items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label={
                         isFollowAgentEnabled
-                          ? "Disable follow AI mode"
-                          : "Enable follow AI mode"
+                          ? "关闭跟随 AI 模式"
+                          : "开启跟随 AI 模式"
                       }
                     >
                       <svg
@@ -2707,7 +2707,7 @@ const Chat = ({
                         height={14}
                         className="h-[14px] w-[13px] shrink-0"
                       />
-                      Prompt
+                      提示词
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -2815,12 +2815,12 @@ const Chat = ({
                   fill="#7A5AF8"
                 />
               </svg>
-              AI Assistant
+              人工智能助手
             </h4>
             {isSending && (
               <span className="inline-flex items-center gap-1 rounded-full bg-[#F4F3FF] px-2 py-0.5 text-[10px] font-medium text-[#6941C6]">
                 <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                Live
+                直播
               </span>
             )}
           </div>
@@ -2853,20 +2853,20 @@ const Chat = ({
         {isHistoryLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-sm text-[#99A1AF]">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading chat…
+            正在加载聊天...
           </div>
         ) : showEditorEmptyState ? (
           <h3 className="-translate-y-7 text-center text-[clamp(20px,1.55vw,24px)] font-normal leading-[1.08] tracking-[-0.72px] text-[#4A4A4A]">
-            What can I do
+            我能做什么
             <br />
-            for your deck today?
+            今天为您的演示文稿准备就绪了吗？
           </h3>
         ) : messages.length === 0 ? (
           <>
             {isOutlineVariant ? (
               <div>
                 <h4 className="mb-2 text-[10px] font-normal leading-[15px] tracking-[0.367px] text-[#99A1AF]">
-                  QUICK PROMPTS
+                  快速提示词
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {outlineQuickPrompts.map((prompt) => (
@@ -2886,7 +2886,7 @@ const Chat = ({
             ) : isTemplateV2Variant ? (
               <div>
                 <h4 className="mb-2 text-[10px] font-normal leading-[15px] tracking-[0.367px] text-[#99A1AF]">
-                  QUICK PROMPTS
+                  快速提示词
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {templateV2QuickPrompts.map((prompt) => (
@@ -2907,7 +2907,7 @@ const Chat = ({
               <>
                 <div>
                   <h4 className="mb-2 text-[10px] font-normal leading-[15px] tracking-[0.367px] text-[#99A1AF]">
-                    SUGGESTIONS
+                    建议
                   </h4>
                   <div className="flex flex-col gap-1.5">
                     {suggestions.map((suggestion) => (
@@ -2931,7 +2931,7 @@ const Chat = ({
 
                 <div className="mt-10">
                   <h4 className="mb-2 text-[10px] font-normal leading-[15px] tracking-[0.367px] text-[#99A1AF]">
-                    QUICK PROMPTS
+                    快速提示词
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {presentationQuickPrompts.map((prompt) => (
@@ -2974,14 +2974,14 @@ const Chat = ({
                           className="rounded-[8px]"
                         />
                         <p className="px-1 pb-0.5 pt-1.5 text-[10px] font-medium text-[#667085]">
-                          Selected layout
+                          已选择的布局
                         </p>
                       </div>
                     )}
                     {message.contextTags?.length ? (
                       <ContextTags
                         tags={message.contextTags}
-                        ariaLabel="Context sent with prompt"
+                        ariaLabel="随提示词发送的上下文"
                       />
                     ) : null}
                     <div className="w-fit max-w-full rounded-[18px] bg-[#7C3AED] px-4 py-3 text-[13px] font-medium leading-5 text-white shadow-sm [overflow-wrap:anywhere] [word-break:break-word]">
@@ -3024,7 +3024,7 @@ const Chat = ({
                     <div className="text-[13px] font-normal leading-6 text-[#667085]">
                       {isSending && message.role === "assistant"
                         ? message.activity?.[message.activity.length - 1]
-                          ?.label || "Working on it..."
+                          ?.label || "正在处理中..."
                         : ""}
                     </div>
                   )}
@@ -3176,7 +3176,7 @@ const Chat = ({
               {isUploadingPastedImage && (
                 <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#EDEEEF] bg-[#F9FAFB] px-2 py-1 text-xs font-medium text-[#667085]">
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                  Processing attachment
+                  处理附件
                 </span>
               )}
             </div>
@@ -3201,12 +3201,12 @@ const Chat = ({
           onKeyDown={handleKeyDown}
           placeholder={
             isOutlineVariant
-              ? "Regenerate this outline"
+              ? "重新生成此大纲"
               : showEditorEmptyState
-                ? "Ask anything.\nType / to get Quick prompts."
+                ? "随时提问。输入 / 获取快捷提示。"
                 : isTemplateV2Variant
-                  ? "Change slide 2 title"
-                  : "Improve slide design"
+                  ? "更改幻灯片 2 标题"
+                  : "改进幻灯片设计"
           }
           aria-invalid={Boolean(errorMessage)}
         />
@@ -3221,8 +3221,8 @@ const Chat = ({
                   aria-label="附加文件"
                 title={
                   isTemplateV2Variant
-                    ? "Attach files"
-                    : "Attachments are available in Template V2 chat"
+                    ? "附加文件"
+                    : "附件可在模板 V2 聊天中获取"
                 }
               >
                 <Plus className="h-3 w-3 text-black" />
@@ -3239,8 +3239,8 @@ const Chat = ({
               <ToolTip
                 content={
                   isFollowAgentEnabled
-                    ? "Disable follow AI mode"
-                    : "Enable follow AI mode"
+                    ? "关闭跟随 AI 模式"
+                    : "开启跟随 AI 模式"
                 }
               >
                 <button
@@ -3252,13 +3252,13 @@ const Chat = ({
                   className="inline-flex h-[28px] items-center gap-1 rounded-[64px] text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={
                     isFollowAgentEnabled
-                      ? "Disable follow AI mode"
-                      : "Enable follow AI mode"
+                      ? "关闭跟随 AI 模式"
+                      : "开启跟随 AI 模式"
                   }
                   title={
                     isFollowAgentEnabled
-                      ? "Follow AI is on: auto-jump to active slide"
-                      : "Follow AI is off"
+                      ? "Follow AI 已开启：自动跳转到当前幻灯片"
+                      : "Follow AI 已关闭"
                   }
                 >
                   <svg
@@ -3320,7 +3320,7 @@ const Chat = ({
               onClick={() => inputRef.current?.focus()}
               disabled={chatInputDisabled}
               className="inline-flex h-[30px] items-center gap-1.5 rounded-[64px] border border-[#EDEEEF] bg-white px-3 text-[12px] font-medium text-[#4A4A4A] transition-colors hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Focus prompt input"
+              aria-label="聚焦提示词输入"
             >
               <svg
                 width="13"
@@ -3338,7 +3338,7 @@ const Chat = ({
                   fill="#7A5AF8"
                 />
               </svg>
-              Prompt
+              提示词
             </button>
           </div>
           <div className="ml-auto mr-2 flex items-center gap-2">
@@ -3354,7 +3354,7 @@ const Chat = ({
                   aria-hidden="true"
                 />
                 <Square className="h-3 w-3 fill-current" aria-hidden="true" />
-                Stop
+                停止
               </button>
             ) : (
               <button

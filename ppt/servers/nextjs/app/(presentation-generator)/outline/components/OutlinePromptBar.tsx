@@ -33,7 +33,7 @@ const OutlinePromptBar: React.FC<OutlinePromptBarProps> = ({
       <div className="mb-[10px] flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-semibold tracking-[-0.12px] text-[#191919]">
-            Prompt
+            提示词
           </span>
           <ConfigurationSelects
             config={config}
@@ -58,7 +58,7 @@ const OutlinePromptBar: React.FC<OutlinePromptBarProps> = ({
               onRegenerate();
             }
           }}
-          placeholder="Describe the presentation you want to generate"
+          placeholder="描述您想要生成的演示文稿"
           className="h-[69px] min-h-[69px] resize-none border-0 bg-transparent px-6 py-[23px] pr-16 text-base font-normal leading-[22px] text-[#191919] shadow-none outline-none placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed"
         />
         <button

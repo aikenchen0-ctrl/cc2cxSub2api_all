@@ -409,7 +409,7 @@ export function TemplateV2HtmlSlidePreview({
             : undefined
         }
       >
-        Preview unavailable
+        预览不可用
       </div>
     );
   }

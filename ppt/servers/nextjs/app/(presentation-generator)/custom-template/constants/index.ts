@@ -7,28 +7,28 @@ import { TemplateCreationStep } from "../types";
 // Step configuration
 export const TEMPLATE_STEPS: Record<TemplateCreationStep, { title: string; description: string }> = {
     'file-upload': {
-        title: 'Upload Template',
-        description: 'Upload your PPTX file to begin',
+        title: '上传模板',
+        description: '上传您的 PPTX 文件开始',
     },
     'font-check': {
-        title: 'Font Check',
-        description: 'Checking fonts in your presentation',
+        title: '字体检查',
+        description: '正在检查演示文稿中的字体',
     },
     'font-upload': {
-        title: 'Upload Fonts',
-        description: 'Upload missing fonts for accurate rendering',
+        title: '上传字体',
+        description: '上传缺失字体以确保准确渲染',
     },
     'slides-preview': {
-        title: 'Preview Slides',
-        description: 'Review your slides before processing',
+        title: '预览幻灯片',
+        description: '处理前请检查您的幻灯片',
     },
     'template-creation': {
-        title: 'Template Creation',
-        description: 'Converting slides to reusable templates',
+        title: '模板创建',
+        description: '将幻灯片转换为可重用的模板',
     },
     'completed': {
-        title: 'Completed',
-        description: 'Your template is ready to save',
+        title: '已完成',
+        description: '您的模板已准备就绪，可以保存',
     },
 };
 
@@ -42,18 +42,18 @@ export const UI_CONFIG = {
 export const HIGHLIGHTS_ITEMS = [
     {
         number: "1",
-        title: "Time-consume",
-        description: "Manual formatting and slide copying wastes hours every week",
+        title: "耗时",
+        description: "手动排版和幻灯片复制每周浪费数小时",
     },
     {
         number: "2",
-        title: "Expensive",
-        description: "Design resources spent on repetitive tasks instead of innovation",
+        title: "昂贵",
+        description: "将设计精力从重复性任务转向创新",
     },
     {
         number: "3",
-        title: "Inconsistent",
-        description: "AI generates unpredictable layouts that require constant cleanup",
+        title: "不一致",
+        description: "AI 生成不可预测的布局，需要不断清理",
     },
 ]
 

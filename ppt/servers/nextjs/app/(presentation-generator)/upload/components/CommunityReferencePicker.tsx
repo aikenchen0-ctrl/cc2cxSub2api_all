@@ -59,7 +59,7 @@ export default function CommunityReferencePicker({
       <div className="flex flex-col gap-3 px-0 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="font-syne text-base font-semibold text-[#191919]">
-            Community
+            社区
           </h2>
           <p className="mt-1 text-xs text-[#808080]">
             为智能模式选择一个可选的设计参考。
@@ -89,7 +89,7 @@ export default function CommunityReferencePicker({
               onClick={() => onSelect(null)}
               className="whitespace-nowrap text-xs font-medium text-[#7A5AF8] hover:text-[#6938EF]"
             >
-              Clear selection
+              清除选择
             </button>
           )}
         </div>
@@ -105,7 +105,7 @@ export default function CommunityReferencePicker({
           onClick={() => load()}
           className="mx-auto mt-5 flex h-40 w-[calc(100%-3rem)] items-center justify-center gap-2 rounded-xl border border-dashed border-[#D9D9DE] text-xs text-[#7A5AF8]"
         >
-          <RefreshCw className="h-4 w-4" /> Retry community designs
+          <RefreshCw className="h-4 w-4" /> 重试社区设计
         </button>
       ) : visibleItems.length === 0 ? (
         <div className="mx-0 mt-5 rounded-xl border border-dashed border-[#D9D9DE] bg-[#FAFAFC] px-6 py-10 text-center sm:mx-6">
@@ -132,7 +132,7 @@ export default function CommunityReferencePicker({
                   type="button"
                   onClick={() => onSelect(selected ? null : item)}
                   className="group relative block aspect-[306/169] w-full overflow-hidden bg-[#F8FBFB]"
-                  aria-label={`Use ${item.title || "community design"}`}
+                  aria-label={`使用${item.title || "community design"}`}
                 >
                   {preview ? (
                     <SmartHtmlSlide
@@ -151,7 +151,7 @@ export default function CommunityReferencePicker({
                 <div className="border-t border-[#EDEEEF] px-2.5 pb-2.5">
                   <div className="flex min-h-[54px] items-center gap-2.5 py-3.5">
                     <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191919]">
-                      {item.title?.trim() || "Untitled presentation"}
+                      {item.title?.trim() || "未命名的演示文稿"}
                     </p>
                     <button
                       type="button"
@@ -159,12 +159,12 @@ export default function CommunityReferencePicker({
                       className="flex h-[26px] items-center gap-1.5 rounded-full border border-[#EDEEEF] bg-white px-3 font-syne text-xs font-medium text-[#191919] hover:bg-[#F6F6F9]"
                     >
                       {selected && <Check className="h-3.5 w-3.5 text-[#7A5AF8]" />}
-                      {selected ? "Selected" : "Use"}
+                      {selected ? "已选择" : "使用"}
                     </button>
                   </div>
                   <div className="flex min-h-[34px] items-center justify-between border-t border-[#EDEEEF] py-2.5 text-[10px] font-medium tracking-[0.4px] text-[#808080]">
                     <span className="min-w-0 flex-1 truncate">
-                      by {item.created_by?.trim() || "永恒PPT"}
+                  作者：{item.created_by?.trim() || "永恒 PPT"}
                     </span>
                     <div className="ml-2 flex shrink-0 items-center gap-2">
                       <span className="inline-flex items-center gap-1">

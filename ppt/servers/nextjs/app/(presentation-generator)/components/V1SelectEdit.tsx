@@ -550,7 +550,7 @@ const HtmlSelectionEditor = ({
   const handleSubmitEdit = useCallback(async () => {
     try {
       if (promptValue.trim().length === 0) {
-        toast.error("Please enter a prompt to edit the selection");
+        toast.error("请输入提示词以编辑选中内容");
         return;
       }
       setUpdatingSelection(true);
@@ -582,15 +582,15 @@ const HtmlSelectionEditor = ({
       setSelectionRects([]);
       setInputPos(null);
 
-      toast.success("Selection edited successfully", {
-        description: "The selection has been edited successfully",
+      toast.success("选择编辑成功", {
+        description: "选择已编辑成功",
       });
     } catch (error: any) {
       setUpdatingSelection(false);
       console.error("error in editing selection HTML", error);
-      toast.error("Error editing selection HTML", {
+      toast.error("HTML 选择编辑失败", {
         description:
-          error?.message || "The selection has not been edited successfully",
+          error?.message || "编辑选择未成功",
       });
     }
   }, [
@@ -722,7 +722,7 @@ const HtmlSelectionEditor = ({
             <div className="h-1 -mx-4 -mt-4 mb-3 bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-purple-500" />
             <div className="flex items-center gap-3">
               <p className="text-sm text-black font-syne font-semibold">
-                Edit selection
+                编辑选择
               </p>
             </div>
 
@@ -734,7 +734,7 @@ const HtmlSelectionEditor = ({
                 id="selection-editor-prompt"
                 name="selection-editor-prompt"
                 onChange={(e) => setPromptValue(e.target.value)}
-                placeholder="Explain the changes you want to make to the selection eg. make the heading larger"
+                placeholder="解释您希望对选择所做的更改，例如使标题更大"
                 className="w-full p-2 rounded-md border border-gray-200 bg-white text-black placeholder-gray-400 outline-none resize-y focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -758,7 +758,7 @@ const HtmlSelectionEditor = ({
                 style={{ cursor: "pointer" }}
                 className="px-4 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 "
               >
-                Cancel
+                取消
               </button>
               <button
                 onClick={handleSubmitEdit}
@@ -766,7 +766,7 @@ const HtmlSelectionEditor = ({
                 disabled={updatingSelection}
                 className="px-4 py-1 rounded-md bg-[#5141e5] text-white hover:bg-[#4336c9] disabled:opacity-50 "
               >
-                {updatingSelection ? "Updating..." : "Apply"}
+                {updatingSelection ? "更新中..." : "应用"}
               </button>
             </div>
           </div>

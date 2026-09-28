@@ -58,32 +58,32 @@ import { buildSvgUpdateUrl } from "@/lib/svg-color";
 type RawRecord = Record<string, unknown>;
 
 const TYPE_LABELS: Record<InfographicType, string> = {
-  progress_bar: "Progress Bar",
-  gauge: "Gauge",
-  gantt: "Gantt Chart",
-  timeline: "Timeline",
-  roadmap: "Roadmap",
-  milestone_timeline: "Milestone Timeline",
-  staircase: "Staircase",
-  supply_chain: "Supply Chain",
-  stair_step_blocks: "Step Blocks",
-  maturity_model: "Maturity Model",
-  diagonal_circles: "Diagonal Circles",
-  pillar_framework: "Pillar Framework",
-  transformation_hub: "Transformation Hub",
-  risk_matrix: "Risk Matrix",
-  chevron_process: "Chevron Process",
-  radial_cycle: "Radial Cycle",
-  conversion_funnel: "Conversion Funnel",
-  pyramid: "Pyramid",
-  segmented_wheel: "Segmented Wheel",
-  customer_journey: "Customer Journey",
-  before_after: "Before & After",
-  impact_effort_matrix: "Impact / Effort Matrix",
-  comparison_matrix: "Comparison Matrix",
-  org_chart: "Organization Chart",
-  decision_tree: "Decision Tree",
-  mind_map: "Mind Map",
+  progress_bar: "进度条",
+  gauge: "仪表盘",
+  gantt: "甘特图",
+  timeline: "时间线",
+  roadmap: "路线图",
+  milestone_timeline: "里程碑时间线",
+  staircase: "阶梯图",
+  supply_chain: "供应链",
+  stair_step_blocks: "阶梯区块",
+  maturity_model: "成熟度模型",
+  diagonal_circles: "对角圆环",
+  pillar_framework: "支柱框架",
+  transformation_hub: "转型中心",
+  risk_matrix: "风险矩阵",
+  chevron_process: "箭头流程",
+  radial_cycle: "径向循环",
+  conversion_funnel: "转化漏斗",
+  pyramid: "金字塔",
+  segmented_wheel: "分段环形图",
+  customer_journey: "客户旅程",
+  before_after: "前后对比",
+  impact_effort_matrix: "影响力 / 工作量矩阵",
+  comparison_matrix: "对比矩阵",
+  org_chart: "组织结构图",
+  decision_tree: "决策树",
+  mind_map: "思维导图",
 };
 
 export function InfographicDataEditorPopover({
@@ -200,7 +200,7 @@ export function InfographicDataEditorContent({
                 id="infographic-editor-title"
                 className="text-[15px] font-semibold text-[#191919]"
               >
-                Edit Infographic
+                编辑信息图
               </h2>
               <p
                 id="infographic-editor-description"
@@ -218,7 +218,7 @@ export function InfographicDataEditorContent({
                 className="h-8 min-w-[76px] rounded-full bg-[linear-gradient(100deg,#FFE6A6_0%,#D8B4FE_100%)] px-5 text-[12px] font-semibold text-[#191919] transition hover:brightness-95"
                 onClick={saveChanges}
               >
-                Save
+                保存
               </button>
             </div>
           </header>
@@ -226,17 +226,17 @@ export function InfographicDataEditorContent({
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <aside className="min-h-0 w-[255px] shrink-0 overflow-y-auto overscroll-contain border-r border-[#ECECF1] px-4 py-4 hide-scrollbar">
               <label className="mb-2 block text-[12px] font-medium text-[#191919]">
-                Appearance
+                外观
               </label>
 
               <div className="rounded-lg border border-[#ECECF1] bg-[#F8F8FA] p-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[12px] font-medium text-[#191919]">
-                      Color palette
+                      配色方案
                     </p>
                     <p className="mt-0.5 text-[10px] text-[#8B8B94]">
-                      Applied to items in order
+                      按顺序应用于项目
                     </p>
                   </div>
                   <Layers3 size={14} className="text-[#7C51F8]" />
@@ -253,15 +253,15 @@ export function InfographicDataEditorContent({
                   <Type size={14} className="text-[#191919]" />
                   <div>
                     <p className="text-[12px] font-medium text-[#191919]">
-                      Text color
+                      文字颜色
                     </p>
                     <p className="mt-0.5 text-[10px] text-[#8B8B94]">
-                      Labels and descriptions
+                      标签和描述
                     </p>
                   </div>
                 </div>
                 <DeferredColorInput
-                  aria-label="Infographic text color"
+                  aria-label="信息图文字颜色"
                   className="h-8 w-full cursor-pointer rounded-lg border border-[#E6E6EA] bg-white p-1"
                   value={textColor}
                   onCommit={(text_color) =>
@@ -280,15 +280,15 @@ export function InfographicDataEditorContent({
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
                   <h3 className="text-[14px] font-semibold text-[#191919]">
-                    Content
+                    内容
                   </h3>
                   <p className="mt-1 text-[11px] text-[#8B8B94]">
-                    Edit copy, icons, order, and relationships.
+                    编辑内容、图标、顺序和关系
                   </p>
                 </div>
                 {!isMeter && itemCount > 0 ? (
                   <span className="rounded-full border border-[#E6E6EA] bg-white px-3 py-1 text-[11px] font-medium text-[#686873]">
-                    {itemCount} {itemCount === 1 ? "item" : "items"}
+                    {itemCount} {itemCount === 1 ? "项目" : "项目"}
                   </span>
                 ) : null}
               </div>
@@ -388,7 +388,7 @@ export function InfographicDataEditorContent({
 
         <button
           type="button"
-          aria-label="Close infographic editor"
+          aria-label="关闭信息图编辑器"
           className="absolute -right-14 top-0 grid h-11 w-11 place-items-center rounded-full bg-white text-[#191919] shadow-sm transition hover:bg-[#F7F7FA]"
           onClick={onClose}
         >
@@ -426,10 +426,10 @@ function ColorEditor({
               <DeferredColorInput
                 aria-label={
                   meter && index === 0
-                    ? "Track color"
+                    ? "跟踪颜色"
                     : meter && index === 1
-                      ? "Progress color"
-                      : `Palette color ${visibleIndex + 1}`
+                      ? "进度颜色"
+                      : `调色板颜色${visibleIndex + 1}`
                 }
                 className="h-8 w-9 shrink-0 cursor-pointer rounded-lg border border-[#E6E6EA] bg-white p-1"
                 value={color}
@@ -444,10 +444,10 @@ function ColorEditor({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[10px] font-medium text-[#191919]">
                   {meter && index === 0
-                    ? "Track"
+                    ? "跟踪"
                     : meter && index === 1
-                      ? "Progress"
-                      : `Color ${visibleIndex + 1}`}
+                      ? "进度"
+                      : `颜色${visibleIndex + 1}`}
                 </span>
                 <span className="mt-0.5 block font-mono text-[8px] uppercase text-[#8B8B94]">
                   #{color.replace(/^#/, "")}
@@ -455,21 +455,21 @@ function ColorEditor({
               </span>
               <div className="flex items-center opacity-60 transition group-hover:opacity-100">
                 <MiniButton
-                  label="Move color up"
+                  label="将颜色上移"
                   disabled={!canMoveUp}
                   onClick={() => onChange(moveCollectionItem(colors, index, -1))}
                 >
                   <ChevronUp size={13} />
                 </MiniButton>
                 <MiniButton
-                  label="Move color down"
+                  label="将颜色下移"
                   disabled={!canMoveDown}
                   onClick={() => onChange(moveCollectionItem(colors, index, 1))}
                 >
                   <ChevronDown size={13} />
                 </MiniButton>
                 <MiniButton
-                  label="Delete color"
+                  label="删除颜色"
                   disabled={editableColors.length <= (meter ? 2 : 1)}
                   onClick={() => onChange(removeInfographicColor(colors, index))}
                 >
@@ -486,7 +486,7 @@ function ColorEditor({
         onClick={() => onChange(appendInfographicColor(colors))}
       >
         <Plus size={13} />
-        Add palette color
+        添加调色板颜色
       </button>
     </div>
   );
@@ -500,20 +500,20 @@ function MeterEditor({
   onChange: (data: MeterInfographicData) => void;
 }) {
   return (
-    <EditorSection title="Values" description="Set the displayed value and range.">
+    <EditorSection title="数值" description="设置显示的数值和范围">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <NumberInput
-          label="Minimum"
+          label="最小值"
           value={data.min_value}
           onChange={(min_value) => onChange({ ...data, min_value })}
         />
         <NumberInput
-          label="Maximum"
+          label="最大"
           value={data.max_value}
           onChange={(max_value) => onChange({ ...data, max_value })}
         />
         <NumberInput
-          label="Value"
+          label="数值"
           value={data.value}
           onChange={(value) => onChange({ ...data, value })}
         />
@@ -576,7 +576,7 @@ function GanttEditor({
     setRows([
       ...data.rows,
       {
-        label: `Row ${data.rows.length + 1}`,
+        label: `行${data.rows.length + 1}`,
         items: [defaultGanttItem(data.columns.length)],
       },
     ]);
@@ -626,18 +626,18 @@ function GanttEditor({
   return (
     <div className="space-y-5">
       <EditorSection
-        title="Timeline columns"
-        description={`${data.columns.length} columns define the horizontal schedule.`}
+        title="时间轴列"
+        description={`${data.columns.length}列定义水平进度表。`}
         action={
           <AddButton
             compact
-            label="Add column"
+            label="添加列"
             onClick={() =>
               onChange({
                 ...data,
                 columns: [
                   ...data.columns,
-                  { label: `Column ${data.columns.length + 1}` },
+                  { label: `列${data.columns.length + 1}` },
                 ],
               })
             }
@@ -656,7 +656,7 @@ function GanttEditor({
                 </span>
                 <div className="flex items-center gap-0.5">
                   <MiniButton
-                    label="Move column left"
+                    label="将列向左移动"
                     disabled={index === 0}
                     onClick={() =>
                       onChange({
@@ -668,7 +668,7 @@ function GanttEditor({
                     <ChevronLeft size={13} />
                   </MiniButton>
                   <MiniButton
-                    label="Move column right"
+                    label="将列向右移动"
                     disabled={index === data.columns.length - 1}
                     onClick={() =>
                       onChange({
@@ -680,7 +680,7 @@ function GanttEditor({
                     <ChevronRight size={13} />
                   </MiniButton>
                   <MiniButton
-                    label="Delete column"
+                    label="删除列"
                     disabled={data.columns.length <= 1}
                     onClick={() => onChange(removeGanttColumn(data, index))}
                   >
@@ -706,12 +706,12 @@ function GanttEditor({
       </EditorSection>
 
       <EditorSection
-        title="Rows and tasks"
-        description={`${data.rows.length} rows. Expand one row to edit its tasks and schedule.`}
+        title="行和任务"
+        description={`${data.rows.length}行。展开一行以编辑其任务和进度。`}
         action={
           <AddButton
             compact
-            label="Add row"
+            label="添加行"
             onClick={addRow}
           />
         }
@@ -738,7 +738,7 @@ function GanttEditor({
                     type="button"
                     aria-controls={rowPanelId}
                     aria-expanded={isExpanded}
-                    aria-label={`${isExpanded ? "Collapse" : "Expand"} row ${rowIndex + 1}`}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"}行${rowIndex + 1}`}
                     className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
                     onClick={() =>
                       setExpandedRowIndex((current) =>
@@ -751,10 +751,10 @@ function GanttEditor({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-semibold text-[#191919]">
-                        {row.label || `Row ${rowIndex + 1}`}
+                        {row.label || `行${rowIndex + 1}`}
                       </span>
                       <span className="mt-0.5 block text-[10px] text-[#8B8B94]">
-                        {row.items.length} {row.items.length === 1 ? "task" : "tasks"}
+                        {row.items.length} {row.items.length === 1 ? "任务" : "任务"}
                       </span>
                     </span>
                     {isExpanded ? (
@@ -767,11 +767,11 @@ function GanttEditor({
                     <MoveButtons
                       index={rowIndex}
                       length={data.rows.length}
-                      label="row"
+                      label="行"
                       onMove={(direction) => moveRow(rowIndex, direction)}
                     />
                     <MiniButton
-                      label="Delete row"
+                      label="删除行"
                       disabled={data.rows.length <= 1}
                       onClick={() => deleteRow(rowIndex)}
                     >
@@ -783,7 +783,7 @@ function GanttEditor({
                 {isExpanded ? (
                   <div id={rowPanelId} className="mt-4">
                     <div className="flex items-end gap-3">
-                      <LabeledField className="min-w-0 flex-1" label="Row label">
+                      <LabeledField className="min-w-0 flex-1" label="行标签">
                         <TextInput
                           ariaLabel={`Row ${rowIndex + 1} label`}
                           className="font-semibold"
@@ -801,7 +801,7 @@ function GanttEditor({
                       </LabeledField>
                       <AddButton
                         compact
-                        label="Add task"
+                        label="添加任务"
                         onClick={() => addTask(rowIndex)}
                       />
                     </div>
@@ -857,7 +857,7 @@ function GanttEditor({
                       ))}
                       {row.items.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-[#DCDDDF] bg-[#FAFAFC] px-4 py-6 text-center text-[11px] text-[#8B8B94]">
-                          This row has no tasks yet. Use “Add task” to create one.
+                          此行尚无任务。请使用“添加任务”创建一个。
                         </div>
                       ) : null}
                     </div>
@@ -897,15 +897,15 @@ function GanttTaskEditor({
             {taskIndex + 1}
           </span>
           <span className="text-[11px] font-semibold text-[#555560]">
-            Task {taskIndex + 1}
+            任务 {taskIndex + 1}
           </span>
         </div>
-        <MiniButton label="Delete task" onClick={onDelete}>
+        <MiniButton label="删除任务" onClick={onDelete}>
           <Trash2 size={13} />
         </MiniButton>
       </div>
       <div className="p-3">
-        <LabeledField label="Task name">
+        <LabeledField label="任务名称">
           <TextInput
             ariaLabel={`Task ${taskIndex + 1} name`}
             value={item.name}
@@ -919,13 +919,13 @@ function GanttTaskEditor({
         />
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <GanttPositionEditor
-            label="Start"
+            label="开始"
             columns={columns}
             value={item.start}
             onChange={(start) => commit({ ...item, start })}
           />
           <GanttPositionEditor
-            label="End"
+            label="结束"
             columns={columns}
             value={item.end}
             onChange={(end) => commit({ ...item, end })}
@@ -991,9 +991,9 @@ function GanttPositionEditor({
         </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
-        <LabeledField label="Column">
+        <LabeledField label="列">
           <select
-            aria-label={`${label} column`}
+            aria-label={`${label}列`}
             className={inputClassName}
             value={Math.min(columns.length - 1, Math.max(0, value.column))}
             onChange={(event) =>
@@ -1002,15 +1002,15 @@ function GanttPositionEditor({
           >
             {columns.map((column, index) => (
               <option key={`${label}-column-${index}`} value={index}>
-                {column.label || `Column ${index + 1}`}
+                {column.label || `列${index + 1}`}
               </option>
             ))}
           </select>
         </LabeledField>
-        <LabeledField label="Position (%)">
+        <LabeledField label="位置 (%)">
           <NumberInput
             compact
-            label={`${label} position percentage`}
+            label={`${label}位置百分比`}
             max={100}
             min={0}
             step={5}
@@ -1038,14 +1038,14 @@ function TimelineEditor({
       case "roadmap":
         return {
           itemLabel: "stop",
-          description: "Edit every stop's heading, description, and order.",
+          description: "编辑每个停靠点的标题、描述和顺序。",
           heading: `Stop ${data.items.length + 1}`,
           showIcons: false,
         };
       case "milestone_timeline":
         return {
           itemLabel: "milestone",
-          description: "Edit each milestone's label, description, and order.",
+          description: "编辑每个里程碑的标签、描述和顺序。",
           heading: Number.isFinite(latestMilestone)
             ? String(latestMilestone + 1)
             : `Milestone ${data.items.length + 1}`,
@@ -1055,35 +1055,35 @@ function TimelineEditor({
         return {
           itemLabel: "step",
           description:
-            "Edit every staircase step's icon, heading, description, and order.",
+            "编辑每一级楼梯台阶的图标、标题、描述和顺序。",
           heading: `Step ${data.items.length + 1}`,
           showIcons: true,
         };
       case "supply_chain":
         return {
           itemLabel: "stage",
-          description: "Edit every supply-chain stage, icon, label, and description.",
+          description: "编辑每个供应链阶段的图标、标签和描述。",
           heading: `Stage ${data.items.length + 1}`,
           showIcons: true,
         };
       case "stair_step_blocks":
         return {
           itemLabel: "step",
-          description: "Edit every step block's icon, heading, and description.",
+          description: "编辑每个步骤块的图标、标题和描述。",
           heading: `Step ${String(data.items.length + 1).padStart(2, "0")}`,
           showIcons: true,
         };
       case "maturity_model":
         return {
           itemLabel: "level",
-          description: "Edit every maturity level's icon, heading, and explanation.",
+          description: "编辑每个成熟度级别的图标、标题和说明。",
           heading: `Level ${data.items.length + 1}`,
           showIcons: true,
         };
       case "diagonal_circles":
         return {
           itemLabel: "pillar",
-          description: "Edit each overlapping circle's icon, heading, and callout.",
+          description: "编辑每个重叠圆圈的图标、标题和提示框。",
           heading: `Pillar ${data.items.length + 1}`,
           showIcons: true,
         };
@@ -1091,7 +1091,7 @@ function TimelineEditor({
         return {
           itemLabel: "stage",
           description:
-            "Edit every chevron stage's heading, description, and order.",
+            "编辑每个折角阶段的标题、描述和顺序。",
           heading: `Stage ${data.items.length + 1}`,
           showIcons: false,
         };
@@ -1099,7 +1099,7 @@ function TimelineEditor({
         return {
           itemLabel: "level",
           description:
-            "Edit each pyramid level's icon, heading, description, and order.",
+            "编辑每个金字塔级别的图标、标题、描述和顺序。",
           heading: `Level ${data.items.length + 1}`,
           showIcons: true,
         };
@@ -1107,7 +1107,7 @@ function TimelineEditor({
         return {
           itemLabel: "segment",
           description:
-            "Edit every wheel segment's icon, heading, description, and order.",
+            "编辑每个轮子段落的图标、标题、描述和顺序。",
           heading: `Segment ${data.items.length + 1}`,
           showIcons: true,
         };
@@ -1115,7 +1115,7 @@ function TimelineEditor({
         return {
           itemLabel: "stage",
           description:
-            "Edit every visible journey stage's icon, heading, description, and order.",
+            "编辑每个可见旅程阶段的图标、标题、描述和顺序。",
           heading: data.items.length === 0 ? "" : `Stage ${data.items.length}`,
           showIcons: true,
         };
@@ -1123,7 +1123,7 @@ function TimelineEditor({
         return {
           itemLabel: "step",
           description:
-            "Edit each step's icon, heading, description, and order.",
+            "编辑每个步骤的图标、标题、描述和顺序。",
           heading: `Step ${data.items.length + 1}`,
           showIcons: true,
         };
@@ -1173,7 +1173,7 @@ function TimelineEditor({
           ? defaultInfographicIcon(data.items.length)
           : null,
         heading: config.heading,
-        description: "Add a description.",
+        description: "添加描述。",
       })}
     />
   );
@@ -1190,8 +1190,8 @@ function RadialCycleEditor({
   return (
     <div className="space-y-4">
       <EditorSection
-        title="Center image"
-        description="Choose the image displayed at the center of the cycle."
+        title="居中图片"
+        description="选择循环中心显示的图片。"
       >
         <button
           type="button"
@@ -1212,29 +1212,29 @@ function RadialCycleEditor({
           </span>
           <span>
             <span className="block text-[12px] font-semibold text-[#191919]">
-              {data.center_image ? "Change center image" : "Add center image"}
+              {data.center_image ? "更换中心图片" : "添加中心图片"}
             </span>
             <span className="mt-1 block text-[10px] leading-4 text-[#8B8B94]">
-              Search, upload, or select a presentation image.
+              搜索、上传或选择演示文稿图片。
             </span>
           </span>
         </button>
       </EditorSection>
       <ItemCollectionEditor
-        description="Edit every cycle stage's heading, description, and order."
+        description="编辑每个循环阶段的标题、描述和顺序。"
         itemLabel="stage"
         items={data.items}
         maxItems={8}
         onChange={(items) => onChange({ ...data, items })}
         onCreate={() => ({
           heading: `Stage ${data.items.length + 1}`,
-          description: "Add a description.",
+          description: "添加描述。",
         })}
         showIcons={false}
       />
       <ImagePickerModal
         currentImage={data.center_image}
-        initialPrompt="business team meeting"
+        initialPrompt="商务团队会议"
         open={imagePickerOpen}
         onClose={() => setImagePickerOpen(false)}
         onSelect={(center_image) => {
@@ -1255,7 +1255,7 @@ function ConversionFunnelEditor({
 }) {
   return (
     <ItemCollectionEditor<ConversionFunnelInfographicItem>
-      description="Edit each funnel stage's percentage, heading, description, and order."
+      description="编辑每个漏斗阶段的百分比、标题、描述和顺序。"
       itemLabel="stage"
       items={data.items}
       maxItems={8}
@@ -1263,7 +1263,7 @@ function ConversionFunnelEditor({
       onCreate={() => ({
         value: Math.max(0, (data.items.at(-1)?.value ?? 60) - 10),
         heading: `Stage ${data.items.length + 1}`,
-        description: "Add a description.",
+        description: "添加描述。",
       })}
       showIcons={false}
       showValue
@@ -1328,12 +1328,12 @@ function BeforeAfterEditor({
         {
           icon: defaultInfographicIcon(data.items.length),
           heading: `Before ${nextRow + 1}`,
-          description: "Add a description.",
+          description: "添加描述。",
         },
         {
           icon: defaultInfographicIcon(data.items.length + 1),
           heading: `After ${nextRow + 1}`,
-          description: "Add a description.",
+          description: "添加描述。",
         },
       ],
     });
@@ -1364,20 +1364,20 @@ function BeforeAfterEditor({
   return (
     <div className="space-y-4">
       <EditorSection
-        title="Column labels"
-        description="Edit the labels shown above the two comparison columns."
+        title="列标签"
+        description="编辑两个比较列上方显示的标签。"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <LabeledField label="Before label">
+          <LabeledField label="之前标签">
             <TextInput
-              ariaLabel="Before comparison label"
+              ariaLabel="对比前标签"
               value={data.before_label}
               onChange={(before_label) => onChange({ ...data, before_label })}
             />
           </LabeledField>
-          <LabeledField label="After label">
+          <LabeledField label="之后标签">
             <TextInput
-              ariaLabel="After comparison label"
+              ariaLabel="对比后标签"
               value={data.after_label}
               onChange={(after_label) => onChange({ ...data, after_label })}
             />
@@ -1386,13 +1386,13 @@ function BeforeAfterEditor({
       </EditorSection>
 
       <EditorSection
-        title="Comparison rows"
-        description="Edit each before-and-after pair, including both icons and descriptions."
+        title="比较行"
+        description="编辑每个前后对比对，包括图标和描述。"
         action={
           <AddButton
             compact
             disabled={pairs.length >= 5}
-            label="Add row"
+            label="添加行"
             onClick={addPair}
           />
         }
@@ -1420,9 +1420,9 @@ function BeforeAfterEditor({
                       {rowIndex + 1}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[12px] font-semibold text-[#191919]">Comparison {rowIndex + 1}</span>
+                      <span className="block text-[12px] font-semibold text-[#191919]">比较 {rowIndex + 1}</span>
                       <span className="mt-0.5 block truncate text-[10px] text-[#8B8B94]">
-                        {pair[0].heading || "Before"} → {pair[1].heading || "After"}
+                        {pair[0].heading || "之前"} → {pair[1].heading || "之后"}
                       </span>
                     </span>
                     {expanded ? <ChevronDown size={15} className="text-[#777781]" /> : <ChevronRight size={15} className="text-[#777781]" />}
@@ -1431,11 +1431,11 @@ function BeforeAfterEditor({
                     <MoveButtons
                       index={rowIndex}
                       length={pairs.length}
-                      label="comparison"
+                      label="对比项"
                       onMove={(direction) => movePair(rowIndex, direction)}
                     />
                     <MiniButton
-                      label="Delete comparison"
+                      label="删除对比"
                       disabled={pairs.length <= 1}
                       onClick={() => deletePair(rowIndex)}
                     >
@@ -1457,7 +1457,7 @@ function BeforeAfterEditor({
                             <div>
                               <button
                                 type="button"
-                                aria-label={`Change ${sideLabel} row ${rowIndex + 1} icon`}
+                                aria-label={`更改${sideLabel}行${rowIndex + 1}图标`}
                                 className="flex w-full flex-col items-center gap-2 rounded-xl border border-[#DFE0E6] bg-white px-2 py-3 outline-none transition hover:border-[#BDAAF8] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
                                 onClick={() => setEditingIconIndex(itemIndex)}
                               >
@@ -1468,7 +1468,7 @@ function BeforeAfterEditor({
                               </button>
                               <div className="mt-2">
                                 <DeferredColorInput
-                                  aria-label={`${sideLabel} row ${rowIndex + 1} icon color`}
+                                  aria-label={`${sideLabel}行${rowIndex + 1}图标颜色`}
                                   className="h-8 w-full rounded-lg border border-[#E6E6EA] bg-white p-1"
                                   value={icon.color}
                                   onCommit={(color) => updatePairItem(rowIndex, sideIndex as 0 | 1, { icon: { ...icon, color } })}
@@ -1476,16 +1476,16 @@ function BeforeAfterEditor({
                               </div>
                             </div>
                             <div>
-                              <LabeledField label="Heading">
+                              <LabeledField label="标题">
                                 <TextInput
                                   ariaLabel={`${sideLabel} row ${rowIndex + 1} heading`}
                                   value={item.heading ?? ""}
                                   onChange={(heading) => updatePairItem(rowIndex, sideIndex as 0 | 1, { heading })}
                                 />
                               </LabeledField>
-                              <LabeledField className="mt-2" label="Description">
+                              <LabeledField className="mt-2" label="描述">
                                 <textarea
-                                  aria-label={`${sideLabel} row ${rowIndex + 1} description`}
+                                  aria-label={`${sideLabel}行${rowIndex + 1}描述`}
                                   className="min-h-[72px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none focus:border-[#7C51F8]"
                                   maxLength={280}
                                   value={item.description ?? ""}
@@ -1537,7 +1537,7 @@ function MindMapEditor({
   const items = nested.length > 0 ? nested : data.items;
   return (
     <ItemCollectionEditor
-      description="Edit every visible node's icon, heading, description, and order."
+      description="编辑每个可见节点的图标、标题、描述和顺序。"
       itemLabel="node"
       items={items}
       onChange={(nextItems) =>
@@ -1549,7 +1549,7 @@ function MindMapEditor({
       onCreate={() => ({
         icon: defaultInfographicIcon(items.length),
         heading: `Node ${items.length + 1}`,
-        description: "Add a description.",
+        description: "添加描述。",
         items: [],
       })}
     />
@@ -1562,18 +1562,18 @@ function PillarFrameworkEditor({ data, onChange }: {
 }) {
   return (
     <div className="space-y-4">
-      <EditorSection title="Framework title" description="Edit the title displayed inside the roof.">
-        <TextInput ariaLabel="Pillar framework title" value={data.title} onChange={(title) => onChange({ ...data, title })} />
+      <EditorSection title="框架标题" description="编辑屋顶内显示的标题。">
+        <TextInput ariaLabel="支柱框架标题" value={data.title} onChange={(title) => onChange({ ...data, title })} />
       </EditorSection>
       <ItemCollectionEditor
-        description="Edit each pillar's icon, title, description, and focus label."
+        description="编辑每个支柱的图标、标题、描述和重点标签。"
         itemLabel="pillar"
         items={data.items}
         minItems={3}
         maxItems={7}
         showFocus
         onChange={(items) => onChange({ ...data, items })}
-        onCreate={() => ({ icon: defaultInfographicIcon(data.items.length), heading: `Pillar ${data.items.length + 1}`, description: "Add a description.", focus: "Focus area" })}
+        onCreate={() => ({ icon: defaultInfographicIcon(data.items.length), heading: `Pillar ${data.items.length + 1}`, description: "添加描述。", focus: "Focus area" })}
       />
     </div>
   );
@@ -1585,11 +1585,11 @@ function TransformationHubEditor({ data, onChange }: {
 }) {
   return (
     <div className="space-y-4">
-      <EditorSection title="Center label" description="Edit the transformation hub label.">
-        <TextInput ariaLabel="Transformation hub center label" value={data.center_label} onChange={(center_label) => onChange({ ...data, center_label })} />
+      <EditorSection title="居中标签" description="编辑转换枢纽的标签。">
+        <TextInput ariaLabel="转型中心标签" value={data.center_label} onChange={(center_label) => onChange({ ...data, center_label })} />
       </EditorSection>
       <ItemCollectionEditor
-        description="Edit the capability names connected to the central hub."
+        description="编辑连接到中央枢纽的能力名称。"
         itemLabel="capability"
         items={data.items}
         minItems={2}
@@ -1609,17 +1609,17 @@ function RiskMatrixEditor({ data, onChange }: {
 }) {
   return (
     <div className="space-y-4">
-      <EditorSection title="Center label" description="Use four characters for the central risk mark.">
-        <TextInput ariaLabel="Risk matrix center label" value={data.center_label} onChange={(center_label) => onChange({ ...data, center_label: center_label.slice(0, 4) })} />
+      <EditorSection title="居中标签" description="使用四个字符表示中央风险标记。">
+        <TextInput ariaLabel="风险矩阵中心标签" value={data.center_label} onChange={(center_label) => onChange({ ...data, center_label: center_label.slice(0, 4) })} />
       </EditorSection>
       <ItemCollectionEditor
-        description="Edit the four risk activities and their icons. Their positions stay fixed."
+        description="编辑四个风险活动及其图标。它们的位置固定不变。"
         itemLabel="activity"
         items={data.items}
         minItems={4}
         maxItems={4}
         onChange={(items) => onChange({ ...data, items })}
-        onCreate={() => ({ icon: defaultInfographicIcon(data.items.length), heading: "Activity", description: "Add a description." })}
+        onCreate={() => ({ icon: defaultInfographicIcon(data.items.length), heading: "活动", description: "添加描述。" })}
       />
     </div>
   );
@@ -1635,8 +1635,8 @@ function ImpactEffortEditor({
   return (
     <div className="space-y-4">
       <EditorSection
-        title="Axis labels"
-        description="Edit the impact and effort axis captions and their range labels."
+        title="坐标轴标签"
+        description="编辑影响和难度轴的标题及其范围标签。"
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {([
@@ -1656,14 +1656,14 @@ function ImpactEffortEditor({
         </div>
       </EditorSection>
       <ItemCollectionEditor
-        description="Edit the four quadrant titles and explanations. Their positions stay fixed."
+        description="编辑四个象限的标题和说明。它们的位置固定不变。"
         itemLabel="quadrant"
         items={data.items}
         minItems={4}
         maxItems={4}
         showIcons={false}
         onChange={(items) => onChange({ ...data, items })}
-        onCreate={() => ({ heading: "Quadrant", description: "Add a description." })}
+        onCreate={() => ({ heading: "象限", description: "添加描述。" })}
       />
     </div>
   );
@@ -1699,23 +1699,23 @@ function ComparisonMatrixEditor({
   return (
     <div className="space-y-4">
       <EditorSection
-        title="Criteria"
-        description="Add, rename, or remove the criteria shown as matrix rows."
-        action={<AddButton compact disabled={data.criteria.length >= 8} label="Add criterion" onClick={() => updateCriteria([...data.criteria, `Criterion ${data.criteria.length + 1}`])} />}
+        title="标准"
+        description="添加、重命名或删除作为矩阵行显示的准则。"
+        action={<AddButton compact disabled={data.criteria.length >= 8} label="添加准则" onClick={() => updateCriteria([...data.criteria, `Criterion ${data.criteria.length + 1}`])} />}
       >
         <div className="space-y-2">
           {data.criteria.map((criterion, index) => (
             <div key={`criterion-${index}`} className="flex gap-2">
               <TextInput ariaLabel={`Criterion ${index + 1}`} value={criterion} onChange={(value) => updateCriteria(data.criteria.map((current, itemIndex) => itemIndex === index ? value : current))} />
-              <MiniButton label="Delete criterion" disabled={data.criteria.length <= 1} onClick={() => updateCriteria(data.criteria.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={14} /></MiniButton>
+              <MiniButton label="删除准则" disabled={data.criteria.length <= 1} onClick={() => updateCriteria(data.criteria.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={14} /></MiniButton>
             </div>
           ))}
         </div>
       </EditorSection>
       <EditorSection
-        title="Options"
-        description="Edit every option's icon, heading, and value for each criterion."
-        action={<AddButton compact disabled={data.items.length >= 6} label="Add option" onClick={() => onChange({ ...data, items: [...data.items, { icon: defaultInfographicIcon(data.items.length), heading: `Option ${data.items.length + 1}`, values: data.criteria.map(() => "") }] })} />}
+        title="选项"
+        description="为每个准则编辑每个选项的图标、标题和值。"
+        action={<AddButton compact disabled={data.items.length >= 6} label="添加选项" onClick={() => onChange({ ...data, items: [...data.items, { icon: defaultInfographicIcon(data.items.length), heading: `Option ${data.items.length + 1}`, values: data.criteria.map(() => "") }] })} />}
       >
         <div className="space-y-3">
           {data.items.map((item, index) => {
@@ -1723,18 +1723,18 @@ function ComparisonMatrixEditor({
             return (
               <div key={`comparison-option-${index}`} className="rounded-xl border border-[#ECECF1] bg-white p-4">
                 <div className="mb-4 flex flex-wrap items-end gap-3 border-b border-[#EFEFF3] pb-4">
-                  <button type="button" aria-label={`Change option ${index + 1} icon`} className="grid size-11 place-items-center rounded-lg bg-[#506FBE] outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[#D8CEFA]" onClick={() => setEditingIconIndex(index)}>
+                  <button type="button" aria-label={`更改选项${index + 1}图标`} className="grid size-11 place-items-center rounded-lg bg-[#506FBE] outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[#D8CEFA]" onClick={() => setEditingIconIndex(index)}>
                     <InfographicIconPreview color={icon.color} url={icon.url} />
                   </button>
                   <div className="min-w-[180px] flex-1">
-                    <LabeledField label="Heading"><TextInput ariaLabel={`Option ${index + 1} heading`} value={item.heading} onChange={(heading) => updateItem(index, { heading })} /></LabeledField>
+                    <LabeledField label="标题"><TextInput ariaLabel={`Option ${index + 1} heading`} value={item.heading} onChange={(heading) => updateItem(index, { heading })} /></LabeledField>
                   </div>
-                  <DeferredColorInput aria-label={`Option ${index + 1} icon color`} className="h-9 w-14 rounded-lg border border-[#E6E6EA] bg-white p-1" value={icon.color} onCommit={(color) => updateItem(index, { icon: { ...icon, color } })} />
-                  <MiniButton label="Delete option" disabled={data.items.length <= 1} onClick={() => onChange({ ...data, items: data.items.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={14} /></MiniButton>
+                  <DeferredColorInput aria-label={`选项${index + 1}图标颜色`} className="h-9 w-14 rounded-lg border border-[#E6E6EA] bg-white p-1" value={icon.color} onCommit={(color) => updateItem(index, { icon: { ...icon, color } })} />
+                  <MiniButton label="删除选项" disabled={data.items.length <= 1} onClick={() => onChange({ ...data, items: data.items.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={14} /></MiniButton>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {data.criteria.map((criterion, valueIndex) => (
-                    <LabeledField key={`${index}-${valueIndex}`} label={criterion || `Criterion ${valueIndex + 1}`}>
+                    <LabeledField key={`${index}-${valueIndex}`} label={criterion || `标准${valueIndex + 1}`}>
                       <TextInput ariaLabel={`${item.heading} ${criterion}`} value={item.values[valueIndex] ?? ""} onChange={(value) => updateItem(index, { values: data.criteria.map((_, criterionIndex) => criterionIndex === valueIndex ? value : item.values[criterionIndex] ?? "") })} />
                     </LabeledField>
                   ))}
@@ -1767,7 +1767,7 @@ function HierarchyEditor({
     onChange({ ...data, items: data.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) });
   const addItem = () => {
     const id = `node-${Date.now().toString(36)}-${data.items.length + 1}`;
-    onChange({ ...data, items: [...data.items, { id, parent_id: data.items[0]?.id ?? null, heading: "New item", description: data.type === "org_chart" ? "Role" : null }] });
+    onChange({ ...data, items: [...data.items, { id, parent_id: data.items[0]?.id ?? null, heading: "新项目", description: data.type === "org_chart" ? "角色" : null }] });
   };
   const deleteItem = (index: number) => {
     const removed = data.items[index];
@@ -1776,25 +1776,25 @@ function HierarchyEditor({
   };
   return (
     <EditorSection
-      title={data.type === "org_chart" ? "People and reporting lines" : "Decision nodes"}
-      description="Edit each node and choose its parent to control the hierarchy."
-      action={<AddButton compact disabled={data.items.length >= 16} label="Add item" onClick={addItem} />}
+      title={data.type === "org_chart" ? "人员与汇报线" : "决策节点"}
+      description="编辑每个节点并选择其父节点以控制层级"
+      action={<AddButton compact disabled={data.items.length >= 16} label="添加项目" onClick={addItem} />}
     >
       <div className="space-y-3">
         {data.items.map((item, index) => (
           <div key={item.id} className="rounded-xl border border-[#ECECF1] bg-white p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px_auto]">
-              <LabeledField label={data.type === "org_chart" ? "Name" : "Label"}><TextInput ariaLabel={`Item ${index + 1} heading`} value={item.heading} onChange={(heading) => updateItem(index, { heading })} /></LabeledField>
-              <LabeledField label="Parent">
+              <LabeledField label={data.type === "org_chart" ? "名称" : "标签"}><TextInput ariaLabel={`Item ${index + 1} heading`} value={item.heading} onChange={(heading) => updateItem(index, { heading })} /></LabeledField>
+              <LabeledField label="父级">
                 <select className={inputClassName} value={item.parent_id ?? ""} onChange={(event) => updateItem(index, { parent_id: event.target.value || null })}>
                   <option value="">顶层</option>
                   {data.items.map((candidate) => candidate.id !== item.id ? <option key={candidate.id} value={candidate.id}>{candidate.heading || candidate.id}</option> : null)}
                 </select>
               </LabeledField>
-              <div className="flex justify-end sm:pt-7"><MiniButton label="Delete item" disabled={data.items.length <= 1} onClick={() => deleteItem(index)}><Trash2 size={14} /></MiniButton></div>
+              <div className="flex justify-end sm:pt-7"><MiniButton label="删除项目" disabled={data.items.length <= 1} onClick={() => deleteItem(index)}><Trash2 size={14} /></MiniButton></div>
             </div>
             {data.type === "org_chart" ? (
-              <LabeledField className="mt-3" label="Role"><TextInput ariaLabel={`Item ${index + 1} role`} value={item.description ?? ""} onChange={(description) => updateItem(index, { description })} /></LabeledField>
+              <LabeledField className="mt-3" label="角色"><TextInput ariaLabel={`Item ${index + 1} role`} value={item.description ?? ""} onChange={(description) => updateItem(index, { description })} /></LabeledField>
             ) : null}
           </div>
         ))}
@@ -1896,7 +1896,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
           <AddButton
             compact
             disabled={maxItems != null && items.length >= maxItems}
-            label={`Add ${itemLabel}`}
+            label={`添加${itemLabel}`}
             onClick={addItem}
           />
         }
@@ -1938,7 +1938,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                         {capitalize(itemLabel)} {index + 1}
                       </span>
                       <span className="mt-0.5 block truncate text-[10px] text-[#8B8B94]">
-                        {item.heading?.trim() || "Untitled"}
+                        {item.heading?.trim() || "未命名"}
                       </span>
                     </span>
                     {isExpanded ? (
@@ -1961,7 +1961,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                       onMove={(direction) => moveItem(index, direction)}
                     />
                     <MiniButton
-                      label={`Delete ${itemLabel}`}
+                      label={`删除${itemLabel}`}
                       disabled={items.length <= minItems}
                       onClick={() => deleteItem(index)}
                     >
@@ -1980,11 +1980,11 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                     {showIcons ? (
                       <div>
                         <span className="mb-1.5 block text-[11px] font-medium text-[#686873]">
-                          Icon
+                          图标
                         </span>
                         <button
                           type="button"
-                          aria-label={`Change ${itemLabel} ${index + 1} icon`}
+                          aria-label={`更改${itemLabel} ${index + 1}图标`}
                           className="group flex w-full flex-col items-center gap-2 rounded-lg border border-[#E6E6EA] bg-[#F8F8FA] px-2 py-3 text-[#686873] outline-none transition hover:border-[#B8A3F8] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
                           onClick={() => setEditingIconIndex(index)}
                         >
@@ -1995,13 +1995,13 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                             />
                           </span>
                           <span className="text-[10px] font-medium text-[#7C51F8]">
-                            Change icon
+                            更改图标
                           </span>
                         </button>
                         <div className="mt-3">
-                          <LabeledField label="Icon color">
+                          <LabeledField label="图标颜色">
                             <DeferredColorInput
-                              aria-label={`${capitalize(itemLabel)} ${index + 1} icon color`}
+                              aria-label={`${capitalize(itemLabel)} ${index + 1}图标颜色`}
                               className="h-8 w-full rounded-lg border border-[#E6E6EA] bg-white p-1"
                               value={icon.color}
                               onCommit={(color) =>
@@ -2028,7 +2028,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                     <div className="min-w-0">
                       {showValue ? (
                         <NumberInput
-                          label="Percentage"
+                          label="百分比"
                           max={100}
                           min={0}
                           value={
@@ -2049,7 +2049,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                       ) : null}
                       <LabeledField
                         className={showValue ? "mt-3" : ""}
-                        label="Heading"
+                        label="标题"
                       >
                         <TextInput
                           ariaLabel={`${capitalize(itemLabel)} ${index + 1} heading`}
@@ -2066,9 +2066,9 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                         />
                       </LabeledField>
                       {showDescription ? (
-                        <LabeledField className="mt-3" label="Description">
+                        <LabeledField className="mt-3" label="描述">
                           <textarea
-                            aria-label={`${capitalize(itemLabel)} ${index + 1} description`}
+                            aria-label={`${capitalize(itemLabel)} ${index + 1}描述`}
                             className="min-h-[82px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none transition focus:border-[#7C51F8]"
                             maxLength={280}
                             value={item.description ?? ""}
@@ -2088,7 +2088,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                         </LabeledField>
                       ) : null}
                       {showFocus ? (
-                        <LabeledField className="mt-3" label="Focus">
+                        <LabeledField className="mt-3" label="焦点">
                           <TextInput
                             ariaLabel={`${capitalize(itemLabel)} ${index + 1} focus`}
                             value={item.focus ?? ""}
@@ -2343,14 +2343,14 @@ function MoveButtons({
   return (
     <>
       <MiniButton
-        label={`Move ${label} up`}
+        label={`移动${label}上`}
         disabled={index === 0}
         onClick={() => onMove(-1)}
       >
         <ChevronUp size={14} />
       </MiniButton>
       <MiniButton
-        label={`Move ${label} down`}
+        label={`移动${label}下`}
         disabled={index === length - 1}
         onClick={() => onMove(1)}
       >
@@ -2389,7 +2389,7 @@ function readGanttData(value: unknown): GanttInfographicData {
   const columns = readArray(data.columns).map((column, index) => ({
     label: readString(readRecord(column).label, `Column ${index + 1}`),
   }));
-  const safeColumns = columns.length > 0 ? columns : [{ label: "Column 1" }];
+  const safeColumns = columns.length > 0 ? columns : [{ label: "第 1 列" }];
   const rows = readArray(data.rows).map((row, rowIndex) => {
     const record = readRecord(row);
     return {
@@ -2413,7 +2413,7 @@ function readGanttData(value: unknown): GanttInfographicData {
     rows:
       rows.length > 0
         ? rows
-        : [{ label: "Row 1", items: [defaultGanttItem(safeColumns.length)] }],
+        : [{ label: "第 1 行", items: [defaultGanttItem(safeColumns.length)] }],
   };
 }
 
@@ -2430,11 +2430,11 @@ function readItemCollectionData(
         ? items
         : type === "pyramid"
           ? [
-              { icon: defaultInfographicIcon(0), heading: "Foundation", description: "" },
-              { icon: defaultInfographicIcon(1), heading: "Efficiency", description: "" },
-              { icon: defaultInfographicIcon(2), heading: "Innovation", description: "" },
+              { icon: defaultInfographicIcon(0), heading: "基础", description: "" },
+              { icon: defaultInfographicIcon(1), heading: "效率", description: "" },
+              { icon: defaultInfographicIcon(2), heading: "创新", description: "" },
             ]
-          : [{ icon: defaultInfographicIcon(), heading: "Step 1", description: "" }],
+          : [{ icon: defaultInfographicIcon(), heading: "步骤 1", description: "" }],
   };
 }
 
@@ -2447,7 +2447,7 @@ function readRadialCycleData(value: unknown): RadialCycleInfographicData {
     items:
       items.length > 0
         ? items
-        : [{ heading: "Stage 1", description: "" }],
+        : [{ heading: "阶段 1", description: "" }],
   };
 }
 
@@ -2457,13 +2457,13 @@ function readBeforeAfterData(value: unknown): BeforeAfterInfographicData {
   const safeItems = items.length >= 2
     ? items.slice(0, items.length - (items.length % 2))
     : [
-        { icon: defaultInfographicIcon(0), heading: "Before", description: "" },
-        { icon: defaultInfographicIcon(1), heading: "After", description: "" },
+        { icon: defaultInfographicIcon(0), heading: "之前", description: "" },
+        { icon: defaultInfographicIcon(1), heading: "之后", description: "" },
       ];
   return {
     type: "before_after",
-    before_label: readString(data.before_label, "Before"),
-    after_label: readString(data.after_label, "After"),
+    before_label: readString(data.before_label, "之前"),
+    after_label: readString(data.after_label, "之后"),
     items: safeItems,
   };
 }
@@ -2471,18 +2471,18 @@ function readBeforeAfterData(value: unknown): BeforeAfterInfographicData {
 function readImpactEffortData(value: unknown): ImpactEffortMatrixInfographicData {
   const data = readRecord(value);
   const defaults: TimelineInfographicItem[] = [
-    { heading: "Quick Wins", description: "High-impact initiatives requiring relatively low effort." },
-    { heading: "Strategic Priorities", description: "High-impact initiatives requiring significant investment." },
-    { heading: "Deprioritize", description: "Low-impact initiatives requiring substantial effort." },
-    { heading: "Fill-ins", description: "Low-impact initiatives that are easy to implement." },
+    { heading: "快速见效", description: "需要相对较少努力的高影响力举措。" },
+    { heading: "战略重点", description: "需要大量投资的高影响力举措。" },
+    { heading: "降低优先级", description: "需要大量努力的低影响力举措。" },
+    { heading: "补充事项", description: "易于实施的低影响力举措。" },
   ];
   const items = readArray(data.items).map(readTimelineItem);
   return {
     type: "impact_effort_matrix",
-    x_axis_label: readString(data.x_axis_label, "Impact"),
-    y_axis_label: readString(data.y_axis_label, "Effort"),
-    low_label: readString(data.low_label, "Low"),
-    high_label: readString(data.high_label, "High"),
+    x_axis_label: readString(data.x_axis_label, "影响力"),
+    y_axis_label: readString(data.y_axis_label, "工作量"),
+    low_label: readString(data.low_label, "低"),
+    high_label: readString(data.high_label, "高"),
     items: defaults.map((fallback, index) => items[index] ?? fallback),
   };
 }
@@ -2503,7 +2503,7 @@ function readComparisonMatrixData(value: unknown): ComparisonMatrixInfographicDa
   return {
     type: "comparison_matrix",
     criteria: safeCriteria,
-    items: items.length > 0 ? items : [{ icon: defaultInfographicIcon(), heading: "Option 1", values: safeCriteria.map(() => "") }],
+    items: items.length > 0 ? items : [{ icon: defaultInfographicIcon(), heading: "选项 1", values: safeCriteria.map(() => "") }],
   };
 }
 
@@ -2523,7 +2523,7 @@ function readHierarchyData(
   });
   return {
     type,
-    items: items.length > 0 ? items : [{ id: "node-1", parent_id: null, heading: type === "org_chart" ? "Leader" : "Decision", description: type === "org_chart" ? "Role" : null }],
+    items: items.length > 0 ? items : [{ id: "node-1", parent_id: null, heading: type === "org_chart" ? "Leader" : "Decision", description: type === "org_chart" ? "角色" : null }],
   };
 }
 
@@ -2544,7 +2544,7 @@ function readConversionFunnelData(
     items:
       items.length > 0
         ? items
-        : [{ value: 50, heading: "Stage 1", description: "" }],
+        : [{ value: 50, heading: "阶段 1", description: "" }],
   };
 }
 
@@ -2559,7 +2559,7 @@ function readMindMapData(value: unknown): MindMapInfographicData {
         : [
             {
               icon: defaultInfographicIcon(),
-              heading: "Node 1",
+              heading: "节点 1",
               description: "",
               items: [],
             },
@@ -2583,22 +2583,22 @@ function readPillarFrameworkData(value: unknown): PillarFrameworkInfographicData
   const items = readArray(data.items).map(readTimelineItem);
   return {
     type: "pillar_framework",
-    title: readString(data.title, "Growth & Transformation Framework"),
-    items: items.length > 0 ? items : [{ icon: defaultInfographicIcon(), heading: "Customer", description: "", focus: "Experience & Value" }],
+    title: readString(data.title, "增长与转型框架"),
+    items: items.length > 0 ? items : [{ icon: defaultInfographicIcon(), heading: "客户", description: "", focus: "Experience & Value" }],
   };
 }
 
 function readTransformationHubData(value: unknown): TransformationHubInfographicData {
   const data = readRecord(value);
   const items = readArray(data.items).map(readTimelineItem);
-  return { type: "transformation_hub", center_label: readString(data.center_label, "Business Transformation"), items: items.length > 0 ? items : [{ heading: "Strategy" }, { heading: "Process" }] };
+  return { type: "transformation_hub", center_label: readString(data.center_label, "业务转型"), items: items.length > 0 ? items : [{ heading: "战略" }, { heading: "流程" }] };
 }
 
 function readRiskMatrixData(value: unknown): RiskMatrixInfographicData {
   const data = readRecord(value);
-  const defaults = ["Identify", "Prioritize", "Assess", "Respond"].map((heading, index) => ({ icon: defaultInfographicIcon(index), heading, description: "Add a description." }));
+  const defaults = ["Identify", "Prioritize", "Assess", "Respond"].map((heading, index) => ({ icon: defaultInfographicIcon(index), heading, description: "添加描述。" }));
   const items = readArray(data.items).map(readTimelineItem);
-  return { type: "risk_matrix", center_label: readString(data.center_label, "RISK"), items: defaults.map((fallback, index) => items[index] ?? fallback) };
+  return { type: "risk_matrix", center_label: readString(data.center_label, "风险"), items: defaults.map((fallback, index) => items[index] ?? fallback) };
 }
 
 function readMindMapNode(value: unknown): MindMapInfographicNode {

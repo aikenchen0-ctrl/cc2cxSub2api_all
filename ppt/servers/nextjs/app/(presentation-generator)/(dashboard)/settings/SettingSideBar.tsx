@@ -19,7 +19,7 @@ const SettingSideBar = ({ selectedProvider, setSelectedProvider, presentonSelect
                     <button className={` w-full rounded-[6px] px-3 py-4 flex items-center gap-1.5 border  ${selectedProvider === 'text-provider' ? 'bg-[#F4F3FF] border-[#D9D6FE]' : 'bg-white border-[#EDEEEF]'}`} onClick={() => setSelectedProvider('text-provider')}>
                         <div className='relative w-[18px] h-[18px] rounded-full overflow-hidden border border-[#EDEEEF]'>
 
-                            <img src={textProviderIcon} className=' object-cover w-full h-full overflow-hidden' alt='google' />
+                            <img src={textProviderIcon} className=' object-cover w-full h-full overflow-hidden' alt='文本服务商图标' />
                         </div>
                         <p className='text-[#191919] text-xs  font-medium' >文本服务商</p>
                     </button>
@@ -27,7 +27,7 @@ const SettingSideBar = ({ selectedProvider, setSelectedProvider, presentonSelect
                         <>
                             <button className={` w-full rounded-[6px] px-3 py-4 flex items-center gap-1.5 border  ${selectedProvider === 'image-provider' ? 'bg-[#F4F3FF] border-[#D9D6FE]' : 'bg-white border-[#EDEEEF]'}`} onClick={() => setSelectedProvider('image-provider')}>
                                 <div className='relative w-[18px] h-[18px] rounded-full overflow-hidden border border-[#EDEEEF]'>
-                                    <img src={imageProviderIcon} className=' object-cover w-full h-full overflow-hidden' alt='image provider' />
+                                    <img src={imageProviderIcon} className=' object-cover w-full h-full overflow-hidden' alt='图像提供商' />
                                 </div>
                                 <p className='text-[#191919] text-xs  font-medium' >图片服务商</p>
                             </button>

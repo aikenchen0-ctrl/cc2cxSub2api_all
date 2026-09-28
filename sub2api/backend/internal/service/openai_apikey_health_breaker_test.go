@@ -86,7 +86,9 @@ func TestClassifyOpenAIAPIKeyHealthFailureExclusions(t *testing.T) {
 		{name: "provider scoped overload", err: &UpstreamFailoverError{StatusCode: 529}, eligible: true},
 		{name: "dedicated same account retry", err: &UpstreamFailoverError{StatusCode: http.StatusTooManyRequests, RetryableOnSameAccount: true}, eligible: true},
 		{name: "credential disable path", err: &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount}, eligible: true},
-		{name: "client request", err: &UpstreamFailoverError{StatusCode: http.StatusBadRequest}, eligible: true},
+		{name: "client request", err: &UpstreamFailoverError{StatusCode: http.StatusBadRequest}, eligible: false},
+		{name: "request-level unsupported method", err: &UpstreamFailoverError{StatusCode: http.StatusMethodNotAllowed, ResponseBody: []byte(`{"error":{"message":"method not supported"}}`)}, eligible: false},
+		{name: "misconfigured upstream html 405", err: &UpstreamFailoverError{StatusCode: http.StatusMethodNotAllowed, ResponseBody: []byte("<html><head><title>405 Not Allowed</title></head></html>")}, eligible: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

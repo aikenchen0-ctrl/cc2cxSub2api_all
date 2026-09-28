@@ -99,7 +99,7 @@ const SlideContent = ({
                     aria-hidden="true"
                   />
                   <span className="text-[13px] font-normal leading-[14px] tracking-[0.39px] text-[#666666]">
-                    Updating slides...
+                    正在更新幻灯片...
                   </span>
                 </span>
               </span>

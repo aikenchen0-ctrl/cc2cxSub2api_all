@@ -51,7 +51,7 @@ func TestDecodeOptionalJSONHandlesChunkedJSON(t *testing.T) {
 	}
 }
 
-func TestProvisioningControlDefaultsToManagedAgentIDs(t *testing.T) {
+func TestProvisioningControlIsExplicitlyEnabled(t *testing.T) {
 	t.Setenv("SESSION_SECRET", strings.Repeat("s", 32))
 	t.Setenv("SESSION_SECRET_FILE", "")
 	t.Setenv("AGENT_INITIAL_BALANCE", "")
@@ -74,12 +74,12 @@ func TestProvisioningControlDefaultsToManagedAgentIDs(t *testing.T) {
 		want              bool
 		wantErrorContains string
 	}{
-		{name: "managed id", agentID: "agt_0123456789abcdef0123456789abcdef", domain: "agent.example.com", want: true},
+		{name: "managed id is zero schema by default", agentID: "agt_0123456789abcdef0123456789abcdef", want: false},
 		{name: "local id", agentID: "agent-local", want: false},
-		{name: "explicit enable", agentID: "agent-local", override: "true", want: true},
-		{name: "managed id requires host binding", agentID: "agt_0123456789abcdef0123456789abcdef", wantErrorContains: "AGENT_DOMAIN is required"},
-		{name: "managed id rejects malformed host binding", agentID: "agt_0123456789abcdef0123456789abcdef", domain: "agent.example.com/path", wantErrorContains: "valid DNS hostname"},
-		{name: "managed id cannot disable control", agentID: "agt_0123456789abcdef0123456789abcdef", domain: "agent.example.com", override: "false", wantErrorContains: "cannot be disabled for a managed Agent ID"},
+		{name: "explicit enable", agentID: "agent-local", domain: "agent.example.com", override: "true", want: true},
+		{name: "explicit enable requires host binding", agentID: "agent-local", override: "true", wantErrorContains: "AGENT_DOMAIN is required"},
+		{name: "explicit enable rejects malformed host binding", agentID: "agent-local", domain: "agent.example.com/path", override: "true", wantErrorContains: "valid DNS hostname"},
+		{name: "managed id may explicitly disable control", agentID: "agt_0123456789abcdef0123456789abcdef", override: "false", want: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("AGENT_ID", test.agentID)
@@ -88,7 +88,7 @@ func TestProvisioningControlDefaultsToManagedAgentIDs(t *testing.T) {
 			cfg, err := LoadConfig()
 			if test.wantErrorContains != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantErrorContains) {
-					t.Fatalf("managed Agent config error = %v, want %q", err, test.wantErrorContains)
+					t.Fatalf("provisioning config error = %v, want %q", err, test.wantErrorContains)
 				}
 				return
 			}
@@ -96,7 +96,7 @@ func TestProvisioningControlDefaultsToManagedAgentIDs(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cfg.ProvisioningControlEnabled != test.want || cfg.ProvisioningControlStaleAfter != 90*time.Second {
-				t.Fatalf("managed control config = %v / %s, want %v / 90s", cfg.ProvisioningControlEnabled, cfg.ProvisioningControlStaleAfter, test.want)
+				t.Fatalf("provisioning control config = %v / %s, want %v / 90s", cfg.ProvisioningControlEnabled, cfg.ProvisioningControlStaleAfter, test.want)
 			}
 		})
 	}
@@ -198,4 +198,34 @@ func TestLoadConfigSeparatesControlAndModelRelayBases(t *testing.T) {
 			t.Fatalf("resolved bases = %q / %q, want HTTP loopback bases", cfg.MainAPIBaseURL, cfg.MainModelBaseURL)
 		}
 	})
+}
+
+func TestLoadConfigAllowsStoredPaymentConfigWithoutBootstrapSecret(t *testing.T) {
+	for name, value := range map[string]string{
+		"AGENT_ID":                              "agent-local",
+		"AGENT_PROVISIONING_CONTROL_ENABLED":    "false",
+		"AGENT_RUNTIME_CONTROL_CREDENTIAL":      "",
+		"AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE": "",
+		"SUB2API_APP_CREDENTIAL":                "shared-satellite-credential",
+		"SUB2API_APP_CREDENTIAL_FILE":           "",
+		"SUB2API_SATELLITE":                     "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":                 "agentapi",
+		"SESSION_SECRET":                        strings.Repeat("s", 32),
+		"SESSION_SECRET_FILE":                   "",
+		"AGENT_BILLING_MODE":                    "owner_upstream",
+		"AGENT_INITIAL_BALANCE":                 "",
+		"AGENT_PAYMENT_ENABLED":                 "true",
+		"AGENT_PAYMENT_WEBHOOK_SECRET":          "",
+		"AGENT_PAYMENT_WEBHOOK_SECRET_FILE":     "",
+	} {
+		t.Setenv(name, value)
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig rejected a restart that can use stored payment config: %v", err)
+	}
+	if !cfg.PaymentEnabled || cfg.PaymentWebhookSecret != "" {
+		t.Fatalf("unexpected payment bootstrap config: enabled=%v secret=%q", cfg.PaymentEnabled, cfg.PaymentWebhookSecret)
+	}
 }

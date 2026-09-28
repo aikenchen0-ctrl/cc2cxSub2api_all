@@ -2361,10 +2361,10 @@ function TemplateV2KonvaSlideComponent({
           }),
         });
         notify.error(
-          "Upload failed",
+          "上传失败",
           error instanceof Error
             ? error.message
-            : "Failed to upload image. Please try again.",
+            : "上传图片失败。请重试。",
         );
       } finally {
         pendingImageUploadRef.current = null;
@@ -2933,7 +2933,7 @@ function TemplateV2KonvaSlideComponent({
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/35">
           <div className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-[#191919] shadow-md">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Uploading image...
+            正在上传图像...
           </div>
         </div>
       ) : null}

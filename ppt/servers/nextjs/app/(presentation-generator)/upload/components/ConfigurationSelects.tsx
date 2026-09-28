@@ -1,4 +1,8 @@
-import { LanguageType, PresentationConfig } from "../type";
+import {
+  getLanguageDisplayName,
+  LanguageType,
+  PresentationConfig,
+} from "../type";
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -177,7 +181,7 @@ const SlideCountSelect: React.FC<{
                   : "text-xs font-medium min-[1800px]:text-sm min-[2200px]:text-base",
               )}
             >
-              {compact && value ? `Slides ${value}` : displayLabel}
+              {compact && value ? `幻灯片${value}` : displayLabel}
             </span>
             {compact && (
               <ChevronUp
@@ -231,7 +235,7 @@ const SlideCountSelect: React.FC<{
               className="h-8 w-16 px-2 text-sm min-[1800px]:h-9 min-[1800px]:w-20 min-[1800px]:text-base"
             />
             <span className="text-sm font-medium min-[1800px]:text-base">
-              slides
+              幻灯片
             </span>
           </div>
         </div>
@@ -323,7 +327,7 @@ const LanguageSelect: React.FC<{
                 : "text-xs font-medium min-[1800px]:text-sm min-[2200px]:text-base",
             )}
           >
-            {value || "选择语言"}
+            {getLanguageDisplayName(value)}
           </span>
           {compact && (
             <ChevronUp
@@ -368,7 +372,7 @@ const LanguageSelect: React.FC<{
                     value === language ? "opacity-100" : "opacity-0",
                   )}
                 />
-                {language}
+                {getLanguageDisplayName(language)}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -405,7 +409,7 @@ export function ConfigurationSelects({
           compact ? "h-[34px] shadow-none" : "h-[38px] shadow-sm",
         )}
       >
-        {mode === "standard" ? "Standard" : "Smart"}
+        {mode === "standard" ? "标准" : "智能"}
         <ChevronUp className="h-4 w-4" />
       </Button>
 

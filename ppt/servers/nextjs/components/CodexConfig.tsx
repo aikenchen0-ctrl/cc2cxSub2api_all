@@ -157,7 +157,7 @@ export default function CodexConfig({
               onInputChange(DEFAULT_CODEX_MODEL, "codex_model");
             }
             notify.success(
-              "Signed in to ChatGPT",
+              "已登录 ChatGPT",
               "ChatGPT 账户已连接，可以开始使用。"
             );
           } else if (pollData.status === "failed") {
@@ -166,8 +166,8 @@ export default function CodexConfig({
             setAuthStatus("unauthenticated");
             applyProfile({});
             notify.error(
-              "Sign-in failed",
-              "Authentication did not complete. Please try signing in again."
+              "登录失败",
+              "认证未完成，请重新尝试登录。"
             );
           }
         } catch {
@@ -177,7 +177,7 @@ export default function CodexConfig({
     } catch (err) {
       trackEvent(MixpanelEvent.Codex_SignIn_Failed, { method: "initiate" });
       notify.error(
-        "Sign-in failed",
+        "登录失败",
         "无法启动登录流程，请重试。"
       );
       setAuthStatus("unauthenticated");
@@ -215,14 +215,14 @@ export default function CodexConfig({
         onInputChange(DEFAULT_CODEX_MODEL, "codex_model");
       }
       notify.success(
-        "Signed in to ChatGPT",
+        "已登录 ChatGPT",
         "ChatGPT 账户已连接，可以开始使用。"
       );
     } catch (err: any) {
       trackEvent(MixpanelEvent.Codex_SignIn_Failed, { method: "manual_exchange" });
       notify.error(
-        "Sign-in failed",
-        err.message || "The verification code could not be accepted. Please try again."
+        "登录失败",
+        err.message || "无法接受验证码，请重试。"
       );
     } finally {
       setIsExchanging(false);
@@ -272,12 +272,12 @@ export default function CodexConfig({
       syncStoreAfterCodexSignOut();
       router.replace(pathname.startsWith("/settings") ? "/settings" : "/");
       notify.success(
-        "Signed out",
-        "You have been disconnected from ChatGPT."
+        "已登出",
+        "您已与 ChatGPT 断开连接。"
       );
     } catch {
       notify.error(
-        "Sign-out failed",
+        "注销失败",
         "无法断开 ChatGPT 连接，请重试。"
       );
     } finally {
@@ -315,12 +315,12 @@ export default function CodexConfig({
       const data = await res.json();
       applyProfile(data);
       notify.success(
-        "Session refreshed",
+        "会话已刷新",
         "ChatGPT 连接已成功续期。"
       );
     } catch {
       notify.error(
-        "Session refresh failed",
+        "会话刷新失败",
         "ChatGPT 会话无法续期，请重新登录。"
       );
       setAuthStatus("unauthenticated");
@@ -339,7 +339,7 @@ export default function CodexConfig({
         <div className="text-start flex-1 min-w-0">
           <h4 className="text-[#191919] text-lg font-medium">正在检查状态</h4>
           <p className="text-[#B3B3B3] text-sm font-normal">
-            Verifying your ChatGPT connection…
+            正在验证您的 ChatGPT 连接…
           </p>
         </div>
       </div>
@@ -357,7 +357,7 @@ export default function CodexConfig({
             <div className="text-start min-w-0">
               <h4 className="text-[#191919] text-lg font-medium">等待登录</h4>
               <p className="text-[#B3B3B3] text-sm font-normal">
-                Complete sign-in in the browser tab we opened.
+                请在我们打开的浏览器标签页中完成登录。
               </p>
             </div>
           </div>
@@ -372,12 +372,12 @@ export default function CodexConfig({
 
         <div className="space-y-2 rounded-[8px] border border-[#EDEEEF] p-3">
           <p className="text-[#191919] text-xs font-normal">
-            Paste redirect URL or code if you were not redirected automatically
+            如果您未自动跳转，请粘贴重定向 URL 或代码
           </p>
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Paste URL or code…"
+              placeholder="粘贴 URL 或代码…"
               className="flex-1 min-w-0 px-3 py-2.5 outline-none border border-[#EDEEEF] rounded-[8px]  text-sm text-[#191919] placeholder:text-[#666666] focus:border-[#555555] transition-colors"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
@@ -409,7 +409,7 @@ export default function CodexConfig({
 
             <div className="w-[40px] h-[40px] bg-[#333333] rounded-full flex items-center justify-center" >
 
-              <img src="/providers/OpenAI-white.png" alt="openai Logo" className="w-[27px] h-[27px]" />
+              <img src="/providers/OpenAI-white.png" alt="OpenAI 标志" className="w-[27px] h-[27px]" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -468,7 +468,7 @@ export default function CodexConfig({
       <div className="flex items-center gap-2 flex-1">
         <div className="w-[40px] h-[40px] bg-[#333333] rounded-full flex items-center justify-center" >
 
-          <img src="/providers/OpenAI-white.png" alt="openai Logo" className="w-[27px] h-[27px]" />
+          <img src="/providers/OpenAI-white.png" alt="OpenAI 标志" className="w-[27px] h-[27px]" />
         </div>
         <div className="text-start flex-1">
           <h4 className="text-[#191919] text-sm font-medium">使用 ChatGPT 登录</h4>

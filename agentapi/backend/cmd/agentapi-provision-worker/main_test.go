@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,7 @@ func setupWorkerConfigEnv(t *testing.T) {
 		value string
 	}{
 		{name: "worker", env: "AGENT_PROVISIONING_WORKER_CREDENTIAL_FILE", value: "worker-provisioning-test-secret-32-bytes-minimum"},
+		{name: "app", env: "SUB2API_APP_CREDENTIAL_FILE", value: "shared-satellite-app-credential"},
 		{name: "sso", env: "SUB2API_SSO_SECRET_FILE", value: "sso-test-secret"},
 	} {
 		path := filepath.Join(root, secret.name+".secret")
@@ -83,4 +85,13 @@ func setupWorkerConfigEnv(t *testing.T) {
 	t.Setenv("AGENTAPI_NGINX_CONFIG_DIR", nginxDir)
 	t.Setenv("AGENTAPI_NGINX_CONTAINER", "nginx-edge")
 	t.Setenv("AGENTAPI_EDGE_IPS", "203.0.113.7")
+}
+
+func TestLoadConfigRequiresSharedSatelliteCredentialFile(t *testing.T) {
+	setupWorkerConfigEnv(t)
+	t.Setenv("SUB2API_APP_CREDENTIAL_FILE", "")
+
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "SUB2API_APP_CREDENTIAL_FILE") {
+		t.Fatalf("loadConfig() error = %v, want missing shared satellite credential", err)
+	}
 }

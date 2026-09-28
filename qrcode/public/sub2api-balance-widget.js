@@ -6,6 +6,7 @@
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  const balanceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function mount(host) {
     if (!(host instanceof HTMLElement) || mounted.has(host)) return;
@@ -22,7 +23,7 @@
       .dialog a{border-color:#2563eb;background:#2563eb;color:#fff}.dialog a[aria-disabled=true]{opacity:.5;pointer-events:none}
       @media(prefers-color-scheme:dark){.pill{background:#17191ddd}.dialog{background:#17191d;color:#f3f4f6}.dialog p{color:#cbd5e1}.dialog button{background:#22252b;color:#f3f4f6;border-color:#454a54}}
     </style>
-    <button class="pill" type="button" aria-label="查看账户余额"><span>余额</span><strong class="amount">--</strong></button>
+    <button class="pill" type="button" aria-label="查看账户余额并前往充值"><strong class="amount">￥--</strong><span>充值</span></button>
     <div class="overlay" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="balance-title">
       <h2 id="balance-title">余额不足</h2><p>当前账户余额为 <strong class="amount low"></strong>，暂时无法继续使用 AI 服务。请前往充值后重试。</p>
       <div class="actions"><button type="button" data-close>稍后</button><a data-recharge target="_blank" rel="noopener noreferrer">前往充值</a></div>
@@ -59,9 +60,9 @@
         if (!Number.isFinite(balance)) return;
         pill.style.display = "";
         const insufficient = balance <= 0;
-        const formatted = money.format(balance);
+        const formatted = `￥${balanceFormat.format(balance)}`;
         amount.textContent = formatted;
-        dialogAmount.textContent = formatted;
+        dialogAmount.textContent = money.format(balance);
         amount.classList.toggle("low", insufficient);
         rechargeUrl = "";
         const rawRechargeUrl = typeof result.recharge_url === "string" ? result.recharge_url.trim() : "";

@@ -213,10 +213,10 @@ function presentationActionsUiReducer(
 const insertActions: ActionItem[] = [
   { id: "texts", label: "文本", icon: Type },
   { id: "charts", label: "图表", icon: BarChart3 },
-  { id: "infographics", label: "Infographics", icon: Shapes },
-  { id: "tables", label: "Tables", icon: Rows3 },
+  { id: "infographics", label: "信息图", icon: Shapes },
+  { id: "tables", label: "表格", icon: Rows3 },
   { id: "images", label: "图片", icon: Image },
-  { id: "elements", label: "Elements", icon: Shapes },
+  { id: "elements", label: "元素", icon: Shapes },
 ];
 
 const actionIconSrc: Record<ActionId, string> = {
@@ -231,69 +231,69 @@ const actionIconSrc: Record<ActionId, string> = {
 };
 
 export const textItems = [
-  { id: "equation", label: "Equation", icon: Sigma },
-  { id: "equation-quadratic", label: "Quadratic", icon: Sigma },
-  { id: "equation-summation", label: "Summation", icon: Sigma },
-  { id: "equation-integral", label: "Integral", icon: Sigma },
-  { id: "equation-matrix", label: "Matrix", icon: Sigma },
-  { id: "title-block", label: "Title Block", icon: AlignCenter },
-  { id: "subtitle", label: "Subtitle", icon: AlignCenter },
-  { id: "bullet-list", label: "Bullet List", icon: List },
-  { id: "numbered-list", label: "Order List", icon: ListOrdered },
-  { id: "list-item", label: "List Item", icon: ListMinus },
-  { id: "quote", label: "Quote", icon: Quote },
-  { id: "body-text", label: "Body Text", icon: Columns2 },
+  { id: "equation", label: "公式", icon: Sigma },
+  { id: "equation-quadratic", label: "二次函数", icon: Sigma },
+  { id: "equation-summation", label: "求和", icon: Sigma },
+  { id: "equation-integral", label: "积分", icon: Sigma },
+  { id: "equation-matrix", label: "矩阵", icon: Sigma },
+  { id: "title-block", label: "标题块", icon: AlignCenter },
+  { id: "subtitle", label: "副标题", icon: AlignCenter },
+  { id: "bullet-list", label: "项目符号列表", icon: List },
+  { id: "numbered-list", label: "有序列表", icon: ListOrdered },
+  { id: "list-item", label: "列表项", icon: ListMinus },
+  { id: "quote", label: "引用", icon: Quote },
+  { id: "body-text", label: "正文文本", icon: Columns2 },
 ] satisfies PaletteItem[];
 
 export const chartTypeItems = [
-  { id: "bar", label: "Bar Chart", icon: BarChart3 },
-  { id: "horizontal_bar", label: "Horizontal Bar", icon: BarChart3 },
-  { id: "stacked_bar", label: "Stacked Bar", icon: BarChart3 },
+  { id: "bar", label: "柱状图", icon: BarChart3 },
+  { id: "horizontal_bar", label: "横向柱状图", icon: BarChart3 },
+  { id: "stacked_bar", label: "堆叠柱状图", icon: BarChart3 },
   {
     id: "horizontal_stacked_bar",
-    label: "Horizontal Stack Bar",
+    label: "横向堆叠柱状图",
     icon: BarChart3,
   },
-  { id: "line", label: "Line Chart", icon: LineChart },
-  { id: "pie", label: "Pie Chart", icon: PieChart },
-  { id: "area", label: "Area Chart", icon: AreaChart },
-  { id: "donut", label: "Donut Chart", icon: PieChart },
-  { id: "scatter", label: "Scatter Chart", icon: Circle },
-  { id: "radar", label: "Radar Chart", icon: PieChart },
-  { id: "polar_area", label: "Polar Area", icon: PieChart },
+  { id: "line", label: "折线图", icon: LineChart },
+  { id: "pie", label: "饼图", icon: PieChart },
+  { id: "area", label: "面积图", icon: AreaChart },
+  { id: "donut", label: "环形图", icon: PieChart },
+  { id: "scatter", label: "散点图", icon: Circle },
+  { id: "radar", label: "雷达图", icon: PieChart },
+  { id: "polar_area", label: "极坐标面积图", icon: PieChart },
 ] satisfies PaletteItem[];
 
 export const infographicItems = [
-  { id: "progress_bar", label: "Progress Bar", icon: ChartNoAxesGantt },
-  { id: "gauge", label: "Gauge Chart", icon: Gauge },
-  { id: "gantt", label: "Gantt Chart", icon: ChartNoAxesGantt },
-  { id: "timeline", label: "Timeline", icon: ArrowRight },
-  { id: "roadmap", label: "Roadmap", icon: Move },
-  { id: "milestone_timeline", label: "Milestones", icon: Flag },
-  { id: "staircase", label: "Staircase", icon: Rows3 },
-  { id: "supply_chain", label: "Supply Chain", icon: Move },
-  { id: "stair_step_blocks", label: "Step Blocks", icon: Rows3 },
-  { id: "maturity_model", label: "Maturity Model", icon: Rows3 },
-  { id: "pillar_framework", label: "Pillar Framework", icon: Columns2 },
-  { id: "transformation_hub", label: "Transformation Hub", icon: Shapes },
-  { id: "diagonal_circles", label: "Diagonal Circles", icon: Circle },
-  { id: "risk_matrix", label: "Risk Matrix", icon: Grid3X3 },
-  { id: "chevron_process", label: "Chevron Process", icon: ChevronsRight },
-  { id: "radial_cycle", label: "Radial Cycle", icon: Circle },
-  { id: "conversion_funnel", label: "Conversion Funnel", icon: AreaChart },
-  { id: "pyramid", label: "Pyramid", icon: Triangle },
-  { id: "segmented_wheel", label: "Segmented Wheel", icon: Circle },
-  { id: "customer_journey", label: "Customer Journey", icon: Move },
-  { id: "before_after", label: "Before & After", icon: Columns2 },
-  { id: "impact_effort_matrix", label: "Impact / Effort", icon: Grid3X3 },
-  { id: "comparison_matrix", label: "Comparison Matrix", icon: Table2 },
-  { id: "org_chart", label: "Organization Chart", icon: Rows3 },
-  { id: "decision_tree", label: "Decision Tree", icon: Shapes },
-  { id: "mind_map", label: "Mind Map", icon: Shapes },
+  { id: "progress_bar", label: "进度条", icon: ChartNoAxesGantt },
+  { id: "gauge", label: "仪表盘", icon: Gauge },
+  { id: "gantt", label: "甘特图", icon: ChartNoAxesGantt },
+  { id: "timeline", label: "时间线", icon: ArrowRight },
+  { id: "roadmap", label: "路线图", icon: Move },
+  { id: "milestone_timeline", label: "里程碑", icon: Flag },
+  { id: "staircase", label: "阶梯图", icon: Rows3 },
+  { id: "supply_chain", label: "供应链", icon: Move },
+  { id: "stair_step_blocks", label: "步骤块", icon: Rows3 },
+  { id: "maturity_model", label: "成熟度模型", icon: Rows3 },
+  { id: "pillar_framework", label: "支柱框架", icon: Columns2 },
+  { id: "transformation_hub", label: "转型中心", icon: Shapes },
+  { id: "diagonal_circles", label: "对角圆", icon: Circle },
+  { id: "risk_matrix", label: "风险矩阵", icon: Grid3X3 },
+  { id: "chevron_process", label: "箭头流程", icon: ChevronsRight },
+  { id: "radial_cycle", label: "径向循环", icon: Circle },
+  { id: "conversion_funnel", label: "转化漏斗", icon: AreaChart },
+  { id: "pyramid", label: "金字塔", icon: Triangle },
+  { id: "segmented_wheel", label: "分段轮图", icon: Circle },
+  { id: "customer_journey", label: "客户旅程", icon: Move },
+  { id: "before_after", label: "前后对比", icon: Columns2 },
+  { id: "impact_effort_matrix", label: "影响/努力", icon: Grid3X3 },
+  { id: "comparison_matrix", label: "对比矩阵", icon: Table2 },
+  { id: "org_chart", label: "组织架构图", icon: Rows3 },
+  { id: "decision_tree", label: "决策树", icon: Shapes },
+  { id: "mind_map", label: "思维导图", icon: Shapes },
 ] satisfies PaletteItem[];
 
 export const tableTypeItems = [
-  { id: "simple-table", label: "Simple Table", icon: Table2 },
+  { id: "simple-table", label: "简单表格", icon: Table2 },
 ] satisfies PaletteItem[];
 
 export const imageItems = [
@@ -435,7 +435,7 @@ const PaletteCard = ({
       disabled &&
         "cursor-not-allowed opacity-50 hover:translate-y-0 hover:border-[#EDEEF0] hover:shadow-sm",
     )}
-    aria-label={`Add ${item.label}`}
+    aria-label={`添加${item.label}`}
     title={item.label}
   >
     <div className="aspect-video w-full overflow-hidden bg-white">
@@ -902,7 +902,7 @@ function BlockVariantButton({
       onClick={() => {
         if (!disabled) onInsertBlock(block);
       }}
-      aria-label={`Insert ${block.title}`}
+      aria-label={`插入${block.title}`}
     >
       <div className="relative">
         <BlockThumbnail block={block} />
@@ -980,7 +980,7 @@ function BlockGroupCard({
           onClick={toggleExpanded}
         >
           <span className="shrink-0 rounded-full border border-[#D6BBFB] bg-[#FAF8FF] px-3 py-1.5 text-[11px] font-medium leading-4 text-[#7F00FF]">
-            {variantCount} Layouts
+            {variantCount} 布局
           </span>
           <ChevronDown
             className={cn(
@@ -1095,7 +1095,7 @@ export const BlocksPanel = ({
         }
       `}</style>
       <h3 className="mb-3 text-[clamp(13px,0.95vw,15px)] font-semibold leading-5 text-[#101323]">
-        Blocks
+        区块
       </h3>
 
       <div className="mb-7 flex h-[clamp(46px,3.6vw,52px)] items-center rounded-[10px] border border-[#EDEEF0] bg-white pl-[clamp(10px,0.9vw,12px)] pr-[clamp(6px,0.6vw,8px)] shadow-[0_10px_26px_rgba(17,24,39,0.08)]">
@@ -1127,7 +1127,7 @@ export const BlocksPanel = ({
       <div className="space-y-3">
         {loading && (
           <p className="rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] p-4 text-[11px] leading-4 text-[#667085]">
-            Loading template components...
+            正在加载模板组件...
           </p>
         )}
         {!loading && error && (
@@ -1137,7 +1137,7 @@ export const BlocksPanel = ({
         )}
         {!loading && !error && visibleBlocks.length === 0 && (
           <p className="rounded-[8px] border border-dashed border-[#D0D5DD] bg-[#F9FAFB] p-4 text-[11px] leading-4 text-[#667085]">
-            No template components found.
+            未找到模板组件。
           </p>
         )}
         {!loading &&
@@ -1217,7 +1217,7 @@ function ActionsSidebar({
 }) {
   return (
     <aside
-      aria-label="Editor tools"
+      aria-label="编辑器工具"
       className="ml-auto flex h-full w-[90px] font-syne shrink-0 flex-col items-center gap-5 bg-white px-[10px] py-2"
     >
       <div
@@ -1240,7 +1240,7 @@ function ActionsSidebar({
               disabled={blocksUnavailable}
               disabledReason="Blocks require a presentation template"
               iconSrc={actionIconSrc.blocks}
-              label="Blocks"
+              label="区块"
               onClick={() => onActionSelect("blocks")}
             />
           </>
@@ -1349,7 +1349,7 @@ function ActionsPanel({
         <InsertPanel
           disabled={editingDisabled}
           title="信息图"
-          groups={[{ label: "Choose a layout", items: infographicItems }]}
+          groups={[{ label: "选择布局", items: infographicItems }]}
           onItemSelect={onInfographicItemSelect}
           previewKind="infographic"
           theme={templateTheme}
@@ -1359,7 +1359,7 @@ function ActionsPanel({
         <InsertPanel
           disabled={editingDisabled}
           title="表格"
-          groups={[{ label: "Table Type", items: tableTypeItems }]}
+          groups={[{ label: "表格类型", items: tableTypeItems }]}
           onItemSelect={onTableItemSelect}
           previewKind="table"
           theme={templateTheme}
@@ -1529,7 +1529,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
     if (!detail.handled) {
       notify.warning(
         "无法插入",
-        "Content can be added only to slides imported through the slide editor.",
+        "仅可通过幻灯片编辑器导入的幻灯片才能添加内容。",
       );
       return false;
     }
@@ -1671,8 +1671,8 @@ const PresentationActions = (props: PresentationActionsProps) => {
     const element = adaptTemplateV2ComponentToElement(block.raw, block.index);
     if (!element) {
       notify.warning(
-        "Component unavailable",
-        "This template component cannot be inserted yet.",
+        "组件不可用",
+        "该模板组件暂时无法插入。",
       );
       return;
     }

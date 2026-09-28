@@ -38,7 +38,7 @@ export const SlidesList: React.FC<SlidesListProps> = ({
       {slides.map((slide, index) => (
         <SlideErrorBoundary
           key={index}
-          label={`Slide ${index + 1}`}
+          label={`幻灯片${index + 1}`}
         >
           <EachSlide
             key={index}

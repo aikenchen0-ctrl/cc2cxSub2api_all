@@ -24,7 +24,7 @@ const OutlineStandardHeader = ({
           <Image
             src="/project-icon.jpg"
             data-sub2api-site-logo
-            alt="永恒PPT"
+            alt="永恒 PPT"
             width={32}
             height={33}
             className="h-[33px] w-[32px]"
@@ -41,7 +41,7 @@ const OutlineStandardHeader = ({
         className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.96px] text-[#333333] transition-colors hover:text-[#7A5AF8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/30"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Back
+        返回
       </button>
     </div>
   </header>

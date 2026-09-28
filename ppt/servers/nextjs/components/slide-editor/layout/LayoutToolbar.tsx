@@ -163,7 +163,7 @@ function GapControl({
         <input
           type="text"
           inputMode={numericInputMode(numericInputOptions)}
-          aria-label="Gap"
+          aria-label="间距"
           value={formatGapValue(value)}
           onKeyDown={(event) => {
             if (preventInvalidNumberInput(event, numericInputOptions)) return;
@@ -185,8 +185,8 @@ function GapControl({
         <span className="flex   flex-col items-center justify-center">
           <button
             type="button"
-            title="Increase gap"
-            aria-label="Increase gap"
+            title="增加间距"
+            aria-label="增加间距"
             onClick={() => commit(value + 1)}
             className="grid  place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
           >
@@ -194,8 +194,8 @@ function GapControl({
           </button>
           <button
             type="button"
-            title="Decrease gap"
-            aria-label="Decrease gap"
+            title="减少间距"
+            aria-label="减少间距"
             onClick={() => commit(value - 1)}
             className="grid   place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
           >
@@ -231,8 +231,8 @@ function ItemsControl({
     <div className="relative">
       <button
         type="button"
-        title="Items"
-        aria-label="Items"
+        title="项目"
+        aria-label="项目"
         aria-expanded={open}
         onClick={() => onToggle("items")}
         className={cn(
@@ -361,7 +361,7 @@ export function TemplateV2LayoutToolbar({
           <>
             <div
               className="inline-flex h-7 items-center gap-1 rounded-[6px] px-2 hover:bg-[#F6F6F9] cursor-pointer text-[14px] font-manrope font-medium leading-4 text-[#191919]"
-              title="Ungroup"
+              title="取消组合"
               onClick={ungroupAction.onUngroup}
             >
               <span>取消组合</span>

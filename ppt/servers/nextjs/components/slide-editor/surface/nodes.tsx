@@ -3333,8 +3333,8 @@ function RawGanttInfographic({
 }) {
   const columns = readArray(data?.columns).map(asRecord).filter(Boolean);
   const rows = readArray(data?.rows).map(asRecord).filter(Boolean);
-  const safeColumns = columns.length > 0 ? columns : [{ label: "Phase" }];
-  const safeRows = rows.length > 0 ? rows : [{ label: "Workstream", items: [] }];
+  const safeColumns = columns.length > 0 ? columns : [{ label: "阶段" }];
+  const safeRows = rows.length > 0 ? rows : [{ label: "工作流", items: [] }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const paddingX = darkBackground ? width * 0.07 : 0;
   const paddingY = darkBackground ? height * 0.065 : 0;
@@ -3470,7 +3470,7 @@ function RawTimelineInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean);
-  const safeItems = items.length > 0 ? items : [{ heading: "Milestone" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "里程碑" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const lineY = height * 0.39;
   const sidePadding = darkBackground ? width * 0.075 : width * 0.025;
@@ -3591,7 +3591,7 @@ function RawRoadmapInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 8);
-  const safeItems = items.length > 0 ? items : [{ heading: "Destination" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "目标" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const textColor =
     customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
@@ -3829,7 +3829,7 @@ function RawStaircaseInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 7);
-  const safeItems = items.length > 0 ? items : [{ heading: "Step" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "步骤" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const textColor =
     customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
@@ -3931,7 +3931,7 @@ function infographicItems(data: RawElement | null, max = 8) {
 
 function RawSupplyChainInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
   const items = infographicItems(data, 7);
-  const safe = items.length ? items : [{ heading: "Sourcing" }];
+  const safe = items.length ? items : [{ heading: "资源获取" }];
   const dark = isDarkInfographicColor(baseColor);
   const body = customTextColor ?? (dark ? "#F0F1F4" : "#111111");
   const lineColor = dark ? "#E0E0E0" : "#D2D2D2";
@@ -3987,7 +3987,7 @@ function RawSupplyChainInfographic({ baseColor, data, height, interactive, palet
 
 function RawStairStepBlocksInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
   const safe = infographicItems(data, 7);
-  const items = safe.length ? safe : [{ heading: "Foundation" }];
+  const items = safe.length ? safe : [{ heading: "基础" }];
   const dark = isDarkInfographicColor(baseColor);
   const body = customTextColor ?? (dark ? "#F0F1F4" : "#111111");
   const pad = width * .12;
@@ -4015,7 +4015,7 @@ function RawStairStepBlocksInfographic({ baseColor, data, height, interactive, p
 
 function RawMaturityModelInfographic({ data, height, interactive, palette, width }: RawInfographicRendererProps) {
   const safe = infographicItems(data, 7);
-  const items = safe.length ? safe : [{ heading: "Initial" }];
+  const items = safe.length ? safe : [{ heading: "初始阶段" }];
   const rowH = height * .145;
   const gap = height * .022;
   return <Group listening={interactive}>
@@ -4040,7 +4040,7 @@ function RawMaturityModelInfographic({ data, height, interactive, palette, width
 
 function RawPillarFrameworkInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
   const safe = infographicItems(data, 7);
-  const items = safe.length ? safe : [{ heading: "Customer" }];
+  const items = safe.length ? safe : [{ heading: "客户" }];
   const dark = isDarkInfographicColor(baseColor);
   const text = customTextColor ?? (dark ? "#F0F1F4" : "#111111");
   const roofColor = withHash(readString(data?.card_color)) ?? "#D6D6D6";
@@ -4077,7 +4077,7 @@ function RawPillarFrameworkInfographic({ baseColor, data, height, interactive, p
 
 function RawTransformationHubInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
   const safe = infographicItems(data, 8);
-  const items = safe.length ? safe : [{ heading: "Strategy" },{ heading: "Process" }];
+  const items = safe.length ? safe : [{ heading: "战略" },{ heading: "流程" }];
   const dark = isDarkInfographicColor(baseColor);
   const line = dark ? "#E0E0E0" : "#D2D2D2";
   const centerColor = withHash(readString(data?.card_color)) ?? "#D6D6D6";
@@ -4106,7 +4106,7 @@ function RawTransformationHubInfographic({ baseColor, data, height, interactive,
     const nodeTextColor=blackOrWhiteTextColor(color);
     return <Group key={`hub-${side}-${sideIndex}`}>
       <Rect x={x} y={y} width={boxW} height={boxH} fill={color} stroke={line} strokeWidth={Math.max(1,height*.003)} />
-      <Text x={x} y={y} width={boxW} height={boxH} text={readString(item?.heading) ?? "Capability"} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(9,height*.04)} fill={nodeTextColor} />
+      <Text x={x} y={y} width={boxW} height={boxH} text={readString(item?.heading) ?? "能力"} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(9,height*.04)} fill={nodeTextColor} />
     </Group>;
   });
   return <Group listening={interactive}>
@@ -4114,12 +4114,12 @@ function RawTransformationHubInfographic({ baseColor, data, height, interactive,
     {rightItems.map((_,index)=>connector("right",index,rightItems.length))}
     {renderSide("left",leftItems)}{renderSide("right",rightItems)}
     <Circle x={cx} y={cy} radius={cr} fill={centerColor}/>
-    <Text x={cx-cr*.9} y={cy-cr*.5} width={cr*1.8} height={cr} text={readString(data?.center_label) ?? "Business Transformation"} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(11,height*.055)} fill={centerTextColor}/>
+    <Text x={cx-cr*.9} y={cy-cr*.5} width={cr*1.8} height={cr} text={readString(data?.center_label) ?? "业务转型"} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(11,height*.055)} fill={centerTextColor}/>
   </Group>;
 }
 
 function RawDiagonalCirclesInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
-  const safe=infographicItems(data,7); const items=safe.length?safe:[{heading:"Strategy"}];
+  const safe=infographicItems(data,7); const items=safe.length?safe:[{heading:"战略"}];
   const dark=isDarkInfographicColor(baseColor); const text=customTextColor??(dark?"#F0F1F4":"#111111");
   const r=Math.min(width/(items.length+3.8),height*.135); const startX=width*.215,startY=height*.7,dx=width*.125,dy=-height*.118;
   const lineColor=dark?"#E0E0E0":"#D2D2D2",arrowSize=Math.max(5,height*.014),textW=width*.205;
@@ -4132,14 +4132,14 @@ function RawDiagonalCirclesInfographic({ baseColor, data, height, interactive, p
       <Line points={[anchorX,anchorY,anchorX,elbowY,arrowBaseX,elbowY]} stroke={lineColor} strokeWidth={1.5}/>
       <Line points={[arrowTipX,elbowY,arrowBaseX,elbowY-arrowSize*.65,arrowBaseX,elbowY+arrowSize*.65]} closed fill={lineColor}/>
       <Circle x={anchorX} y={anchorY} radius={3} fill={lineColor}/>
-      <Text x={textX} y={elbowY-height*.026} width={textW} height={height*.05} text={readString(item?.heading)??"Pillar"} align={calloutLeft?"right":"left"} fontFamily="Arial" fontStyle="bold" fontSize={Math.max(8,height*.027)} fill={customTextColor??color}/>
+      <Text x={textX} y={elbowY-height*.026} width={textW} height={height*.05} text={readString(item?.heading)??"支柱"} align={calloutLeft?"right":"left"} fontFamily="Arial" fontStyle="bold" fontSize={Math.max(8,height*.027)} fill={customTextColor??color}/>
       <Text x={textX} y={elbowY+height*.018} width={textW} height={height*.1} text={readString(item?.description)??""} align={calloutLeft?"right":"left"} fontFamily="Arial" fontSize={Math.max(7,height*.02)} lineHeight={1.12} fill={text}/>
     </Group>})}
   </Group>;
 }
 
 function RawRiskMatrixInfographic({ baseColor, data, height, interactive, palette, textColor: customTextColor, width }: RawInfographicRendererProps) {
-  const raw=infographicItems(data,4); const defaults: RawElement[]=[{heading:"Identify"},{heading:"Prioritize"},{heading:"Assess"},{heading:"Respond"}]; const items=defaults.map((fallback,index)=>raw[index]??fallback);
+  const raw=infographicItems(data,4); const defaults: RawElement[]=[{heading:"识别"},{heading:"排序"},{heading:"评估"},{heading:"应对"}]; const items=defaults.map((fallback,index)=>raw[index]??fallback);
   const dark=isDarkInfographicColor(baseColor), body=customTextColor??(dark?"#F0F1F4":"#111111");
   const q=height*.43,gap=height*.035,cx=width*.5,cy=height*.5, left=cx-q-gap*.5, top=cy-q-gap*.5;
   const pos=[[left,top],[cx+gap*.5,top],[left,cy+gap*.5],[cx+gap*.5,cy+gap*.5]];
@@ -4149,11 +4149,11 @@ function RawRiskMatrixInfographic({ baseColor, data, height, interactive, palett
       <Rect x={x} y={y} width={q} height={q} cornerRadius={q*.1} fill={color}/>
       <InfographicUrlIcon icon={icon?.url??null} color={icon?.color??null} x={x+q*.5} y={y+q*.43} size={q*.28}/>
       <Line points={[arrowTip,midY,arrowBase,midY-arrowHalf,arrowBase,midY+arrowHalf]} closed fill={color}/>
-      <Text x={tx} y={y+q*.27} width={textWidth} height={q*.11} text={readString(item?.heading)??"Activity"} align={side==="left"?"right":"left"} fontFamily="Arial" fontStyle="bold" fontSize={Math.max(8,height*.027)} fill={customTextColor??color}/>
+      <Text x={tx} y={y+q*.27} width={textWidth} height={q*.11} text={readString(item?.heading)??"活动"} align={side==="left"?"right":"left"} fontFamily="Arial" fontStyle="bold" fontSize={Math.max(8,height*.027)} fill={customTextColor??color}/>
       <Text x={tx} y={y+q*.39} width={textWidth} height={q*.35} text={readString(item?.description)??""} align={side==="left"?"right":"left"} fontFamily="Arial" fontSize={Math.max(7,height*.02)} lineHeight={1.1} fill={body}/>
     </Group>})}
     <Rect x={cx-q*.375} y={cy-q*.375} width={q*.75} height={q*.75} cornerRadius={q*.1} fill="#FFFFFF" opacity={.34}/>
-    {(readString(data?.center_label)??"RISK").padEnd(4," ").slice(0,4).split("").map((letter,index)=><Text key={`risk-letter-${index}`} x={cx-q*.34+(index%2)*q*.34} y={cy-q*.34+Math.floor(index/2)*q*.34} width={q*.34} height={q*.34} text={letter} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(11,height*.06)} fill="#FFFFFF"/>)}
+    {(readString(data?.center_label)??"风险").padEnd(4," ").slice(0,4).split("").map((letter,index)=><Text key={`risk-letter-${index}`} x={cx-q*.34+(index%2)*q*.34} y={cy-q*.34+Math.floor(index/2)*q*.34} width={q*.34} height={q*.34} text={letter} align="center" verticalAlign="middle" fontFamily="Arial" fontStyle="bold" fontSize={Math.max(11,height*.06)} fill="#FFFFFF"/>)}
   </Group>;
 }
 
@@ -4175,7 +4175,7 @@ function RawChevronProcessInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 8);
-  const safeItems = items.length > 0 ? items : [{ heading: "Stage" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "阶段" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const bodyColor = customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
   const sidePadding = width * 0.035;
@@ -4287,7 +4287,7 @@ function RawRadialCycleInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 8);
-  const safeItems = items.length > 0 ? items : [{ heading: "Stage" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "阶段" }];
   const centerX = width / 2;
   const centerY = height / 2;
   const orbitX = width * 0.315;
@@ -4448,7 +4448,7 @@ function RawConversionFunnelInfographic({
   width: number;
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 8);
-  const safeItems = items.length > 0 ? items : [{ value: 50, heading: "Stage" }];
+  const safeItems = items.length > 0 ? items : [{ value: 50, heading: "阶段" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const textColor = customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
   const columnWidth = width / safeItems.length;
@@ -4550,7 +4550,7 @@ function RawSegmentedWheelInfographic({
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 6);
   const safeItems = items.length >= 3
     ? items
-    : [{ heading: "Foundation" }, { heading: "Efficiency" }, { heading: "Growth" }];
+    : [{ heading: "基础" }, { heading: "效率" }, { heading: "增长" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const outsideTextColor = customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
   const centerX = width * 0.5;
@@ -4672,9 +4672,9 @@ function RawCustomerJourneyInfographic({
     ? items
     : [
         { icon: null },
-        { heading: "Awareness" },
-        { heading: "Consideration" },
-        { heading: "Experience" },
+        { heading: "认知" },
+        { heading: "考虑" },
+        { heading: "体验" },
       ];
   const startItem = safeItems[0];
   const stages = safeItems.slice(1);
@@ -4798,7 +4798,7 @@ function RawBeforeAfterInfographic({
   const evenItems = items.slice(0, items.length - (items.length % 2));
   const safeItems = evenItems.length >= 2
     ? evenItems
-    : [{ heading: "Before" }, { heading: "After" }];
+    : [{ heading: "之前" }, { heading: "之后" }];
   const pairCount = safeItems.length / 2;
   const darkBackground = isDarkInfographicColor(baseColor);
   const textColor = customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
@@ -4964,9 +4964,9 @@ function RawPyramidInfographic({
 }) {
   const items = readArray(data?.items).map(asRecord).filter(Boolean).slice(0, 4);
   const safeItems = items.length >= 3 ? items : [
-    { heading: "Foundation" },
-    { heading: "Efficiency" },
-    { heading: "Innovation" },
+    { heading: "基础" },
+    { heading: "效率" },
+    { heading: "创新" },
   ];
   const darkBackground = isDarkInfographicColor(baseColor);
   const outsideTextColor = customTextColor ?? (darkBackground ? "#F0F1F4" : "#111111");
@@ -5383,7 +5383,7 @@ function RawMindMapInfographic({
     ? firstNested
     : topLevel
   ).slice(0, 8);
-  const safeItems = items.length > 0 ? items : [{ heading: "Core idea" }];
+  const safeItems = items.length > 0 ? items : [{ heading: "核心理念" }];
   const darkBackground = isDarkInfographicColor(baseColor);
   const layout = mindMapLayout(safeItems.length, width, height);
   const textColor =
@@ -5425,7 +5425,7 @@ function RawMindMapInfographic({
               width={textBox.width}
               height={textBox.headingHeight}
               text={
-                readString(item?.heading) ?? `Idea ${index + 1}`
+                readString(item?.heading) ?? `想法 ${index + 1}`
               }
               fontFamily="Arial, Helvetica, sans-serif"
               fontSize={Math.max(11, Math.min(17, height * 0.045))}

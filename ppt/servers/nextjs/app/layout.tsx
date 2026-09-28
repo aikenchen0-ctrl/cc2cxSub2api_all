@@ -43,16 +43,16 @@ const unbounded = Unbounded({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://presenton.ai"),
-  title: "PPT生成",
-  description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
+  title: "PPT 生成",
+  description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出",
   keywords: [
     "AI 演示文稿生成",
     "数据故事",
     "演示文稿生成器",
   ],
   openGraph: {
-    title: "PPT生成",
-    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
+    title: "PPT 生成",
+    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出",
     url: "https://presenton.ai",
     siteName: "PPT生成",
     images: [
@@ -71,8 +71,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PPT生成",
-    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出。",
+    title: "PPT 生成",
+    description: "基于人工智能的演示文稿生成器，支持自定义布局、多模型和 PDF/PPTX 导出",
     images: ["https://presenton.ai/presenton-feature-graphics.png"],
   },
   icons: { icon: "/project-icon.jpg", shortcut: "/project-icon.jpg" },
