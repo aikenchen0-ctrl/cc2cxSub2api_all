@@ -359,6 +359,7 @@ func TestWeChatOAuthCallbackRejectsDisabledExistingIdentityUser(t *testing.T) {
 }
 
 func TestWeChatPaymentOAuthCallbackRedirectsWithOpaqueResumeToken(t *testing.T) {
+	t.Setenv("AGENTAPI_LINK", "https://tenant.example.test")
 	originalAccessTokenURL := wechatOAuthAccessTokenURL
 	t.Cleanup(func() {
 		wechatOAuthAccessTokenURL = originalAccessTokenURL
@@ -388,6 +389,7 @@ func TestWeChatPaymentOAuthCallbackRedirectsWithOpaqueResumeToken(t *testing.T) 
 	req.AddCookie(encodedCookie(wechatPaymentOAuthRedirect, "/purchase?from=wechat"))
 	req.AddCookie(encodedCookie(wechatPaymentOAuthContextName, `{"payment_type":"wxpay","amount":"12.5","order_type":"subscription","plan_id":7}`))
 	req.AddCookie(encodedCookie(wechatPaymentOAuthScope, "snsapi_base"))
+	req.AddCookie(encodedCookie(wechatPaymentOAuthSatellite, "agentapi"))
 	c.Request = req
 
 	handler.WeChatPaymentOAuthCallback(c)
@@ -396,6 +398,7 @@ func TestWeChatPaymentOAuthCallbackRedirectsWithOpaqueResumeToken(t *testing.T) 
 	location := recorder.Header().Get("Location")
 	parsed, err := url.Parse(location)
 	require.NoError(t, err)
+	require.Equal(t, "https://tenant.example.test/auth/wechat/payment/callback", parsed.Scheme+"://"+parsed.Host+parsed.Path)
 	fragment, err := url.ParseQuery(parsed.Fragment)
 	require.NoError(t, err)
 	require.Equal(t, "/purchase?from=wechat", fragment.Get("redirect"))
@@ -414,6 +417,35 @@ func TestWeChatPaymentOAuthCallbackRedirectsWithOpaqueResumeToken(t *testing.T) 
 	require.Equal(t, payment.OrderTypeSubscription, claims.OrderType)
 	require.EqualValues(t, 7, claims.PlanID)
 	require.Equal(t, "/purchase?from=wechat", claims.RedirectTo)
+}
+
+func TestWeChatPaymentOAuthStartAcceptsOnlySignedSatelliteHandoff(t *testing.T) {
+	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "0123456789abcdef0123456789abcdef")
+	handler, client := newWeChatOAuthTestHandlerWithSettings(t, false, wechatOAuthTestSettings("mp", "wx-mp-app", "wx-mp-secret", "/auth/wechat/callback"))
+	defer client.Close()
+
+	handoff, err := handler.wechatPaymentResumeService().CreateWeChatPaymentHandoffToken("agentapi")
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/wechat/payment/start?payment_type=wxpay&redirect=%2Fpurchase&satellite_handoff="+url.QueryEscape(handoff), nil)
+	c.Request.Host = "api.example.com"
+	handler.WeChatPaymentOAuthStart(c)
+
+	require.Equal(t, http.StatusFound, recorder.Code)
+	require.Contains(t, recorder.Header().Get("Location"), "open.weixin.qq.com")
+	satelliteCookie := findCookie(recorder.Result().Cookies(), wechatPaymentOAuthSatellite)
+	require.NotNil(t, satelliteCookie)
+	require.Equal(t, "agentapi", decodeCookieValueForTest(t, satelliteCookie.Value))
+
+	rejected := httptest.NewRecorder()
+	rejectedContext, _ := gin.CreateTestContext(rejected)
+	rejectedContext.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/wechat/payment/start?payment_type=wxpay&satellite_handoff=forged.agentapi", nil)
+	rejectedContext.Request.Host = "api.example.com"
+	handler.WeChatPaymentOAuthStart(rejectedContext)
+	require.Equal(t, http.StatusBadRequest, rejected.Code)
+	require.Nil(t, findCookie(rejected.Result().Cookies(), wechatPaymentOAuthSatellite))
 }
 
 func TestWeChatPaymentOAuthCallbackUsesExplicitPaymentResumeSigningKeyWhenMixedKeysConfigured(t *testing.T) {

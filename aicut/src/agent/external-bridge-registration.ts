@@ -4,6 +4,20 @@ import type { BrowserProjectOwnership } from '../persist/projectStoreTransport';
 
 const EDITOR_REGISTRATION_CAPABILITY_HEADER = 'X-OpenChatCut-Editor-Registration';
 
+/** Keep the failed stage when fetch rejects before an HTTP response exists. */
+export async function fetchEditorBridge(
+  operation: string,
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (cause) {
+    if (init.signal?.aborted) throw cause;
+    throw new Error(`${operation} failed: network`, { cause });
+  }
+}
+
 export class EditorBridgeRequestError extends Error {
   readonly operation: string;
   readonly status: number;
@@ -36,7 +50,7 @@ export async function sendEditorBridgeResult(
   registrationCapability: string,
   baseRevision?: string,
 ): Promise<void> {
-  const response = await fetch('/api/external-agent/result', {
+  const response = await fetchEditorBridge('result', '/api/external-agent/result', {
     method: 'POST',
     headers: editorBridgeHeaders(true, registrationCapability),
     body: JSON.stringify({ id, outcome, value, ...(baseRevision ? { baseRevision } : {}) }),
@@ -68,7 +82,7 @@ export async function registerEditorBridge(
   signal: AbortSignal,
   registrationCapability?: string,
 ): Promise<BrowserProjectOwnership> {
-  const response = await fetch('/api/external-agent/register', {
+  const response = await fetchEditorBridge('registration', '/api/external-agent/register', {
     method: 'POST',
     headers: editorBridgeHeaders(true, registrationCapability),
     body: JSON.stringify({

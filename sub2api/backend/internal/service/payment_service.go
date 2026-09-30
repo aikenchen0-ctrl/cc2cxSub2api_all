@@ -82,6 +82,7 @@ type CreateOrderRequest struct {
 	SrcURL          string
 	ReturnURL       string
 	PaymentSource   string
+	SatelliteSlug   string
 	OrderType       string
 	PlanID          int64
 	Locale          string
@@ -119,6 +120,7 @@ type OrderListParams struct {
 	OrderType   string
 	PaymentType string
 	Keyword     string
+	PaidSince   *time.Time
 }
 
 type RefundPlan struct {

@@ -431,7 +431,7 @@ func newSession(user model.User) (model.AuthSession, error) {
 func newToken(user model.User) (string, error) {
 	expireHours := config.Cfg.JWTExpireHours
 	if expireHours <= 0 {
-		expireHours = 168
+		expireHours = 72
 	}
 	claims := TokenClaims{
 		UserID:   user.ID,

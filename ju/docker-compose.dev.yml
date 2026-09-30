@@ -31,9 +31,9 @@ services:
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:-}
       LINK: ${LINK:-}
       SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-${LINK:-}}
-      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-gpt-5.5}
+      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-gpt-5.6-sol}
       SUB2API_RELAY_IMAGE_MODELS: ${SUB2API_RELAY_IMAGE_MODELS:-gpt-image-2}
-      SUB2API_RELAY_VIDEO_MODELS: ${SUB2API_RELAY_VIDEO_MODELS:-grok-imagine-video-1.5,seedance-2.0,kling-v3}
+      SUB2API_RELAY_VIDEO_MODELS: ${SUB2API_RELAY_VIDEO_MODELS:-minimax_h3_z0901,minimax_h3_z0903,minimax_h3_z0902,minimax_h3_zm_u24,minimax_h3_zm_u08,minimax_h3_b99_002,minimax_h3_b99_001,minimax_h3_b99_003_12s,wan2.2animate-v4-motion_retargeting,minimax_h3_image_audio_to_video_v2_15s,minimax_h3_lightx2v_v5_15s,minimax_h3_image_audio_to_video_v2,minimax_h3_image_audio_to_video,minimax_h3_lightx2v_v5,minimax_h3_lightx2v_no_pic,minimax_h3_lightx2v}
       SUB2API_RELAY_ALLOW_LOCAL: ${SUB2API_RELAY_ALLOW_LOCAL:-false}
       GIN_MODE: debug
     volumes:

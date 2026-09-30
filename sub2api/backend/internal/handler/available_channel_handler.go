@@ -137,8 +137,28 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		response.Success(c, []userAvailableChannel{})
 		return
 	}
+	h.listForUser(c, subject.UserID, false)
+}
 
-	userGroups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), subject.UserID)
+// SatelliteList exposes the same user-scoped, field-whitelisted channel view
+// through the model gateway authentication chain. It is intentionally not
+// controlled by the panel-only available_channels_enabled switch: trusted
+// satellites have their own navigation and feature policy, while the current
+// user identity still comes from the authenticated on-behalf-of API key.
+//
+// GET /v1/sub2api/available-channels
+func (h *AvailableChannelHandler) SatelliteList(c *gin.Context) {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.listForUser(c, apiKey.User.ID, true)
+}
+
+func (h *AvailableChannelHandler) listForUser(c *gin.Context, userID int64, includeRates bool) {
+
+	userGroups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -174,7 +194,20 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, out)
+	if !includeRates {
+		response.Success(c, out)
+		return
+	}
+	rates, err := h.apiKeyService.GetUserGroupRates(c.Request.Context(), userID)
+	if err != nil {
+		// User-specific rates are presentation enhancement only. Preserve the
+		// channel response and let the satellite display default group rates.
+		rates = nil
+	}
+	if rates == nil {
+		rates = map[int64]float64{}
+	}
+	response.Success(c, gin.H{"channels": out, "user_group_rates": rates})
 }
 
 // buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：

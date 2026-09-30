@@ -283,9 +283,20 @@ def get_ollama_model_env():
 
 
 def get_custom_model_env():
-    return os.getenv("CUSTOM_MODEL") or (
-        "gpt-5.5" if os.getenv("SUB2API_APP_CREDENTIAL", "").strip() else None
-    )
+    model = (os.getenv("CUSTOM_MODEL") or "").strip()
+    if os.getenv("SUB2API_APP_CREDENTIAL", "").strip():
+        return sub2api_text_model(model)
+    return model or None
+
+
+def sub2api_text_model(model: str | None) -> str:
+    # Persisted image/video selections cannot serve chat-based outline requests.
+    text_models = {"gpt-5.5", "gpt-5.6-sol", "gpt-5.4-mini", "gpt-5.6-luna", "deepseek-chat"}
+    selected = (model or "").strip()
+    if selected in text_models:
+        return selected
+    configured = os.getenv("SUB2API_MODEL", "").strip()
+    return configured if configured in text_models else "gpt-5.6-sol"
 
 
 def get_pexels_api_key_env():

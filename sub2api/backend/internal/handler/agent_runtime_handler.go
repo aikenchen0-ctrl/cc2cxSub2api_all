@@ -275,6 +275,7 @@ func ownerUsageItems(logs []service.UsageLog, ownerID int64, requestID string) [
 			model = item.Model
 		}
 		items = append(items, gin.H{
+			"id":         item.ID,
 			"request_id": item.RequestID, "model": model,
 			"total_cost": item.TotalCost, "actual_cost": item.ActualCost,
 			"input_tokens": item.InputTokens, "output_tokens": item.OutputTokens,

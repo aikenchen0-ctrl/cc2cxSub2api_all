@@ -290,9 +290,6 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					return
 				}
 				action := fs.HandleFailoverError(requestCtx, h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
-				if action == FailoverContinue && preferImmediateAccountSwitch(failoverErr) {
-					h.gatewayService.ClearStickySession(requestCtx, apiKey.GroupID, sessionHash)
-				}
 				switch action {
 				case FailoverContinue:
 					continue

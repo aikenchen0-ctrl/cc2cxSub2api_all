@@ -142,6 +142,10 @@ type AffiliateRecordFilter struct {
 	EndAt    *time.Time
 	SortBy   string
 	SortDesc bool
+	// UserID limits a record query to the authenticated affiliate owner. It is
+	// only set by user/satellite service methods; admin list methods leave it
+	// zero to retain their existing system-wide behavior.
+	UserID int64
 }
 
 type AffiliateInviteRecord struct {
@@ -586,6 +590,30 @@ func (s *AffiliateService) AdminListTransferRecords(ctx context.Context, filter 
 		return nil, 0, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate service unavailable")
 	}
 	return s.repo.ListAffiliateTransferRecords(ctx, normalizeAffiliateRecordFilter(filter))
+}
+
+func (s *AffiliateService) UserListInviteRecords(ctx context.Context, userID int64, filter AffiliateRecordFilter) ([]AffiliateInviteRecord, int64, error) {
+	if userID <= 0 {
+		return nil, 0, infraerrors.BadRequest("INVALID_USER", "invalid user")
+	}
+	filter.UserID = userID
+	return s.AdminListInviteRecords(ctx, filter)
+}
+
+func (s *AffiliateService) UserListRebateRecords(ctx context.Context, userID int64, filter AffiliateRecordFilter) ([]AffiliateRebateRecord, int64, error) {
+	if userID <= 0 {
+		return nil, 0, infraerrors.BadRequest("INVALID_USER", "invalid user")
+	}
+	filter.UserID = userID
+	return s.AdminListRebateRecords(ctx, filter)
+}
+
+func (s *AffiliateService) UserListTransferRecords(ctx context.Context, userID int64, filter AffiliateRecordFilter) ([]AffiliateTransferRecord, int64, error) {
+	if userID <= 0 {
+		return nil, 0, infraerrors.BadRequest("INVALID_USER", "invalid user")
+	}
+	filter.UserID = userID
+	return s.AdminListTransferRecords(ctx, filter)
 }
 
 func (s *AffiliateService) AdminGetUserOverview(ctx context.Context, userID int64) (*AffiliateUserOverview, error) {

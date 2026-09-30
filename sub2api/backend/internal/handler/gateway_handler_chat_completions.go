@@ -302,9 +302,6 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 					return
 				}
 				action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
-				if action == FailoverContinue && preferImmediateAccountSwitch(failoverErr) {
-					h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, selectionSessionHash)
-				}
 				switch action {
 				case FailoverContinue:
 					continue

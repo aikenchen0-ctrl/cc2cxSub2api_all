@@ -68,8 +68,8 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
     const cogVideoX3 = isCogVideoX3Model(model);
     const autoDLResolution = getAutoDLCapabilities(workflow)?.resolution;
     const autoDLDuration = getAutoDLCapabilities(workflow)?.duration;
-    const selectedAutoDLResolution = !config.vquality || config.vquality === "720" ? String(autoDLResolution?.default ?? "") : config.vquality;
-    const seconds = autodl && (!config.videoSeconds || config.videoSeconds === "6")
+    const selectedAutoDLResolution = autoDLResolution?.options?.some((item) => item.label === config.vquality) ? config.vquality : String(autoDLResolution?.default ?? "");
+    const seconds = autodl && !config.videoSeconds
         ? String(autoDLDuration?.default ?? "")
         : autodl ? config.videoSeconds : amamVideo && config.videoSeconds === "6" ? "5" : cogVideoX3 ? normalizeCogVideoX3Duration(config.videoSeconds) : config.videoSeconds || "6";
     const displayedResolution = amamVideo && (!config.vquality || config.vquality === "720") ? amamVideoDefaultResolution(model).replace(/p$/i, "") : config.vquality;
@@ -134,7 +134,7 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
                         </div>
                     )}
                 </SettingGroup>
-                <SettingGroup title="尺寸" color={theme.node.muted}>
+                {!autodl ? <SettingGroup title="尺寸" color={theme.node.muted}>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
                         <DimensionInput prefix="W" value={dimensions.width} disabled={size === "auto"} theme={theme} onChange={(value) => updateDimension("width", value)} />
                         <span className="text-lg opacity-45">↔</span>
@@ -176,19 +176,19 @@ export function VideoSettingsPanel({ config, modelName, onConfigChange, theme, s
                             </button>
                         ))}
                     </div>
-                </SettingGroup>
+                </SettingGroup> : null}
                 {!visualOnly ? (
                     <>
-                        <SettingGroup title="秒数" color={theme.node.muted}>
+                        {!autodl || autoDLDuration ? <SettingGroup title="秒数" color={theme.node.muted}>
                             <div className="grid grid-cols-3 gap-2.5">
-                                {(cogVideoX3 ? COGVIDEOX3_DURATIONS : secondOptions).map((value) => (
+                                {(cogVideoX3 ? COGVIDEOX3_DURATIONS : autodl ? [5, 10, 12, 15].filter((value) => value >= (autoDLDuration?.min ?? 1) && value <= (autoDLDuration?.max ?? 15)) : secondOptions).map((value) => (
                                     <OptionPill key={value} selected={seconds === String(value)} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
                                         {value}s
                                     </OptionPill>
                                 ))}
-                                {cogVideoX3 ? null : <NumberInput value={seconds} min={1} max={30} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} onBlur={autodl ? (value) => onConfigChange("videoSeconds", normalizeAutoDLDuration(value, workflow)) : undefined} />}
+                                {cogVideoX3 ? null : <NumberInput value={seconds} min={autodl ? autoDLDuration?.min ?? 1 : 1} max={autodl ? autoDLDuration?.max ?? 15 : 30} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} onBlur={autodl ? (value) => onConfigChange("videoSeconds", normalizeAutoDLDuration(value, workflow)) : undefined} />}
                             </div>
-                        </SettingGroup>
+                        </SettingGroup> : null}
                         {audioGenerationEnabled ? <AudioGenerationSetting checked={generateAudio} theme={theme} onChange={(checked) => onConfigChange("videoGenerateAudio", String(checked))} /> : null}
                     </>
                 ) : null}

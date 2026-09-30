@@ -59,6 +59,15 @@ describe('AgentAPI browser boundary', () => {
     expect(get).toHaveBeenCalledWith('/v1/models', { baseURL: '' })
   })
 
+  it('loads the public model plaza without an authenticated model relay request', async () => {
+    const get = vi.spyOn(agentClient, 'get').mockResolvedValue({
+      data: { data: [{ id: 'gpt-5.5' }, { id: 'gpt-image-2' }, { id: '' }] },
+    } as never)
+
+    await expect(agentAPI.model.publicList()).resolves.toEqual(['gpt-5.5', 'gpt-image-2'])
+    expect(get).toHaveBeenCalledWith('/public/models')
+  })
+
   it('sends image generation and multipart edits through the same-origin AgentAPI session', async () => {
     const post = vi.spyOn(agentClient, 'post').mockResolvedValue({
       data: { data: [{ url: 'https://media.example/image.png' }] },
@@ -148,6 +157,42 @@ describe('AgentAPI browser boundary', () => {
 
     await expect(agentAPI.getTasks(1, 25)).resolves.toMatchObject({ total: 1, page: 1, page_size: 25 })
     expect(get).toHaveBeenCalledWith('/agent/tasks', { params: { page: 1, page_size: 25 } })
+  })
+
+  it('loads the administrator channel catalogue through the tenant-safe read-only endpoint', async () => {
+    const get = vi.spyOn(agentClient, 'get').mockResolvedValue({ data: { channels: [], user_group_rates: {} } } as never)
+    await expect(agentAPI.getAdminChannels()).resolves.toEqual({ channels: [], user_group_rates: {} })
+    expect(get).toHaveBeenCalledWith('/agent/admin/channels')
+  })
+
+  it('loads only the current Agent lifecycle view without a browser administrator credential', async () => {
+    const get = vi.spyOn(agentClient, 'get').mockResolvedValue({ data: { agent_id: 'agent-1', management_scope: 'current_agent_read_only' } } as never)
+
+    await agentAPI.adminProvisioning.get()
+
+    expect(get).toHaveBeenCalledWith('/agent/admin/agent-provisioning')
+    expect(agentClient.defaults.headers.common.Authorization).toBeUndefined()
+  })
+
+  it('loads the current Agent promo-code funding boundary without a main administrator credential', async () => {
+    const get = vi.spyOn(agentClient, 'get').mockResolvedValue({ data: { feature_enabled: false, items: [] } } as never)
+
+    await agentAPI.adminPromoCodes.get()
+
+    expect(get).toHaveBeenCalledWith('/agent/admin/promo-codes')
+    expect(agentClient.defaults.headers.common.Authorization).toBeUndefined()
+  })
+
+  it('requests an image-only task page without changing tenant scope', async () => {
+    const get = vi.spyOn(agentClient, 'get').mockResolvedValue({
+      data: { items: [], total: 0, page: 2, page_size: 10 },
+    } as never)
+
+    await agentAPI.getTasks(2, 10, 'image')
+
+    expect(get).toHaveBeenCalledWith('/agent/tasks', {
+      params: { page: 2, page_size: 10, task_type: 'image' },
+    })
   })
 
   it('requests a bounded mapped-user page from the AgentAPI backend', async () => {

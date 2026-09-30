@@ -501,9 +501,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
-					if action == FailoverContinue && preferImmediateAccountSwitch(failoverErr) {
-						h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionKey)
-					}
 					switch action {
 					case FailoverContinue:
 						continue
@@ -1040,9 +1037,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
-					if action == FailoverContinue && preferImmediateAccountSwitch(failoverErr) {
-						h.gatewayService.ClearStickySession(c.Request.Context(), currentAPIKey.GroupID, sessionHash)
-					}
 					switch action {
 					case FailoverContinue:
 						// 本次尝试已确定性失败，立即释放该账号的会话注册

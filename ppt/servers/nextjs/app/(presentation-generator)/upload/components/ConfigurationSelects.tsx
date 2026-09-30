@@ -3,6 +3,7 @@ import {
   LanguageType,
   PresentationConfig,
 } from "../type";
+import { useUiLanguage, UiText } from "@/components/UiLanguage";
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -90,6 +91,7 @@ const SlideCountSelect: React.FC<{
   onOpenChange: (open: boolean) => void;
   compact?: boolean;
 }> = ({ value, onValueChange, open, onOpenChange, compact = false }) => {
+  const { t } = useUiLanguage();
   const [customInput, setCustomInput] = useState(
     value && !SLIDE_OPTIONS.includes(value as SlideOption) ? value : "",
   );
@@ -121,7 +123,7 @@ const SlideCountSelect: React.FC<{
     }
   };
 
-  const displayLabel = value ? `${value} 页` : "自动页数";
+  const displayLabel = value ? t(`${value} 页`, `${value} slides`) : t("自动页数", "Auto slides");
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -235,7 +237,7 @@ const SlideCountSelect: React.FC<{
               className="h-8 w-16 px-2 text-sm min-[1800px]:h-9 min-[1800px]:w-20 min-[1800px]:text-base"
             />
             <span className="text-sm font-medium min-[1800px]:text-base">
-              幻灯片
+              <UiText zh="幻灯片" en="slides" />
             </span>
           </div>
         </div>
@@ -267,7 +269,7 @@ const SlideCountSelect: React.FC<{
                       value === option ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  {option} 页
+                  {option} <UiText zh="页" en="slides" />
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -287,7 +289,9 @@ const LanguageSelect: React.FC<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
   compact?: boolean;
-}> = ({ value, onValueChange, open, onOpenChange, compact = false }) => (
+}> = ({ value, onValueChange, open, onOpenChange, compact = false }) => {
+ const { t } = useUiLanguage();
+ return (
   <Popover open={open} onOpenChange={onOpenChange}>
     <PopoverTrigger asChild>
       <button
@@ -349,11 +353,11 @@ const LanguageSelect: React.FC<{
     >
       <Command>
         <CommandInput
-          placeholder="搜索语言..."
+          placeholder={t("搜索语言...", "Search languages...")}
           className="font-instrument_sans"
         />
         <CommandList>
-          <CommandEmpty>未找到语言。</CommandEmpty>
+          <CommandEmpty>{t("未找到语言。", "No language found.")}</CommandEmpty>
           <CommandGroup>
             {Object.values(LanguageType).map((language) => (
               <CommandItem
@@ -381,6 +385,7 @@ const LanguageSelect: React.FC<{
     </PopoverContent>
   </Popover>
 );
+};
 
 export function ConfigurationSelects({
   config,
@@ -409,7 +414,7 @@ export function ConfigurationSelects({
           compact ? "h-[34px] shadow-none" : "h-[38px] shadow-sm",
         )}
       >
-        {mode === "standard" ? "标准" : "智能"}
+        {mode === "standard" ? <UiText zh="标准" en="Standard" /> : <UiText zh="智能" en="Smart" />}
         <ChevronUp className="h-4 w-4" />
       </Button>
 

@@ -39,10 +39,11 @@ func (s *Service) Sub2APIOnBehalfOf(userID string) string {
 }
 
 type sub2APIRelayModel struct {
-	name       string
-	capability string
-	protocol   model.ChannelInterfaceType
-	configJSON string
+	name        string
+	displayName string
+	capability  string
+	protocol    model.ChannelInterfaceType
+	configJSON  string
 }
 
 // EnsureSub2APIRelayChannel provisions an ordinary system channel when the
@@ -216,8 +217,8 @@ func (s *Service) disableSub2APIRelayChannel() error {
 func prepareSub2APIModel(item *model.ChannelModel, configured sub2APIRelayModel) {
 	item.ModelKey = configured.name
 	item.ProviderModelKey = configured.name
-	if strings.TrimSpace(item.DisplayName) == "" {
-		item.DisplayName = configured.name
+	if strings.TrimSpace(item.DisplayName) == "" || item.DisplayName == item.ModelKey {
+		item.DisplayName = firstNonEmpty(configured.displayName, configured.name)
 	}
 	item.Capability = configured.capability
 	item.Protocol = configured.protocol
@@ -277,7 +278,7 @@ func normalizeSub2APIBaseURL(raw string) (string, error) {
 func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 	textModels := splitCSV(os.Getenv("SUB2API_RELAY_MODELS"))
 	if len(textModels) == 0 {
-		textModels = []string{firstNonEmpty(strings.TrimSpace(os.Getenv("SUB2API_RELAY_MODEL")), "gpt-5.5")}
+		textModels = []string{firstNonEmpty(strings.TrimSpace(os.Getenv("SUB2API_RELAY_MODEL")), "gpt-5.6-sol")}
 	}
 	imageModels := splitCSV(os.Getenv("SUB2API_RELAY_IMAGE_MODELS"))
 	videoModels := splitCSV(os.Getenv("SUB2API_RELAY_VIDEO_MODELS"))
@@ -286,7 +287,7 @@ func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 			imageModels = []string{"gpt-image-2"}
 		}
 		if len(videoModels) == 0 {
-			videoModels = []string{"grok-imagine-video-1.5", "seedance-2.0", "kling-v3"}
+			videoModels = sub2APIAutoDLModelNames()
 		}
 	}
 	groups := []struct {
@@ -313,8 +314,13 @@ func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 				}
 				continue
 			}
+			if group.capability == "video" && name != strings.ToLower(name) {
+				return nil, fmt.Errorf("%s contains a non-canonical video model name %q", group.env, name)
+			}
 			protocol := group.protocol
-			if group.capability == "image" {
+			if group.capability == "text" {
+				protocol = sub2APITextProtocol(name)
+			} else if group.capability == "image" {
 				protocol = sub2APIImageProtocol(name)
 			}
 			config := DefaultModelCapabilityConfigForModel(string(protocol), name)
@@ -330,10 +336,25 @@ func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 				return nil, err
 			}
 			seen[name] = group.capability
-			items = append(items, sub2APIRelayModel{name: name, capability: group.capability, protocol: protocol, configJSON: string(encoded)})
+			displayName := name
+			if workflow, ok := sub2APIAutoDLWorkflowByID(name); ok {
+				displayName = workflow.DisplayName
+			}
+			items = append(items, sub2APIRelayModel{name: name, displayName: displayName, capability: group.capability, protocol: protocol, configJSON: string(encoded)})
 		}
 	}
 	return items, nil
+}
+
+// GPT-5.6 family accounts are Responses-native in Sub2API. Sending them to
+// /chat/completions can select compatibility accounts whose upstream endpoint
+// does not exist, producing the observed 404 after failover.
+func sub2APITextProtocol(name string) model.ChannelInterfaceType {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if strings.HasPrefix(normalized, "gpt-5.6-") || normalized == "gpt-5.6" {
+		return model.ChannelInterfaceOpenAIResponse
+	}
+	return model.ChannelInterfaceChatCompletion
 }
 
 func splitCSV(raw string) []string {

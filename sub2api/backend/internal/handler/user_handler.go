@@ -202,13 +202,115 @@ func (h *UserHandler) GetAffiliate(c *gin.Context) {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
+	h.getAffiliateForUser(c, subject.UserID)
+}
 
-	detail, err := h.affiliateService.GetAffiliateDetail(c.Request.Context(), subject.UserID)
+func (h *UserHandler) getAffiliateForUser(c *gin.Context, userID int64) {
+	detail, err := h.affiliateService.GetAffiliateDetail(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, detail)
+}
+
+// SatelliteGetAffiliate returns affiliate details for the authenticated
+// on-behalf-of user. The satellite application credential only establishes
+// the server-to-server channel; it must never select another user here.
+// GET /v1/sub2api/affiliate
+func (h *UserHandler) SatelliteGetAffiliate(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.getAffiliateForUser(c, apiKey.User.ID)
+}
+
+func satelliteAffiliateRecordFilter(c *gin.Context, userID int64) service.AffiliateRecordFilter {
+	page, pageSize := response.ParsePagination(c)
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	filter := service.AffiliateRecordFilter{
+		Search:   strings.TrimSpace(c.Query("search")),
+		Page:     page,
+		PageSize: pageSize,
+		SortBy:   strings.TrimSpace(c.Query("sort_by")),
+		SortDesc: c.Query("sort_order") != "asc",
+		UserID:   userID,
+	}
+	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
+		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			filter.StartAt = &parsed
+		}
+	}
+	if value := strings.TrimSpace(c.Query("end_at")); value != "" {
+		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			filter.EndAt = &parsed
+		}
+	}
+	return filter
+}
+
+func (h *UserHandler) satelliteAffiliateUser(c *gin.Context) (int64, bool) {
+	c.Header("Cache-Control", "no-store")
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return 0, false
+	}
+	return apiKey.User.ID, true
+}
+
+// SatelliteListAffiliateInvites returns invitation relationships owned by the
+// authenticated on-behalf-of user. It never accepts an inviter ID from the
+// caller, so a satellite credential cannot enumerate another main-site user.
+func (h *UserHandler) SatelliteListAffiliateInvites(c *gin.Context) {
+	userID, ok := h.satelliteAffiliateUser(c)
+	if !ok {
+		return
+	}
+	filter := satelliteAffiliateRecordFilter(c, userID)
+	items, total, err := h.affiliateService.UserListInviteRecords(c.Request.Context(), userID, filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, filter.Page, filter.PageSize)
+}
+
+// SatelliteListAffiliateRebates returns order-level rebates earned by the
+// authenticated on-behalf-of user only.
+func (h *UserHandler) SatelliteListAffiliateRebates(c *gin.Context) {
+	userID, ok := h.satelliteAffiliateUser(c)
+	if !ok {
+		return
+	}
+	filter := satelliteAffiliateRecordFilter(c, userID)
+	items, total, err := h.affiliateService.UserListRebateRecords(c.Request.Context(), userID, filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, filter.Page, filter.PageSize)
+}
+
+// SatelliteListAffiliateTransfers returns quota-to-balance transfers made by
+// the authenticated on-behalf-of user only.
+func (h *UserHandler) SatelliteListAffiliateTransfers(c *gin.Context) {
+	userID, ok := h.satelliteAffiliateUser(c)
+	if !ok {
+		return
+	}
+	filter := satelliteAffiliateRecordFilter(c, userID)
+	items, total, err := h.affiliateService.UserListTransferRecords(c.Request.Context(), userID, filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, filter.Page, filter.PageSize)
 }
 
 // TransferAffiliateQuota transfers all available affiliate quota into current balance.
@@ -219,8 +321,11 @@ func (h *UserHandler) TransferAffiliateQuota(c *gin.Context) {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
+	h.transferAffiliateQuotaForUser(c, subject.UserID)
+}
 
-	transferred, balance, err := h.affiliateService.TransferAffiliateQuota(c.Request.Context(), subject.UserID)
+func (h *UserHandler) transferAffiliateQuotaForUser(c *gin.Context, userID int64) {
+	transferred, balance, err := h.affiliateService.TransferAffiliateQuota(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -230,6 +335,46 @@ func (h *UserHandler) TransferAffiliateQuota(c *gin.Context) {
 		"transferred_quota": transferred,
 		"balance":           balance,
 	})
+}
+
+// SatelliteTransferAffiliateQuota transfers only the authenticated
+// on-behalf-of user's affiliate quota into that same user's main-site balance.
+// POST /v1/sub2api/affiliate/transfer
+func (h *UserHandler) SatelliteTransferAffiliateQuota(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.transferAffiliateQuotaForUser(c, apiKey.User.ID)
+}
+
+type satelliteBindAffiliateRequest struct {
+	AffCode string `json:"aff_code" binding:"required"`
+}
+
+// SatelliteBindAffiliate binds an inviter to the authenticated on-behalf-of
+// user. It is used by AgentAPI immediately after authoritative main-site user
+// creation; neither a user ID nor an inviter ID is accepted from the browser.
+// POST /v1/sub2api/affiliate/bind
+func (h *UserHandler) SatelliteBindAffiliate(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	var req satelliteBindAffiliateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+	if err := h.affiliateService.BindInviterByCode(c.Request.Context(), apiKey.User.ID, req.AffCode); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"bound": true})
 }
 
 type StartIdentityBindingRequest struct {

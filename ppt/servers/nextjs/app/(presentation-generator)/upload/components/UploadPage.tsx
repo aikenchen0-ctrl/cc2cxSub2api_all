@@ -10,6 +10,7 @@
  */
 
 "use client";
+import { useUiLanguage } from "@/components/UiLanguage";
 import React, { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
@@ -144,6 +145,7 @@ const getDocumentPaths = (files: unknown): string[] => {
 };
 
 const UploadPage = () => {
+  const { setLanguage } = useUiLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useDispatch();
@@ -164,6 +166,7 @@ const UploadPage = () => {
     includeTitleSlide: false,
     webSearch: false,
   });
+  useEffect(() => { setLanguage(config.language || DEFAULT_PRESENTATION_LANGUAGE); }, [config.language, setLanguage]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -263,6 +266,7 @@ const UploadPage = () => {
   };
 
   const handleConfigChange = (key: keyof PresentationConfig, value: unknown) => {
+    if (key === "language" && typeof value === "string") setLanguage(value);
     const nextValue =
       key === "slides" && typeof value === "string"
         ? clampSlideCountValue(value)

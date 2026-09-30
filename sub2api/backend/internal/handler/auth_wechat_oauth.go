@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/oauth"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/pkg/satellite"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,6 +42,7 @@ const (
 	wechatPaymentOAuthRedirect    = "wechat_payment_oauth_redirect"
 	wechatPaymentOAuthContextName = "wechat_payment_oauth_context"
 	wechatPaymentOAuthScope       = "wechat_payment_oauth_scope"
+	wechatPaymentOAuthSatellite   = "wechat_payment_oauth_satellite"
 	wechatPaymentOAuthDefaultTo   = "/purchase"
 	wechatPaymentOAuthFrontendCB  = "/auth/wechat/payment/callback"
 
@@ -99,6 +101,11 @@ func (h *AuthHandler) WeChatOAuthStart(c *gin.Context) {
 	if !h.requireActionCaptchaForOAuthLoginStart(c) {
 		return
 	}
+	satelliteClaims, err := h.satelliteOAuthBindingClaims(c, "wechat")
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	cfg, err := h.getWeChatOAuthConfig(c.Request.Context(), c.Query("mode"), c)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -112,6 +119,9 @@ func (h *AuthHandler) WeChatOAuthStart(c *gin.Context) {
 	}
 
 	redirectTo := sanitizeFrontendRedirectPath(c.Query("redirect"))
+	if satelliteClaims != nil {
+		redirectTo = sanitizeFrontendRedirectPath(satelliteClaims.RedirectTo)
+	}
 	if redirectTo == "" {
 		redirectTo = wechatOAuthDefaultRedirectTo
 	}
@@ -132,7 +142,12 @@ func (h *AuthHandler) WeChatOAuthStart(c *gin.Context) {
 	setOAuthPendingBrowserCookie(c, browserSessionKey, secureCookie)
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	if intent == oauthIntentBindCurrentUser {
-		bindCookieValue, err := h.buildOAuthBindUserCookieFromContext(c)
+		bindCookieValue := ""
+		if satelliteClaims != nil {
+			bindCookieValue, err = buildOAuthBindUserCookieValue(satelliteClaims.UserID, h.oauthBindCookieSecret())
+		} else {
+			bindCookieValue, err = h.buildOAuthBindUserCookieFromContext(c)
+		}
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -155,6 +170,9 @@ func (h *AuthHandler) WeChatOAuthStart(c *gin.Context) {
 // and stores the result in the unified pending-auth flow.
 func (h *AuthHandler) WeChatOAuthCallback(c *gin.Context) {
 	frontendCallback := h.wechatOAuthFrontendCallback(c.Request.Context())
+	satelliteClaims, satelliteCallback := h.satelliteOAuthBindingFrontendCallback(c, "wechat", frontendCallback)
+	frontendCallback = satelliteCallback
+	defer clearSatelliteOAuthBindingHandoff(c)
 
 	if providerErr := strings.TrimSpace(c.Query("error")); providerErr != "" {
 		redirectOAuthError(c, frontendCallback, "provider_error", providerErr, c.Query("error_description"))
@@ -252,6 +270,21 @@ func (h *AuthHandler) WeChatOAuthCallback(c *gin.Context) {
 
 	normalizedIntent := normalizeWeChatOAuthIntent(intent)
 	if normalizedIntent == wechatOAuthIntentBind {
+		if satelliteClaims != nil {
+			targetUserID, readErr := h.readOAuthBindUserIDFromCookie(c, wechatOAuthBindUserCookieName)
+			if readErr != nil || targetUserID != satelliteClaims.UserID {
+				redirectOAuthError(c, frontendCallback, "invalid_state", "oauth bind target does not match satellite handoff", "")
+				return
+			}
+			if err := h.completeSatelliteOAuthBinding(c, satelliteClaims, identityRef, email, upstreamClaims); err != nil {
+				redirectOAuthError(c, frontendCallback, "binding_failed", infraerrors.Reason(err), infraerrors.Message(err))
+				return
+			}
+			clearOAuthPendingSessionCookie(c, secureCookie)
+			clearOAuthPendingBrowserCookie(c, secureCookie)
+			redirectSatelliteOAuthBindingSuccess(c, frontendCallback, "wechat", satelliteClaims.RedirectTo)
+			return
+		}
 		if err := h.createWeChatBindPendingSession(c, cfg, providerSubject, openid, redirectTo, browserSessionKey, upstreamClaims); err != nil {
 			switch infraerrors.Code(err) {
 			case http.StatusConflict:
@@ -355,6 +388,19 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 	if redirectTo == "" {
 		redirectTo = wechatPaymentOAuthDefaultTo
 	}
+	satelliteSlug := ""
+	if handoffToken := strings.TrimSpace(c.Query("satellite_handoff")); handoffToken != "" {
+		claims, parseErr := h.wechatPaymentResumeService().ParseWeChatPaymentHandoffToken(handoffToken)
+		if parseErr != nil {
+			response.ErrorFrom(c, parseErr)
+			return
+		}
+		if _, exists := satellite.Lookup(claims.SatelliteSlug); !exists {
+			response.BadRequest(c, "Invalid satellite payment handoff")
+			return
+		}
+		satelliteSlug = claims.SatelliteSlug
+	}
 	rawContext, err := encodeWeChatPaymentOAuthContext(wechatPaymentOAuthContext{
 		PaymentType: paymentType,
 		Amount:      strings.TrimSpace(c.Query("amount")),
@@ -372,6 +418,9 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 	wechatPaymentSetCookie(c, wechatPaymentOAuthRedirect, encodeCookieValue(redirectTo), wechatOAuthCookieMaxAgeSec, secureCookie)
 	wechatPaymentSetCookie(c, wechatPaymentOAuthContextName, encodeCookieValue(rawContext), wechatOAuthCookieMaxAgeSec, secureCookie)
 	wechatPaymentSetCookie(c, wechatPaymentOAuthScope, encodeCookieValue(scope), wechatOAuthCookieMaxAgeSec, secureCookie)
+	if satelliteSlug != "" {
+		wechatPaymentSetCookie(c, wechatPaymentOAuthSatellite, encodeCookieValue(satelliteSlug), wechatOAuthCookieMaxAgeSec, secureCookie)
+	}
 
 	cfg.redirectURI = h.resolveWeChatPaymentOAuthCallbackURL(c.Request.Context(), c)
 	cfg.scope = scope
@@ -388,6 +437,13 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 // forwards the browser back to the frontend callback route.
 func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 	frontendCallback := wechatPaymentOAuthFrontendCB
+	if satelliteSlug, readErr := readCookieDecoded(c, wechatPaymentOAuthSatellite); readErr == nil {
+		if app, exists := satellite.Lookup(strings.TrimSpace(satelliteSlug)); exists {
+			if origin := satellite.ProjectOrigin(app.Slug, app.DefaultOrigin); origin != "" {
+				frontendCallback = strings.TrimRight(origin, "/") + wechatPaymentOAuthFrontendCB
+			}
+		}
+	}
 
 	if providerErr := strings.TrimSpace(c.Query("error")); providerErr != "" {
 		redirectOAuthError(c, frontendCallback, "provider_error", providerErr, c.Query("error_description"))
@@ -407,6 +463,7 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 		wechatPaymentClearCookie(c, wechatPaymentOAuthRedirect, secureCookie)
 		wechatPaymentClearCookie(c, wechatPaymentOAuthContextName, secureCookie)
 		wechatPaymentClearCookie(c, wechatPaymentOAuthScope, secureCookie)
+		wechatPaymentClearCookie(c, wechatPaymentOAuthSatellite, secureCookie)
 	}()
 
 	expectedState, err := readCookieDecoded(c, wechatPaymentOAuthStateName)

@@ -3,10 +3,10 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { loadBranding } from './agent/branding'
+import { initializeTheme } from './agent/theme'
 import './style.css'
 
-const savedTheme = sessionStorage.getItem('agentapi_theme')
-document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+initializeTheme()
 
 async function bootstrap(): Promise<void> {
   await loadBranding()

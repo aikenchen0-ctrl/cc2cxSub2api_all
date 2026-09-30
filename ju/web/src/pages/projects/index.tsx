@@ -339,7 +339,7 @@ async function createUniqueProjectName(story: string, selectedStyle: CanvasStyle
             return await createProject(buildInput(attempt === 0 ? base : `${base}（${attempt + 1}）`));
         } catch (error) {
             const message = error instanceof Error ? error.message : "";
-            const uniqueConflict = message.includes("UNIQUE") || message.includes("projects.user_id") || message.includes("projects.name");
+            const uniqueConflict = message.includes("UNIQUE") || message.includes("projects.user_id") || message.includes("projects.name") || message.includes("项目名称已存在");
             if (!uniqueConflict || attempt >= 5) throw error;
             attempt += 1;
         }

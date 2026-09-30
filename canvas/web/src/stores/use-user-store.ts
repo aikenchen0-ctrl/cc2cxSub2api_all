@@ -25,7 +25,10 @@ export const useUserStore = create<UserStore>()(
             isReady: false,
             isLoading: false,
             setSession: (token, user) => set({ token, user, isReady: true }),
-            clearSession: () => set({ token: "", user: null, isReady: true }),
+            clearSession: () => {
+                if (get().token.startsWith("cookie:")) void fetch("/api/auth/logout", { method: "POST" });
+                set({ token: "", user: null, isReady: true });
+            },
             hydrateUser: async () => {
                 const token = get().token;
                 if (!token) {

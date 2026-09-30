@@ -32,6 +32,7 @@ func serveSub2APIVideoContent(w http.ResponseWriter, r *http.Request, id string)
 		return true
 	}
 	upstreamID := firstNonEmpty(task.UpstreamTaskID, task.UpstreamVideoID)
+	channel = service.OverlayUserSub2APIKey(channel, user.ID)
 	if upstreamID == "" {
 		FailWithStatus(w, 502, "视频缺少上游任务 ID")
 		return true

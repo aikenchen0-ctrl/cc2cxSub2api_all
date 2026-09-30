@@ -37,6 +37,7 @@ import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
 import pluginsAPI from './plugins'
 import agentProvisioningAPI from './agentProvisioning'
+import upstreamAuditAPI from './upstreamAudit'
 
 /**
  * Unified admin API object for convenient access
@@ -75,7 +76,8 @@ export const adminAPI = {
   compliance: adminComplianceAPI,
   audit: auditAPI,
   plugins: pluginsAPI,
-  agentProvisioning: agentProvisioningAPI
+  agentProvisioning: agentProvisioningAPI,
+  upstreamAudit: upstreamAuditAPI
 }
 
 export {
@@ -112,8 +114,11 @@ export {
   adminComplianceAPI,
   auditAPI,
   pluginsAPI,
-  agentProvisioningAPI
+  agentProvisioningAPI,
+  upstreamAuditAPI
 }
+
+export type { UpstreamAuditOverview, UpstreamAuditJob, UpstreamAuditItem, UpstreamAuditStatus } from './upstreamAudit'
 
 export default adminAPI
 

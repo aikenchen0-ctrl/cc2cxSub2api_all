@@ -85,6 +85,11 @@ func (h *AuthHandler) LinuxDoOAuthStart(c *gin.Context) {
 	if !h.requireActionCaptchaForOAuthLoginStart(c) {
 		return
 	}
+	satelliteClaims, err := h.satelliteOAuthBindingClaims(c, "linuxdo")
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	cfg, err := h.getLinuxDoOAuthConfig(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -98,6 +103,9 @@ func (h *AuthHandler) LinuxDoOAuthStart(c *gin.Context) {
 	}
 
 	redirectTo := sanitizeFrontendRedirectPath(c.Query("redirect"))
+	if satelliteClaims != nil {
+		redirectTo = sanitizeFrontendRedirectPath(satelliteClaims.RedirectTo)
+	}
 	if redirectTo == "" {
 		redirectTo = linuxDoOAuthDefaultRedirectTo
 	}
@@ -117,7 +125,12 @@ func (h *AuthHandler) LinuxDoOAuthStart(c *gin.Context) {
 	setOAuthPendingBrowserCookie(c, browserSessionKey, secureCookie)
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	if intent == oauthIntentBindCurrentUser {
-		bindCookieValue, err := h.buildOAuthBindUserCookieFromContext(c)
+		bindCookieValue := ""
+		if satelliteClaims != nil {
+			bindCookieValue, err = buildOAuthBindUserCookieValue(satelliteClaims.UserID, h.oauthBindCookieSecret())
+		} else {
+			bindCookieValue, err = h.buildOAuthBindUserCookieFromContext(c)
+		}
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -166,6 +179,9 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 	if frontendCallback == "" {
 		frontendCallback = linuxDoOAuthDefaultFrontendCB
 	}
+	satelliteClaims, satelliteCallback := h.satelliteOAuthBindingFrontendCallback(c, "linuxdo", frontendCallback)
+	frontendCallback = satelliteCallback
+	defer clearSatelliteOAuthBindingHandoff(c)
 
 	if providerErr := strings.TrimSpace(c.Query("error")); providerErr != "" {
 		redirectOAuthError(c, frontendCallback, "provider_error", providerErr, c.Query("error_description"))
@@ -276,6 +292,20 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 		targetUserID, err := h.readOAuthBindUserIDFromCookie(c, linuxDoOAuthBindUserCookieName)
 		if err != nil {
 			redirectOAuthError(c, frontendCallback, "invalid_state", "invalid oauth bind target", "")
+			return
+		}
+		if satelliteClaims != nil {
+			if targetUserID != satelliteClaims.UserID {
+				redirectOAuthError(c, frontendCallback, "invalid_state", "oauth bind target does not match satellite handoff", "")
+				return
+			}
+			if err := h.completeSatelliteOAuthBinding(c, satelliteClaims, identityKey, email, upstreamClaims); err != nil {
+				redirectOAuthError(c, frontendCallback, "binding_failed", infraerrors.Reason(err), infraerrors.Message(err))
+				return
+			}
+			clearOAuthPendingSessionCookie(c, secureCookie)
+			clearOAuthPendingBrowserCookie(c, secureCookie)
+			redirectSatelliteOAuthBindingSuccess(c, frontendCallback, "linuxdo", satelliteClaims.RedirectTo)
 			return
 		}
 		if err := h.createOAuthPendingSession(c, oauthPendingSessionPayload{

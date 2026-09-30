@@ -4,6 +4,36 @@ import AgentUsageView from './AgentUsageView.vue'
 import { agentAPI, type AgentUsageView as UsageItem } from '@/agent/api'
 
 describe('AgentUsageView', () => {
+  it('sends filters to the server and resets them instead of filtering the current page', async () => {
+    const getUsage = vi.spyOn(agentAPI, 'getUsage').mockResolvedValue({ items: [], total: 0, page: 1, page_size: 25 })
+    const wrapper = mount(AgentUsageView, { global: { stubs: { AgentUsageInsights: true } } })
+    await flushPromises()
+    await wrapper.get('#usage-model').setValue(' gpt-5.5 ')
+    await wrapper.get('#usage-request').setValue('request-123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(getUsage).toHaveBeenLastCalledWith(1, 25, { model: 'gpt-5.5', request_id: 'request-123' })
+    await wrapper.findAll('button').find(b => b.text() === '重置')!.trigger('click')
+    await flushPromises()
+    expect(getUsage).toHaveBeenLastCalledWith(1, 25)
+    expect((wrapper.get('#usage-model').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('rejects an inverted time window without querying and clears failed-query results', async () => {
+    const getUsage = vi.spyOn(agentAPI, 'getUsage').mockResolvedValue({ items: [], total: 1, page: 1, page_size: 25 })
+    const wrapper = mount(AgentUsageView, { global: { stubs: { AgentUsageInsights: true } } })
+    await flushPromises()
+    await wrapper.get('#usage-start').setValue('2026-09-29T12:00')
+    await wrapper.get('#usage-end').setValue('2026-09-28T12:00')
+    await wrapper.get('form').trigger('submit')
+    expect(getUsage).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[role="alert"]').text()).toContain('开始时间必须早于结束时间')
+    getUsage.mockRejectedValueOnce(new Error('network unavailable'))
+    await wrapper.findAll('button').find(b => b.text() === '重置')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[aria-label="下一页"]').exists()).toBe(false)
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -150,7 +180,9 @@ describe('AgentUsageView', () => {
     await flushPromises()
     expect(getUsage).toHaveBeenLastCalledWith(2, 25)
 
-    await wrapper.get('[aria-label="每页显示条数"]').setValue('50')
+    await wrapper.get('[aria-label="每页显示条数"]').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.trim() === '50')!.click()
     await flushPromises()
     expect(getUsage).toHaveBeenLastCalledWith(1, 50)
   })

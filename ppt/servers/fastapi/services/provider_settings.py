@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.sql.provider_settings import ProviderSettings
 from utils.datetime_utils import get_current_utc_datetime
 from utils.db_utils import get_database_url_and_connect_args, to_sync_sqlalchemy_url
-from utils.get_env import get_user_config_path_env
+from utils.get_env import get_user_config_path_env, sub2api_text_model
 from utils.user_config_store import read_user_config_file, update_user_config_file
 
 
@@ -53,6 +53,8 @@ OPTIONAL_ADVANCED_FIELDS = {
 
 def sanitize_provider_settings(config: dict[str, Any]) -> dict[str, Any]:
     """Keep provider/runtime settings and exclude every legacy auth field."""
+    if os.getenv("SUB2API_APP_CREDENTIAL", "").strip() and config.get("LLM") == "custom":
+        config = {**config, "CUSTOM_MODEL": sub2api_text_model(config.get("CUSTOM_MODEL"))}
     return {
         key: value
         for key, value in config.items()
@@ -81,7 +83,7 @@ def merge_provider_settings(
         if key in sanitized and sanitized[key] in (None, "", []):
             merged.pop(key, None)
 
-    return merged
+    return sanitize_provider_settings(merged)
 
 
 def _mirror_to_legacy_file(config: dict[str, Any]) -> None:

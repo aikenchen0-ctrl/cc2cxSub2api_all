@@ -580,6 +580,8 @@ type AccountSelectionResult struct {
 	Acquired    bool
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
+	// stickySessionHit 标记账号来自会话粘性绑定命中，供非高级调度路径回填决策标签。
+	stickySessionHit bool
 	// profitGate 携带本次选号真实生效的利润门（无门为 nil）。门安装在调度栈的
 	// 局部 ctx 上，handler 必须经 ContextWithSelectionProfitGate 重放后才能在
 	// 调度栈之外做抢槽后终检与准入后粘性绑定。
@@ -950,13 +952,6 @@ func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 	}
 
 	return ""
-}
-
-func (s *GatewayService) ClearStickySession(ctx context.Context, groupID *int64, sessionHash string) {
-	if s == nil || s.cache == nil || sessionHash == "" {
-		return
-	}
-	_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
 }
 
 // BindStickySession sets session -> account binding with standard TTL.

@@ -169,6 +169,18 @@ func TestUsersPageReturnsStablePagesAndAgentScopedTotals(t *testing.T) {
 	if err != nil || searchTotal != 1 || len(searchItems) != 1 || searchItems[0].MainUserID != "52" {
 		t.Fatalf("identifier search failed: items=%+v total=%d err=%v", searchItems, searchTotal, err)
 	}
+
+	if _, err := store.SetUserStatus("agent-test", "44", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	disabledItems, disabledTotal, err := store.UsersPageFiltered("agent-test", 5, 0, "", "disabled")
+	if err != nil || disabledTotal != 1 || len(disabledItems) != 1 || disabledItems[0].MainUserID != "44" {
+		t.Fatalf("local status filter escaped or returned the wrong users: items=%+v total=%d err=%v", disabledItems, disabledTotal, err)
+	}
+	activeItems, activeTotal, err := store.UsersPageFiltered("agent-test", 20, 0, "", "active")
+	if err != nil || activeTotal != 10 || len(activeItems) != 10 {
+		t.Fatalf("active status filter returned the wrong page: items=%+v total=%d err=%v", activeItems, activeTotal, err)
+	}
 }
 
 func TestAgentModelPolicyDefaultsToPublicCatalogAndPersistsAValidatedSubset(t *testing.T) {
@@ -511,6 +523,57 @@ func TestFinalizeSettlementAtomicallyRefundsUnusedReservation(t *testing.T) {
 	}
 }
 
+func TestSettlementRefundUsesActualLocalDebitNotIdentityEquality(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			store := testStore(t)
+			if err := store.Allocate("agent-test", "42", 400, "alloc", "order", "test"); err != nil {
+				t.Fatal(err)
+			}
+			prepare := store.PrepareSettlement
+			if direct {
+				prepare = store.PrepareDirectSettlement
+			}
+			if _, _, err := prepare("agent-test", "42", "42", "self-request", "self-request", 150); err != nil {
+				t.Fatal(err)
+			}
+			record, err := store.Settlement("agent-test", "self-request")
+			if err != nil || record.HasLocalReservation == direct {
+				t.Fatalf("incorrect local reservation classification: %+v err=%v", record, err)
+			}
+			pending, err := store.PendingSettlements("agent-test", 10)
+			if err != nil || len(pending) != 1 || pending[0].HasLocalReservation == direct {
+				t.Fatalf("batch classification differs: %+v err=%v", pending, err)
+			}
+			if !direct {
+				if err := store.FinalizeSettlement("agent-test", "self-request", "main-usage", "confirmed", 200, ""); err == nil {
+					t.Fatal("legacy self-billing must not bypass its actual local reservation")
+				}
+				unchanged, err := store.Settlement("agent-test", "self-request")
+				if err != nil || unchanged.Status != "pending" {
+					t.Fatalf("rejected settlement changed state: %+v %v", unchanged, err)
+				}
+			}
+			for i := 0; i < 2; i++ {
+				if err := store.FinalizeSettlement("agent-test", "self-request", "main-usage", "confirmed", 100, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			user, err := store.User("agent-test", "42")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := int64(300)
+			if direct {
+				want = 400
+			}
+			if user.BalanceCents != want {
+				t.Fatalf("direct=%v balance=%d want=%d", direct, user.BalanceCents, want)
+			}
+		})
+	}
+}
+
 func TestOwnerChangeRejectsPendingSettlement(t *testing.T) {
 	store := testStore(t)
 	if err := store.Allocate("agent-test", "42", 400, "owner-change-alloc", "order", "test"); err != nil {
@@ -577,7 +640,7 @@ func TestBrandingUpdateSurvivesRestartUnlessEnvSyncIsExplicit(t *testing.T) {
 	if err := store.UpsertAgent(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.UpdateBranding(cfg.AgentID, "Edited", "Edited Site", "https://cdn.example.com/edited.svg"); err != nil {
+	if _, err := store.UpdateBranding(cfg.AgentID, "Edited", "Edited Site", "https://cdn.example.com/edited.svg", "https://docs.example.com/agent", "support@example.com", AgentHomeSettings{SiteSubtitle: "Edited subtitle", CompactHomeEnabled: true, HomeContent: "<h1>Edited home</h1>"}); err != nil {
 		t.Fatal(err)
 	}
 	// A normal restart keeps the admin-edited branding instead of silently
@@ -589,8 +652,11 @@ func TestBrandingUpdateSurvivesRestartUnlessEnvSyncIsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agent.Name != "Edited" || agent.SiteName != "Edited Site" || agent.SiteLogo != "https://cdn.example.com/edited.svg" {
+	if agent.Name != "Edited" || agent.SiteName != "Edited Site" || agent.SiteLogo != "https://cdn.example.com/edited.svg" || agent.DocURL != "https://docs.example.com/agent" || agent.ContactInfo != "support@example.com" {
 		t.Fatalf("normal restart overwrote branding: %+v", agent)
+	}
+	if agent.SiteSubtitle != "Edited subtitle" || !agent.CompactHomeEnabled || agent.HomeContent != "<h1>Edited home</h1>" {
+		t.Fatalf("restart overwrote homepage: %+v", agent.AgentHomeSettings)
 	}
 	if err := store.UpsertAgent(Config{AgentID: cfg.AgentID, AgentName: "Env Name", SiteName: "Env Site", SiteLogo: "/env.svg", BrandSync: true}); err != nil {
 		t.Fatal(err)
@@ -599,7 +665,7 @@ func TestBrandingUpdateSurvivesRestartUnlessEnvSyncIsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agent.Name != "Env Name" || agent.SiteName != "Env Site" || agent.SiteLogo != "/env.svg" {
+	if agent.Name != "Env Name" || agent.SiteName != "Env Site" || agent.SiteLogo != "/env.svg" || agent.DocURL != "https://docs.example.com/agent" || agent.ContactInfo != "support@example.com" {
 		t.Fatalf("explicit env branding sync did not apply: %+v", agent)
 	}
 }

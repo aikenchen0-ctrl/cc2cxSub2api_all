@@ -4,6 +4,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { autoDLBaseUrl, isAutoDLConfig } from "@/lib/autodl";
 import { fetchAutoDLWorkflow, fetchAutoDLWorkflows } from "@/services/api/autodl";
 import type { AiConfig } from "@/stores/use-config-store";
+import { autoDLVideoWorkflow } from "@/lib/autodl-video-catalog";
 
 export function useAutoDLWorkflow(config: AiConfig, model = config.model) {
     const baseUrl = autoDLBaseUrl(config, model);
@@ -11,6 +12,7 @@ export function useAutoDLWorkflow(config: AiConfig, model = config.model) {
     return useQuery({
         queryKey: ["autodl", enabled ? baseUrl : "", model],
         queryFn: () => fetchAutoDLWorkflow(baseUrl, model),
+        initialData: enabled && !baseUrl ? autoDLVideoWorkflow(model) : undefined,
         enabled,
         staleTime: 300_000,
     });
@@ -26,6 +28,8 @@ export function useAutoDLWorkflowNames(channels: AutoDLChannel[]) {
         staleTime: 300_000,
     })) });
     return (model: string, channel?: AutoDLChannel | null) => {
+        const preset = autoDLVideoWorkflow(model);
+        if (preset) return preset.name;
         if (channel?.protocol !== "autodl") return model;
         const baseUrl = (channel.baseUrl || "https://autodl.art").trim().replace(/\/+$/, "");
         return queries[baseUrls.indexOf(baseUrl)]?.data?.find((workflow) => workflow.uuid === model)?.name || model;

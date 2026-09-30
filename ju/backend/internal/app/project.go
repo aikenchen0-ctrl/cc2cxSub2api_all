@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -254,6 +255,9 @@ func (s *Service) CreateProject(userID string, req CreateProjectRequest) (model.
 	}
 	project := model.Project{ID: newID(), UserID: userID, Name: name, Type: projectType, AspectRatio: aspectRatio, SourceType: sourceType, Description: strings.TrimSpace(req.Description), StylePresetID: stylePresetID, StyleProfileJSON: styleProfileJSON, DefaultImageModel: defaultImageModel, DefaultVideoModel: defaultVideoModel, Status: model.ProjectStatusActive, Revision: 1, CreatedAt: now, UpdatedAt: now}
 	if err := s.repo.CreateProject(&project); err != nil {
+		if isProjectNameConflict(err) {
+			return model.Project{}, WrapAppError(http.StatusConflict, "项目名称已存在，请使用其他名称", err)
+		}
 		return model.Project{}, err
 	}
 	if _, err := s.createProjectWorkflow(project.ID, "", "project"); err != nil {
@@ -265,6 +269,14 @@ func (s *Service) CreateProject(userID string, req CreateProjectRequest) (model.
 	project.Revision++
 	project.UpdatedAt = time.Now()
 	return project, nil
+}
+
+func isProjectNameConflict(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "projects.user_id, projects.name") ||
+		strings.Contains(message, "idx_projects_user_name") ||
+		(strings.Contains(message, "unique constraint") && strings.Contains(message, "projects")) ||
+		(strings.Contains(message, "duplicate key") && strings.Contains(message, "projects"))
 }
 
 func (s *Service) UpdateProject(userID string, id string, req UpdateProjectRequest) (model.Project, error) {

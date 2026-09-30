@@ -9,10 +9,15 @@ export function getAutoDLCapabilities(workflow?: AutoDLWorkflow) {
     return {
         promptRequired: Boolean(rules.prompt?.required),
         imageMax: images.length,
+        imageMin: images.filter((key) => rules[key].required).length,
         audioMax: audios.length,
+        audioMin: audios.filter((key) => rules[key].required).length,
         videoMax: videos.length,
+        videoMin: videos.filter((key) => rules[key].required).length,
         firstFrame: Boolean(rules.first_frame),
+        firstFrameRequired: Boolean(rules.first_frame?.required),
         lastFrame: Boolean(rules.last_frame),
+        lastFrameRequired: Boolean(rules.last_frame?.required),
         duration: rules.duration || rules.audio_duration,
         resolution: rules.resolution,
     };

@@ -33,7 +33,7 @@ var SatelliteImageModels = []string{
 }
 
 // SatelliteVideoModels come from 计算万物 plus the Grok video adapter.
-var SatelliteVideoModels = []string{
+var SatelliteVideoModels = append([]string{
 	"grok-imagine-video-1.5",
 	"seedance-2.0",
 	"seedance-2.0-fast",
@@ -44,4 +44,4 @@ var SatelliteVideoModels = []string{
 	"kling-v2-6",
 	"kling-v3",
 	"kling-v3-omni",
-}
+}, AutoDLVideoModels()...)

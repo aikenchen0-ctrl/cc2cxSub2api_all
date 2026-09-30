@@ -378,7 +378,7 @@ func satelliteBillingCost(rule SatelliteBillingRule, mode SatelliteBillingMode, 
 	case SatelliteBillingUnitImage:
 		cost.TotalCost = unitPrice * float64(usage.ImageCount)
 	case SatelliteBillingUnitVideoSecond:
-		cost.TotalCost = unitPrice * float64(NormalizeVideoBillingDurationSecondsOrDefault(usage.VideoDurationSeconds)) * float64(usage.VideoCount)
+		cost.TotalCost = unitPrice * float64(NormalizeModelVideoBillingDuration(usage.Model, usage.VideoDurationSeconds)) * float64(usage.VideoCount)
 	default:
 		cost.TotalCost = unitPrice
 	}

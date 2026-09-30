@@ -45,6 +45,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
         try {
             String token = extractBearerToken(request.getHeader("Authorization"));
+            String cookie = SessionCookies.read(request);
+            if (!cookie.isBlank()) {
+                if (!List.of("GET", "HEAD", "OPTIONS").contains(request.getMethod()) && !SessionCookies.sameOrigin(request)) {
+                    throw new ApiException(HttpStatus.FORBIDDEN, "CROSS_ORIGIN_SESSION", "跨域会话请求被拒绝");
+                }
+                token = cookie;
+            }
             if (!token.isBlank()) {
                 authenticateToken(request, token);
             }

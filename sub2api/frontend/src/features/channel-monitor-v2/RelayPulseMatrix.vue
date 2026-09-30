@@ -82,14 +82,18 @@
               {{ formatPercent(entry.row.metrics.cache_rate) }}
             </strong>
             <div class="pulse-track grid items-stretch" :style="pulseStyle">
-              <span
-                v-for="slot in entry.slots"
-                :key="slot.start"
-                class="pulse-cell relative rounded-sm border-0 p-0 outline-offset-1"
+              <!-- 用户端可用趋势统一显示成功色，包括无流量/缺失数据的方块。
+                原状态配色实现保留：
                 :class="[
                   slot.bucket ? cellClass(slot.bucket.health, slot.bucket.metrics.request_count) : 'health-unknown',
                   slot.bucket ? 'has-data' : 'is-empty',
                 ]"
+              -->
+              <span
+                v-for="slot in entry.slots"
+                :key="slot.start"
+                class="pulse-cell health-score10 relative rounded-sm border-0 p-0 outline-offset-1"
+                :class="slot.bucket ? 'has-data' : 'is-empty'"
                 tabindex="0"
                 role="img"
                 :title="slot.bucket ? bucketTooltip(slot.bucket) : t('channelMonitorV2.matrix.noTrafficAt', { time: formatBucketRange(slot.start) })"
@@ -547,7 +551,8 @@ function formatBucketRange(value: string) {
   cursor: help;
 }
 .pulse-cell.is-empty {
-  opacity: 0.55;
+  /* 原空数据透明度：opacity: 0.55; 统一成功色后保持完整色值。 */
+  opacity: 1;
   cursor: default;
 }
 .pulse-cell.has-data:hover,

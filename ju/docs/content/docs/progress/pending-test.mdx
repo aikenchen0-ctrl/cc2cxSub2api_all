@@ -5,6 +5,18 @@ description: 已实现功能的部署与人工验收事项
 
 # Ju 与 Sub2API SSO
 
+## AI 导演台视频默认参数
+
+- 已修复首页继承全局 `videoGenerateAudio=true` 导致智能剧场视频模型被任务接口拒绝的问题。首页生成与重新生成共用模型能力解析；不支持同步音频/水印的模型使用关闭值，支持的模型使用自身默认值。模型筛选只使用首页可选参数，不再被隐藏的全局音频/水印设置干扰。
+- `bun test test/creation-config.test.ts test/canvas-model-policy.test.ts`：26 项通过，覆盖 grok-imagine-video-1.5、seedance-2.0、kling-v3 的 16:9 / 720P / 6 秒任务请求、重试、切换支持音频的模型及文本/图片参数回归；`bun run typecheck` 通过。
+- 待部署 Ju 前端后在首页对三个模型分别生成并重试，确认不再出现“同步音频超出支持范围”，并确认真实视频产物。自动化测试验证参数和任务请求，不代表线上上游生成已验收。
+
+## 接入与部署
+
+- 自由画布网站 Agent 与章节提取共用任务出口策略。Sub2API Compose overlay 显式设置 `SUB2API_RELAY_ALLOW_LOCAL=false`，使用精确主机白名单；新增 Agent 模拟中转测试验证公开模型、三项身份头及私网拒绝边界。专项测试两项通过；线上应用配置后需验证回复、工具调用与画布节点产出。
+
+- 根目录线上 Compose 修正章节提取的出口策略：关闭桌面专用 `SUB2API_RELAY_ALLOW_LOCAL`，仅通过 `CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS=sub2api` 放行容器中转，保持全局私网放行关闭。回归测试证明旧模式拒绝容器地址、精确白名单可解析 `gpt-5.5` 渠道、未列出的私网仍被拒绝；线上配置应用及章节提取真实任务待验收。
+
 - 两端同时部署新版本，并完成 Ju 数据库版本 11 迁移。
 - 从已登录 Sub2API 点击智能剧场，检查同源交换后进入目标页，URL 无票据，交换 Cookie 被清除。
 - 使用两个隔离测试账号检查项目、资源、任务和浏览器缓存隔离；Relay Key 不出现在客户端。

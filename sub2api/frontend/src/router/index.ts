@@ -532,6 +532,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/upstream-audit',
+    name: 'AdminUpstreamAudit',
+    component: () => import('@/views/admin/UpstreamAuditView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Upstream Audit',
+      titleKey: 'admin.upstreamAudit.title',
+      descriptionKey: 'admin.upstreamAudit.description'
+    }
+  },
+  {
     path: '/admin/plugins',
     name: 'AdminPlugins',
     component: () => import('@/views/admin/PluginsView.vue'),

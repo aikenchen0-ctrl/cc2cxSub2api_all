@@ -317,6 +317,7 @@ function isImageModelName(model: string) {
 
 function isAudioModelName(model: string) {
     const value = model.toLowerCase();
+    if (value.startsWith("minimax_h3_")) return false;
     return value.includes("audio") || value.includes("tts") || value.includes("speech") || value.includes("voice") || value.includes("music") || value.includes("sound") || value.includes("elevenlabs") || value.includes("suno") || value.includes("lyrics") || value.includes("vocal") || value.includes("midi") || value.includes("wav");
 }
 

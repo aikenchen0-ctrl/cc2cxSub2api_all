@@ -61,10 +61,12 @@ type MainAuthResult struct {
 }
 
 type MainUserResult struct {
-	ID      string
-	Email   string
-	Balance int64
-	Raw     json.RawMessage
+	BalancePositive bool
+	ID              string
+	Email           string
+	Balance         int64
+	FrozenBalance   int64
+	Raw             json.RawMessage
 }
 
 type MainProvisioningAgent struct {
@@ -249,6 +251,94 @@ func (c *MainClient) Register(ctx context.Context, payload map[string]any) (Main
 	return decodeAuthResult(data)
 }
 
+// PublicSettings reads only Sub2API's unauthenticated feature flags. Callers
+// must whitelist fields before returning them from AgentAPI.
+func (c *MainClient) PublicSettings(ctx context.Context) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodGet, "/settings/public", nil, "")
+}
+
+// Passkey login is intentionally proxied through AgentAPI. Sub2API remains
+// the WebAuthn relying party and credential store, while the token pair it
+// returns is consumed only by AgentAPI's server-side session establishment.
+func (c *MainClient) PasskeyLoginBegin(ctx context.Context, payload any) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/auth/passkey/login/begin", payload, "")
+}
+
+func (c *MainClient) PasskeyLoginFinish(ctx context.Context, payload any) (MainAuthResult, error) {
+	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/passkey/login/finish", payload, "")
+	if err != nil {
+		return MainAuthResult{}, err
+	}
+	return decodeAuthResult(data)
+}
+
+func (c *MainClient) Passkeys(ctx context.Context, token string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodGet, "/user/passkeys", nil, token)
+}
+
+func (c *MainClient) PasskeyRegisterBegin(ctx context.Context, token string, payload any) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/passkeys/register/begin", payload, token)
+}
+
+func (c *MainClient) PasskeyRegisterFinish(ctx context.Context, token string, payload any) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/passkeys/register/finish", payload, token)
+}
+
+func (c *MainClient) PasskeyRename(ctx context.Context, token string, id int64, payload any) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPatch, "/user/passkeys/"+strconv.FormatInt(id, 10), payload, token)
+}
+
+func (c *MainClient) PasskeyDelete(ctx context.Context, token string, id int64, payload any) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodDelete, "/user/passkeys/"+strconv.FormatInt(id, 10), payload, token)
+}
+
+func (c *MainClient) ForgotPassword(ctx context.Context, payload any, locale string) (json.RawMessage, error) {
+	return c.satelliteAuthJSON(ctx, "/auth/satellite/"+url.PathEscape(c.cfg.SatelliteSlug)+"/forgot-password", payload, locale, "PASSWORD_RECOVERY_UNAVAILABLE")
+}
+
+func (c *MainClient) ResetPassword(ctx context.Context, payload any, locale string) (json.RawMessage, error) {
+	return c.satelliteAuthJSON(ctx, "/auth/satellite/"+url.PathEscape(c.cfg.SatelliteSlug)+"/reset-password", payload, locale, "PASSWORD_RECOVERY_UNAVAILABLE")
+}
+
+func (c *MainClient) SendRegistrationVerifyCode(ctx context.Context, email, locale string) (json.RawMessage, error) {
+	return c.satelliteAuthJSON(ctx, "/auth/satellite/"+url.PathEscape(c.cfg.SatelliteSlug)+"/send-verify-code", map[string]string{"email": email}, locale, "EMAIL_VERIFICATION_UNAVAILABLE")
+}
+
+func (c *MainClient) VerifyRegistrationEmail(ctx context.Context, email, verifyCode, locale string) error {
+	_, err := c.satelliteAuthJSON(ctx, "/auth/satellite/"+url.PathEscape(c.cfg.SatelliteSlug)+"/verify-registration-email", map[string]string{
+		"email": email, "verify_code": verifyCode,
+	}, locale, "EMAIL_VERIFICATION_UNAVAILABLE")
+	return err
+}
+
+func (c *MainClient) satelliteAuthJSON(ctx context.Context, path string, payload any, locale, unavailableCode string) (json.RawMessage, error) {
+	credential := strings.TrimSpace(c.cfg.AppCredential)
+	if credential == "" || strings.ContainsAny(credential, "\r\n") {
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_APP_CREDENTIAL_MISSING", Message: "satellite application credential is not configured"}
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	headers := make(http.Header)
+	headers.Set("Accept", "application/json")
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Authorization", "Bearer "+credential)
+	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
+	locale = strings.TrimSpace(locale)
+	if locale != "" && len(locale) <= 128 && !strings.ContainsAny(locale, "\r\n") {
+		headers.Set("Accept-Language", locale)
+	}
+	resp, responseBody, err := c.request(ctx, http.MethodPost, c.endpoint(path), body, headers)
+	if err != nil {
+		if strings.TrimSpace(unavailableCode) == "" {
+			unavailableCode = "SATELLITE_AUTH_UNAVAILABLE"
+		}
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: unavailableCode, Message: "main-site authentication service is temporarily unavailable"}
+	}
+	return unwrapMainResponse(resp.StatusCode, responseBody)
+}
+
 func (c *MainClient) Login2FA(ctx context.Context, tempToken, code string) (MainAuthResult, error) {
 	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/login/2fa", map[string]any{
 		"temp_token": tempToken, "totp_code": code,
@@ -285,12 +375,112 @@ func (c *MainClient) UpdateUserProfile(ctx context.Context, accessToken, usernam
 	return c.jsonRequest(ctx, http.MethodPut, "/user", map[string]string{"username": username}, accessToken)
 }
 
+func (c *MainClient) UpdateUserAvatar(ctx context.Context, accessToken, avatarURL string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPut, "/user", map[string]string{"avatar_url": avatarURL}, accessToken)
+}
+
+func (c *MainClient) UserSendEmailBindingCode(ctx context.Context, accessToken, email, locale string) (json.RawMessage, error) {
+	return c.userJSONWithLocale(ctx, http.MethodPost, "/user/account-bindings/email/send-code", map[string]string{"email": email}, accessToken, locale)
+}
+
+func (c *MainClient) UserBindEmailIdentity(ctx context.Context, accessToken, email, code, password string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/account-bindings/email", map[string]string{
+		"email": email, "verify_code": code, "password": password,
+	}, accessToken)
+}
+
+func (c *MainClient) UserUnbindIdentity(ctx context.Context, accessToken, provider string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodDelete, "/user/account-bindings/"+url.PathEscape(provider), nil, accessToken)
+}
+
 func (c *MainClient) ChangeUserPassword(ctx context.Context, accessToken, oldPassword, newPassword string) error {
 	_, err := c.jsonRequest(ctx, http.MethodPut, "/user/password", map[string]string{
 		"old_password": oldPassword,
 		"new_password": newPassword,
 	}, accessToken)
 	return err
+}
+
+// The TOTP helpers deliberately expose a fixed list of authenticated user
+// endpoints. AgentAPI must never become an arbitrary main-site proxy, and the
+// user's access token remains server-side for every call.
+func (c *MainClient) UserTOTPStatus(ctx context.Context, accessToken string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodGet, "/user/totp/status", nil, accessToken)
+}
+
+func (c *MainClient) UserTOTPVerificationMethod(ctx context.Context, accessToken string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodGet, "/user/totp/verification-method", nil, accessToken)
+}
+
+func (c *MainClient) UserTOTPSendCode(ctx context.Context, accessToken string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/totp/send-code", map[string]any{}, accessToken)
+}
+
+func (c *MainClient) UserTOTPSetup(ctx context.Context, accessToken, emailCode, password string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/totp/setup", map[string]string{
+		"email_code": emailCode,
+		"password":   password,
+	}, accessToken)
+}
+
+func (c *MainClient) UserTOTPEnable(ctx context.Context, accessToken, code, setupToken string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/totp/enable", map[string]string{
+		"totp_code":   code,
+		"setup_token": setupToken,
+	}, accessToken)
+}
+
+func (c *MainClient) UserTOTPDisable(ctx context.Context, accessToken, emailCode, password string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/totp/disable", map[string]string{
+		"email_code": emailCode,
+		"password":   password,
+	}, accessToken)
+}
+
+func (c *MainClient) UserUpdateBalanceNotify(ctx context.Context, accessToken string, enabled *bool, threshold *float64) (json.RawMessage, error) {
+	payload := map[string]any{}
+	if enabled != nil {
+		payload["balance_notify_enabled"] = *enabled
+	}
+	if threshold != nil {
+		payload["balance_notify_threshold"] = *threshold
+	}
+	return c.jsonRequest(ctx, http.MethodPut, "/user", payload, accessToken)
+}
+
+func (c *MainClient) UserNotifyEmailSendCode(ctx context.Context, accessToken, email, locale string) (json.RawMessage, error) {
+	return c.userJSONWithLocale(ctx, http.MethodPost, "/user/notify-email/send-code", map[string]string{"email": email}, accessToken, locale)
+}
+
+func (c *MainClient) UserNotifyEmailVerify(ctx context.Context, accessToken, email, code string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPost, "/user/notify-email/verify", map[string]string{"email": email, "code": code}, accessToken)
+}
+
+func (c *MainClient) UserNotifyEmailToggle(ctx context.Context, accessToken, email string, disabled bool) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodPut, "/user/notify-email/toggle", map[string]any{"email": email, "disabled": disabled}, accessToken)
+}
+
+func (c *MainClient) UserNotifyEmailRemove(ctx context.Context, accessToken, email string) (json.RawMessage, error) {
+	return c.jsonRequest(ctx, http.MethodDelete, "/user/notify-email", map[string]string{"email": email}, accessToken)
+}
+
+func (c *MainClient) userJSONWithLocale(ctx context.Context, method, path string, payload any, accessToken, locale string) (json.RawMessage, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	headers := make(http.Header)
+	headers.Set("Accept", "application/json")
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Authorization", "Bearer "+accessToken)
+	if locale = strings.TrimSpace(locale); locale != "" && len(locale) <= 64 && !strings.ContainsAny(locale, "\r\n") {
+		headers.Set("Accept-Language", locale)
+	}
+	resp, data, err := c.request(ctx, method, c.endpoint(path), body, headers)
+	if err != nil {
+		return nil, err
+	}
+	return unwrapMainResponse(resp.StatusCode, data)
 }
 
 func (c *MainClient) Logout(ctx context.Context, refreshToken string) error {
@@ -359,7 +549,11 @@ func (c *MainClient) RuntimeGetOwner(ctx context.Context) (MainUserResult, error
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return MainUserResult{}, err
 	}
-	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: moneyValue(raw["balance"]), Raw: data}, nil
+	balance, frozenBalance, positive, err := decodeMainBalanceFacts(data)
+	if err != nil {
+		return MainUserResult{}, err
+	}
+	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: balance, FrozenBalance: frozenBalance, BalancePositive: positive, Raw: data}, nil
 }
 
 // SatelliteUserBalance reads one mapped Sub2API user's authoritative balance
@@ -378,13 +572,51 @@ func (c *MainClient) SatelliteUserBalance(ctx context.Context, mainUserID string
 	if err != nil {
 		return MainUserResult{}, err
 	}
+	balance, frozenBalance, positive, err := decodeMainBalanceFacts(data)
+	if err != nil {
+		return MainUserResult{}, err
+	}
+	return MainUserResult{ID: mainUserID, Balance: balance, FrozenBalance: frozenBalance, BalancePositive: positive, Raw: data}, nil
+}
+
+// Rounded display cents must never decide whether a real balance is positive.
+// Missing or malformed balances are unavailable, not authoritative zeroes.
+func decodeMainBalance(data json.RawMessage) (int64, bool, error) {
+	balance, _, positive, err := decodeMainBalanceFacts(data)
+	return balance, positive, err
+}
+
+func decodeMainBalanceFacts(data json.RawMessage) (int64, int64, bool, error) {
 	var payload struct {
-		Balance json.RawMessage `json:"balance"`
+		Balance       json.RawMessage `json:"balance"`
+		FrozenBalance json.RawMessage `json:"frozen_balance"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return MainUserResult{}, fmt.Errorf("decode satellite user balance: %w", err)
+		return 0, 0, false, fmt.Errorf("invalid main balance response")
 	}
-	return MainUserResult{ID: mainUserID, Balance: moneyValue(payload.Balance), Raw: data}, nil
+	nanos, valid := decimalNanos(payload.Balance)
+	if !valid {
+		return 0, 0, false, fmt.Errorf("main balance is missing or invalid")
+	}
+	text := strings.TrimSpace(string(payload.Balance))
+	if strings.HasPrefix(text, "\"") {
+		if err := json.Unmarshal(payload.Balance, &text); err != nil {
+			return 0, 0, false, fmt.Errorf("invalid main balance")
+		}
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("invalid main balance")
+	}
+	frozenCents := int64(0)
+	if raw := bytes.TrimSpace(payload.FrozenBalance); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
+		frozenNanos, frozenValid := decimalNanos(raw)
+		if !frozenValid {
+			return 0, 0, false, fmt.Errorf("main frozen balance is invalid")
+		}
+		frozenCents = nanosToCents(frozenNanos)
+	}
+	return nanosToCents(nanos), frozenCents, value > 0, nil
 }
 
 func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID string) (MainUserResult, error) {
@@ -643,18 +875,86 @@ func (c *MainClient) satelliteUserJSON(ctx context.Context, mainUserID, path str
 	}
 	response, body, err := c.request(ctx, http.MethodGet, base+path, nil, headers)
 	if err != nil {
-		return nil, err
+		// Lookup errors can be persisted or exposed by reconciliation. Never
+		// propagate URLs, request identifiers, or transport diagnostics here.
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "SATELLITE_LOOKUP_UNAVAILABLE", Message: "main-site lookup is temporarily unavailable"}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("sub2api satellite request failed: status=%d body=%s", response.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &MainAPIError{Status: response.StatusCode, Code: "SATELLITE_LOOKUP_FAILED", Message: "main-site lookup failed"}
 	}
 	var envelope struct {
+		Code json.RawMessage `json:"code"`
 		Data json.RawMessage `json:"data"`
 	}
-	if json.Unmarshal(body, &envelope) == nil && len(envelope.Data) > 0 {
-		return envelope.Data, nil
+	if !json.Valid(body) {
+		return nil, &MainAPIError{Status: http.StatusBadGateway, Code: "SATELLITE_INVALID_RESPONSE", Message: "main-site lookup returned an invalid response"}
+	}
+	if json.Unmarshal(body, &envelope) == nil {
+		code := strings.TrimSpace(string(envelope.Code))
+		if code != "" && code != "0" && code != "null" {
+			return nil, &MainAPIError{Status: http.StatusBadGateway, Code: "SATELLITE_LOOKUP_FAILED", Message: "main-site lookup failed"}
+		}
+		if len(envelope.Data) > 0 {
+			return envelope.Data, nil
+		}
 	}
 	return body, nil
+}
+
+// satelliteUserMutationJSON is intentionally separate from the established
+// read-only lookup path. It forwards a bounded JSON mutation while retaining
+// the same server-side satellite identity headers. Upstream error bodies are
+// decoded only into the typed, public API error fields and are never copied to
+// the browser verbatim.
+func (c *MainClient) satelliteUserMutationJSON(ctx context.Context, mainUserID, path string, payload any) (json.RawMessage, error) {
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	headers := make(http.Header)
+	headers.Set("Authorization", "Bearer "+strings.TrimSpace(c.cfg.AppCredential))
+	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
+	headers.Set("X-Sub2API-On-Behalf-Of", strings.TrimSpace(mainUserID))
+	headers.Set("Accept", "application/json")
+	headers.Set("Content-Type", "application/json")
+	base := strings.TrimRight(c.cfg.MainModelBaseURL, "/")
+	if strings.HasSuffix(base, "/v1") && strings.HasPrefix(path, "/v1/") {
+		path = strings.TrimPrefix(path, "/v1")
+	}
+	response, body, err := c.request(ctx, http.MethodPost, base+path, requestBody, headers)
+	if err != nil {
+		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "SATELLITE_MUTATION_UNAVAILABLE", Message: "main-site operation is temporarily unavailable"}
+	}
+	return unwrapMainResponse(response.StatusCode, body)
+}
+
+type MainOAuthBindingStart struct {
+	Provider     string `json:"provider"`
+	AuthorizeURL string `json:"authorize_url"`
+	Method       string `json:"method"`
+}
+
+// SatelliteOAuthBindingStart asks Sub2API for a short-lived, OBO-scoped
+// browser handoff. The application credential and the user's main-site token
+// stay on the AgentAPI server.
+func (c *MainClient) SatelliteOAuthBindingStart(ctx context.Context, mainUserID, provider string) (MainOAuthBindingStart, error) {
+	data, err := c.satelliteUserMutationJSON(ctx, mainUserID, "/v1/sub2api/auth-identities/bind/start", map[string]string{
+		"provider": strings.ToLower(strings.TrimSpace(provider)),
+	})
+	if err != nil {
+		return MainOAuthBindingStart{}, err
+	}
+	var result MainOAuthBindingStart
+	if err := json.Unmarshal(data, &result); err != nil {
+		return MainOAuthBindingStart{}, err
+	}
+	result.Provider = strings.ToLower(strings.TrimSpace(result.Provider))
+	result.AuthorizeURL = strings.TrimSpace(result.AuthorizeURL)
+	result.Method = strings.ToUpper(strings.TrimSpace(result.Method))
+	if result.Provider == "" || result.AuthorizeURL == "" || result.Method != http.MethodGet {
+		return MainOAuthBindingStart{}, fmt.Errorf("invalid oauth binding start response")
+	}
+	return result, nil
 }
 
 func decodeMainUsageItems(items []json.RawMessage, source string) ([]MainUsageResult, error) {
@@ -675,8 +975,14 @@ func decodeMainUsageItems(items []json.RawMessage, source string) ([]MainUsageRe
 		if actualCostPresent && !actualCostValid {
 			return nil, fmt.Errorf("main usage %q has an invalid actual_cost", requestID)
 		}
-		if !actualCostPresent && (!totalCostPresent || !totalCostValid) {
-			return nil, fmt.Errorf("main usage %q has neither a valid actual_cost nor a fallback total_cost", requestID)
+		if !actualCostPresent {
+			// Standard cost is not a billing fact: discounts and free requests
+			// can make it differ from the actual charge. Keep synchronization
+			// pending until the main site explicitly supplies actual_cost.
+			return nil, fmt.Errorf("main usage %q is awaiting authoritative actual_cost", requestID)
+		}
+		if totalCostPresent && !totalCostValid {
+			return nil, fmt.Errorf("main usage %q has an invalid total_cost", requestID)
 		}
 		var snapshot MainUsageSnapshot
 		snapshot.Source = source
@@ -722,15 +1028,11 @@ func decodeMainUsageItems(items []json.RawMessage, source string) ([]MainUsageRe
 		snapshot.ImageSizeBreakdown = rawInt64Map(item["image_size_breakdown"])
 		snapshot.MediaType = rawString(item["media_type"])
 		snapshot.CacheTTLOverridden = rawBool(item["cache_ttl_overridden"])
-		settlementNanos := actualCost
-		if !actualCostPresent {
-			settlementNanos = totalCost
-		}
 		result = append(result, MainUsageResult{
 			ID:            jsonID(rawJSONAny(item["id"])),
 			RequestID:     requestID,
 			TotalCents:    nanosToCents(totalCost),
-			ActualCents:   nanosToCents(settlementNanos),
+			ActualCents:   nanosToCents(actualCost),
 			HasActualCost: actualCostPresent,
 			Model:         snapshot.RequestedModel,
 			Snapshot:      snapshot,
@@ -830,14 +1132,23 @@ func decimalNanos(raw json.RawMessage) (int64, bool) {
 	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value > float64(math.MaxInt64)/1e9 || value < float64(math.MinInt64)/1e9 {
 		return 0, false
 	}
-	return int64(math.Round(value * 1e9)), true
+	rounded := math.Round(value * 1e9)
+	// float64(MaxInt64) rounds up to 2^63, which is not representable.
+	if rounded >= 9223372036854775808.0 || rounded < -9223372036854775808.0 {
+		return 0, false
+	}
+	return int64(rounded), true
 }
 
 func nanosToCents(nanos int64) int64 {
-	if nanos >= 0 {
-		return (nanos + 5_000_000) / 10_000_000
+	cents, remainder := nanos/10_000_000, nanos%10_000_000
+	if remainder >= 5_000_000 {
+		return cents + 1
 	}
-	return (nanos - 5_000_000) / 10_000_000
+	if remainder <= -5_000_000 {
+		return cents - 1
+	}
+	return cents
 }
 
 func mustJSON(value any) json.RawMessage {
@@ -1044,12 +1355,12 @@ func moneyValue(value any) int64 {
 }
 
 func mainUserIDFromJSON(data []byte) string {
-	var value map[string]any
+	var value map[string]json.RawMessage
 	if json.Unmarshal(data, &value) != nil {
 		return ""
 	}
 	for _, key := range []string{"id", "user_id", "uid"} {
-		if id := jsonID(value[key]); id != "" {
+		if id := jsonID(rawJSONAny(value[key])); id != "" {
 			return id
 		}
 	}

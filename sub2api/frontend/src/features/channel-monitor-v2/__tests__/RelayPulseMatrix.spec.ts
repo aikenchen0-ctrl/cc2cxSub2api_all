@@ -82,7 +82,7 @@ function metrics(requestCount: number): MonitorMetric {
 }
 
 describe('RelayPulseMatrix', () => {
-  it('shows privacy-safe hover tooltips and multi-band colors without click modal', async () => {
+  it('shows privacy-safe hover tooltips and uniformly green cells without click modal', async () => {
     const wrapper = mount(RelayPulseMatrix, {
       props: {
         rows: [{
@@ -130,11 +130,10 @@ describe('RelayPulseMatrix', () => {
     expect(header).toContain('首 Token')
     expect(header).toContain('每秒 Token')
     expect(header).toContain('缓存率')
-    // Multi-band class from score 52 → score5
-    expect(cells[0].classes().some((c) => c.startsWith('health-score'))).toBe(true)
-    // Redacted user payloads may have request_count=0 but still include score.
-    expect(cells[1].classes().some((c) => c.startsWith('health-score'))).toBe(true)
-    expect(cells[2].classes()).toContain('health-unknown')
+    // Warning scores, redacted request counts, and missing buckets all render green.
+    for (const cell of cells) {
+      expect(cell.classes().filter((c) => c.startsWith('health-'))).toEqual(['health-score10'])
+    }
 
     // No click-to-open modal
     await cells[0].trigger('click')

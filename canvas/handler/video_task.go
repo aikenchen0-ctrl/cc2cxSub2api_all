@@ -294,6 +294,7 @@ func pollVideoTaskFromUpstream(task model.VideoTask) (service.VideoTaskPollUpdat
 		return service.VideoTaskPollUpdate{}, err
 	}
 	pollID := firstNonEmpty(task.UpstreamTaskID, task.ID)
+	channel = service.OverlayUserSub2APIKey(channel, task.UserID)
 	if isAIProtocolVideoID(task.Model, task.UpstreamVideoID) {
 		pollID = task.UpstreamVideoID
 	}
@@ -328,7 +329,7 @@ func pollVideoTaskFromUpstream(task model.VideoTask) (service.VideoTaskPollUpdat
 	if status >= http.StatusBadRequest {
 		message := readUpstreamAIErrorMessage(payload, status)
 		saveAIProxyLog(logContext, status, string(payload), strings.TrimSpace(string(payload)))
-		if status == http.StatusTooManyRequests {
+		if status == http.StatusTooManyRequests || (service.IsSub2APIChannel(channel) && status >= http.StatusInternalServerError) {
 			return service.VideoTaskPollUpdate{Status: task.Status, ErrorDetail: message, ResponseBody: string(payload)}, nil
 		}
 		return service.VideoTaskPollUpdate{Status: "failed", Error: message, ErrorDetail: message, ResponseBody: string(payload)}, nil

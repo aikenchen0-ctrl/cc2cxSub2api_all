@@ -47,6 +47,31 @@ func RegisterGatewayRoutes(
 	// 分组级模型白名单准入：在 apiKeyAuth 之后、compositeTarget 之前，
 	// 保证校验发生在合成路由改写与调度之前，且只看客户端书写的模型名。
 	groupModelAllowlist := middleware.GroupModelAllowlist()
+	registerSatelliteRoutes := func(gateway *gin.RouterGroup) {
+		gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+		gateway.GET("/sub2api/balance", h.Gateway.SatelliteUserBalance)
+		gateway.GET("/sub2api/usage", h.Gateway.SatelliteUserUsage)
+		gateway.GET("/sub2api/available-channels", h.AvailableChannel.SatelliteList)
+		gateway.GET("/sub2api/channel-monitors", h.ChannelMonitor.SatelliteList)
+		gateway.GET("/sub2api/channel-monitors/:id/status", h.ChannelMonitor.SatelliteGetStatus)
+		gateway.GET("/sub2api/payment/checkout-info", h.Payment.SatelliteGetCheckoutInfo)
+		gateway.POST("/sub2api/payment/orders", h.Payment.SatelliteCreateOrder)
+		gateway.POST("/sub2api/payment/orders/verify", h.Payment.SatelliteVerifyOrder)
+		gateway.GET("/sub2api/subscriptions", h.Subscription.SatelliteList)
+		gateway.GET("/sub2api/affiliate", h.User.SatelliteGetAffiliate)
+		gateway.GET("/sub2api/affiliate/invites", h.User.SatelliteListAffiliateInvites)
+		gateway.GET("/sub2api/affiliate/rebates", h.User.SatelliteListAffiliateRebates)
+		gateway.GET("/sub2api/affiliate/transfers", h.User.SatelliteListAffiliateTransfers)
+		gateway.POST("/sub2api/affiliate/transfer", h.User.SatelliteTransferAffiliateQuota)
+		gateway.POST("/sub2api/affiliate/bind", h.User.SatelliteBindAffiliate)
+		gateway.GET("/sub2api/orders", h.Payment.SatelliteGetMyOrders)
+		gateway.GET("/sub2api/orders/refund-eligible-providers", h.Payment.GetRefundEligibleProviders)
+		gateway.POST("/sub2api/orders/:id/cancel", h.Payment.SatelliteCancelOrder)
+		gateway.POST("/sub2api/orders/:id/refund-request", h.Payment.SatelliteRequestRefund)
+		gateway.POST("/sub2api/redeem", h.Redeem.SatelliteRedeem)
+		gateway.GET("/sub2api/redeem/history", h.Redeem.SatelliteGetHistory)
+		gateway.POST("/sub2api/auth-identities/bind/start", h.Auth.SatelliteStartOAuthBinding)
+	}
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
 		switch getGroupPlatform(c) {
@@ -110,7 +135,7 @@ func RegisterGatewayRoutes(
 			h.OpenAIGateway.GrokVideoGeneration(c)
 			return
 		}
-		if platform := getGroupPlatform(c); platform == service.PlatformGrok || platform == service.PlatformComposite {
+		if platform := getGroupPlatform(c); platform == service.PlatformGrok || platform == service.PlatformComposite || platform == service.PlatformOpenAI {
 			h.OpenAIGateway.GrokVideoGeneration(c)
 			return
 		}
@@ -126,7 +151,7 @@ func RegisterGatewayRoutes(
 		// Video status requests do not carry a model, so composite groups cannot
 		// be resolved by compositeTargetPlatformMiddleware. Route them through
 		// the Grok handler and let scheduler/account selection enforce capacity.
-		if getGroupPlatform(c) == service.PlatformGrok || getGroupPlatform(c) == service.PlatformComposite {
+		if getGroupPlatform(c) == service.PlatformGrok || getGroupPlatform(c) == service.PlatformComposite || getGroupPlatform(c) == service.PlatformOpenAI {
 			h.OpenAIGateway.GrokVideoStatus(c)
 			return
 		}
@@ -142,7 +167,7 @@ func RegisterGatewayRoutes(
 		// Video content requests do not carry a model, so composite groups cannot
 		// be resolved by compositeTargetPlatformMiddleware. Route them through
 		// the Grok handler just like video status lookups.
-		if getGroupPlatform(c) == service.PlatformGrok || getGroupPlatform(c) == service.PlatformComposite {
+		if getGroupPlatform(c) == service.PlatformGrok || getGroupPlatform(c) == service.PlatformComposite || getGroupPlatform(c) == service.PlatformOpenAI {
 			h.OpenAIGateway.GrokVideoContent(c)
 			return
 		}
@@ -196,7 +221,7 @@ func RegisterGatewayRoutes(
 	// API网关（Claude API兼容）
 	gateway := r.Group("/v1")
 	gateway.Use(func(c *gin.Context) {
-		if c.Request.URL.Path == "/v1/sub2api/balance" || c.Request.URL.Path == "/v1/sub2api/usage" {
+		if strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/") {
 			c.Header("Cache-Control", "no-store")
 		}
 		c.Next()
@@ -206,9 +231,7 @@ func RegisterGatewayRoutes(
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
-	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
-	gateway.GET("/sub2api/balance", h.Gateway.SatelliteUserBalance)
-	gateway.GET("/sub2api/usage", h.Gateway.SatelliteUserUsage)
+	registerSatelliteRoutes(gateway)
 	gateway.Use(groupModelAllowlist)
 	gateway.Use(compositeTarget)
 	gateway.Use(requireGroupAnthropic)

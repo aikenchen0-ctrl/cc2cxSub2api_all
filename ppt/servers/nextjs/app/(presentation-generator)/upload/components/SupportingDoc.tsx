@@ -1,4 +1,5 @@
 "use client";
+import { useUiLanguage } from "@/components/UiLanguage";
 
 import type { ChangeEvent, DragEvent } from "react";
 import { ArrowUp, File, Paperclip, X } from "lucide-react";
@@ -29,6 +30,7 @@ export default function SupportingDoc({
   disabled = false,
   multiple = true,
 }: SupportingDocProps) {
+  const { t } = useUiLanguage();
   const addFiles = (candidates: File[]) => {
     const allowed = candidates.filter(isAllowedFile);
     const rejected = candidates.length - allowed.length;
@@ -108,7 +110,7 @@ export default function SupportingDoc({
       <div className="flex items-center justify-between gap-3">
         <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-full px-2.5 font-manrope text-xs font-medium text-[#4C4C4C] transition hover:bg-[#F6F6F9]">
           <Paperclip className="h-3.5 w-3.5" />
-          <span>{files.length ? `继续添加（${files.length}）` : "添加文件"}</span>
+          <span>{files.length ? t(`继续添加（${files.length}）`, `Add more (${files.length})`) : t("添加文件", "Add files")}</span>
           <input
             type="file"
             className="hidden"
@@ -124,7 +126,7 @@ export default function SupportingDoc({
           type="button"
           onClick={onSubmit}
           disabled={disabled}
-          aria-label="生成演示文稿"
+          aria-label={t("生成演示文稿", "Generate presentation")}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-[#7A5AF8] text-white shadow-sm transition hover:bg-[#6938EF] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowUp className="h-4 w-4" strokeWidth={2} />

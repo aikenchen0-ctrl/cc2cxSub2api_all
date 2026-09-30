@@ -7,7 +7,7 @@ import (
 
 func TestLookupKnownApps(t *testing.T) {
 	t.Parallel()
-	for _, slug := range []string{"canvas", "ju", "livart", "ppt", "aicut", "screen2code", "aiexcel", "qrcode", "yibiao", "ai3d", "aihuoke", "agentapi", "modelaudit"} {
+	for _, slug := range []string{"canvas", "ju", "livart", "ppt", "aicut", "screen2code", "aiexcel", "qrcode", "yibiao", "ai3d", "aihuoke", "agentapi"} {
 		app, ok := Lookup(slug)
 		if !ok || app.Slug != slug || app.CallbackPath == "" || app.Audience == "" {
 			t.Fatalf("Lookup(%q) = %+v ok=%v", slug, app, ok)
@@ -24,8 +24,7 @@ func TestNewSatelliteDefaultsUseDedicatedLocalPorts(t *testing.T) {
 		"yibiao":     "http://localhost:8081",
 		"ai3d":       "http://localhost:5174",
 		"aihuoke":    "http://localhost:3001",
-		"agentapi":   "http://localhost:18081",
-		"modelaudit": "http://localhost:8077",
+		"agentapi": "http://localhost:18081",
 	}
 	for slug, origin := range want {
 		app, ok := Lookup(slug)

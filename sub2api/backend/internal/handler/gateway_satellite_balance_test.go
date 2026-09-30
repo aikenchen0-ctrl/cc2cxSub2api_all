@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayHandlerSatelliteUserBalanceReturnsOnlyBalance(t *testing.T) {
+func TestGatewayHandlerSatelliteUserBalanceReturnsOnlyCurrentUserBalanceFacts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -20,8 +20,9 @@ func TestGatewayHandlerSatelliteUserBalanceReturnsOnlyBalance(t *testing.T) {
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Key: "never-return-this-credential",
 		User: &service.User{
-			ID:      7,
-			Balance: 0,
+			ID:            7,
+			Balance:       0,
+			FrozenBalance: 2.5,
 		},
 	})
 
@@ -33,6 +34,9 @@ func TestGatewayHandlerSatelliteUserBalanceReturnsOnlyBalance(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	require.Equal(t, "sub2api.user_balance", got["object"])
 	require.Equal(t, float64(0), got["balance"])
+	require.Equal(t, 2.5, got["frozen_balance"])
+	require.NotContains(t, got, "email")
+	require.NotContains(t, got, "user_id")
 	require.NotContains(t, w.Body.String(), "never-return-this-credential")
 }
 

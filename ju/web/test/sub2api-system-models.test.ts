@@ -9,9 +9,9 @@ import { defaultConfig, normalizeConfigSnapshot, resolveModelRequestConfig, sele
 
 function relayCatalog(): PublicChannelCatalog[] {
     const models = ([
-        ["text", "gpt-5.5", "chat-completion"],
-        ["image", "gpt-image-1", "openai-image"],
-        ["video", "minimax_h3_lightx2v_no_pic", "sub2api-video-v1"],
+        ["text", "gpt-5.6-sol", "chat-completion"],
+        ["image", "gpt-image-2", "openai-image"],
+        ["video", "minimax_h3_z0901", "sub2api-video-v1"],
     ] as const).map(([capability, modelKey, protocol]): PublicChannelModel => {
         const capabilityConfig = defaultModelCapabilityConfig(protocol, modelKey);
         if (capability === "video") {
@@ -29,7 +29,7 @@ function relayCatalog(): PublicChannelCatalog[] {
         return {
             id: `relay-${capability}`,
             modelKey,
-            displayName: modelKey,
+            displayName: capability === "video" ? "H3文生视频（高质量创意直出）" : modelKey,
             icon: "",
             capability,
             protocol,
@@ -57,6 +57,10 @@ test("first-login catalog selects usable free system models without a user key o
         expect(useConfigStore.getState().isAiConfigReady(config, selected)).toBe(true);
     }
     expect(config.apiKey).toBe("");
+    expect(config.textModel).toBe("sub2api-relay::gpt-5.6-sol");
+    expect(config.imageModel).toBe("sub2api-relay::gpt-image-2");
+    expect(config.videoModel).toBe("sub2api-relay::minimax_h3_z0901");
+    expect(config.channels[0]!.modelCosts!.find((model) => model.model === "minimax_h3_z0901")!.displayName).toBe("H3文生视频（高质量创意直出）");
     expect(config.channels[0]!.apiKey).toBe("system");
     expect(config.channels[0]!.baseUrl).toBe("/api/sub2api-relay");
     expect(resolveModelRequestConfig(config, config.videoModel).interfaceType).toBe("sub2api-video-v1");

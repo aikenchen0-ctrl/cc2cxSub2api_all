@@ -66,6 +66,7 @@ type AccountHandler struct {
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
 	modelRefreshJobs        *accountModelRefreshJobStore
+	upstreamAuditJobs       *upstreamAuditJobStore
 	cfg                     *config.Config
 }
 
@@ -108,6 +109,7 @@ func NewAccountHandler(
 		concurrencyService:      concurrencyService,
 		crsSyncService:          crsSyncService,
 		modelRefreshJobs:        newAccountModelRefreshJobStore(),
+		upstreamAuditJobs:       newUpstreamAuditJobStore(),
 		sessionLimitCache:       sessionLimitCache,
 		rpmCache:                rpmCache,
 		tokenCacheInvalidator:   tokenCacheInvalidator,

@@ -3,6 +3,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { useUiLanguage } from "@/components/UiLanguage";
 
 export type GenerationMode = "standard" | "smart";
 
@@ -17,6 +18,7 @@ export default function GenerationModeDialog({
   onOpenChange,
   onSelect,
 }: GenerationModeDialogProps) {
+  const { t } = useUiLanguage();
   const selectMode = (mode: GenerationMode) => {
     onSelect(mode);
     onOpenChange(false);
@@ -48,11 +50,11 @@ export default function GenerationModeDialog({
             }}
           >
             <DialogPrimitive.Description className="sr-only">
-              标准模式使用固定布局，智能模式会根据内容自适应。布局
+              {t("标准模式使用固定布局，智能模式会根据内容自适应。", "Standard mode uses fixed layouts; smart mode adapts to your content.")}
             </DialogPrimitive.Description>
             <div className="sticky top-0 z-10 border-b border-[#EDEEEF] bg-[#F9FAFB] px-4 py-4 sm:px-8">
               <DialogPrimitive.Title className="text-xl font-medium tracking-[-0.2px] text-[#808080]">
-               选择生成模式
+               {t("选择生成模式", "Choose generation mode")}
               </DialogPrimitive.Title>
               <DialogPrimitive.Close className="absolute right-4 top-5 sm:right-8">
                 <X className="h-5 w-5 text-[#808080]" />
@@ -76,20 +78,20 @@ export default function GenerationModeDialog({
               </div>
               <div className="rounded-[20px] border border-[#EBE9FE] bg-[#F4F3FF] px-3.5 pb-5 pt-3.5">
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
-                  <p className="text-xl font-medium text-[#333333]">标准模式</p>
+                  <p className="text-xl font-medium text-[#333333]">{t("标准模式", "Standard mode")}</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
-                    固定布局
+                    {t("固定布局", "Fixed layouts")}
                   </p>
                 </div>
                 <p className="mb-2 py-1.5 text-base font-medium text-[#666666]">
-                  具有固定结构的刚性预定义布局，确保一致性、清晰度和可预测的结果。
+                  {t("具有固定结构的刚性预定义布局，确保一致性、清晰度和可预测的结果。", "Predefined layouts provide consistent, clear and predictable results.")}
                 </p>
                 <Button
                   type="button"
                   className="rounded-[80px] bg-[#7A5AF8] px-5 text-base font-medium text-white shadow-none hover:bg-[#6938EF]/90"
                   onClick={() => selectMode("standard")}
                 >
-                  选择标准模式
+                  {t("选择标准模式", "Choose standard mode")}
                 </Button>
               </div>
             </div>
@@ -109,13 +111,13 @@ export default function GenerationModeDialog({
               </div>
               <div className="rounded-[20px] border border-[#EBE9FE] bg-[#F4F3FF] px-3.5 pb-5 pt-3.5">
                 <div className="flex items-center justify-between border-b border-[#EBE9FE] pb-3.5">
-                  <p className="text-xl font-medium text-[#333333]">智能模式</p>
+                  <p className="text-xl font-medium text-[#333333]">{t("智能模式", "Smart mode")}</p>
                   <p className="text-[10px] font-medium text-[#6938EF]">
-                    灵活布局
+                    {t("灵活布局", "Flexible layouts")}
                   </p>
                 </div>
                 <p className="mb-2 py-1.5 text-base font-medium text-[#666666]">
-                  具有灵活结构的智能自适应布局，兼顾一致性与内容。
+                  {t("具有灵活结构的智能自适应布局，兼顾一致性与内容。", "Adaptive layouts balance consistency with your content.")}
                 </p>
                 <Button
                   type="button"
@@ -126,7 +128,7 @@ export default function GenerationModeDialog({
                   }}
                   onClick={() => selectMode("smart")}
                 >
-                  选择智能模式
+                  {t("选择智能模式", "Choose smart mode")}
                 </Button>
               </div>
             </div>

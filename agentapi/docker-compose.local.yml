@@ -1,0 +1,12 @@
+# Optional same-host Sub2API networking. Does not recreate the main network.
+# Use together with docker-compose.yml, never as a standalone deployment.
+services:
+  agentapi:
+    networks:
+      - default
+      - sub2api
+
+networks:
+  sub2api:
+    external: true
+    name: ${SUB2API_DOCKER_NETWORK:-deploy_sub2api-network}

@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { agentAPI, type AgentTaskHistoryItem, type ChatCompletionResponse, type ImageGenerationResponse, type ImageTaskResponse, type VideoTaskResponse } from '@/agent/api'
+import { modelCapability, type AgentModelCapability } from '@/agent/modelCatalog'
 import { errorMessage } from '@/agent/client'
 import { statusLabel, taskTypeLabel } from '@/agent/locale'
 import AgentPagination from '@/components/AgentPagination.vue'
+import AgentSelect from '@/components/common/AgentSelect.vue'
+import AgentTextArea from '@/components/common/AgentTextArea.vue'
+import AgentToggle from '@/components/common/AgentToggle.vue'
 
-type ConsoleMode = 'text' | 'image' | 'video'
+type ConsoleMode = AgentModelCapability
 type Message = { role: 'user' | 'assistant'; content: string }
 type ImageResult = { url: string; revisedPrompt?: string }
 
 const models = ref<string[]>([])
+const currentRoute = getCurrentInstance()?.appContext.config.globalProperties.$route as { query?: Record<string, unknown> } | undefined
 const mode = ref<ConsoleMode>('text')
 const model = ref('')
 const prompt = ref('')
@@ -38,6 +43,7 @@ const taskHistoryLoading = ref(true)
 const taskHistoryError = ref('')
 
 const modelsByMode = computed(() => models.value.filter((name) => modelMode(name) === mode.value))
+const modelOptions = computed(() => modelsByMode.value.map(value => ({ value, label: value })))
 const canSubmit = computed(() => prompt.value.trim().length > 0 && Boolean(model.value) && !loading.value && !modelsLoading.value)
 
 const VIDEO_POLL_INTERVAL_MS = 3_000
@@ -47,12 +53,7 @@ let pollTimer: ReturnType<typeof setTimeout> | undefined
 let resolvePollTimer: (() => void) | undefined
 let taskHistorySequence = 0
 
-function modelMode(name: string): ConsoleMode {
-  const normalized = name.trim().toLowerCase()
-  if (normalized.startsWith('grok-imagine-video-') || normalized.startsWith('seedance-') || normalized.startsWith('kling-')) return 'video'
-  if (normalized.startsWith('gpt-image-') || normalized === 'gemini-3.1-flash-image' || normalized.startsWith('grok-imagine-image') || normalized === 'grok-imagine') return 'image'
-  return 'text'
-}
+const modelMode = modelCapability
 
 watch(mode, () => {
   model.value = modelsByMode.value[0] || ''
@@ -65,6 +66,12 @@ async function loadModels(): Promise<void> {
   try {
     models.value = await agentAPI.model.list()
     if (!models.value.includes(model.value)) model.value = modelsByMode.value[0] || ''
+    const requestedModel = typeof currentRoute?.query?.model === 'string' ? currentRoute.query.model.trim() : ''
+    if (requestedModel && models.value.includes(requestedModel)) {
+      mode.value = modelMode(requestedModel)
+      await nextTick()
+      model.value = requestedModel
+    }
     if (models.value.length === 0) modelsError.value = '当前代理站尚未启用任何模型。'
   } catch (err) {
     modelsError.value = errorMessage(err, '加载可用模型失败，请稍后刷新重试。')
@@ -455,9 +462,7 @@ function clearConversation(): void {
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <label class="text-sm text-slate-500" for="agent-model">模型</label>
-        <select id="agent-model" v-model="model" class="rounded-lg border px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" :disabled="modelsLoading || modelsByMode.length === 0 || loading">
-          <option v-for="item in modelsByMode" :key="item" :value="item">{{ item }}</option>
-        </select>
+        <AgentSelect id="agent-model" v-model="model" :options="modelOptions" class="min-w-48" aria-label="模型" :disabled="modelsLoading || modelsByMode.length === 0 || loading" />
         <button class="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" type="button" :disabled="loading" @click="clearConversation">清空</button>
       </div>
     </header>
@@ -490,7 +495,7 @@ function clearConversation(): void {
         <p class="mt-1 text-sm text-slate-500">添加参考图片以使用图片编辑接口；不添加图片则生成新图片。</p>
       </div>
       <label class="block text-sm font-medium text-slate-700 dark:text-slate-200" for="agent-image-prompt">提示词
-        <textarea id="agent-image-prompt" v-model="prompt" class="mt-2 min-h-28 w-full resize-y rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model" placeholder="描述想生成的图片或需要修改的内容…"></textarea>
+        <AgentTextArea id="agent-image-prompt" v-model="prompt" class="mt-2 min-h-28 rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model" placeholder="描述想生成的图片或需要修改的内容…" />
       </label>
       <div class="block text-sm text-slate-600 dark:text-slate-300">
         <label class="block" for="agent-image-file">参考图片（选填）</label>
@@ -501,7 +506,7 @@ function clearConversation(): void {
         </div>
       </div>
       <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-        <input v-model="asyncImage" type="checkbox" :disabled="loading || !model">
+        <AgentToggle v-model="asyncImage" aria-label="作为后台任务运行" :disabled="loading || !model" />
         作为后台任务运行并持续查询结果
       </label>
       <div v-if="imageTaskID" class="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-950">
@@ -523,7 +528,7 @@ function clearConversation(): void {
         <p class="mt-1 text-sm text-slate-500">视频生成采用异步处理。AgentAPI 会跟踪任务并查询状态，不会重复提交生成请求。</p>
       </div>
       <label class="block text-sm font-medium text-slate-700 dark:text-slate-200" for="agent-video-prompt">提示词
-        <textarea id="agent-video-prompt" v-model="prompt" class="mt-2 min-h-28 w-full resize-y rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model" placeholder="描述想生成的视频…"></textarea>
+        <AgentTextArea id="agent-video-prompt" v-model="prompt" class="mt-2 min-h-28 rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model" placeholder="描述想生成的视频…" />
       </label>
       <div v-if="videoTaskID" class="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-950">
         <p>任务 <code class="break-all">{{ videoTaskID }}</code><span v-if="videoStatus"> · {{ statusLabel(videoStatus) }}</span></p>
@@ -536,7 +541,7 @@ function clearConversation(): void {
     <form class="rounded-2xl border bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900" @submit.prevent="submit">
       <template v-if="mode === 'text'">
         <label class="sr-only" for="agent-prompt">消息</label>
-        <textarea id="agent-prompt" v-model="prompt" class="min-h-28 w-full resize-y rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model || modelsLoading" placeholder="向模型提问…" @keydown.ctrl.enter.prevent="submit"></textarea>
+        <AgentTextArea id="agent-prompt" v-model="prompt" class="min-h-28 rounded-xl border px-4 py-3 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950" :disabled="loading || !model || modelsLoading" placeholder="向模型提问…" @keydown.ctrl.enter.prevent="submit" />
       </template>
       <p v-else class="px-1 text-sm text-slate-500">{{ mode === 'image' ? (asyncImage ? '图片任务会持续跟踪，并按原始请求结算。' : imageFile ? '所选图片和提示词将发送到图片编辑接口。' : '提示词将发送到图片生成接口。') : '系统将自动创建任务并查询处理状态。' }}</p>
       <div class="mt-3 flex items-center justify-between gap-3">

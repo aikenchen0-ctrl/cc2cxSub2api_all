@@ -28,6 +28,13 @@ export const useOutlineStreaming = (
   const [activeSlideIndex, setActiveSlideIndex] = useState<number | null>(null);
   const [highestActiveIndex, setHighestActiveIndex] = useState<number>(-1);
   const [statusMessage, setStatusMessage] = useState(DEFAULT_STATUS_MESSAGE);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => {
+    outlinesRef.current = [];
+    dispatch(setOutlines([]));
+    setAttempt((value) => value + 1);
+  };
   const outlinesRef = useRef<{ content: string }[]>(outlines);
   const prevSlidesRef = useRef<{ content: string }[]>([]);
   const activeIndexRef = useRef<number>(-1);
@@ -59,6 +66,7 @@ export const useOutlineStreaming = (
     let retryCount = 0;
     let isClosed = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let completed = false;
     const retryToastId = `presentation-outline-retry-${presentationId}`;
 
     const closeEventSource = () => {
@@ -77,6 +85,13 @@ export const useOutlineStreaming = (
 
     const scheduleRetry = (reason: string): boolean => {
       if (retryCount >= MAX_STREAM_RETRIES || isClosed) {
+        if (!isClosed) {
+          setError("大纲生成失败，请检查文本模型配置或稍后重试。您的需求已保留。");
+          isClosed = true;
+          closeEventSource();
+          clearRetryTimer();
+          notify.dismiss(retryToastId);
+        }
         return false;
       }
 
@@ -89,6 +104,8 @@ export const useOutlineStreaming = (
       closeEventSource();
       clearRetryTimer();
       accumulatedChunks = "";
+      dispatch(setOutlines([]));
+      outlinesRef.current = [];
       prevSlidesRef.current = [];
       activeIndexRef.current = -1;
       highestIndexRef.current = -1;
@@ -115,6 +132,7 @@ export const useOutlineStreaming = (
       );
 
       eventSource.addEventListener("response", (event) => {
+        if (isClosed) return;
         let data: any;
         try {
           data = JSON.parse(event.data);
@@ -183,6 +201,8 @@ export const useOutlineStreaming = (
             try {
               const outlinesData: { content: string }[] =
                 limitOutlines(data.presentation.outlines.slides);
+              if (!outlinesData.length || outlinesData.some((slide) => !slide.content?.trim())) throw new Error("empty outline");
+              completed = true;
               dispatch(setOutlines(outlinesData));
               setIsStreaming(false);
               setIsLoading(false);
@@ -210,6 +230,10 @@ export const useOutlineStreaming = (
             break;
 
           case "closing":
+            if (!completed) {
+              if (!scheduleRetry("stream closed before completion")) resetStreamingState();
+              break;
+            }
             resetStreamingState("Outline ready");
             isClosed = true;
             closeEventSource();
@@ -220,6 +244,8 @@ export const useOutlineStreaming = (
 
           case "error":
             if (isChatGptAuthRequiredMessage(data.detail)) {
+              setError("登录已失效，请重新登录后重试。您的需求已保留。");
+              isClosed = true;
               resetStreamingState();
               closeEventSource();
               requestChatGptReauth({
@@ -241,6 +267,7 @@ export const useOutlineStreaming = (
       });
 
       eventSource.onerror = () => {
+        if (isClosed) return;
         if (!scheduleRetry("connection lost")) {
           resetStreamingState();
           closeEventSource();
@@ -253,6 +280,7 @@ export const useOutlineStreaming = (
     };
 
     setStatusMessage(DEFAULT_STATUS_MESSAGE);
+    setError(null);
     setIsStreaming(true);
     setIsLoading(true);
     openStream();
@@ -263,7 +291,7 @@ export const useOutlineStreaming = (
       clearRetryTimer();
       notify.dismiss(retryToastId);
     };
-  }, [presentationId, dispatch, enabled]);
+  }, [presentationId, dispatch, enabled, attempt]);
 
   return {
     isStreaming,
@@ -271,5 +299,7 @@ export const useOutlineStreaming = (
     activeSlideIndex,
     highestActiveIndex,
     statusMessage,
+    error,
+    retry,
   };
 };

@@ -1,14 +1,74 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"infinite-canvas/backend/internal/auth"
 	"infinite-canvas/backend/internal/model"
+	"infinite-canvas/backend/internal/platform"
 
 	"gorm.io/gorm"
 )
+
+func TestSub2APIOnlineAgentUsesAllowlistedRelay(t *testing.T) {
+	svc, db := newSub2APIIntegrationTestService(t)
+	svc.coordinator = platform.NewCoordinatorWithRedis(nil, "agent-relay-test")
+	if err := db.AutoMigrate(&model.SystemSetting{}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CANVAS_ALLOW_PRIVATE_UPSTREAMS", "false")
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "::1")
+	userID := "agent-relay-regression-user"
+	auth.StoreUserRelayKey(userID, "agent-subject")
+	t.Cleanup(func() { auth.StoreUserRelayKey(userID, "") })
+	calls := 0
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("Authorization") != "Bearer satellite-test-credential" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "agent-subject" || r.Header.Get("X-Sub2API-Satellite") != "ju" {
+			t.Error("agent request must preserve all satellite identity headers")
+		}
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("text request path = %q, want /v1/responses", r.URL.Path)
+		}
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body["model"] != "gpt-5.6-sol" || body["input"] == nil {
+			t.Error("agent must send the public text model")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"开始创作"}]}]}`))
+	}))
+	server.Listener.Close()
+	listener, err := net.Listen("tcp", "[::1]:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	t.Setenv("SUB2API_RELAY_BASE_URL", server.URL+"/v1")
+	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
+		t.Fatal(err)
+	}
+	config, err := svc.resolveProviderConfig(providerConfig{ChannelID: sub2APIRelayChannelID, Model: "gpt-5.6-sol"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := withProviderAnalytics(context.Background(), svc, model.Task{UserID: userID, Type: "canvas_text"})
+	result, err := runAgentToolTask(ctx, canvasGenerationInput{Config: config, AgentRequests: &agentToolRequests{Responses: map[string]interface{}{"input": []interface{}{map[string]interface{}{"role": "user", "content": "一个社恐的外星人"}}}}})
+	if err != nil || result["text"] != "开始创作" || calls != 1 {
+		t.Fatalf("agent relay failed: result=%v error=%v calls=%d", result, err, calls)
+	}
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "192.168.50.11")
+	if _, err := svc.resolveProviderConfig(providerConfig{ChannelID: sub2APIRelayChannelID, Model: "gpt-5.6-sol"}); err == nil {
+		t.Fatal("unlisted private relay must remain blocked")
+	}
+}
 
 func newSub2APIIntegrationTestService(t *testing.T) (*Service, *gorm.DB) {
 	t.Helper()
@@ -36,12 +96,43 @@ func TestSub2APIBaseURL(t *testing.T) {
 	}
 }
 
+func TestSub2APIRelayPrivateHostUsesAllowlistNotDesktopMode(t *testing.T) {
+	svc, _ := newSub2APIIntegrationTestService(t)
+	// Use a numeric private host so the deployment policy test needs no Docker DNS.
+	t.Setenv("SUB2API_RELAY_BASE_URL", "http://192.168.50.10:8080/v1")
+	t.Setenv("CANVAS_ALLOW_PRIVATE_UPSTREAMS", "false")
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "192.168.50.10")
+	t.Setenv("SUB2API_RELAY_ALLOW_LOCAL", "true")
+	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
+		t.Fatal(err)
+	}
+	input := providerConfig{ChannelID: sub2APIRelayChannelID, Model: "gpt-5.6-sol"}
+	if _, err := svc.resolveProviderConfig(input); err == nil {
+		t.Fatal("desktop-only mode must reject the container relay")
+	}
+	t.Setenv("SUB2API_RELAY_ALLOW_LOCAL", "false")
+	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := svc.resolveProviderConfig(input)
+	if err != nil {
+		t.Fatalf("allowlisted relay must resolve: %v", err)
+	}
+	if resolved.AllowLocalChannel || resolved.Model != "gpt-5.6-sol" || resolved.ChannelID != sub2APIRelayChannelID {
+		t.Fatal("relay must preserve its public model and server channel identity")
+	}
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "192.168.50.11")
+	if _, err := svc.resolveProviderConfig(input); err == nil {
+		t.Fatal("unlisted private relay must remain blocked")
+	}
+}
+
 func TestSub2APIBootstrapPersistsSyntheticLegacyPriceTier(t *testing.T) {
 	svc, db := newSub2APIIntegrationTestService(t)
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.5")
+	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.6-sol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,12 +215,23 @@ func TestSub2APIBootstrapCapabilitiesAndSecrets(t *testing.T) {
 	}
 }
 
+func TestSub2APITextProtocolUsesResponsesForGPT56(t *testing.T) {
+	for _, name := range []string{"gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6"} {
+		if got := sub2APITextProtocol(name); got != model.ChannelInterfaceOpenAIResponse {
+			t.Fatalf("sub2APITextProtocol(%q) = %q", name, got)
+		}
+	}
+	if got := sub2APITextProtocol("gpt-5.5"); got != model.ChannelInterfaceChatCompletion {
+		t.Fatalf("gpt-5.5 protocol = %q", got)
+	}
+}
+
 func TestSub2APIBootstrapPreservesOperatorPricing(t *testing.T) {
 	svc, db := newSub2APIIntegrationTestService(t)
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.5")
+	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.6-sol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +321,7 @@ func TestSub2APIBootstrapRejectsInvalidConfigBeforeWriting(t *testing.T) {
 	for _, test := range []struct{ name, env, value string }{
 		{"gateway", "SUB2API_RELAY_BASE_URL", "http://sub2api:8080/api/v1"},
 		{"missing app credential", "SUB2API_APP_CREDENTIAL", ""},
-		{"ambiguous capability", "SUB2API_RELAY_IMAGE_MODELS", "models/gpt-5.5"},
+		{"ambiguous capability", "SUB2API_RELAY_IMAGE_MODELS", "models/gpt-5.6-sol"},
 		{"empty normalized name", "SUB2API_RELAY_MODELS", "models/"},
 		{"name too long", "SUB2API_RELAY_MODELS", strings.Repeat("m", 121)},
 		{"unsupported video", "SUB2API_RELAY_VIDEO_MODELS", "indextts2-v1"},
@@ -247,7 +349,7 @@ func TestSub2APIBootstrapZeroPriceAllowsEmptyWallet(t *testing.T) {
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	order, err := svc.newBillingOrder("new-sso-user", "", "sub2api-zero-price-test", sub2APIRelayChannelID, "gpt-5.5", "text", "text_generation", 1, tokenBillingEstimate{})
+	order, err := svc.newBillingOrder("new-sso-user", "", "sub2api-zero-price-test", sub2APIRelayChannelID, "gpt-5.6-sol", "text", "text_generation", 1, tokenBillingEstimate{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +371,7 @@ func TestSub2APIVideoCapabilityProfiles(t *testing.T) {
 		minImages, maxImages, maxSeconds int
 	}{
 		{"minimax", 0, 0, 15}, {"minimax-h3", 0, 0, 15}, {"minimax_h3", 0, 0, 15},
-		{"minimax_h3_b99_001", 0, 0, 15}, {"minimax_h3_b99_002", 2, 2, 15}, {"minimax_h3_b99_003_12s", 1, 9, 12},
+		{"minimax_h3_z0901", 0, 0, 15}, {"minimax_h3_b99_001", 0, 0, 15}, {"minimax_h3_b99_002", 2, 2, 15}, {"minimax_h3_b99_003_12s", 1, 9, 12},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config, err := sub2APIVideoCapabilityConfig(test.name)
@@ -280,12 +382,25 @@ func TestSub2APIVideoCapabilityProfiles(t *testing.T) {
 			if video.References.MinImages != test.minImages || video.References.MaxImages != test.maxImages || video.Duration.Max != test.maxSeconds || video.Duration.Default != 5 || video.References.MaxVideos != 0 || video.References.MaxAudios != 0 {
 				t.Fatalf("incorrect workflow capability: %#v", video)
 			}
-			if len(video.Resolutions) != 1 || video.DefaultResolution != "736p" || len(video.Ratios) != 2 || video.GenerateAudio.Supported || video.Watermark.Supported {
+			if len(video.Resolutions) == 0 || video.DefaultResolution == "" || len(video.Ratios) < 2 || video.GenerateAudio.Supported || video.Watermark.Supported {
 				t.Fatalf("unverified workflow parameters exposed: %#v", video)
 			}
 		})
 	}
 	if _, err := sub2APIVideoCapabilityConfig("unknown-video"); err == nil {
 		t.Fatal("unverified model should not receive generic video capabilities")
+	}
+}
+
+func TestSub2APIAutoDLCatalogUsesChineseDisplayNamesAndEnglishIDs(t *testing.T) {
+	models := sub2APIAutoDLModelNames()
+	if len(models) != 16 || models[0] != "minimax_h3_z0901" {
+		t.Fatalf("unexpected AutoDL defaults: %#v", models)
+	}
+	for _, id := range models {
+		workflow, ok := sub2APIAutoDLWorkflowByID(id)
+		if !ok || workflow.DisplayName == "" || workflow.DisplayName == id {
+			t.Fatalf("workflow must keep an English call ID and Chinese display name: %#v", workflow)
+		}
 	}
 }

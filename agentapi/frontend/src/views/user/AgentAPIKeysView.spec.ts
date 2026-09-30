@@ -2,10 +2,51 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentAPIKeysView from './AgentAPIKeysView.vue'
 import { agentAPI } from '@/agent/api'
+import { resetAgentToastsForTests, useAgentToast } from '@/composables/useAgentToast'
 
 describe('AgentAPIKeysView', () => {
+  it('combines name/prefix search and status filters on tenant keys', async () => {
+    vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({ total: 3, items: [
+      { id: 1, name: 'Desktop', prefix: 'sk-a-one', status: 'active', created_at: '' },
+      { id: 2, name: 'Desktop old', prefix: 'sk-a-two', status: 'revoked', created_at: '' },
+      { id: 3, name: 'Server', prefix: 'sk-a-three', status: 'active', created_at: '' },
+    ] })
+    const wrapper = mount(AgentAPIKeysView)
+    await flushPromises()
+    await wrapper.get('[aria-label="搜索密钥"]').setValue('desktop')
+    await wrapper.get('[aria-label="密钥状态"]').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.includes('启用中'))!.click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Desktop')
+    expect(wrapper.text()).not.toContain('Desktop old')
+    expect(wrapper.text()).not.toContain('Server')
+    expect(wrapper.text()).toContain('显示 1 / 3 个密钥')
+    await wrapper.get('[aria-label="搜索密钥"]').setValue('sk-a-three')
+    expect(wrapper.text()).toContain('Server')
+    expect(wrapper.text()).not.toContain('Desktop')
+    wrapper.unmount()
+  })
+
+  it('retains the modal and input after creation fails without displaying a secret', async () => {
+    vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({ total: 0, items: [] })
+    vi.spyOn(agentAPI.keys, 'create').mockRejectedValue(new Error('unavailable'))
+    const wrapper = mount(AgentAPIKeysView, { global: { stubs: { Teleport: true } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="open-create-key"]').trigger('click')
+    await wrapper.get('#key-name').setValue('desktop')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    expect((wrapper.get('#key-name').element as HTMLInputElement).value).toBe('desktop')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('创建 API 密钥失败')
+    expect(wrapper.text()).not.toContain('新密钥 — 请立即复制')
+    wrapper.unmount()
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
+    resetAgentToastsForTests()
   })
 
   it('loads local keys and displays a newly created key once', async () => {
@@ -17,9 +58,10 @@ describe('AgentAPIKeysView', () => {
       item: { id: 2, name: 'desktop', prefix: 'sk-agent-new', status: 'active', created_at: '2026-09-22T00:00:00Z' },
       key: 'sk-agent-new-secret',
     })
-    const wrapper = mount(AgentAPIKeysView)
+    const wrapper = mount(AgentAPIKeysView, { global: { stubs: { Teleport: true } } })
     await flushPromises()
 
+    await wrapper.get('[data-testid="open-create-key"]').trigger('click')
     await wrapper.get('input[placeholder="密钥名称，例如：桌面客户端"]').setValue('desktop')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -27,6 +69,9 @@ describe('AgentAPIKeysView', () => {
     expect(create).toHaveBeenCalledWith('desktop')
     expect(wrapper.text()).toContain('sk-agent-new-secret')
     expect(wrapper.text()).not.toContain('sk-super-')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(useAgentToast().toasts.value.at(-1)?.message).toContain('API 密钥已创建')
+    wrapper.unmount()
   })
 
   it('uses a Chinese confirmation dialog before revoking a key', async () => {
@@ -48,6 +93,7 @@ describe('AgentAPIKeysView', () => {
 
     expect(revoke).toHaveBeenCalledWith(1)
     expect(wrapper.text()).toContain('已撤销')
+    expect(useAgentToast().toasts.value.at(-1)?.message).toBe('API 密钥已撤销。')
     wrapper.unmount()
   })
 })

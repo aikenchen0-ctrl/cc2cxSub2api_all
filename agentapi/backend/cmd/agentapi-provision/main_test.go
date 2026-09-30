@@ -36,6 +36,9 @@ func TestProvisionCreatesSecretSafeIdempotentBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(string(env), `LINK="https://api.cc2.cx"`) {
+		t.Fatal("generated instance missing public recharge origin")
+	}
 	sessionSecret, err := os.ReadFile(filepath.Join(first.RuntimeSecretDir, "session_secret"))
 	if err != nil {
 		t.Fatal(err)

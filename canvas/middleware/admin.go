@@ -45,6 +45,12 @@ func NotFoundJSON(c *gin.Context) {
 
 func authUser(c *gin.Context) (model.AuthUser, bool) {
 	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	if cookie, err := c.Request.Cookie(service.SessionCookieName); err == nil {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions && !service.SameOriginSessionRequest(c.Request) {
+			return model.AuthUser{}, false
+		}
+		token = cookie.Value
+	}
 	if strings.TrimSpace(token) == "" {
 		return model.AuthUser{}, false
 	}

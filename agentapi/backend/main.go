@@ -60,10 +60,23 @@ type apiResponse struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && (len(os.Args) != 2 || os.Args[1] != "--preflight") {
+		slog.Error("usage: agentapi [--preflight]")
+		os.Exit(2)
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		slog.Error("load config failed", "error", err)
 		os.Exit(1)
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--preflight" {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		report := runPreflight(ctx, cfg)
+		if err := json.NewEncoder(os.Stdout).Encode(report); err != nil || !report.OK {
+			os.Exit(1)
+		}
+		return
 	}
 	store, err := OpenStore(cfg.DatabasePath, cfg.SessionSecret)
 	if err != nil {
@@ -127,7 +140,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path != "/healthz" && r.URL.Path != "/readyz" {
-		if status, available := s.provisioningState(time.Now().UTC()); !available {
+		if status, available := s.provisioningState(s.store.clock().UTC()); !available {
 			s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_CONTROL_UNAVAILABLE", "main-site agent status is unavailable or stale")
 			return
 		} else if status != "active" {
@@ -154,6 +167,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAuth(w, r, requestID)
 	case r.URL.Path == "/api/v1/settings/public":
 		s.handlePublicSettings(w, r, requestID)
+	case r.URL.Path == "/api/v1/public/models":
+		s.handlePublicModels(w, r, requestID)
 	case r.URL.Path == "/api/v1/payments/webhook":
 		// Payment providers call this endpoint without an AgentAPI cookie. Keep
 		// it before the generic /api/v1 branch and authenticate it with the
@@ -163,24 +178,48 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentContext(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/profile":
 		s.handleAgentProfile(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/profile/avatar":
+		s.handleAgentProfileAvatar(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/profile/bindings" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/profile/bindings/"):
+		s.handleAgentProfileBindings(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/passkeys" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/passkeys/"):
+		s.handleAgentPasskeys(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/password":
 		s.handleAgentPassword(w, r, requestID)
+	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/totp/"):
+		s.handleAgentTOTP(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/balance-notify" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/balance-notify/"):
+		s.handleAgentBalanceNotify(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/wallet":
 		s.handleAgentWallet(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/users":
 		s.handleAgentUsers(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/usage/insights":
+		s.handleUsageInsights(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/usage":
 		s.handleAgentUsage(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/tasks":
 		s.handleAgentTasks(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/affiliate" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/affiliate/"):
+		s.handleAgentAffiliate(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/orders" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/orders/"):
+		s.handleAgentOrders(w, r, requestID)
+	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/payment/"):
+		s.handleAgentPayment(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/recharge/orders":
 		s.handleAgentRecharge(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/announcements" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/announcements/"):
+		s.handleAgentAnnouncements(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/content-pages" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/content/"):
+		s.handleAgentContentPages(w, r, requestID)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/"):
 		s.handleAgentAdmin(w, r, requestID)
 	case r.URL.Path == "/api/v1/api-keys" || strings.HasPrefix(r.URL.Path, "/api/v1/api-keys/"):
 		s.handleAPIKeys(w, r, requestID)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/"):
-		s.handleMainAPIProxy(w, r, requestID)
+		// Only explicit AgentAPI routes are exposed; never proxy arbitrary
+		// main-site account or administrator endpoints with a user session.
+		s.writeError(w, http.StatusForbidden, requestID, "AGENT_ROUTE_FORBIDDEN", "this main-site route is not exposed by AgentAPI")
 	case strings.HasPrefix(r.URL.Path, "/v1/"):
 		s.handleModelRelay(w, r, requestID)
 	case r.Method == http.MethodGet || r.Method == http.MethodHead:
@@ -225,7 +264,7 @@ func (s *Server) runSettlementReconciler(ctx context.Context) {
 }
 
 func (s *Server) reconcilePendingInBackground(parent context.Context) {
-	if strings.TrimSpace(s.cfg.AppCredential) == "" || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" {
+	if strings.TrimSpace(s.cfg.AppCredential) == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(parent, s.cfg.MainRequestTimeout)
@@ -242,7 +281,7 @@ func (s *Server) reconcilePendingInBackground(parent context.Context) {
 }
 
 func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
-	if s.cfg.VideoTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
+	if s.cfg.VideoTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
 		return
 	}
 	tasks, err := s.store.PendingVideoTasks(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
@@ -278,8 +317,8 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 						case usageErr != nil:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed video task usage lookup failed: "+usageErr.Error())
 						case usage == nil:
-							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task ended without a main-site usage record: "+upstreamStatus)
-						case usage.ActualCents > settlement.ReservedCents:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "video task failed; awaiting authoritative main-site usage: "+upstreamStatus)
+						case settlement.HasLocalReservation && usage.ActualCents > settlement.ReservedCents:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", usage.ActualCents, "authoritative video usage exceeds local reservation", usage.Snapshot)
 						default:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", usage.ActualCents, "", usage.Snapshot)
@@ -301,7 +340,7 @@ func (s *Server) reconcileStaleVideoTasks(ctx context.Context) {
 }
 
 func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
-	if s.cfg.ImageTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.OwnerMainUserID) == "" || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
+	if s.cfg.ImageTaskReconcileAge <= 0 || strings.TrimSpace(s.cfg.AppCredential) == "" || s.main == nil {
 		return
 	}
 	tasks, err := s.store.PendingImageTasks(s.cfg.AgentID, s.cfg.SettlementReconcileBatch)
@@ -337,8 +376,8 @@ func (s *Server) reconcileStaleImageTasks(ctx context.Context) {
 						case usageErr != nil:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "failed image task usage lookup failed: "+usageErr.Error())
 						case usage == nil:
-							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "image task ended without a main-site usage record: "+imageStatus)
-						case usage.ActualCents > settlement.ReservedCents:
+							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "image task failed; awaiting authoritative main-site usage: "+imageStatus)
+						case settlement.HasLocalReservation && usage.ActualCents > settlement.ReservedCents:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", usage.ActualCents, "authoritative image usage exceeds local reservation", usage.Snapshot)
 						default:
 							_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", usage.ActualCents, "", usage.Snapshot)
@@ -443,6 +482,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request, requestID st
 			return
 		}
 		s.authRegister(w, r, requestID)
+	case "/api/v1/auth/send-verify-code":
+		if r.Method != http.MethodPost || !sameOrigin(r) {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authSendVerifyCode(w, r, requestID)
 	case "/api/v1/auth/login":
 		if r.Method != http.MethodPost || !sameOrigin(r) {
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
@@ -455,6 +500,44 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request, requestID st
 			return
 		}
 		s.authLogin2FA(w, r, requestID)
+	case "/api/v1/auth/passkey/config":
+		s.handleAgentPasskeyConfig(w, r, requestID)
+	case "/api/v1/auth/passkey/login/begin":
+		if r.Method != http.MethodPost || !sameOrigin(r) {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authPasskeyLoginBegin(w, r, requestID)
+	case "/api/v1/auth/passkey/login/finish":
+		if r.Method != http.MethodPost || !sameOrigin(r) {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authPasskeyLoginFinish(w, r, requestID)
+	case "/api/v1/auth/forgot-password":
+		if r.Method != http.MethodPost || !sameOrigin(r) {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authForgotPassword(w, r, requestID)
+	case "/api/v1/auth/reset-password":
+		if r.Method != http.MethodPost || !sameOrigin(r) {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authResetPassword(w, r, requestID)
+	case "/api/v1/auth/password-recovery/config":
+		if r.Method != http.MethodGet {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authPasswordRecoveryConfig(w, r, requestID)
+	case "/api/v1/auth/main-site/login":
+		if r.Method != http.MethodGet {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authMainSiteLogin(w, r, requestID)
 	case "/api/v1/auth/me":
 		if r.Method != http.MethodGet {
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
@@ -476,6 +559,36 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request, requestID st
 	default:
 		s.writeError(w, http.StatusNotFound, requestID, "NOT_FOUND", "authentication endpoint not found")
 	}
+}
+
+// authMainSiteLogin starts the existing Sub2API satellite SSO flow. The
+// browser receives only a public navigation URL; application credentials,
+// runtime-control credentials and the SSO secret remain server-side.
+func (s *Server) authMainSiteLogin(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	base, ok := publicMainOrigin(s.cfg.PublicMainURL)
+	if !ok {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_SITE_LOGIN_UNAVAILABLE", "main-site login is not configured")
+		return
+	}
+	base.Path = "/api/v1/auth/integrations/" + url.PathEscape(s.cfg.SatelliteSlug) + "/start"
+	query := base.Query()
+	query.Set("next", safeSSONext(r.URL.Query().Get("next")))
+	base.RawQuery = query.Encode()
+	http.Redirect(w, r, base.String(), http.StatusFound)
+}
+
+func publicMainOrigin(raw string) (*url.URL, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return nil, false
+	}
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname())) {
+		return nil, false
+	}
+	parsed.Path = ""
+	return parsed, true
 }
 
 // handleSSOCallback consumes the public Sub2API satellite ticket format. The
@@ -662,17 +775,75 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request, requestID 
 	}
 	email := strings.TrimSpace(stringValue(payload["email"]))
 	password := stringValue(payload["password"])
+	verifyCode := strings.TrimSpace(stringValue(payload["verify_code"]))
+	affCode := strings.ToUpper(strings.TrimSpace(stringValue(payload["aff_code"])))
 	if email == "" || password == "" {
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", "email and password are required")
 		return
 	}
+	if affCode != "" && !validAffiliateCode(affCode) {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_AFFILIATE_CODE", "affiliate code must contain 4 to 32 letters, digits, underscores or dashes")
+		return
+	}
 
-	// Use Sub2API's public registration contract so captcha, verification,
-	// invitation and signup policy remain authoritative. The per-Agent control
-	// credential cannot create or elevate main-site accounts.
-	auth, err := s.main.Register(r.Context(), payload)
+	// Create the authoritative user first. Local state is only membership;
+	// never store passwords or accept role/balance/group fields from signup.
+	if s.cfg.MainAdminAPIKey == "" {
+		s.writeError(w, 503, requestID, "MAIN_ADMIN_NOT_CONFIGURED", "registration is unavailable")
+		return
+	}
+	allowed, limitErr := s.store.AllowRegistration(s.cfg.AgentID, registrationPeer(r), email)
+	if limitErr != nil {
+		s.writeError(w, 503, requestID, "REGISTRATION_UNAVAILABLE", "registration safety checks unavailable")
+		return
+	}
+	if !allowed {
+		w.Header().Set("Retry-After", "3600")
+		s.writeError(w, 429, requestID, "REGISTRATION_RATE_LIMITED", "too many registration attempts; try again later")
+		return
+	}
+	if s.cfg.EmailVerifyEnabled {
+		if verifyCode == "" || len(verifyCode) > 32 || strings.ContainsAny(verifyCode, "\r\n") {
+			s.writeError(w, http.StatusBadRequest, requestID, "EMAIL_VERIFY_REQUIRED", "email verification is required")
+			return
+		}
+		if err := s.main.VerifyRegistrationEmail(r.Context(), email, verifyCode, r.Header.Get("Accept-Language")); err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+	}
+	marker, err := s.store.RegistrationMarker(s.cfg.AgentID, email)
+	if err != nil {
+		s.writeError(w, 503, requestID, "REGISTRATION_UNAVAILABLE", "could not persist registration intent")
+		return
+	}
+	createdUser, err := s.main.CreateMainUser(r.Context(), email, password, strings.TrimSpace(stringValue(payload["username"])), marker)
 	if err != nil {
 		s.writeMainError(w, requestID, err)
+		return
+	}
+	userID := mainUserIDFromJSON(createdUser)
+	createdEmail, displayName, _ := userJSONFields(createdUser)
+	if affCode != "" {
+		if bindErr := s.main.BindAffiliateCode(r.Context(), userID, affCode); bindErr != nil {
+			// Account creation is authoritative and cannot be rolled back from this
+			// service. Preserve the new account/membership and make the failed bind
+			// auditable instead of returning an error that encourages duplicate
+			// registration attempts.
+			s.recordAudit("system", s.cfg.AgentID, "affiliate.bind", "main_user", userID, requestID, "failed", "main-site affiliate binding failed")
+		} else {
+			s.recordAudit("agent_user", userID, "affiliate.bind", "main_user", userID, requestID, "success", "")
+		}
+	}
+	if _, err := s.store.UpsertUser(s.cfg.AgentID, userID, createdEmail, displayName); err != nil {
+		s.recordAudit("system", s.cfg.AgentID, "user.register", "main_user", userID, requestID, "failed", "main user created; local membership needs repair")
+		s.writeError(w, 503, requestID, "USER_MAPPING_FAILED", "main user created but local membership could not be saved; contact the site administrator")
+		return
+	}
+	s.recordAudit("agent_user", userID, "user.register", "main_user", userID, requestID, "success", "")
+	auth, err := s.main.Login(r.Context(), email, password)
+	if err != nil {
+		s.writeError(w, 503, requestID, "REGISTERED_LOGIN_REQUIRED", "account created; please sign in separately")
 		return
 	}
 	if auth.Requires2FA {
@@ -681,7 +852,64 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request, requestID 
 		})
 		return
 	}
-	s.establishSession(w, r, requestID, auth, true)
+	if mainUserIDFromJSON(auth.User) != userID {
+		s.writeError(w, 502, requestID, "UPSTREAM_IDENTITY_MISMATCH", "created account does not match the authenticated user")
+		return
+	}
+	s.establishSession(w, r, requestID, auth, false)
+}
+
+func (s *Server) authSendVerifyCode(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	if agent, err := s.store.Agent(s.cfg.AgentID); err != nil || agent.Status != "active" || s.cfg.MainAdminAPIKey == "" {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "REGISTRATION_UNAVAILABLE", "registration is unavailable")
+		return
+	}
+	var payload struct {
+		Email string `json:"email"`
+	}
+	if err := decodeJSON(r, &payload, 16<<10); err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+		return
+	}
+	payload.Email = strings.TrimSpace(payload.Email)
+	if payload.Email == "" || len(payload.Email) > 320 || strings.ContainsAny(payload.Email, "\r\n") {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", "a valid email address is required")
+		return
+	}
+	if !s.cfg.EmailVerifyEnabled {
+		s.writeError(w, http.StatusBadRequest, requestID, "EMAIL_VERIFY_DISABLED", "email verification is not enabled")
+		return
+	}
+	data, err := s.main.SendRegistrationVerifyCode(r.Context(), payload.Email, r.Header.Get("Accept-Language"))
+	if err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	var result struct {
+		Countdown int `json:"countdown"`
+	}
+	_ = json.Unmarshal(data, &result)
+	countdown := result.Countdown
+	if countdown <= 0 || countdown > 3600 {
+		countdown = 60
+	}
+	s.writeData(w, http.StatusOK, requestID, map[string]any{
+		"message": "Verification code sent successfully", "countdown": countdown,
+	})
+}
+
+func validAffiliateCode(code string) bool {
+	if len(code) < 4 || len(code) > 32 {
+		return false
+	}
+	for _, char := range code {
+		if (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Server) authLogin(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -724,6 +952,98 @@ func (s *Server) authLogin2FA(w http.ResponseWriter, r *http.Request, requestID 
 	s.establishSession(w, r, requestID, auth, false)
 }
 
+func (s *Server) authForgotPassword(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var payload struct {
+		Email                 string `json:"email"`
+		TurnstileToken        string `json:"turnstile_token"`
+		TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
+		TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
+	}
+	if err := decodeJSON(r, &payload, 16<<10); err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+		return
+	}
+	payload.Email = strings.TrimSpace(payload.Email)
+	if payload.Email == "" || len(payload.Email) > 320 || strings.ContainsAny(payload.Email, "\r\n") {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", "a valid email address is required")
+		return
+	}
+	data, err := s.main.ForgotPassword(r.Context(), payload, r.Header.Get("Accept-Language"))
+	if err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	var result map[string]any
+	if json.Unmarshal(data, &result) != nil {
+		result = map[string]any{}
+	}
+	message := strings.TrimSpace(stringValue(result["message"]))
+	if message == "" {
+		message = "If your email is registered, you will receive a password reset link shortly."
+	}
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"message": message})
+}
+
+func (s *Server) authPasswordRecoveryConfig(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	raw, err := s.main.PublicSettings(r.Context())
+	if err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	mainPublic := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &mainPublic); err != nil {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_SETTINGS_INVALID", "main-site password recovery configuration is invalid")
+		return
+	}
+	s.writeData(w, http.StatusOK, requestID, map[string]any{
+		"password_reset_enabled":  rawBool(mainPublic["password_reset_enabled"]),
+		"turnstile_enabled":       rawBool(mainPublic["turnstile_enabled"]),
+		"turnstile_site_key":      rawString(mainPublic["turnstile_site_key"]),
+		"tencent_captcha_enabled": rawBool(mainPublic["tencent_captcha_enabled"]),
+		"tencent_captcha_app_id":  rawString(mainPublic["tencent_captcha_app_id"]),
+		"tencent_captcha_region":  rawString(mainPublic["tencent_captcha_region"]),
+		"aliyun_captcha_enabled":  rawBool(mainPublic["aliyun_captcha_enabled"]),
+		"aliyun_captcha_scene_id": rawString(mainPublic["aliyun_captcha_scene_id"]),
+		"aliyun_captcha_prefix":   rawString(mainPublic["aliyun_captcha_prefix"]),
+		"aliyun_captcha_region":   rawString(mainPublic["aliyun_captcha_region"]),
+	})
+}
+
+func (s *Server) authResetPassword(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var payload struct {
+		Email       string `json:"email"`
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := decodeJSON(r, &payload, 16<<10); err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
+		return
+	}
+	payload.Email = strings.TrimSpace(payload.Email)
+	payload.Token = strings.TrimSpace(payload.Token)
+	if payload.Email == "" || len(payload.Email) > 320 || strings.ContainsAny(payload.Email, "\r\n") || payload.Token == "" || len(payload.Token) > 2048 || len(payload.NewPassword) < 6 || len(payload.NewPassword) > 256 {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", "email, reset token, and a password of at least 6 characters are required")
+		return
+	}
+	data, err := s.main.ResetPassword(r.Context(), payload, r.Header.Get("Accept-Language"))
+	if err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	var result map[string]any
+	if json.Unmarshal(data, &result) != nil {
+		result = map[string]any{}
+	}
+	message := strings.TrimSpace(stringValue(result["message"]))
+	if message == "" {
+		message = "Your password has been reset successfully. You can now log in with your new password."
+	}
+	s.writeData(w, http.StatusOK, requestID, map[string]any{"message": message})
+}
+
 func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, requestID string, auth MainAuthResult, createMapping bool) {
 	if auth.AccessToken == "" {
 		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_AUTH_INVALID", "main site did not return an access token")
@@ -747,6 +1067,14 @@ func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, reques
 	mappedUser, mapErr := s.store.User(s.cfg.AgentID, mainUserID)
 	if errors.Is(mapErr, errNotFound) {
 		allowed := createMapping || s.cfg.AutoBindExistingUsers || mainUserID == s.cfg.OwnerMainUserID
+		if !allowed {
+			recovered, recoveryErr := s.recoverRegistration(r.Context(), mainUserID, email, displayName)
+			if recoveryErr != nil {
+				s.writeError(w, 503, requestID, "REGISTRATION_RECOVERY_UNAVAILABLE", "could not verify registration provenance; retry sign in later")
+				return
+			}
+			allowed = recovered
+		}
 		if !allowed {
 			s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_NOT_MAPPED", "this main-site account is not registered on this agent")
 			return
@@ -837,10 +1165,12 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request, requestID s
 		s.writeMainError(w, requestID, err)
 		return
 	}
-	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, time.Now().UTC().Add(sessionTTL)); err != nil {
+	expiresAt := time.Now().UTC().Add(sessionTTL)
+	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, expiresAt); err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "SESSION_UPDATE_FAILED", "failed to refresh session")
 		return
 	}
+	s.setSessionCookie(w, session.ID, expiresAt)
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"expires_in": int(sessionTTL.Seconds()), "token_type": "Cookie", "user": s.browserUser(current, session.MainUserID)})
 }
 
@@ -890,7 +1220,9 @@ func (s *Server) currentSessionUser(ctx context.Context, session Session) (json.
 	if err := validateMainSessionIdentity(current, session.MainUserID); err != nil {
 		return nil, err
 	}
-	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, time.Now().UTC().Add(sessionTTL)); err != nil {
+	// Rotating upstream credentials is not a local session renewal. This
+	// helper cannot renew the browser cookie, so preserve its bound expiry.
+	if err := s.store.UpdateSession(session.ID, session.MainUserID, current, auth.AccessToken, auth.RefreshToken, session.ExpiresAt); err != nil {
 		return nil, fmt.Errorf("refresh AgentAPI session credentials: %w", err)
 	}
 	return current, nil
@@ -905,6 +1237,7 @@ func validateMainSessionIdentity(userJSON []byte, expectedMainUserID string) err
 }
 
 func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
 		return
@@ -927,17 +1260,36 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 	}
 	payment := s.paymentConfig()
 	paymentEnabled := payment.Enabled && s.cfg.BillingMode != "user_upstream"
+	rechargeURL := ""
+	if s.cfg.PublicMainURL != "" {
+		rechargeURL = strings.TrimRight(s.cfg.PublicMainURL, "/") + "/purchase"
+	}
+	emailVerifyEnabled := s.cfg.EmailVerifyEnabled
+	registrationEnabled := s.cfg.MainAdminAPIKey != "" && branding.Status == "active" && (!emailVerifyEnabled || strings.TrimSpace(s.cfg.AppCredential) != "")
 	settings := map[string]any{
-		"registration_enabled": true, "email_verify_enabled": false,
+		"registration_enabled": registrationEnabled, "email_verify_enabled": emailVerifyEnabled,
+		"main_site_sso_enabled":             func() bool { _, ok := publicMainOrigin(s.cfg.PublicMainURL); return ok }(),
 		"force_email_on_third_party_signup": false, "registration_email_suffix_whitelist": []string{},
 		"registration_email_domain_quota_enabled": false, "promo_code_enabled": false,
 		"password_reset_enabled": false, "invitation_code_enabled": false,
-		"login_agreement_enabled": false, "turnstile_enabled": false, "tencent_captcha_enabled": false,
-		"passkey_enabled": false, "turnstile_site_key": "", "aliyun_captcha_enabled": false,
-		"site_name": siteName, "site_logo": logo, "site_subtitle": "Agent API Gateway",
-		"api_base_url": "/api/v1", "contact_info": "", "doc_url": "", "home_content": "",
-		"recharge_url":         strings.TrimRight(s.cfg.PublicMainURL, "/") + "/purchase",
-		"compact_home_enabled": false, "hide_ccs_import_button": true,
+		"login_agreement_enabled": false, "turnstile_enabled": false,
+		"turnstile_site_key":      "",
+		"tencent_captcha_enabled": false,
+		"tencent_captcha_app_id":  "",
+		"tencent_captcha_region":  "",
+		"aliyun_captcha_enabled":  false,
+		"aliyun_captcha_scene_id": "",
+		"aliyun_captcha_prefix":   "",
+		"aliyun_captcha_region":   "",
+		// Passkey availability depends on the current browser origin and is
+		// therefore served by /auth/passkey/config. Keep this legacy settings
+		// response local-only so public branding never depends on Sub2API.
+		"passkey_enabled":    false,
+		"passkey_configured": false,
+		"site_name":          siteName, "site_logo": logo, "site_subtitle": branding.SiteSubtitle,
+		"api_base_url": "/api/v1", "contact_info": branding.ContactInfo, "doc_url": branding.DocURL, "home_content": branding.HomeContent,
+		"recharge_url":         rechargeURL,
+		"compact_home_enabled": branding.CompactHomeEnabled, "hide_ccs_import_button": true,
 		// The public flag only tells the UI whether this AgentAPI instance has
 		// enabled its signed webhook bridge. It never exposes a secret or a main
 		// site credential. A verified payment still requires synced owner credit.
@@ -951,9 +1303,9 @@ func (s *Server) handlePublicSettings(w http.ResponseWriter, r *http.Request, re
 		"backend_mode_enabled": false, "version": "agentapi", "balance_low_notify_enabled": false,
 		"account_quota_notify_enabled": false, "balance_low_notify_threshold": 0,
 		"channel_monitor_enabled": false, "channel_monitor_default_interval_seconds": 60,
-		"available_channels_enabled": false, "subscription_enabled": false, "model_plaza_enabled": false,
+		"available_channels_enabled": true, "subscription_enabled": false, "model_plaza_enabled": false,
 		"model_plaza_require_auth": true, "plugin_management_enabled": false, "service_quota_enabled": false,
-		"affiliate_enabled": false, "allow_user_view_error_requests": false,
+		"affiliate_enabled": true, "allow_user_view_error_requests": false,
 	}
 	s.writeData(w, http.StatusOK, requestID, settings)
 }
@@ -976,6 +1328,7 @@ func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requ
 	if session, user, ok := s.loadSession(r); ok {
 		if mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID); balanceErr == nil {
 			user.BalanceCents = mainUser.Balance
+			user.FrozenBalanceCents = mainUser.FrozenBalance
 		} else {
 			result["balance_error"] = "Sub2API user balance is temporarily unavailable"
 		}
@@ -1204,7 +1557,12 @@ func (s *Server) handleAgentUsers(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_SEARCH", err.Error())
 			return
 		}
-		users, total, err := s.store.UsersPage(s.cfg.AgentID, pageSize, (page-1)*pageSize, search)
+		status, err := agentUserStatusFilter(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_STATUS", err.Error())
+			return
+		}
+		users, total, err := s.store.UsersPageFiltered(s.cfg.AgentID, pageSize, (page-1)*pageSize, search, status)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list agent users")
 			return
@@ -1220,6 +1578,14 @@ func (s *Server) handleAgentUsers(w http.ResponseWriter, r *http.Request, reques
 		user.BalanceError = "Sub2API user balance is temporarily unavailable"
 	}
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"items": []AgentUserView{user}, "total": 1, "page": 1, "page_size": 25})
+}
+
+func agentUserStatusFilter(r *http.Request) (string, error) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status == "" || status == "active" || status == "disabled" {
+		return status, nil
+	}
+	return "", fmt.Errorf("status must be active or disabled")
 }
 
 func (s *Server) hydrateAgentUserBalances(ctx context.Context, users []AgentUserView) {
@@ -1305,7 +1671,12 @@ func (s *Server) handleAgentUsage(w http.ResponseWriter, r *http.Request, reques
 		}
 		pageSize = parsed
 	}
-	items, total, err := s.store.UsagePage(s.cfg.AgentID, mainUserID, pageSize, (page-1)*pageSize)
+	search, err := parseUsageFilter(r.URL.Query())
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_FILTER", err.Error())
+		return
+	}
+	items, total, err := s.store.FilteredUsagePage(s.cfg.AgentID, mainUserID, pageSize, (page-1)*pageSize, search)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load usage")
 		return
@@ -1331,7 +1702,12 @@ func (s *Server) handleAgentTasks(w http.ResponseWriter, r *http.Request, reques
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAGINATION", err.Error())
 		return
 	}
-	items, total, err := s.store.TaskHistoryPage(s.cfg.AgentID, session.MainUserID, pageSize, (page-1)*pageSize)
+	taskType := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("task_type")))
+	if taskType != "" && taskType != "image" && taskType != "video" {
+		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_FILTER", "task_type must be image or video")
+		return
+	}
+	items, total, err := s.store.TaskHistoryPageByType(s.cfg.AgentID, session.MainUserID, taskType, pageSize, (page-1)*pageSize)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load model task history")
 		return
@@ -1699,6 +2075,34 @@ func validateBrandLogo(value string) error {
 	return nil
 }
 
+func validateBrandDocURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) > 2048 || strings.ContainsAny(value, "\r\n\x00") {
+		return fmt.Errorf("doc_url must be at most 2048 bytes and contain no line breaks")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return fmt.Errorf("doc_url must be an http or https URL")
+	}
+	return nil
+}
+
+func validateBrandContactInfo(value string) error {
+	value = strings.TrimSpace(value)
+	if len(value) > 300 {
+		return fmt.Errorf("contact_info must be at most 300 bytes")
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("contact_info contains a control character")
+		}
+	}
+	return nil
+}
+
 func verifyPaymentSignature(rawSignature, secret string, body []byte) bool {
 	signature := strings.TrimSpace(rawSignature)
 	if !strings.HasPrefix(strings.ToLower(signature), "sha256=") {
@@ -1863,6 +2267,46 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		}
 		return
 	}
+	if r.URL.Path == "/api/v1/agent/admin/announcements" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/announcements/") {
+		s.handleAgentAdminAnnouncements(w, r, requestID, session)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/content-pages" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/content-pages/") {
+		s.handleAgentAdminContentPages(w, r, requestID, session)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/backups" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/backups/") {
+		s.handleAgentAdminBackups(w, r, requestID, session)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/orders" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/orders/") {
+		s.handleAgentAdminOrders(w, r, requestID, session)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/payment/plans" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/payment/plans/") {
+		s.handleAgentAdminPaymentPlans(w, r, requestID, session)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/subscriptions" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/subscriptions/") {
+		s.handleAgentAdminSubscriptions(w, r, requestID)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/agent-provisioning" {
+		s.handleAgentAdminProvisioning(w, r, requestID)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/promo-codes" {
+		s.handleAgentAdminPromoCodes(w, r, requestID)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/channels" {
+		s.handleAgentAdminChannels(w, r, requestID, session)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/affiliates/") {
+		s.handleAgentAdminAffiliates(w, r, requestID)
+		return
+	}
 	if r.URL.Path == "/api/v1/agent/admin/payment-config" {
 		if s.cfg.BillingMode == "user_upstream" {
 			s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "local payment configuration is disabled for direct user billing")
@@ -1879,9 +2323,7 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load branding")
 				return
 			}
-			s.writeData(w, http.StatusOK, requestID, map[string]any{
-				"name": agent.Name, "site_name": agent.SiteName, "site_logo": agent.SiteLogo,
-			})
+			s.writeData(w, http.StatusOK, requestID, agentBrandingData(agent))
 			return
 		case http.MethodPut, http.MethodPatch:
 			if !sameOrigin(r) {
@@ -1889,9 +2331,14 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 				return
 			}
 			var payload struct {
-				Name     *string `json:"name"`
-				SiteName *string `json:"site_name"`
-				SiteLogo *string `json:"site_logo"`
+				Name               *string `json:"name"`
+				SiteName           *string `json:"site_name"`
+				SiteLogo           *string `json:"site_logo"`
+				DocURL             *string `json:"doc_url"`
+				ContactInfo        *string `json:"contact_info"`
+				SiteSubtitle       *string `json:"site_subtitle"`
+				CompactHomeEnabled *bool   `json:"compact_home_enabled"`
+				HomeContent        *string `json:"home_content"`
 			}
 			if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
 				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
@@ -1902,7 +2349,17 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load branding")
 				return
 			}
-			name, siteName, siteLogo := current.Name, current.SiteName, current.SiteLogo
+			name, siteName, siteLogo, docURL, contactInfo := current.Name, current.SiteName, current.SiteLogo, current.DocURL, current.ContactInfo
+			home := current.AgentHomeSettings
+			if payload.SiteSubtitle != nil {
+				home.SiteSubtitle = strings.TrimSpace(*payload.SiteSubtitle)
+			}
+			if payload.CompactHomeEnabled != nil {
+				home.CompactHomeEnabled = *payload.CompactHomeEnabled
+			}
+			if payload.HomeContent != nil {
+				home.HomeContent = strings.TrimSpace(*payload.HomeContent)
+			}
 			if payload.Name != nil {
 				name = strings.TrimSpace(*payload.Name)
 			}
@@ -1911,6 +2368,12 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 			}
 			if payload.SiteLogo != nil {
 				siteLogo = strings.TrimSpace(*payload.SiteLogo)
+			}
+			if payload.DocURL != nil {
+				docURL = strings.TrimSpace(*payload.DocURL)
+			}
+			if payload.ContactInfo != nil {
+				contactInfo = strings.TrimSpace(*payload.ContactInfo)
 			}
 			if err := validateBrandingText(name, "name", 100); err != nil {
 				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_BRANDING", err.Error())
@@ -1924,15 +2387,25 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_BRANDING", err.Error())
 				return
 			}
-			updated, err := s.store.UpdateBranding(s.cfg.AgentID, name, siteName, siteLogo)
+			if err := validateBrandDocURL(docURL); err != nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_BRANDING", err.Error())
+				return
+			}
+			if err := validateBrandContactInfo(contactInfo); err != nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_BRANDING", err.Error())
+				return
+			}
+			if err := validateAgentHomeSettings(home); err != nil {
+				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_BRANDING", err.Error())
+				return
+			}
+			updated, err := s.store.UpdateBranding(s.cfg.AgentID, name, siteName, siteLogo, docURL, contactInfo, home)
 			if err != nil {
 				s.writeError(w, http.StatusInternalServerError, requestID, "BRANDING_UPDATE_FAILED", "failed to save branding")
 				return
 			}
 			s.recordAudit("agent_admin", session.MainUserID, "branding.update", "agent", s.cfg.AgentID, requestID, "success", "")
-			s.writeData(w, http.StatusOK, requestID, map[string]any{
-				"name": updated.Name, "site_name": updated.SiteName, "site_logo": updated.SiteLogo,
-			})
+			s.writeData(w, http.StatusOK, requestID, agentBrandingData(updated))
 			return
 		default:
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported branding operation")
@@ -2115,7 +2588,12 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_SEARCH", err.Error())
 			return
 		}
-		users, total, err := s.store.UsersPage(s.cfg.AgentID, pageSize, (page-1)*pageSize, search)
+		status, err := agentUserStatusFilter(r)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_STATUS", err.Error())
+			return
+		}
+		users, total, err := s.store.UsersPageFiltered(s.cfg.AgentID, pageSize, (page-1)*pageSize, search, status)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list users")
 			return
@@ -2292,13 +2770,30 @@ func (s *Server) writeMappedUserStatusError(w http.ResponseWriter, requestID, ac
 // browser's opaque AgentAPI session; a bearer key cannot create or revoke a
 // sibling key.
 func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
 	session, _, ok := s.requireSession(w, r, requestID)
 	if !ok {
 		return
 	}
 
+	keyUserID := session.MainUserID
+	actorType := "agent_user"
+	if s.isAgentAdmin(session) {
+		actorType = "agent_admin"
+	}
+	if target := strings.TrimSpace(r.URL.Query().Get("main_user_id")); target != "" && target != keyUserID {
+		if !s.isAgentAdmin(session) {
+			s.writeError(w, 403, requestID, "AGENT_ADMIN_REQUIRED", "cannot manage another user's keys")
+			return
+		}
+		if _, err := s.store.User(s.cfg.AgentID, target); err != nil {
+			s.writeError(w, 404, requestID, "AGENT_USER_NOT_FOUND", "user does not belong to this agent")
+			return
+		}
+		keyUserID = target
+	}
 	if r.URL.Path == "/api/v1/api-keys" && r.Method == http.MethodGet {
-		keys, err := s.store.APIKeys(s.cfg.AgentID, session.MainUserID)
+		keys, err := s.store.APIKeys(s.cfg.AgentID, keyUserID)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to list AgentAPI keys")
 			return
@@ -2327,12 +2822,12 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_NAME", "key name must be at most 100 characters")
 			return
 		}
-		view, raw, err := s.store.CreateAPIKey(s.cfg.AgentID, session.MainUserID, name)
+		view, raw, err := s.store.CreateAPIKey(s.cfg.AgentID, keyUserID, name)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "API_KEY_CREATE_FAILED", "failed to create AgentAPI key")
 			return
 		}
-		s.recordAudit("agent_user", session.MainUserID, "api_key.create", "agent_api_key", strconv.FormatInt(view.ID, 10), requestID, "success", "")
+		s.recordAudit(actorType, session.MainUserID, "api_key.create", "agent_api_key", strconv.FormatInt(view.ID, 10), requestID, "success", "key_user_id="+keyUserID)
 		s.writeData(w, http.StatusCreated, requestID, map[string]any{"item": view, "key": raw})
 		return
 	}
@@ -2353,7 +2848,7 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_KEY_ID", "key id is invalid")
 			return
 		}
-		if err := s.store.RevokeAPIKey(s.cfg.AgentID, session.MainUserID, id); err != nil {
+		if err := s.store.RevokeAPIKey(s.cfg.AgentID, keyUserID, id); err != nil {
 			if errors.Is(err, errNotFound) {
 				s.writeError(w, http.StatusNotFound, requestID, "API_KEY_NOT_FOUND", "AgentAPI key not found")
 				return
@@ -2361,7 +2856,7 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 			s.writeError(w, http.StatusInternalServerError, requestID, "API_KEY_REVOKE_FAILED", "failed to revoke AgentAPI key")
 			return
 		}
-		s.recordAudit("agent_user", session.MainUserID, "api_key.revoke", "agent_api_key", strconv.FormatInt(id, 10), requestID, "success", "")
+		s.recordAudit(actorType, session.MainUserID, "api_key.revoke", "agent_api_key", strconv.FormatInt(id, 10), requestID, "success", "key_user_id="+keyUserID)
 		s.writeData(w, http.StatusOK, requestID, map[string]any{"id": id, "status": "revoked"})
 		return
 	}
@@ -2369,84 +2864,13 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 	s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported AgentAPI key operation")
 }
 
-func (s *Server) handleMainAPIProxy(w http.ResponseWriter, r *http.Request, requestID string) {
-	if !isAllowedUserAPIPath(r.URL.Path, r.Method) {
-		s.writeError(w, http.StatusForbidden, requestID, "AGENT_ROUTE_FORBIDDEN", "this main-site route is not exposed by AgentAPI")
-		return
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead && !sameOrigin(r) {
-		s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
-		return
-	}
-	session, _, ok := s.requireSession(w, r, requestID)
-	if !ok {
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxModelBody))
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", "failed to read request body")
-		return
-	}
-	status, headers, responseBody, updated, err := s.proxyUserAPI(r, session, body, requestID)
-	if err != nil {
-		s.writeMainError(w, requestID, err)
-		return
-	}
-	if updated != nil {
-		session = *updated
-		_ = session
-	}
-	copyResponse(w, status, headers, responseBody)
-}
-
-func (s *Server) proxyUserAPI(r *http.Request, session Session, body []byte, requestID string) (int, http.Header, []byte, *Session, error) {
-	try := func(current Session) (int, http.Header, []byte, error) {
-		pathSuffix := strings.TrimPrefix(r.URL.Path, "/api/v1")
-		target := s.main.endpoint(pathSuffix)
-		if query := r.URL.Query().Encode(); query != "" {
-			target += "?" + query
-		}
-		headers := make(http.Header)
-		for _, key := range []string{"Accept", "Content-Type", "Accept-Language", "User-Agent"} {
-			if value := r.Header.Get(key); value != "" {
-				headers.Set(key, value)
-			}
-		}
-		headers.Set("Authorization", "Bearer "+current.AccessToken)
-		headers.Set("X-Request-ID", requestID)
-		resp, data, err := s.main.request(r.Context(), r.Method, target, body, headers)
-		if err != nil {
-			return 0, nil, nil, err
-		}
-		return resp.StatusCode, filteredResponseHeaders(resp.Header), data, nil
-	}
-	status, headers, responseBody, err := try(session)
-	if err == nil && status != http.StatusUnauthorized {
-		return status, headers, responseBody, nil, nil
-	}
-	if status != http.StatusUnauthorized || session.RefreshToken == "" {
-		return status, headers, responseBody, nil, err
-	}
-	auth, refreshErr := s.main.Refresh(r.Context(), session.RefreshToken)
-	if refreshErr != nil {
-		return status, headers, responseBody, nil, refreshErr
-	}
-	current, currentErr := s.main.CurrentUser(r.Context(), auth.AccessToken)
-	if currentErr != nil {
-		return status, headers, responseBody, nil, currentErr
-	}
-	updated := session
-	updated.AccessToken, updated.RefreshToken = auth.AccessToken, auth.RefreshToken
-	updated.UserJSON = current
-	updated.ExpiresAt = time.Now().UTC().Add(sessionTTL)
-	_ = s.store.UpdateSession(updated.ID, updated.MainUserID, updated.UserJSON, updated.AccessToken, updated.RefreshToken, updated.ExpiresAt)
-	status, headers, responseBody, err = try(updated)
-	return status, headers, responseBody, &updated, err
-}
-
 func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, requestID string) {
 	if agent, err := s.store.Agent(s.cfg.AgentID); err != nil || agent.Status != "active" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "AGENT_SUSPENDED", "agent is not active for model requests")
+		return
+	}
+	if r.URL.Path == "/v1/usage" {
+		s.handleAPIKeyUsage(w, r, requestID)
 		return
 	}
 	if !isAllowedModelPath(r.URL.Path, r.Method) {
@@ -2506,8 +2930,26 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_DISABLED", "agent user is disabled")
 		return
 	}
+	// Never silently substitute a random ID for a supplied retry identifier:
+	// both the legacy lookup and namespaced ID must identify the same request.
+	for _, header := range []string{"Idempotency-Key", "X-Request-ID"} {
+		if len(strings.TrimSpace(r.Header.Get(header))) > 128 {
+			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST_IDENTIFIER", header+" must not exceed 128 bytes")
+			return
+		}
+	}
 	chargeID := requestIDFrom(r, nil)
+	legacyChargeID := chargeID
 	billingUserID := strings.TrimSpace(principal.ProxyMainUserID)
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		key = strings.TrimSpace(r.Header.Get("X-Request-ID"))
+	}
+	if key != "" && s.cfg.BillingMode == "user_upstream" {
+		identity, _ := json.Marshal([]string{s.cfg.AgentID, billingUserID, key})
+		digest := sha256.Sum256(identity)
+		chargeID = "agent-" + hex.EncodeToString(digest[:])
+	}
 	if billingUserID == "" || strings.TrimSpace(s.cfg.AppCredential) == "" {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_NOT_READY", "main user billing identity is not configured")
 		return
@@ -2531,25 +2973,45 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	principal.User = currentUser
+	// Before namespaced IDs were introduced, the raw client key was stored.
+	// Preserve that user's replay barrier without renaming records referenced
+	// by task mappings or by the main site's usage logs.
+	if chargeID != legacyChargeID {
+		legacy, lookupErr := s.store.Settlement(s.cfg.AgentID, legacyChargeID)
+		if lookupErr == nil && legacy.ProxyMainUserID == billingUserID {
+			s.writeSettlementReplay(w, requestID, legacy)
+			return
+		}
+		if lookupErr != nil && !errors.Is(lookupErr, errNotFound) {
+			s.writeError(w, http.StatusInternalServerError, requestID, "SETTLEMENT_LOOKUP_FAILED", "failed to load legacy request settlement")
+			return
+		}
+	}
 	// The settlement row is the durable request idempotency record. A retry
 	// must never send the same model operation to the main site a second time,
 	// even if the first process died after the upstream call.
 	if existing, lookupErr := s.store.Settlement(s.cfg.AgentID, chargeID); lookupErr == nil {
+		if existing.ProxyMainUserID != billingUserID {
+			s.writeError(w, 409, requestID, "IDEMPOTENCY_CONFLICT", "request identifier belongs to another user")
+			return
+		}
 		s.writeSettlementReplay(w, requestID, existing)
 		return
 	} else if !errors.Is(lookupErr, errNotFound) {
 		s.writeError(w, http.StatusInternalServerError, requestID, "SETTLEMENT_LOOKUP_FAILED", "failed to load request settlement")
 		return
 	}
-	before, ok := s.readMainBalance(r.Context(), billingUserID)
-	if !ok {
+	model := requestModelName(r.Header.Get("Content-Type"), body)
+	mainBalance, balanceErr := s.main.AdminGetUser(r.Context(), billingUserID)
+	if balanceErr != nil {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_BALANCE_UNAVAILABLE", "main user balance could not be read")
 		return
 	}
-	if before < s.cfg.MaxRequestCostCents {
+	if !mainBalance.BalancePositive {
 		s.writeError(w, http.StatusPaymentRequired, requestID, "MAIN_USER_BALANCE_INSUFFICIENT", "main user balance is insufficient")
 		return
 	}
+	before := mainBalance.Balance
 	settlement, created, err := s.store.PrepareDirectSettlement(s.cfg.AgentID, billingUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
 	if err != nil {
 		if errors.Is(err, errIdempotencyConflict) {
@@ -2563,7 +3025,12 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		s.writeSettlementReplay(w, requestID, settlement)
 		return
 	}
-	_ = s.store.SetSettlementModel(s.cfg.AgentID, chargeID, requestModelName(r.Header.Get("Content-Type"), body))
+	_ = s.store.SetSettlementModel(s.cfg.AgentID, chargeID, model)
+	if err := s.store.SetSettlementAPIKey(s.cfg.AgentID, chargeID, principal.APIKeyID); err != nil {
+		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "local API key attribution could not be persisted")
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "API_KEY_ATTRIBUTION_FAILED", "request was not forwarded because API key attribution could not be saved")
+		return
+	}
 
 	if modelRequestWantsStream(r.Header.Get("Accept"), r.Header.Get("Content-Type"), body) {
 		s.relayStreamingModel(w, r, requestID, billingUserID, chargeID, before, body, r.Header.Get("Content-Type"))
@@ -2638,19 +3105,25 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			return
 		}
 		actual := usage.ActualCents
-		if actual > s.cfg.MaxRequestCostCents {
+		if s.cfg.BillingMode != "user_upstream" && actual > s.cfg.MaxRequestCostCents {
 			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
 			copyResponse(w, status, headers, responseBody)
 			return
 		}
 		if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "confirmed", actual, "", usage.Snapshot); err != nil {
-			s.writeError(w, http.StatusServiceUnavailable, requestID, "LOCAL_SETTLEMENT_FAILED", "upstream succeeded but local settlement could not be finalized")
+			slog.Error("main request succeeded; local usage sync failed", "request_id", chargeID, "error", err)
+			copyResponse(w, status, headers, responseBody)
 			return
 		}
 		copyResponse(w, status, headers, responseBody)
 		return
 	}
 
+	if s.cfg.BillingMode == "user_upstream" {
+		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "awaiting authoritative main-site usage; balance differences are not billing records")
+		copyResponse(w, status, headers, responseBody)
+		return
+	}
 	after, hasAfter := s.readMainBalance(r.Context(), billingUserID)
 	if !hasAfter {
 		if err := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "user balance could not be read after relay"); err != nil {
@@ -2753,12 +3226,12 @@ func (s *Server) handleImageTaskPoll(w http.ResponseWriter, r *http.Request, req
 			case usageErr != nil:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, usageErr.Error())
 			case usage == nil && imageTaskFailed(imageStatus):
-				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "image task ended without a charge: "+imageStatus)
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "image task failed; awaiting authoritative main-site usage: "+imageStatus)
 			case usage == nil:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "main-site usage is not visible yet")
 			default:
 				actual := usage.ActualCents
-				if actual > settlement.ReservedCents {
+				if settlement.HasLocalReservation && actual > settlement.ReservedCents {
 					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
 				} else {
 					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot)
@@ -2805,12 +3278,12 @@ func (s *Server) handleVideoPoll(w http.ResponseWriter, r *http.Request, request
 			case usageErr != nil:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, usageErr.Error())
 			case usage == nil && videoTaskFailed(upstreamStatus):
-				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "released", 0, "video task ended without a charge: "+upstreamStatus)
+				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "video task failed; awaiting authoritative main-site usage: "+upstreamStatus)
 			case usage == nil:
 				_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, task.RequestID, "pending", 0, "main-site usage is not visible yet")
 			default:
 				actual := usage.ActualCents
-				if actual > settlement.ReservedCents {
+				if settlement.HasLocalReservation && actual > settlement.ReservedCents {
 					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
 				} else {
 					_ = s.store.FinalizeSettlement(s.cfg.AgentID, task.RequestID, usage.ID, "confirmed", actual, "", usage.Snapshot)
@@ -2948,13 +3421,17 @@ func (s *Server) relayStreamingModel(w http.ResponseWriter, r *http.Request, req
 			return
 		}
 		actual := usage.ActualCents
-		if actual > s.cfg.MaxRequestCostCents {
+		if s.cfg.BillingMode != "user_upstream" && actual > s.cfg.MaxRequestCostCents {
 			_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot)
 			return
 		}
 		if finalizeErr := s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, usage.ID, "confirmed", actual, "", usage.Snapshot); finalizeErr != nil {
 			slog.Error("failed to finalize streaming usage settlement", "request_id", requestID, "error", finalizeErr)
 		}
+		return
+	}
+	if s.cfg.BillingMode == "user_upstream" {
+		_ = s.store.FinalizeSettlement(s.cfg.AgentID, chargeID, chargeID, "pending", 0, "awaiting authoritative main-site usage; balance differences are not billing records")
 		return
 	}
 	after, hasAfter := s.readMainBalance(r.Context(), billingUserID)
@@ -3005,9 +3482,16 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 	}
 	result := make([]settlementReconcileResult, 0, len(records))
 	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		if err := s.store.MarkReconciliationAttempt(s.cfg.AgentID, record.RequestID); err != nil {
+			return result, err
+		}
 		billingUserID := strings.TrimSpace(record.BillingMainUserID)
 		if billingUserID == "" {
-			return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_USER_MISSING", Message: "settlement billing user is not configured"}
+			result = append(result, settlementReconcileResult{RequestID: record.RequestID, Status: record.Status, Message: "billing user identity is missing; manual review required"})
+			continue
 		}
 		userMu := s.userSettlementMutex(billingUserID)
 		userMu.Lock()
@@ -3021,7 +3505,12 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 		usageItems, findErr := s.main.AdminFindUsageForUser(ctx, billingUserID, record.RequestID)
 		if findErr != nil {
 			userMu.Unlock()
-			return nil, findErr
+			if requestID != "" {
+				return nil, findErr
+			}
+			item.Message = "main-site usage lookup failed; kept pending for retry"
+			result = append(result, item)
+			continue
 		}
 		var usage *MainUsageResult
 		for i := range usageItems {
@@ -3040,7 +3529,7 @@ func (s *Server) reconcileSettlements(ctx context.Context, requestID string) ([]
 		actual := usage.ActualCents
 		item.ActualCents = actual
 		item.UsageID = usage.ID
-		if actual > record.ReservedCents {
+		if record.HasLocalReservation && actual > record.ReservedCents {
 			if err := s.store.FinalizeSettlement(s.cfg.AgentID, record.RequestID, usage.ID, "pending", actual, "authoritative usage exceeds local reservation", usage.Snapshot); err != nil {
 				userMu.Unlock()
 				return nil, err
@@ -3076,6 +3565,9 @@ func (s *Server) writeSettlementReplay(w http.ResponseWriter, requestID string, 
 type modelPrincipal struct {
 	ProxyMainUserID string
 	User            AgentUserView
+	APIKeyID        int64
+	APIKeyName      string
+	APIKeyPrefix    string
 }
 
 // requireModelPrincipal accepts either the browser session or an AgentAPI
@@ -3104,7 +3596,7 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusUnauthorized, requestID, "INVALID_AGENT_API_KEY", "a valid AgentAPI bearer key is required")
 		return modelPrincipal{}, false
 	}
-	mainUserID, err := s.store.ResolveAPIKey(s.cfg.AgentID, strings.TrimSpace(parts[1]))
+	resolved, err := s.store.ResolveAPIKeyDetails(s.cfg.AgentID, strings.TrimSpace(parts[1]))
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			s.writeError(w, http.StatusUnauthorized, requestID, "INVALID_AGENT_API_KEY", "AgentAPI API key is invalid or revoked")
@@ -3113,7 +3605,7 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to resolve AgentAPI API key")
 		return modelPrincipal{}, false
 	}
-	user, err := s.store.User(s.cfg.AgentID, mainUserID)
+	user, err := s.store.User(s.cfg.AgentID, resolved.MainUserID)
 	if err != nil {
 		s.writeError(w, http.StatusUnauthorized, requestID, "AGENT_USER_NOT_FOUND", "AgentAPI user mapping is unavailable")
 		return modelPrincipal{}, false
@@ -3122,7 +3614,7 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_DISABLED", "agent user is disabled")
 		return modelPrincipal{}, false
 	}
-	return modelPrincipal{ProxyMainUserID: mainUserID, User: user}, true
+	return modelPrincipal{ProxyMainUserID: resolved.MainUserID, User: user, APIKeyID: resolved.ID, APIKeyName: resolved.Name, APIKeyPrefix: resolved.Prefix}, true
 }
 
 func (s *Server) readMainBalance(ctx context.Context, mainUserID string) (int64, bool) {
@@ -3294,13 +3786,17 @@ func (s *Server) browserAuthResponse(raw []byte, mainUserID string) map[string]a
 }
 
 func (s *Server) browserUser(raw []byte, mainUserID string) map[string]any {
+	// Only the public profile fields consumed by AgentAPI may cross this
+	// boundary. New main-site fields must not become browser-visible by default.
+	var upstream map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &upstream)
 	result := make(map[string]any)
-	if json.Unmarshal(raw, &result) != nil {
-		result = map[string]any{}
+	for _, field := range []string{"email", "username", "display_name", "avatar_url", "status"} {
+		var value string
+		if data, ok := upstream[field]; ok && string(data) != "null" && json.Unmarshal(data, &value) == nil {
+			result[field] = value
+		}
 	}
-	delete(result, "access_token")
-	delete(result, "refresh_token")
-	delete(result, "token")
 	if numericID, err := strconv.ParseInt(mainUserID, 10, 64); err == nil && numericID > 0 {
 		result["id"] = numericID
 	} else {
@@ -3309,8 +3805,6 @@ func (s *Server) browserUser(raw []byte, mainUserID string) map[string]any {
 	// AgentAPI's copied admin UI must not become a main-site admin console. The
 	// separate agent_admin flag is consumed by the AgentAPI view only.
 	result["role"] = "user"
-	var sessionUser Session
-	_ = sessionUser
 	result["agent_admin"] = s.cfg.OwnerMainUserID == mainUserID
 	result["agent_id"] = s.cfg.AgentID
 	return result
@@ -3405,16 +3899,6 @@ func copyResponseHeaders(w http.ResponseWriter, headers http.Header) {
 	}
 }
 
-func isAllowedUserAPIPath(rawPath, method string) bool {
-	// AgentAPI deliberately has no generic main-site API proxy. The explicit
-	// routes above are the complete public contract; forwarding an unknown
-	// /api/v1 path would let a browser bypass local wallet checks or reach
-	// account, payment, key, subscription, and administrator resources.
-	_ = rawPath
-	_ = method
-	return false
-}
-
 func isAllowedModelPath(rawPath, method string) bool {
 	if method != http.MethodGet && method != http.MethodPost {
 		return false
@@ -3423,8 +3907,10 @@ func isAllowedModelPath(rawPath, method string) bool {
 		return method == http.MethodPost
 	}
 	switch rawPath {
-	case "/v1/models", "/v1/chat/completions", "/v1/responses", "/v1/images/generations", "/v1/images/edits", "/v1/videos":
-		return true
+	case "/v1/models":
+		return method == http.MethodGet
+	case "/v1/chat/completions", "/v1/responses", "/v1/images/generations", "/v1/images/edits", "/v1/videos":
+		return method == http.MethodPost
 	default:
 		videoID := strings.TrimPrefix(rawPath, "/v1/videos/")
 		if method == http.MethodGet && strings.HasPrefix(rawPath, "/v1/videos/") && videoID != "" && videoID != "." && videoID != ".." && !strings.Contains(videoID, "/") {

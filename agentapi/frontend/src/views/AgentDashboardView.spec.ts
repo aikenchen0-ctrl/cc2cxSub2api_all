@@ -1,7 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentDashboardView from './AgentDashboardView.vue'
-import { agentAPI, type AgentContextResponse, type AgentUsageView, type AgentUserView } from '@/agent/api'
+import { createRouter, createMemoryHistory } from 'vue-router'
+import { agentAPI, type AgentContextResponse, type AgentUsageView, type AgentUserView, type UsageInsights } from '@/agent/api'
+
+vi.mock('vue-chartjs', () => ({
+  Doughnut: { template: '<div data-testid="doughnut-chart" />' },
+  Line: { template: '<div data-testid="line-chart" />' },
+}))
 
 type UsagePage = { items: AgentUsageView[]; total: number; page: number; page_size: number }
 
@@ -26,8 +32,10 @@ function usage(overrides: Partial<AgentUsageView> = {}): AgentUsageView {
 }
 
 function mountDashboard() {
+  const router = createRouter({ history: createMemoryHistory(), routes: ['/', '/keys', '/usage', '/purchase'].map(path => ({ path, component: { template: '<div />' } })) })
   return mount(AgentDashboardView, {
     global: {
+      plugins: [router],
       stubs: {
         RouterLink: { template: '<a><slot /></a>' },
       },
@@ -56,7 +64,37 @@ function dashboardContext(siteName: string, balanceCents: number): AgentContextR
   } as AgentContextResponse
 }
 
+function usageInsights(): UsageInsights {
+  const measuredRow = {
+    key: 'gpt-5.5', requests: 1, measured: 1, missing_actual: 0, unobserved: 0, pending: 0,
+    input_tokens: 1000, output_tokens: 250, cache_read_tokens: 0, cache_creation_tokens: 0,
+    standard_cost_usd_nanos: 150_000_000, actual_cost_usd_nanos: 0,
+    route_observed: 1, route_mismatch: 0,
+  }
+  return {
+    status: 'measured', scope: 'user', start: '2026-09-24T00:00:00Z', end: '2026-09-25T00:00:00Z',
+    requests: 1, measured: 1, missing_actual: 0, unobserved: 0, pending: 0,
+    actual_cost_usd_nanos: 0, standard_cost_usd_nanos: 150_000_000,
+    route_observed: 1, route_mismatch: 0, input_tokens: 1000, output_tokens: 250,
+    cache_read_tokens: 0, cache_creation_tokens: 0,
+    models: [measuredRow],
+    trend: [{ ...measuredRow, key: '2026-09-24T00:00:00Z' }],
+  }
+}
+
 describe('AgentDashboardView', () => {
+  beforeEach(() => {
+    vi.spyOn(agentAPI, 'getUsageInsights').mockResolvedValue(usageInsights())
+  })
+
+  it('does not present local balance when the main balance read failed', async () => {
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue({ ...dashboardContext('Demo API', 987654), balance_error: 'unavailable' })
+    vi.spyOn(agentAPI, 'getUsage').mockResolvedValue({ items: [], total: 0, page: 1, page_size: 5 })
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂不可用')
+    expect(wrapper.text()).not.toContain('9876.54')
+  })
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -80,6 +118,10 @@ describe('AgentDashboardView', () => {
     expect(wrapper.text()).toContain('Sub2API 实际费用 $0.00 · 标准费用 $0.15')
     expect(wrapper.text()).toContain('主站扣费 0.00')
     expect(wrapper.text()).toContain('查看全部用量')
+    expect(wrapper.text()).toContain('用量与费用分析')
+    expect(wrapper.text()).toContain('当前用户')
+    expect(wrapper.find('[data-testid="doughnut-chart"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="line-chart"]').exists()).toBe(true)
   })
 
   it('keeps balance/dashboard content available when recent usage cannot be loaded', async () => {
@@ -138,5 +180,6 @@ describe('AgentDashboardView', () => {
     expect(wrapper.text()).not.toContain('Stale Site')
     expect(wrapper.text()).toContain('req-latest')
     expect(wrapper.text()).not.toContain('req-stale')
+    expect(agentAPI.getUsageInsights).toHaveBeenCalledTimes(2)
   })
 })

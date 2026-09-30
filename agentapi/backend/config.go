@@ -22,6 +22,7 @@ type Config struct {
 	WebDir                        string
 	DatabasePath                  string
 	MainAPIBaseURL                string
+	MainAdminAPIKey               string
 	MainModelBaseURL              string
 	PublicMainURL                 string
 	RuntimeControlCredential      string
@@ -39,6 +40,7 @@ type Config struct {
 	SiteName                      string
 	SiteLogo                      string
 	BrandSync                     bool
+	EmailVerifyEnabled            bool
 	AgentDisabled                 bool
 	ProvisioningControlEnabled    bool
 	ProvisioningControlStaleAfter time.Duration
@@ -68,7 +70,7 @@ type Config struct {
 func LoadConfig() (Config, error) {
 	mainURL := firstNonEmpty(os.Getenv("MAIN_API_URL"), os.Getenv("LINK"), "http://localhost:18080")
 	apiBase := normalizeAPIBase(mainURL)
-	publicMainURL := normalizePublicBase(firstNonEmpty(os.Getenv("LINK"), mainURL))
+	publicMainURL := normalizePublicBase(os.Getenv("LINK"))
 	// Keep control-plane traffic on MAIN_API_URL. Model traffic can use the
 	// Docker-internal relay endpoint without changing LINK (the public model
 	// origin) or the management API address.
@@ -103,6 +105,7 @@ func LoadConfig() (Config, error) {
 		WebDir:                        firstNonEmpty(os.Getenv("AGENTAPI_WEB_DIR"), "./web"),
 		DatabasePath:                  firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
 		MainAPIBaseURL:                apiBase,
+		MainAdminAPIKey:               mainAdminCredential(),
 		MainModelBaseURL:              modelBase,
 		PublicMainURL:                 publicMainURL,
 		RuntimeControlCredential:      secretEnv("AGENT_RUNTIME_CONTROL_CREDENTIAL"),
@@ -120,6 +123,7 @@ func LoadConfig() (Config, error) {
 		SiteName:                      firstNonEmpty(os.Getenv("AGENT_SITE_NAME"), "AgentAPI"),
 		SiteLogo:                      strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
 		BrandSync:                     envBool("AGENT_BRAND_SYNC", false),
+		EmailVerifyEnabled:            envBool("AGENT_EMAIL_VERIFY_ENABLED", true),
 		AgentDisabled:                 !envBool("AGENT_ENABLED", true),
 		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", false),
 		ProvisioningControlStaleAfter: envDuration("AGENT_PROVISIONING_CONTROL_STALE_AFTER", 90*time.Second),
@@ -156,6 +160,9 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.BillingMode != "user_upstream" && cfg.BillingMode != "owner_upstream" {
 		return Config{}, fmt.Errorf("AGENT_BILLING_MODE must be user_upstream")
+	}
+	if cfg.BillingMode == "user_upstream" && cfg.ProvisioningControlEnabled {
+		return Config{}, fmt.Errorf("AGENT_PROVISIONING_CONTROL_ENABLED must be false for user_upstream billing; legacy runtime control is owner-scoped")
 	}
 	// Local wallet seeding is useful for unit tests, but would break the
 	// owner-authoritative accounting contract in a deployed AgentAPI. Refuse it
@@ -219,7 +226,7 @@ func normalizeModelBase(value string) string {
 func normalizePublicBase(value string) string {
 	base := strings.TrimRight(strings.TrimSpace(value), "/")
 	if base == "" {
-		base = "http://localhost:18080"
+		return ""
 	}
 	base = addLocalHTTPForSchemeLessURL(base)
 	base = strings.TrimSuffix(base, "/api/v1")

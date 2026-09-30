@@ -1,10 +1,30 @@
 <script setup lang="ts">
+import TablePageLayout from '@/components/layout/TablePageLayout.vue'
+import AgentInput from '@/components/common/AgentInput.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
+import AgentSearchInput from '@/components/common/AgentSearchInput.vue'
+import AgentSelect from '@/components/common/AgentSelect.vue'
+import AgentStatusBadge from '@/components/common/AgentStatusBadge.vue'
+import Icon from '@/components/icons/Icon.vue'
+import DataTable from '@/components/common/DataTable.vue'
 import { computed, onMounted, ref } from 'vue'
 import { agentAPI, type AgentAPIKeyView } from '@/agent/api'
 import AgentConfirmDialog from '@/components/AgentConfirmDialog.vue'
 import { statusLabel } from '@/agent/locale'
 import { errorMessage } from '@/agent/client'
+import { useAgentToast } from '@/composables/useAgentToast'
 
+const { showSuccess, showWarning } = useAgentToast()
+
+const showCreate = ref(false)
+const search = ref('')
+const filterStatus = ref('')
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'active', label: '启用中' },
+  { value: 'revoked', label: '已撤销' },
+]
+const filteredKeys = computed(() => keys.value.filter(key => (!filterStatus.value || key.status === filterStatus.value) && (key.name + ' ' + key.prefix).toLowerCase().includes(search.value.trim().toLowerCase())))
 const keys = ref<AgentAPIKeyView[]>([])
 const loading = ref(true)
 const saving = ref(false)
@@ -38,15 +58,18 @@ async function load(): Promise<void> {
 }
 
 async function create(): Promise<void> {
+  if (saving.value) return
   saving.value = true
   error.value = ''
   notice.value = ''
   try {
     const response = await agentAPI.keys.create(name.value.trim() || 'AgentAPI 密钥')
+    showCreate.value = false
     oneTimeKey.value = response.key
     keys.value = [response.item, ...keys.value]
     name.value = ''
     notice.value = '完整密钥仅显示一次，请在关闭此提示前复制保存。'
+    showSuccess('API 密钥已创建，请立即复制并妥善保存。')
   } catch (err) {
     error.value = errorMessage(err, '创建 API 密钥失败，请稍后重试。')
   } finally {
@@ -70,6 +93,7 @@ async function confirmRevoke(): Promise<void> {
     await agentAPI.keys.revoke(key.id)
     key.status = 'revoked'
     if (oneTimeKey.value && oneTimeKey.value.startsWith(key.prefix)) oneTimeKey.value = ''
+    showSuccess('API 密钥已撤销。')
   } catch (err) {
     error.value = errorMessage(err, '撤销 API 密钥失败，请稍后重试。')
   }
@@ -80,8 +104,10 @@ async function copyKey(): Promise<void> {
   try {
     await navigator.clipboard.writeText(oneTimeKey.value)
     notice.value = '已复制到剪贴板。请像保护密码一样妥善保管此密钥。'
+    showSuccess('密钥已复制到剪贴板。')
   } catch {
     notice.value = '剪贴板访问被阻止，请手动选中并复制密钥。'
+    showWarning('剪贴板访问被阻止，请手动复制密钥。')
   }
 }
 
@@ -89,7 +115,7 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="mx-auto max-w-5xl space-y-6 p-6">
+  <main class="space-y-6">
     <header>
       <p class="text-sm text-slate-500">AgentAPI</p>
       <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">API 密钥</h1>
@@ -111,34 +137,44 @@ onMounted(load)
       <code class="block select-all break-all rounded-lg bg-white p-3 text-sm text-slate-900 dark:bg-slate-950 dark:text-slate-100">{{ oneTimeKey }}</code>
     </section>
 
-    <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <h2 class="font-semibold text-slate-900 dark:text-white">创建密钥</h2>
-      <form class="mt-4 flex flex-col gap-3 sm:flex-row" @submit.prevent="create">
-        <input v-model="name" class="min-w-0 flex-1 rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950" maxlength="100" placeholder="密钥名称，例如：桌面客户端" type="text">
-        <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900" :disabled="saving" type="submit">{{ saving ? '正在创建…' : '创建密钥' }}</button>
+    <TablePageLayout>
+      <template #actions>
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-lg font-semibold">我的密钥</h2>
+          <div class="flex gap-3">
+            <button class="btn btn-secondary" :disabled="loading" aria-label="刷新密钥" @click="load"><Icon name="refresh" size="md" /></button>
+            <button class="btn btn-primary" data-testid="open-create-key" @click="showCreate = true"><Icon name="plus" size="md" class="mr-2" />创建密钥</button>
+          </div>
+        </div>
+      </template>
+      <template #filters>
+        <div class="flex flex-wrap gap-3">
+          <AgentSearchInput v-model="search" class="w-full sm:w-64" aria-label="搜索密钥" placeholder="搜索名称或前缀" />
+          <AgentSelect v-model="filterStatus" :options="statusOptions" class="w-40" aria-label="密钥状态" />
+        </div>
+      </template>
+      <template #table>
+      <DataTable :columns='[{"key":"name","label":"名称"},{"key":"prefix","label":"前缀"},{"key":"created_at","label":"创建时间"},{"key":"last_used_at","label":"最后使用时间"},{"key":"status","label":"状态"},{"key":"actions","label":"操作"}]' :data="filteredKeys" :loading="loading" row-key="id">
+        <template #cell-name="{ row: key }"><div class="max-w-xl whitespace-normal">{{ key.name || '—' }}</div></template>
+        <template #cell-prefix="{ row: key }"><div class="max-w-xl whitespace-normal">{{ key.prefix }}…</div></template>
+        <template #cell-created_at="{ row: key }"><div class="max-w-xl whitespace-normal">{{ formatDate(key.created_at) }}</div></template>
+        <template #cell-last_used_at="{ row: key }"><div class="max-w-xl whitespace-normal">{{ formatDate(key.last_used_at) }}</div></template>
+        <template #cell-status="{ row: key }"><div class="max-w-xl whitespace-normal"><AgentStatusBadge :status="key.status" :label="statusLabel(key.status)" /></div></template>
+        <template #cell-actions="{ row: key }"><div class="max-w-xl whitespace-normal"><button v-if="key.status === 'active'" class="text-sm text-red-600 hover:underline" type="button" @click="requestRevoke(key)">撤销</button></div></template>
+        <template #empty>暂无 AgentAPI 密钥。</template>
+      </DataTable>
+      </template>
+      <template #pagination><p class="text-sm text-gray-500">显示 {{ filteredKeys.length }} / {{ keys.length }} 个密钥</p></template>
+    </TablePageLayout>
+    <BaseDialog :show="showCreate" title="创建 API 密钥" :close-on-escape="!saving" :show-close-button="!saving" @close="showCreate = false">
+      <form class="space-y-4" @submit.prevent="create">
+        <label for="key-name" class="input-label">密钥名称</label>
+        <AgentInput id="key-name" v-model="name" maxlength="100" placeholder="密钥名称，例如：桌面客户端" :disabled="saving" />
+        <p class="text-sm text-gray-500">密钥只用于本代理站；完整密钥仅在创建成功时显示一次。</p>
+        <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
+        <div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="saving" @click="showCreate = false">取消</button><button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? '正在创建…' : '创建密钥' }}</button></div>
       </form>
-    </section>
-
-    <section class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div class="border-b p-5 dark:border-slate-700"><h2 class="font-semibold text-slate-900 dark:text-white">我的密钥</h2></div>
-      <div v-if="loading" class="p-5 text-sm text-slate-500">正在加载…</div>
-      <div v-else-if="keys.length === 0" class="p-5 text-sm text-slate-500">暂无 AgentAPI 密钥。</div>
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
-          <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800"><tr><th class="px-5 py-3">名称</th><th class="px-5 py-3">前缀</th><th class="px-5 py-3">创建时间</th><th class="px-5 py-3">最后使用时间</th><th class="px-5 py-3">状态</th><th class="px-5 py-3"></th></tr></thead>
-          <tbody>
-            <tr v-for="key in keys" :key="key.id" class="border-t dark:border-slate-700">
-              <td class="px-5 py-4 font-medium text-slate-900 dark:text-white">{{ key.name || '—' }}</td>
-              <td class="px-5 py-4 font-mono text-xs text-slate-500">{{ key.prefix }}…</td>
-              <td class="px-5 py-4 text-slate-500">{{ formatDate(key.created_at) }}</td>
-              <td class="px-5 py-4 text-slate-500">{{ formatDate(key.last_used_at) }}</td>
-              <td class="px-5 py-4"><span :class="key.status === 'active' ? 'text-emerald-600' : 'text-slate-400'">{{ statusLabel(key.status) }}</span></td>
-              <td class="px-5 py-4 text-right"><button v-if="key.status === 'active'" class="text-sm text-red-600 hover:underline" type="button" @click="requestRevoke(key)">撤销</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </BaseDialog>
 
     <AgentConfirmDialog
       :open="revokeConfirmation !== null"

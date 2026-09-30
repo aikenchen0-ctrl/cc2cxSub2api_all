@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { agentAPI, isAuthoritativeAgentUsageSource, type AgentContextResponse, type AgentUsageView } from '@/agent/api'
 import { statusLabel } from '@/agent/locale'
 import { errorMessage } from '@/agent/client'
+
+import StatCard from '@/components/common/StatCard.vue'
+import AgentStatusBadge from '@/components/common/AgentStatusBadge.vue'
+import AgentUsageInsights from '@/components/AgentUsageInsights.vue'
+import Icon from '@/components/icons/Icon.vue'
+import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
+const balanceIcon = () => h(Icon, { name: 'creditCard', size: 'lg' })
+const siteIcon = () => h(Icon, { name: 'home', size: 'lg' })
+const billingIcon = () => h(Icon, { name: 'shield', size: 'lg' })
 
 const context = ref<AgentContextResponse | null>(null)
 const recentUsage = ref<AgentUsageView[]>([])
@@ -11,6 +20,7 @@ const loading = ref(true)
 const usageLoading = ref(true)
 const error = ref('')
 const usageError = ref('')
+const insightsVersion = ref(0)
 let loadSequence = 0
 
 function money(cents: number): string {
@@ -81,6 +91,11 @@ async function load(): Promise<void> {
   await Promise.all([contextRequest, usageRequest])
 }
 
+async function refreshDashboard(): Promise<void> {
+  insightsVersion.value += 1
+  await load()
+}
+
 onMounted(load)
 </script>
 
@@ -93,61 +108,59 @@ onMounted(load)
         <p class="mt-1 text-sm text-slate-500">余额和模型费用均来自你的 Sub2API 主站账户；AgentAPI 只负责代理站身份和请求转发。</p>
       </div>
       <div class="flex gap-2">
-        <RouterLink to="/recharge" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">充值</RouterLink>
-        <button class="rounded-lg border px-4 py-2 text-sm" type="button" @click="load">刷新</button>
+        <RouterLink to="/purchase" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">充值</RouterLink>
+        <button class="rounded-lg border px-4 py-2 text-sm" type="button" @click="refreshDashboard">刷新</button>
       </div>
     </header>
 
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <p v-if="loading" class="text-sm text-slate-500">正在加载…</p>
 
-    <section v-if="context" class="grid gap-4 md:grid-cols-3">
-      <div v-if="context.user" class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">可用余额</p>
-        <p class="mt-2 text-2xl font-semibold">{{ money(context.user.balance_cents) }}</p>
-      </div>
-      <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">代理站</p>
-        <p class="mt-2 text-lg font-semibold">{{ context.agent.name }}</p>
-        <p class="text-sm text-slate-500">{{ context.agent.domain || '域名待配置' }}</p>
-      </div>
-      <div class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p class="text-sm text-slate-500">计费方式</p>
-        <p class="mt-2 text-lg font-semibold">用户主站直扣</p>
-        <p class="text-sm text-slate-500">每个用户由自己的 Sub2API 余额结算，不共用站长余额。</p>
-      </div>
+    <section v-if="context" class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <StatCard v-if="context.user" title="可用余额" :value="context.balance_error ? '暂不可用' : money(context.user.balance_cents)" :icon="balanceIcon" />
+      <StatCard title="代理站" :value="context.agent.site_name" :icon="siteIcon" icon-variant="success" />
+      <StatCard title="计费方式" value="用户主站直扣" :icon="billingIcon" icon-variant="warning" />
     </section>
+    <p v-if="context?.balance_error" class="text-sm text-amber-600">主站余额读取失败，请刷新重试；不使用本地余额替代。</p>
 
-    <section v-if="context" class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b p-5 dark:border-slate-700">
-        <div>
-          <h2 class="font-semibold">最近用量</h2>
-          <p class="mt-1 text-sm text-slate-500">AgentAPI 最近记录的 5 次请求。</p>
-        </div>
-        <RouterLink to="/usage" class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">查看全部用量</RouterLink>
-      </div>
-      <p v-if="usageError" class="m-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ usageError }}</p>
-      <p v-else-if="usageLoading" class="p-5 text-sm text-slate-500">正在加载最近用量…</p>
-      <p v-else-if="recentUsage.length === 0" class="p-5 text-sm text-slate-500">暂无模型请求记录，最近的请求会显示在这里。</p>
-      <div v-else class="divide-y dark:divide-slate-700">
-        <article v-for="item in recentUsage" :key="item.request_id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-medium">{{ item.model || '未知模型' }}</span>
-              <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ statusLabel(item.settlement_status) }}</span>
+    <AgentUsageInsights :key="insightsVersion" />
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div class="lg:col-span-2">
+        <section v-if="context" class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b p-5 dark:border-slate-700">
+            <div>
+              <h2 class="font-semibold">最近用量</h2>
+              <p class="mt-1 text-sm text-slate-500">AgentAPI 最近记录的 5 次请求。</p>
             </div>
-            <p class="mt-1 truncate font-mono text-xs text-slate-500" :title="item.request_id">{{ item.request_id }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ date(item.created_at) }}<span v-if="item.inbound_endpoint"> · {{ item.inbound_endpoint }}</span></p>
-            <p v-if="isAuthoritativeAgentUsageSource(item.usage_source)" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              输入 {{ item.input_tokens.toLocaleString('zh-CN') }} · 输出 {{ item.output_tokens.toLocaleString('zh-CN') }}
-            </p>
-            <p class="mt-1 text-xs text-slate-500">{{ sub2ApiUsageLabel(item) }}</p>
+            <RouterLink to="/usage" class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">查看全部用量</RouterLink>
           </div>
-          <p class="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{{ settlementLabel(item) }}</p>
-        </article>
+          <p v-if="usageError" class="m-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ usageError }}</p>
+          <p v-else-if="usageLoading" class="p-5 text-sm text-slate-500">正在加载最近用量…</p>
+          <p v-else-if="recentUsage.length === 0" class="p-5 text-sm text-slate-500">暂无模型请求记录，最近的请求会显示在这里。</p>
+          <div v-else class="divide-y dark:divide-slate-700">
+            <article v-for="item in recentUsage" :key="item.request_id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium">{{ item.model || '未知模型' }}</span>
+                  <AgentStatusBadge :status="item.settlement_status" :label="statusLabel(item.settlement_status)" />
+                </div>
+                <p class="mt-1 truncate font-mono text-xs text-slate-500" :title="item.request_id">{{ item.request_id }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ date(item.created_at) }}<span v-if="item.inbound_endpoint"> · {{ item.inbound_endpoint }}</span></p>
+                <p v-if="isAuthoritativeAgentUsageSource(item.usage_source)" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                  输入 {{ item.input_tokens.toLocaleString('zh-CN') }} · 输出 {{ item.output_tokens.toLocaleString('zh-CN') }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500">{{ sub2ApiUsageLabel(item) }}</p>
+              </div>
+              <p class="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{{ settlementLabel(item) }}</p>
+            </article>
+          </div>
+        </section>
       </div>
-    </section>
-
+      <div class="lg:col-span-1">
+        <UserDashboardQuickActions />
+      </div>
+    </div>
     <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <h2 class="font-semibold">计费说明</h2>
       <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">

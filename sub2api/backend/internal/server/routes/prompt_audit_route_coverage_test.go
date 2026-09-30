@@ -51,10 +51,18 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/x_search":                 {"gateway_web_search.go"},
 	}
 	excluded := map[string]string{
-		"/messages/count_tokens":     "tokenization only; it does not execute a model request",
-		"/images/batches/:id/cancel": "control-plane cancellation with no user prompt",
-		"/stt":                       "speech transcription is not a text-generation prompt",
-		"/custom-voices":             "voice profile management has no model prompt",
+		"/messages/count_tokens":              "tokenization only; it does not execute a model request",
+		"/images/batches/:id/cancel":          "control-plane cancellation with no user prompt",
+		"/sub2api/payment/orders":             "account payment order creation with no model prompt",
+		"/sub2api/payment/orders/verify":      "account payment verification with no model prompt",
+		"/sub2api/orders/:id/cancel":          "account order cancellation with no model prompt",
+		"/sub2api/orders/:id/refund-request":  "account refund request with no model prompt",
+		"/sub2api/affiliate/transfer":         "account affiliate-balance transfer with no model prompt",
+		"/sub2api/affiliate/bind":             "account inviter binding with no model prompt",
+		"/sub2api/redeem":                     "account redemption mutation with no model prompt",
+		"/sub2api/auth-identities/bind/start": "account identity-binding handoff with no model prompt",
+		"/stt":                                "speech transcription is not a text-generation prompt",
+		"/custom-voices":                      "voice profile management has no model prompt",
 	}
 
 	unclassified := make([]string, 0)

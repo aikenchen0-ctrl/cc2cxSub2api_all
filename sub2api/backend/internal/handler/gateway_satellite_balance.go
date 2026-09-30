@@ -12,8 +12,9 @@ import (
 )
 
 type satelliteUserBalanceResponse struct {
-	Object  string  `json:"object"`
-	Balance float64 `json:"balance"`
+	Object        string  `json:"object"`
+	Balance       float64 `json:"balance"`
+	FrozenBalance float64 `json:"frozen_balance"`
 }
 
 // SatelliteUserBalance returns only the authenticated API key owner's account
@@ -28,8 +29,9 @@ func (h *GatewayHandler) SatelliteUserBalance(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, satelliteUserBalanceResponse{
-		Object:  "sub2api.user_balance",
-		Balance: apiKey.User.Balance,
+		Object:        "sub2api.user_balance",
+		Balance:       apiKey.User.Balance,
+		FrozenBalance: apiKey.User.FrozenBalance,
 	})
 }
 

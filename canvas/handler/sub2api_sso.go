@@ -35,11 +35,11 @@ func setSSOHandoffCookie(w http.ResponseWriter, r *http.Request, token string, a
 	http.SetCookie(w, &http.Cookie{Name: ssoCookieName, Value: token, Path: "/api/auth/sso/exchange", MaxAge: age, HttpOnly: true, Secure: r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteStrictMode})
 }
 
-// A same-origin POST exchanges the short-lived HttpOnly handoff for the normal bearer session.
+// Keep the session credential in an HttpOnly cookie; the UI only receives an identity hint.
 func Sub2APISSOExchange(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	if r.Header.Get("X-Canvas-SSO") != "1" || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	if r.Header.Get("X-Canvas-SSO") != "1" || !service.SameOriginSessionRequest(r) {
 		FailWithStatus(w, http.StatusForbidden, "SSO exchange rejected")
 		return
 	}
@@ -54,5 +54,16 @@ func Sub2APISSOExchange(w http.ResponseWriter, r *http.Request) {
 		FailWithStatus(w, http.StatusUnauthorized, "SSO handoff expired")
 		return
 	}
-	OK(w, model.AuthSession{Token: cookie.Value, User: user})
+	service.SetSessionCookie(w, r, cookie.Value, 3*24*60*60)
+	OK(w, model.AuthSession{Token: "cookie:" + user.ID, User: user})
+}
+
+func Logout(w http.ResponseWriter, r *http.Request) {
+	if !service.SameOriginSessionRequest(r) {
+		FailWithStatus(w, http.StatusForbidden, "Cross-origin session request rejected")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	service.SetSessionCookie(w, r, "", -1)
+	OK(w, nil)
 }

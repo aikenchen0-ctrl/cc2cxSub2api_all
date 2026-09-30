@@ -101,6 +101,23 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	requestInfo := service.ParseGrokMediaRequest(contentType, body)
 	requestModel := requestInfo.Model
 	routingModel := service.NormalizeGrokMediaModelForEndpoint(endpoint, requestModel, requestInfo.HasInputImage())
+	autodl := service.IsAutoDLVideoModel(requestModel) || endpoint.IsVideoLookupRequest() && service.IsAutoDLVideoTask(requestID)
+	mediaPlatform := service.PlatformGrok
+	noAccountType, noAccountMessage := "grok_media_no_eligible_account", "No eligible Grok media accounts"
+	if autodl {
+		mediaPlatform = service.PlatformOpenAI
+		noAccountType, noAccountMessage = "autodl_video_no_eligible_account", "没有可调度的 AutoDL 视频账号，请检查账号启用状态、分组和 ComfyUI Token"
+		if endpoint.IsGenerationRequest() {
+			if endpoint != service.GrokMediaEndpointVideosGenerations {
+				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "AutoDL 只支持视频工作流创建")
+				return
+			}
+			if _, _, _, err := service.PrepareAutoDLVideoRequest(body); err != nil {
+				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+				return
+			}
+		}
+	}
 	if endpoint.IsGenerationRequest() && strings.TrimSpace(requestModel) == "" {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
@@ -204,6 +221,9 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	}
 	routingStart := time.Now()
 	requiredCapability := grokMediaRequiredCapability(endpoint)
+	if autodl {
+		requiredCapability = service.OpenAIEndpointCapabilityAutoDLVideo
+	}
 	var accountReleaseFunc func()
 	releaseAccount := func() {
 		if accountReleaseFunc != nil {
@@ -222,7 +242,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		var scheduleDecision service.OpenAIAccountScheduleDecision
 		if boundLookupAccountID > 0 {
 			selection, scheduleDecision, err = h.gatewayService.SelectGrokMediaVideoRequestAccount(
-				requestCtx, apiKey.GroupID, sessionHash, boundLookupAccountID, routingModel,
+				requestCtx, apiKey.GroupID, sessionHash, boundLookupAccountID, routingModel, mediaPlatform,
 			)
 		} else {
 			selection, scheduleDecision, err = h.gatewayService.SelectAccountWithSchedulerForCapability(
@@ -237,7 +257,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 				false,
 				false,
 				false,
-				service.PlatformGrok,
+				mediaPlatform,
 			)
 		}
 		// Own an eagerly acquired slot before any rejection or eligibility probe.
@@ -262,11 +282,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			if endpoint.IsGenerationRequest() && errors.Is(err, service.ErrNoAvailableAccounts) &&
 				(len(failedAccountIDs) == 0 || (mediaEligibilityRejected && lastFailoverErr == nil)) {
 				markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
-				h.errorResponse(c, http.StatusServiceUnavailable, "grok_media_no_eligible_account", "No eligible Grok media accounts")
+				h.errorResponse(c, http.StatusServiceUnavailable, noAccountType, noAccountMessage)
 				return
 			}
 			if len(failedAccountIDs) == 0 {
-				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestModel, routingModel, service.PlatformGrok)
+				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestModel, routingModel, mediaPlatform)
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
@@ -283,10 +303,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		if selection == nil || selection.Account == nil {
 			if endpoint.IsGenerationRequest() {
 				markOpsRoutingCapacityLimited(c)
-				h.errorResponse(c, http.StatusServiceUnavailable, "grok_media_no_eligible_account", "No eligible Grok media accounts")
+				h.errorResponse(c, http.StatusServiceUnavailable, noAccountType, noAccountMessage)
 				return
 			}
-			cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestModel, routingModel, service.PlatformGrok)
+			cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestModel, routingModel, mediaPlatform)
 			if !cls.ModelNotFound {
 				markOpsRoutingCapacityLimited(c)
 			}
@@ -315,7 +335,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		)
 
 		account := selection.Account
-		if endpoint.IsGenerationRequest() {
+		if endpoint.IsGenerationRequest() && !autodl {
 			eligible, eligibilityReason, eligibilityErr := h.ensureGrokMediaAccountEligibility(requestCtx, account)
 			if !eligible {
 				releaseAccount()
@@ -617,6 +637,18 @@ func prepareGrokVideoCompletionBilling(
 			zap.String("note", "resolution falls back to default 480p; investigate pending store failures"),
 		)
 	}
+	if pending != nil && pending.Model == "wan2.2animate-v4-motion_retargeting" && pending.VideoDurationSeconds <= 0 {
+		seconds, err := h.gatewayService.MeasureAutoDLVideoDuration(ctx, statusResult.VideoOutputURL)
+		if err != nil {
+			reqLog.Warn("autodl_video.output_duration_unavailable", zap.String("request_id", taskRequestID), zap.Error(err))
+			return nil
+		}
+		pending.VideoDurationSeconds = seconds
+		if err := h.gatewayService.StoreGrokVideoPendingBilling(ctx, taskRequestID, subject.UserID, apiKey.ID, *pending); err != nil {
+			reqLog.Warn("autodl_video.output_duration_cache_failed", zap.Error(err))
+			return nil
+		}
+	}
 	claimed, err := h.gatewayService.ClaimGrokVideoBilling(ctx, taskRequestID, subject.UserID, apiKey.ID)
 	if err != nil {
 		reqLog.Warn("grok_media.video_billing_claim_failed", zap.String("request_id", taskRequestID), zap.Error(err))
@@ -665,7 +697,7 @@ func prepareGrokVideoCompletionBilling(
 	// Official default resolution is 480p when the create request omitted it.
 	merged.VideoResolution = service.NormalizeVideoBillingResolutionOrDefault(merged.VideoResolution)
 	// Official default duration is 8s when neither status nor create provided it.
-	merged.VideoDurationSeconds = service.NormalizeVideoBillingDurationSecondsOrDefault(merged.VideoDurationSeconds)
+	merged.VideoDurationSeconds = service.NormalizeModelVideoBillingDuration(merged.Model, merged.VideoDurationSeconds)
 	// E2E latency for async video: create accept → this discovery of done+url.
 	// Bill on discovery (status/content), not after further client polls; duration
 	// must not be only the single discovery hop (~hundreds of ms).

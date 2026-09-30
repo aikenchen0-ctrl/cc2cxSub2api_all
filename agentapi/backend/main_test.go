@@ -41,6 +41,7 @@ func testServer(t *testing.T, upstream *httptest.Server) *Server {
 		Addr:                       ":0",
 		DatabasePath:               ":memory:",
 		MainAPIBaseURL:             upstream.URL + "/api/v1",
+		MainAdminAPIKey:            "test-main-admin-key",
 		MainModelBaseURL:           upstream.URL + "/v1",
 		RuntimeControlCredential:   testRuntimeControlCredential,
 		AppCredential:              "app-secret",
@@ -121,6 +122,56 @@ func TestLoginUsesHttpOnlyAgentSession(t *testing.T) {
 
 	// The upstream test server only implements login; /auth/me is not called by
 	// this assertion, proving login itself does not expose a token.
+}
+
+func TestAgentContextReturnsCurrentUsersAvailableAndFrozenMainBalance(t *testing.T) {
+	var gotHeaders http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/sub2api/balance" {
+			http.NotFound(w, r)
+			return
+		}
+		gotHeaders = r.Header.Clone()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "sub2api.user_balance", "balance": 12.34, "frozen_balance": 2.5,
+		})
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.main = NewMainClient(server.cfg)
+	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"u@example.com"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/context", nil)
+	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("context status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotHeaders.Get("Authorization") != "Bearer app-secret" || gotHeaders.Get("X-Sub2API-On-Behalf-Of") != "42" || gotHeaders.Get("X-Sub2API-Satellite") != "agentapi" {
+		t.Fatalf("context balance lookup did not use the satellite OBO contract: %v", gotHeaders)
+	}
+	var response struct {
+		Data struct {
+			User struct {
+				BalanceCents       int64 `json:"balance_cents"`
+				FrozenBalanceCents int64 `json:"frozen_balance_cents"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Data.User.BalanceCents != 1234 || response.Data.User.FrozenBalanceCents != 250 {
+		t.Fatalf("unexpected context balance facts: %+v", response.Data.User)
+	}
+	for _, secret := range []string{"app-secret", "test-main-admin-key"} {
+		if strings.Contains(rec.Body.String(), secret) {
+			t.Fatalf("server credential leaked in context response: %s", rec.Body.String())
+		}
+	}
 }
 
 func TestAgentProfileUsesAuthenticatedMainProfileAndFiltersAdminFields(t *testing.T) {
@@ -490,7 +541,7 @@ func TestFailedMainRegistrationDoesNotCreateLocalAgentMapping(t *testing.T) {
 	var mapCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/auth/register":
+		case "/api/v1/admin/users":
 			registerCalls.Add(1)
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": "REGISTRATION_REJECTED", "message": "registration rejected"})
@@ -528,12 +579,9 @@ func TestRegistrationMappingFailureCanRetryThroughLoginWithoutDuplicateMainUser(
 	var mapCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/auth/register":
+		case "/api/v1/admin/users":
 			registerCalls.Add(1)
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
-				"access_token": "register-access", "refresh_token": "register-refresh", "expires_in": 3600,
-				"user": map[string]any{"id": 43, "email": "new@example.com", "role": "user"},
-			}))
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 43, "email": "new@example.com", "role": "user"}))
 		case "/api/v1/auth/login":
 			loginCalls.Add(1)
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
@@ -577,7 +625,7 @@ func TestRegistrationMappingFailureCanRetryThroughLoginWithoutDuplicateMainUser(
 	if loginResponse.Code != http.StatusOK || len(loginResponse.Result().Cookies()) != 1 {
 		t.Fatalf("login retry did not recover the mapping: status=%d cookies=%v body=%s", loginResponse.Code, loginResponse.Result().Cookies(), loginResponse.Body.String())
 	}
-	if registerCalls.Load() != 1 || loginCalls.Load() != 1 || mapCalls.Load() != 2 {
+	if registerCalls.Load() != 1 || loginCalls.Load() != 2 || mapCalls.Load() != 2 {
 		t.Fatalf("mapping retry duplicated main-site account creation: register=%d login=%d map=%d", registerCalls.Load(), loginCalls.Load(), mapCalls.Load())
 	}
 }
@@ -617,6 +665,50 @@ func TestSSOCallbackCreatesLocalSessionAndConsumesTicketOnce(t *testing.T) {
 	server.ServeHTTP(replay, httptest.NewRequest(http.MethodGet, "/api/auth/sso/callback?ticket="+url.QueryEscape(ticket), nil))
 	if replay.Code != http.StatusConflict || !strings.Contains(replay.Body.String(), "SSO_TICKET_REPLAYED") {
 		t.Fatalf("SSO replay status=%d body=%s", replay.Code, replay.Body.String())
+	}
+}
+
+func TestMainSiteLoginRedirectUsesRegisteredSatelliteStart(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("main-site login redirect must not call Sub2API server-side: %s", r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.PublicMainURL = upstream.URL
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/main-site/login?next="+url.QueryEscape("/usage?page=2"), nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusFound {
+		t.Fatalf("main-site login status=%d body=%s", response.Code, response.Body.String())
+	}
+	target, err := url.Parse(response.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+	if target.Scheme+"://"+target.Host != upstream.URL || target.Path != "/api/v1/auth/integrations/agentapi/start" || target.Query().Get("next") != "/usage?page=2" {
+		t.Fatalf("unexpected main-site SSO redirect: %s", target.String())
+	}
+	if target.Query().Has("key") || target.Query().Has("token") || strings.Contains(target.RawQuery, "credential") {
+		t.Fatalf("main-site SSO redirect leaked credentials: %s", target.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("missing privacy headers: %#v", response.Header())
+	}
+}
+
+func TestMainSiteLoginRejectsUnsafeOrMissingPublicOrigin(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	for _, publicURL := range []string{"", "http://remote.example", "https://user:pass@main.example", "https://main.example/path", "javascript:alert(1)"} {
+		server.cfg.PublicMainURL = publicURL
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/auth/main-site/login?next=//evil.example", nil))
+		if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "MAIN_SITE_LOGIN_UNAVAILABLE") {
+			t.Fatalf("unsafe public URL %q status=%d body=%s", publicURL, response.Code, response.Body.String())
+		}
 	}
 }
 
@@ -1390,7 +1482,7 @@ func TestModelRelayRejectsInsufficientMappedUserBalanceBeforeUpstream(t *testing
 			if r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" {
 				t.Errorf("balance lookup used the wrong user identity: %v", r.Header)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 0.50})
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 0})
 		case "/v1/chat/completions":
 			modelCalls.Add(1)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1648,6 +1740,23 @@ func TestAgentUsersEndpointPaginatesAndRestrictsNonAdminToSelf(t *testing.T) {
 	if searchPayload.Data.Items[0].BalanceCents != 440 {
 		t.Fatalf("searched user did not receive the authoritative balance: %+v", searchPayload.Data.Items[0])
 	}
+	if _, err := server.store.SetUserStatus(server.cfg.AgentID, "44", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	statusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?status=disabled", nil)
+	statusRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
+	statusResponse := httptest.NewRecorder()
+	server.ServeHTTP(statusResponse, statusRequest)
+	if statusResponse.Code != http.StatusOK || !strings.Contains(statusResponse.Body.String(), `"total":1`) || !strings.Contains(statusResponse.Body.String(), `"main_user_id":"44"`) {
+		t.Fatalf("admin local-status filter failed: status=%d body=%s", statusResponse.Code, statusResponse.Body.String())
+	}
+	invalidStatusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?status=suspended", nil)
+	invalidStatusRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
+	invalidStatusResponse := httptest.NewRecorder()
+	server.ServeHTTP(invalidStatusResponse, invalidStatusRequest)
+	if invalidStatusResponse.Code != http.StatusBadRequest || !strings.Contains(invalidStatusResponse.Body.String(), "INVALID_STATUS") {
+		t.Fatalf("invalid local-status filter status=%d body=%s", invalidStatusResponse.Code, invalidStatusResponse.Body.String())
+	}
 
 	userRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?page=2&page_size=2&q=44", nil)
 	userRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: userSession})
@@ -1749,6 +1858,32 @@ func TestAgentUsageEndpointPaginatesAndKeepsUserScope(t *testing.T) {
 	if userResponse.Code != http.StatusOK || json.Unmarshal(userResponse.Body.Bytes(), &userPayload) != nil || userPayload.Data.Total != 1 || len(userPayload.Data.Items) != 1 || userPayload.Data.Items[0].RequestID != "user-third" {
 		t.Fatalf("user usage page escaped user scope: status=%d body=%s data=%+v", userResponse.Code, userResponse.Body.String(), userPayload.Data)
 	}
+	for _, check := range []struct {
+		query  string
+		status int
+		total  int
+	}{
+		{"?request_id=owner-first", http.StatusOK, 0},
+		{"?request_id=user-third", http.StatusOK, 1},
+		{"?model=not-present", http.StatusOK, 0},
+		{"?start_time=invalid", http.StatusBadRequest, 0},
+		{"?start_time=2026-09-29T00:00:00Z&end_time=2026-09-28T00:00:00Z", http.StatusBadRequest, 0},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/usage"+check.query, nil)
+		req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: userSession})
+		res := httptest.NewRecorder()
+		server.ServeHTTP(res, req)
+		if res.Code != check.status {
+			t.Fatalf("filter %s status=%d body=%s", check.query, res.Code, res.Body.String())
+		}
+		if check.status == http.StatusOK {
+			if err := json.Unmarshal(res.Body.Bytes(), &userPayload); err != nil || userPayload.Data.Total != check.total {
+				t.Fatalf("filtered total: %s", res.Body.String())
+			}
+		} else if !strings.Contains(res.Body.String(), "INVALID_FILTER") {
+			t.Fatalf("unexpected error: %s", res.Body.String())
+		}
+	}
 
 	badRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/usage?page_size=201", nil)
 	badRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
@@ -1836,6 +1971,14 @@ func TestAgentTaskHistoryEndpointRestoresTasksWithSessionUserScope(t *testing.T)
 	if status != http.StatusOK || ownerTotal != 2 || len(ownerItems) != 1 || ownerItems[0].TaskID != "video-older" {
 		t.Fatalf("unexpected second owner task history page: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
 	}
+	status, _, ownerItems, ownerTotal = readPage(ownerSession, "/api/v1/agent/tasks?task_type=image")
+	if status != http.StatusOK || ownerTotal != 1 || len(ownerItems) != 1 || ownerItems[0].TaskID != "image-newer" || ownerItems[0].TaskType != "image" {
+		t.Fatalf("unexpected image-only task history: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
+	}
+	status, _, ownerItems, ownerTotal = readPage(ownerSession, "/api/v1/agent/tasks?task_type=video")
+	if status != http.StatusOK || ownerTotal != 1 || len(ownerItems) != 1 || ownerItems[0].TaskID != "video-older" || ownerItems[0].TaskType != "video" {
+		t.Fatalf("unexpected video-only task history: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
+	}
 	status, _, userItems, userTotal := readPage(userSession, "/api/v1/agent/tasks")
 	if status != http.StatusOK || userTotal != 1 || len(userItems) != 1 || userItems[0].TaskID != "video-other-user" {
 		t.Fatalf("task history escaped the current user's mapping: status=%d total=%d items=%+v", status, userTotal, userItems)
@@ -1847,6 +1990,10 @@ func TestAgentTaskHistoryEndpointRestoresTasksWithSessionUserScope(t *testing.T)
 	status, response, _, _ := readPage(ownerSession, "/api/v1/agent/tasks?page_size=201")
 	if status != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_PAGINATION") {
 		t.Fatalf("invalid task page size status=%d body=%s", status, response.Body.String())
+	}
+	status, response, _, _ = readPage(ownerSession, "/api/v1/agent/tasks?task_type=audio")
+	if status != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FILTER") {
+		t.Fatalf("invalid task type status=%d body=%s", status, response.Body.String())
 	}
 }
 
@@ -2158,7 +2305,7 @@ func TestAsyncImageTrackingFailuresRemainPendingAndDoNotRetryCreate(t *testing.T
 	}
 }
 
-func TestFailedAsyncImagePollReleasesReservationWithoutUsage(t *testing.T) {
+func TestFailedAsyncImagePollWaitsForAuthoritativeUsage(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/sub2api/balance":
@@ -2205,8 +2352,8 @@ func TestFailedAsyncImagePollReleasesReservationWithoutUsage(t *testing.T) {
 		t.Fatalf("failed image poll status=%d body=%s", polled.Code, polled.Body.String())
 	}
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
-	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "released" || usage[0].ActualCents != 0 {
-		t.Fatalf("failed image reservation was not released: %+v err=%v", usage, err)
+	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" || usage[0].ActualCents != 0 {
+		t.Fatalf("missing main usage must remain unconfirmed: %+v err=%v", usage, err)
 	}
 }
 
@@ -2289,7 +2436,7 @@ func TestFailedAsyncPollKeepsReservationWhenUsageAPIIsUnavailable(t *testing.T) 
 	}
 }
 
-func TestStaleVideoTaskReconcilerReleasesFailedTask(t *testing.T) {
+func TestStaleVideoTaskReconcilerWaitsForFailedTaskUsage(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/videos/video-stale":
@@ -2323,8 +2470,8 @@ func TestStaleVideoTaskReconcilerReleasesFailedTask(t *testing.T) {
 	server.store.clock = time.Now
 	server.reconcileStaleVideoTasks(context.Background())
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
-	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "released" {
-		t.Fatalf("stale failed video was not released: %+v err=%v", usage, err)
+	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
+		t.Fatalf("stale failed video must await main usage: %+v err=%v", usage, err)
 	}
 	task, err := server.store.VideoTask(server.cfg.AgentID, "video-stale")
 	if err != nil || task.Status != "failed" {
@@ -2412,7 +2559,7 @@ func TestStaleFailedVideoTaskStaysPendingWhenUsageLookupFails(t *testing.T) {
 	}
 }
 
-func TestStaleImageTaskReconcilerReleasesFailedTask(t *testing.T) {
+func TestStaleImageTaskReconcilerWaitsForFailedTaskUsage(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/sub2api/usage" {
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"items": []map[string]any{}}))
@@ -2447,8 +2594,8 @@ func TestStaleImageTaskReconcilerReleasesFailedTask(t *testing.T) {
 	server.store.clock = time.Now
 	server.reconcileStaleImageTasks(context.Background())
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
-	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "released" {
-		t.Fatalf("stale failed image was not released: %+v err=%v", usage, err)
+	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
+		t.Fatalf("stale failed image must await main usage: %+v err=%v", usage, err)
 	}
 	task, err := server.store.ImageTask(server.cfg.AgentID, "image-stale")
 	if err != nil || task.Status != "failed" {
@@ -2621,6 +2768,21 @@ func TestAgentAPIRejectsForeignCredentialedOriginAndMainKeyProxy(t *testing.T) {
 	if mainResponse.Code != http.StatusForbidden {
 		t.Fatalf("main key proxy status=%d body=%s", mainResponse.Code, mainResponse.Body.String())
 	}
+	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "private-main-access", "private-main-refresh", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+		for _, route := range []string{"/api/v1/admin/users", "/api/v1/keys", "/api/v1/subscriptions", "/api/v1/payment/orders"} {
+			probe := httptest.NewRecorder()
+			req := httptest.NewRequest(method, route, strings.NewReader(`{}`))
+			req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
+			server.ServeHTTP(probe, req)
+			if probe.Code != http.StatusForbidden || !strings.Contains(probe.Body.String(), "AGENT_ROUTE_FORBIDDEN") {
+				t.Fatalf("authenticated owner main route %s %s: %d %s", method, route, probe.Code, probe.Body.String())
+			}
+		}
+	}
 	for _, route := range []string{"/api/v1/users", "/api/v1/balance", "/api/v1/payment/orders"} {
 		probe := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, route, nil)
@@ -2681,7 +2843,7 @@ func TestAgentAdminCanPersistBrandingWithoutExposingOwnerFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/agent/admin/branding", strings.NewReader(`{"name":"Brand Agent","site_name":"Brand Site","site_logo":"https://cdn.example.com/logo.svg"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/agent/admin/branding", strings.NewReader(`{"name":"Brand Agent","site_name":"Brand Site","site_logo":"https://cdn.example.com/logo.svg","doc_url":"https://docs.brand.example.com/start","contact_info":"support@brand.example.com"}`))
 	req.Host = "agent.example.com"
 	req.Header.Set("Origin", "https://agent.example.com")
 	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
@@ -2694,12 +2856,12 @@ func TestAgentAdminCanPersistBrandingWithoutExposingOwnerFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agent.Name != "Brand Agent" || agent.SiteName != "Brand Site" || agent.SiteLogo != "https://cdn.example.com/logo.svg" {
+	if agent.Name != "Brand Agent" || agent.SiteName != "Brand Site" || agent.SiteLogo != "https://cdn.example.com/logo.svg" || agent.DocURL != "https://docs.brand.example.com/start" || agent.ContactInfo != "support@brand.example.com" {
 		t.Fatalf("branding was not persisted: %+v", agent)
 	}
 	settings := httptest.NewRecorder()
 	server.ServeHTTP(settings, httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil))
-	if settings.Code != http.StatusOK || !strings.Contains(settings.Body.String(), "Brand Site") || !strings.Contains(settings.Body.String(), "cdn.example.com/logo.svg") {
+	if settings.Code != http.StatusOK || !strings.Contains(settings.Body.String(), "Brand Site") || !strings.Contains(settings.Body.String(), "cdn.example.com/logo.svg") || !strings.Contains(settings.Body.String(), `"doc_url":"https://docs.brand.example.com/start"`) || !strings.Contains(settings.Body.String(), `"contact_info":"support@brand.example.com"`) {
 		t.Fatalf("public branding did not reflect persisted value: status=%d body=%s", settings.Code, settings.Body.String())
 	}
 	bad := httptest.NewRequest(http.MethodPut, "/api/v1/agent/admin/branding", strings.NewReader(`{"site_logo":"javascript:alert(1)"}`))
@@ -2710,6 +2872,24 @@ func TestAgentAdminCanPersistBrandingWithoutExposingOwnerFields(t *testing.T) {
 	server.ServeHTTP(badResponse, bad)
 	if badResponse.Code != http.StatusBadRequest || !strings.Contains(badResponse.Body.String(), "INVALID_BRANDING") {
 		t.Fatalf("unsafe branding URL status=%d body=%s", badResponse.Code, badResponse.Body.String())
+	}
+	badDoc := httptest.NewRequest(http.MethodPut, "/api/v1/agent/admin/branding", strings.NewReader(`{"doc_url":"javascript:alert(1)"}`))
+	badDoc.Host = "agent.example.com"
+	badDoc.Header.Set("Origin", "https://agent.example.com")
+	badDoc.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
+	badDocResponse := httptest.NewRecorder()
+	server.ServeHTTP(badDocResponse, badDoc)
+	if badDocResponse.Code != http.StatusBadRequest || !strings.Contains(badDocResponse.Body.String(), "INVALID_BRANDING") {
+		t.Fatalf("unsafe documentation URL status=%d body=%s", badDocResponse.Code, badDocResponse.Body.String())
+	}
+	badContact := httptest.NewRequest(http.MethodPut, "/api/v1/agent/admin/branding", strings.NewReader("{\"contact_info\":\"support@example.com\\nforged\"}"))
+	badContact.Host = "agent.example.com"
+	badContact.Header.Set("Origin", "https://agent.example.com")
+	badContact.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
+	badContactResponse := httptest.NewRecorder()
+	server.ServeHTTP(badContactResponse, badContact)
+	if badContactResponse.Code != http.StatusBadRequest || !strings.Contains(badContactResponse.Body.String(), "INVALID_BRANDING") {
+		t.Fatalf("unsafe contact info status=%d body=%s", badContactResponse.Code, badContactResponse.Body.String())
 	}
 }
 
@@ -2935,6 +3115,14 @@ func TestAgentAdminMappedUserStatusIsInstanceLocalWithoutLegacyRuntimeBridge(t *
 	if err != nil {
 		t.Fatal(err)
 	}
+	memberSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, memberKey, err := server.store.CreateAPIKey(server.cfg.AgentID, "43", "existing-key")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, status := range []string{"disabled", "active"} {
 		req := httptest.NewRequest(http.MethodPatch, "http://agent.local/api/v1/agent/admin/users/43/status", strings.NewReader(`{"status":"`+status+`"}`))
 		req.Header.Set("Origin", "http://agent.local")
@@ -2943,6 +3131,38 @@ func TestAgentAdminMappedUserStatusIsInstanceLocalWithoutLegacyRuntimeBridge(t *
 		server.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"`+status+`"`) {
 			t.Fatalf("local status %s returned %d %s", status, rec.Code, rec.Body.String())
+		}
+		// Existing cookies cannot bypass a newly disabled membership. Re-enable
+		// restores local access without changing the user's main-site account.
+		keysReq := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys", nil)
+		keysReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: memberSession})
+		keysResponse := httptest.NewRecorder()
+		server.ServeHTTP(keysResponse, keysReq)
+		want := http.StatusOK
+		if status == "disabled" {
+			want = http.StatusUnauthorized
+		}
+		if keysResponse.Code != want {
+			t.Fatalf("%s cookie access: %d %s", status, keysResponse.Code, keysResponse.Body.String())
+		}
+		if status == "disabled" {
+			for _, useCookie := range []bool{true, false} {
+				modelReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","messages":[]}`))
+				if useCookie {
+					modelReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: memberSession})
+				} else {
+					modelReq.Header.Set("Authorization", "Bearer "+memberKey)
+				}
+				modelResponse := httptest.NewRecorder()
+				server.ServeHTTP(modelResponse, modelReq)
+				wantCode, wantReason := http.StatusForbidden, "AGENT_USER_DISABLED"
+				if useCookie {
+					wantCode, wantReason = http.StatusUnauthorized, "UNAUTHORIZED"
+				}
+				if modelResponse.Code != wantCode || !strings.Contains(modelResponse.Body.String(), wantReason) {
+					t.Fatalf("disabled model access cookie=%v: %d %s", useCookie, modelResponse.Code, modelResponse.Body.String())
+				}
+			}
 		}
 	}
 }
@@ -3118,5 +3338,94 @@ func TestMultipartModelValidationUsesThePublicCatalog(t *testing.T) {
 	}
 	if err := validatePublicModel(writer.FormDataContentType(), body.Bytes()); err != nil {
 		t.Fatalf("public multipart model was rejected: %v", err)
+	}
+}
+
+func TestTenantAnnouncementsAreLocalIsolatedAndUserScoped(t *testing.T) {
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls.Add(1)
+		http.Error(w, "announcement endpoints must not reach Sub2API", http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "member@example.com", "Member"); err != nil {
+		t.Fatal(err)
+	}
+	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerCookie := &http.Cookie{Name: server.cfg.CookieName, Value: ownerSession}
+	memberCookie := &http.Cookie{Name: server.cfg.CookieName, Value: memberSession}
+
+	create := httptest.NewRequest(http.MethodPost, "http://agent.local/api/v1/agent/admin/announcements", strings.NewReader(`{"title":"维护通知","content":"今晚进行租户维护。","status":"active","notify_mode":"popup"}`))
+	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Origin", "http://agent.local")
+	create.AddCookie(ownerCookie)
+	createResponse := httptest.NewRecorder()
+	server.ServeHTTP(createResponse, create)
+	if createResponse.Code != http.StatusCreated || !strings.Contains(createResponse.Body.String(), "维护通知") {
+		t.Fatalf("create announcement status=%d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+
+	forbidden := httptest.NewRequest(http.MethodPost, "http://agent.local/api/v1/agent/admin/announcements", strings.NewReader(`{"title":"越权","content":"禁止","status":"active","notify_mode":"silent"}`))
+	forbidden.Header.Set("Origin", "http://agent.local")
+	forbidden.AddCookie(memberCookie)
+	forbiddenResponse := httptest.NewRecorder()
+	server.ServeHTTP(forbiddenResponse, forbidden)
+	if forbiddenResponse.Code != http.StatusForbidden {
+		t.Fatalf("member managed announcements status=%d body=%s", forbiddenResponse.Code, forbiddenResponse.Body.String())
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/agent/announcements", nil)
+	list.AddCookie(memberCookie)
+	listResponse := httptest.NewRecorder()
+	server.ServeHTTP(listResponse, list)
+	if listResponse.Code != http.StatusOK || !strings.Contains(listResponse.Body.String(), `"unread":1`) || !strings.Contains(listResponse.Body.String(), "维护通知") {
+		t.Fatalf("member announcement list status=%d body=%s", listResponse.Code, listResponse.Body.String())
+	}
+	if listResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("announcement list is cacheable: %v", listResponse.Header())
+	}
+
+	read := httptest.NewRequest(http.MethodPost, "http://agent.local/api/v1/agent/announcements/1/read", strings.NewReader(`{}`))
+	read.Header.Set("Origin", "http://agent.local")
+	read.AddCookie(memberCookie)
+	readResponse := httptest.NewRecorder()
+	server.ServeHTTP(readResponse, read)
+	if readResponse.Code != http.StatusOK {
+		t.Fatalf("mark announcement read status=%d body=%s", readResponse.Code, readResponse.Body.String())
+	}
+
+	ownerList := httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/agent/announcements", nil)
+	ownerList.AddCookie(ownerCookie)
+	ownerListResponse := httptest.NewRecorder()
+	server.ServeHTTP(ownerListResponse, ownerList)
+	if !strings.Contains(ownerListResponse.Body.String(), `"unread":1`) {
+		t.Fatalf("member read state leaked to owner: %s", ownerListResponse.Body.String())
+	}
+	memberList := httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/agent/announcements", nil)
+	memberList.AddCookie(memberCookie)
+	memberListResponse := httptest.NewRecorder()
+	server.ServeHTTP(memberListResponse, memberList)
+	if !strings.Contains(memberListResponse.Body.String(), `"unread":0`) || !strings.Contains(memberListResponse.Body.String(), `"read_at"`) {
+		t.Fatalf("member read state was not persisted: %s", memberListResponse.Body.String())
+	}
+
+	crossOriginDelete := httptest.NewRequest(http.MethodDelete, "http://agent.local/api/v1/agent/admin/announcements/1", nil)
+	crossOriginDelete.Header.Set("Origin", "https://attacker.example")
+	crossOriginDelete.AddCookie(ownerCookie)
+	crossOriginResponse := httptest.NewRecorder()
+	server.ServeHTTP(crossOriginResponse, crossOriginDelete)
+	if crossOriginResponse.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin delete status=%d body=%s", crossOriginResponse.Code, crossOriginResponse.Body.String())
+	}
+	if upstreamCalls.Load() != 0 {
+		t.Fatalf("tenant announcements unexpectedly called Sub2API %d times", upstreamCalls.Load())
 	}
 }

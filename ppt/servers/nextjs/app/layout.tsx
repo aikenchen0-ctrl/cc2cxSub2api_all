@@ -97,10 +97,10 @@ export default function RootLayout({
             {children}
 
           </MixpanelInitializer>
+          <Sub2ApiBalanceWidget />
         </Providers>
         <TailwindBrowserRuntime />
         <Toaster position="top-center" />
-        <Sub2ApiBalanceWidget />
       </body>
     </html>
   );

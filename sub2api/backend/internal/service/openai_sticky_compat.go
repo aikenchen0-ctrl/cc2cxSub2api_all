@@ -199,10 +199,6 @@ func (s *OpenAIGatewayService) refreshStickySessionTTL(ctx context.Context, grou
 	return err
 }
 
-func (s *OpenAIGatewayService) ClearStickySession(ctx context.Context, groupID *int64, sessionHash string) {
-	_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
-}
-
 func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string) error {
 	if s == nil || s.cache == nil {
 		return nil

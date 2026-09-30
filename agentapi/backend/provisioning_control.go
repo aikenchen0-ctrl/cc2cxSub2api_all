@@ -77,8 +77,13 @@ func (s *Server) setProvisioningState(status string, checkedAt time.Time) {
 }
 
 func (s *Server) provisioningState(now time.Time) (string, bool) {
+	status, _, available := s.provisioningSnapshot(now)
+	return status, available
+}
+
+func (s *Server) provisioningSnapshot(now time.Time) (string, time.Time, bool) {
 	if !s.cfg.ProvisioningControlEnabled {
-		return "active", true
+		return "active", time.Time{}, true
 	}
 	s.provisioningMu.RLock()
 	status, checkedAt := s.provisioningStatus, s.provisioningCheckedAt
@@ -88,7 +93,7 @@ func (s *Server) provisioningState(now time.Time) (string, bool) {
 		staleAfter = 90 * time.Second
 	}
 	if status == "" || checkedAt.IsZero() || now.Sub(checkedAt) > staleAfter {
-		return "", false
+		return status, checkedAt, false
 	}
-	return status, true
+	return status, checkedAt, true
 }

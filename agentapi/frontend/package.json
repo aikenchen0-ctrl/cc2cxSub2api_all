@@ -16,13 +16,23 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@airwallex/components-sdk": "^1.35.2",
+    "@stripe/stripe-js": "^9.17.0",
+    "@tanstack/vue-virtual": "3.13.23",
     "axios": "^1.18.0",
+    "chart.js": "^4.5.1",
+    "dompurify": "^3.4.14",
+    "driver.js": "^1.8.0",
+    "marked": "^17.0.1",
     "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
     "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.4",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
+    "@types/qrcode": "^1.5.6",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-vue": "^5.2.3",

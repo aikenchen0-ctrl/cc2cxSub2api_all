@@ -1,6 +1,8 @@
 package com.artisanlab.ai;
 
 import com.artisanlab.skill.ExternalSkillService;
+import com.artisanlab.userconfig.UserApiConfigDtos;
+import com.artisanlab.userconfig.UserApiConfigService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -16,9 +18,47 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AgentRunServiceTest {
+    @Test
+    void lockedBackgroundEditReachesImageJobWithoutTextPlanningAndPreservesInstructions() throws IOException {
+        UserApiConfigService configs = mock(UserApiConfigService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        AiProxyService imageService = mock(AiProxyService.class);
+        ExternalSkillService skills = mock(ExternalSkillService.class);
+        UUID userId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        when(configs.getRequiredConfig(userId)).thenReturn(new UserApiConfigDtos.ResolvedConfig(
+                "https://relay.example/v1", "test-key", "gpt-image-2", "gpt-5.5",
+                "https://relay.example/v1/images/generations", "https://relay.example/v1/images/edits", false));
+        when(skills.requirePromptGuidance(any())).thenReturn("");
+        when(imageService.createImageEditJobFromAgent(eq(userId), any())).thenReturn(job("background-edit"));
+        AgentPlannerService planner = new AgentPlannerService(
+                configs, textService, null, new com.fasterxml.jackson.databind.ObjectMapper());
+        AgentRunService service = new AgentRunService(
+                planner, imageService, mock(ImageJobEventBroadcaster.class), skills);
+        AiProxyDtos.AgentRunRequest request = new AiProxyDtos.AgentRunRequest(
+                "@05y2sr59e把背景换成海边，人物保持不动，整体色调偏暖",
+                "05y2sr59e", "auto", "2k", "",
+                List.of(new AiProxyDtos.ImageReferenceCandidate(
+                        "05y2sr59e", "20260929-120342.png", 1, 768, 1024, assetId.toString())),
+                "", "", "", "run-background-edit");
+
+        AiProxyDtos.AgentRunResponse response = service.run(userId, request);
+
+        ArgumentCaptor<AiProxyService.AgentImageEditJobRequest> captor =
+                ArgumentCaptor.forClass(AiProxyService.AgentImageEditJobRequest.class);
+        verify(imageService).createImageEditJobFromAgent(eq(userId), captor.capture());
+        assertThat(captor.getValue().imageAssetId()).isEqualTo(assetId);
+        assertThat(captor.getValue().prompt()).contains("把背景换成海边", "人物保持不动", "整体色调偏暖");
+        assertThat(captor.getValue().prompt()).doesNotContain("@05y2sr59e");
+        assertThat(response.jobs()).extracting(AiProxyDtos.AgentRunJob::jobId).containsExactly("background-edit");
+        verifyNoInteractions(textService);
+        verify(imageService, never()).createTextToImageJobsFromAgent(any(), any(), any(), any(), any(Integer.class), any(), any(Boolean.class));
+    }
+
     @Test
     void answerPlanDoesNotCreateImageJob() throws IOException {
         AgentPlannerService plannerService = mock(AgentPlannerService.class);

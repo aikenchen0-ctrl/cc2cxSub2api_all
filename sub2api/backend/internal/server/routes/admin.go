@@ -45,6 +45,7 @@ func RegisterAdminRoutes(
 
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
+		registerUpstreamAuditRoutes(admin, h)
 
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
@@ -130,6 +131,15 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerUpstreamAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	audit := admin.Group("/upstream-audit")
+	{
+		audit.GET("", h.Admin.Account.GetUpstreamAuditOverview)
+		audit.POST("/start", h.Admin.Account.StartUpstreamAudit)
+		audit.GET("/jobs/:job_id", h.Admin.Account.GetUpstreamAuditJob)
 	}
 }
 

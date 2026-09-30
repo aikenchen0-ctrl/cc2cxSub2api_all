@@ -888,6 +888,101 @@ func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCurrentUser(t *testing.
 	require.Equal(t, 1, userCount)
 }
 
+func TestLinuxDoOAuthCallbackCompletesSatelliteBindingAndReturnsToAgent(t *testing.T) {
+	const signingKey = "0123456789abcdef0123456789abcdef"
+	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", signingKey)
+	t.Setenv("AGENTAPI_LINK", "https://agent.example")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"linuxdo-access","token_type":"Bearer","expires_in":3600}`))
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"satellite-999","username":"satellite_bind","name":"Satellite Bind"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	handler, client := newLinuxDoOAuthHandlerAndClient(t, false, config.LinuxDoConnectConfig{
+		Enabled:             true,
+		ClientID:            "linuxdo-client",
+		ClientSecret:        "linuxdo-secret",
+		AuthorizeURL:        upstream.URL + "/authorize",
+		TokenURL:            upstream.URL + "/token",
+		UserInfoURL:         upstream.URL + "/userinfo",
+		Scopes:              "read",
+		RedirectURL:         "https://api.example.com/api/v1/auth/oauth/linuxdo/callback",
+		FrontendRedirectURL: "/auth/linuxdo/callback",
+		TokenAuthMethod:     "client_secret_post",
+		UsePKCE:             true,
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	ctx := context.Background()
+	currentUser, err := client.User.Create().
+		SetEmail("satellite-current@example.com").
+		SetUsername("satellite-current").
+		SetPasswordHash("hash").
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	handoff, err := service.NewPaymentResumeService([]byte(signingKey)).CreateOAuthBindingHandoffToken(service.OAuthBindingHandoffClaims{
+		SatelliteSlug: "agentapi",
+		UserID:        currentUser.ID,
+		Provider:      "linuxdo",
+		RedirectTo:    "/profile",
+	})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/linuxdo/callback?code=code-bind&state=state-bind", nil)
+	req.AddCookie(encodedCookie(linuxDoOAuthStateCookieName, "state-bind"))
+	req.AddCookie(encodedCookie(linuxDoOAuthRedirectCookie, "/profile"))
+	req.AddCookie(encodedCookie(linuxDoOAuthVerifierCookie, "verifier-bind"))
+	req.AddCookie(encodedCookie(linuxDoOAuthIntentCookieName, oauthIntentBindCurrentUser))
+	req.AddCookie(encodedCookie(linuxDoOAuthBindUserCookieName, buildEncodedOAuthBindUserCookie(t, currentUser.ID, "test-secret")))
+	req.AddCookie(encodedCookie(oauthPendingBrowserCookieName, "browser-bind"))
+	req.AddCookie(encodedCookie(satelliteOAuthBindingHandoffCookie, handoff))
+	c.Request = req
+
+	handler.LinuxDoOAuthCallback(c)
+
+	require.Equal(t, http.StatusFound, recorder.Code)
+	location := recorder.Header().Get("Location")
+	require.Contains(t, location, "https://agent.example/auth/oauth/binding/callback#")
+	fragment := parseOAuthRedirectFragment(t, location)
+	require.Equal(t, "success", fragment.Get("status"))
+	require.Equal(t, "linuxdo", fragment.Get("provider"))
+	require.Equal(t, "/profile", fragment.Get("redirect"))
+	require.Empty(t, fragment.Get("access_token"))
+	require.Empty(t, fragment.Get("refresh_token"))
+	setCookieHeaders := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	require.Contains(t, setCookieHeaders, satelliteOAuthBindingHandoffCookie+"=")
+	require.Contains(t, setCookieHeaders, oauthPendingSessionCookieName+"=")
+	require.Contains(t, setCookieHeaders, oauthPendingBrowserCookieName+"=")
+
+	identity, err := client.AuthIdentity.Query().
+		Where(
+			authidentity.ProviderTypeEQ("linuxdo"),
+			authidentity.ProviderKeyEQ("linuxdo"),
+			authidentity.ProviderSubjectEQ("satellite-999"),
+		).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, currentUser.ID, identity.UserID)
+
+	sessionCount, err := client.PendingAuthSession.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, sessionCount)
+}
+
 func TestCompleteLinuxDoOAuthRegistrationAppliesPendingAdoptionDecision(t *testing.T) {
 	handler, client := newOAuthPendingFlowTestHandler(t, false)
 	ctx := context.Background()

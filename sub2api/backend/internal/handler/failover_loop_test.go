@@ -76,18 +76,6 @@ func TestSameAccountRetryAllowedUsesDeadlineInsteadOfPoolCount(t *testing.T) {
 	require.False(t, sameAccountRetryAllowed(err, 0, 100))
 }
 
-func TestPreferImmediateAccountSwitchForCapacityErrors(t *testing.T) {
-	require.True(t, preferImmediateAccountSwitch(&service.UpstreamFailoverError{StatusCode: http.StatusTooManyRequests}))
-	require.True(t, preferImmediateAccountSwitch(&service.UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable}))
-	require.True(t, preferImmediateAccountSwitch(&service.UpstreamFailoverError{StatusCode: 529}))
-	require.False(t, preferImmediateAccountSwitch(&service.UpstreamFailoverError{StatusCode: http.StatusForbidden}))
-	require.False(t, sameAccountRetryAllowed(&service.UpstreamFailoverError{
-		StatusCode:               http.StatusTooManyRequests,
-		RetryableOnSameAccount:   true,
-		SameAccountRetryDeadline: time.Now().Add(time.Minute),
-	}, 0, maxSameAccountRetries))
-}
-
 func TestSameAccountRetryAllowedRequiresOptInAndDefaultsToCountLimit(t *testing.T) {
 	err := &service.UpstreamFailoverError{SameAccountRetryDeadline: time.Now().Add(time.Minute)}
 	require.False(t, sameAccountRetryAllowed(err, 0, maxSameAccountRetries))

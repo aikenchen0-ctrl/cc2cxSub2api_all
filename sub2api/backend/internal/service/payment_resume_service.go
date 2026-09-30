@@ -34,14 +34,22 @@ const (
 	VisibleMethodSourceOfficialWechat = "official_wxpay"
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
 
-	wechatPaymentResumeTokenType = "wechat_payment_resume"
+	wechatPaymentResumeTokenType  = "wechat_payment_resume"
+	wechatPaymentHandoffTokenType = "wechat_payment_handoff"
+	oauthBindingHandoffTokenType  = "oauth_binding_handoff"
 
 	paymentResumeNotConfiguredCode    = "PAYMENT_RESUME_NOT_CONFIGURED"
 	paymentResumeNotConfiguredMessage = "payment resume tokens require a configured signing key"
 
-	paymentResumeTokenTTL       = 24 * time.Hour
-	wechatPaymentResumeTokenTTL = 15 * time.Minute
+	paymentResumeTokenTTL        = 24 * time.Hour
+	wechatPaymentResumeTokenTTL  = 15 * time.Minute
+	wechatPaymentHandoffTokenTTL = 5 * time.Minute
+	oauthBindingHandoffTokenTTL  = 5 * time.Minute
 )
+
+func OAuthBindingHandoffTTL() time.Duration {
+	return oauthBindingHandoffTokenTTL
+}
 
 type ResumeTokenClaims struct {
 	OrderID            int64  `json:"oid"`
@@ -65,6 +73,26 @@ type WeChatPaymentResumeClaims struct {
 	Scope       string `json:"scp,omitempty"`
 	IssuedAt    int64  `json:"iat"`
 	ExpiresAt   int64  `json:"exp,omitempty"`
+}
+
+type WeChatPaymentHandoffClaims struct {
+	TokenType     string `json:"tk,omitempty"`
+	SatelliteSlug string `json:"sat"`
+	IssuedAt      int64  `json:"iat"`
+	ExpiresAt     int64  `json:"exp,omitempty"`
+}
+
+// OAuthBindingHandoffClaims authorizes a browser to begin one provider bind
+// flow for one already-authenticated satellite user. It deliberately contains
+// no access token, API key, application credential, or provider secret.
+type OAuthBindingHandoffClaims struct {
+	TokenType     string `json:"tk,omitempty"`
+	SatelliteSlug string `json:"sat"`
+	UserID        int64  `json:"uid"`
+	Provider      string `json:"prv"`
+	RedirectTo    string `json:"rd,omitempty"`
+	IssuedAt      int64  `json:"iat"`
+	ExpiresAt     int64  `json:"exp,omitempty"`
 }
 
 type PaymentResumeService struct {
@@ -417,6 +445,105 @@ func (s *PaymentResumeService) ParseWeChatPaymentResumeToken(token string) (*WeC
 		claims.OrderType = payment.OrderTypeBalance
 	}
 	return &claims, nil
+}
+
+func (s *PaymentResumeService) CreateWeChatPaymentHandoffToken(satelliteSlug string) (string, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return "", err
+	}
+	satelliteSlug = strings.TrimSpace(satelliteSlug)
+	if !validSatelliteSlug(satelliteSlug) {
+		return "", fmt.Errorf("wechat payment handoff token requires a valid satellite slug")
+	}
+	now := time.Now()
+	return s.createSignedToken(WeChatPaymentHandoffClaims{
+		TokenType:     wechatPaymentHandoffTokenType,
+		SatelliteSlug: satelliteSlug,
+		IssuedAt:      now.Unix(),
+		ExpiresAt:     now.Add(wechatPaymentHandoffTokenTTL).Unix(),
+	})
+}
+
+func (s *PaymentResumeService) ParseWeChatPaymentHandoffToken(token string) (*WeChatPaymentHandoffClaims, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return nil, err
+	}
+	var claims WeChatPaymentHandoffClaims
+	if err := s.parseSignedToken(token, &claims); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_HANDOFF", "wechat payment handoff token payload is invalid")
+	}
+	if claims.TokenType != wechatPaymentHandoffTokenType || !validSatelliteSlug(strings.TrimSpace(claims.SatelliteSlug)) {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_HANDOFF", "wechat payment handoff token is invalid")
+	}
+	if err := validatePaymentResumeExpiry(claims.ExpiresAt, "INVALID_WECHAT_PAYMENT_HANDOFF", "wechat payment handoff token has expired"); err != nil {
+		return nil, err
+	}
+	claims.SatelliteSlug = strings.TrimSpace(claims.SatelliteSlug)
+	return &claims, nil
+}
+
+func (s *PaymentResumeService) CreateOAuthBindingHandoffToken(claims OAuthBindingHandoffClaims) (string, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return "", err
+	}
+	claims.SatelliteSlug = strings.TrimSpace(claims.SatelliteSlug)
+	claims.Provider = strings.ToLower(strings.TrimSpace(claims.Provider))
+	claims.RedirectTo = strings.TrimSpace(claims.RedirectTo)
+	if !validSatelliteSlug(claims.SatelliteSlug) || claims.UserID <= 0 || !validOAuthBindingProvider(claims.Provider) {
+		return "", fmt.Errorf("oauth binding handoff requires a valid satellite, user and provider")
+	}
+	if claims.RedirectTo != "" && (!strings.HasPrefix(claims.RedirectTo, "/") || strings.HasPrefix(claims.RedirectTo, "//")) {
+		return "", fmt.Errorf("oauth binding handoff requires a relative redirect path")
+	}
+	now := time.Now()
+	claims.TokenType = oauthBindingHandoffTokenType
+	claims.IssuedAt = now.Unix()
+	claims.ExpiresAt = now.Add(oauthBindingHandoffTokenTTL).Unix()
+	return s.createSignedToken(claims)
+}
+
+func (s *PaymentResumeService) ParseOAuthBindingHandoffToken(token string) (*OAuthBindingHandoffClaims, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return nil, err
+	}
+	var claims OAuthBindingHandoffClaims
+	if err := s.parseSignedToken(token, &claims); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_OAUTH_BINDING_HANDOFF", "oauth binding handoff token payload is invalid")
+	}
+	claims.SatelliteSlug = strings.TrimSpace(claims.SatelliteSlug)
+	claims.Provider = strings.ToLower(strings.TrimSpace(claims.Provider))
+	claims.RedirectTo = strings.TrimSpace(claims.RedirectTo)
+	if claims.TokenType != oauthBindingHandoffTokenType || !validSatelliteSlug(claims.SatelliteSlug) || claims.UserID <= 0 || !validOAuthBindingProvider(claims.Provider) {
+		return nil, infraerrors.BadRequest("INVALID_OAUTH_BINDING_HANDOFF", "oauth binding handoff token is invalid")
+	}
+	if claims.RedirectTo != "" && (!strings.HasPrefix(claims.RedirectTo, "/") || strings.HasPrefix(claims.RedirectTo, "//")) {
+		return nil, infraerrors.BadRequest("INVALID_OAUTH_BINDING_HANDOFF", "oauth binding handoff redirect is invalid")
+	}
+	if err := validatePaymentResumeExpiry(claims.ExpiresAt, "INVALID_OAUTH_BINDING_HANDOFF", "oauth binding handoff token has expired"); err != nil {
+		return nil, err
+	}
+	return &claims, nil
+}
+
+func validOAuthBindingProvider(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "linuxdo", "oidc", "wechat", "dingtalk":
+		return true
+	default:
+		return false
+	}
+}
+
+func validSatelliteSlug(value string) bool {
+	if value == "" || len(value) > 32 {
+		return false
+	}
+	for _, r := range value {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *PaymentResumeService) createSignedToken(claims any) (string, error) {

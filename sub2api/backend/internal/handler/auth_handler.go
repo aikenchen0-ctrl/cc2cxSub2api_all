@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/pkg/satellite"
 
 	"github.com/gin-gonic/gin"
 )
@@ -81,6 +84,11 @@ type SendVerifyCodeRequest struct {
 type SendVerifyCodeResponse struct {
 	Message   string `json:"message"`
 	Countdown int    `json:"countdown"` // 倒计时秒数
+}
+
+type SatelliteVerifyRegistrationEmailRequest struct {
+	Email      string `json:"email" binding:"required,email"`
+	VerifyCode string `json:"verify_code" binding:"required"`
 }
 
 // LoginRequest represents the login request payload
@@ -244,6 +252,46 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 		Message:   "Verification code sent successfully",
 		Countdown: result.Countdown,
 	})
+}
+
+// SatelliteSendVerifyCode is the trusted satellite counterpart of the public
+// registration-code endpoint. The browser talks only to its same-origin
+// satellite backend; the application credential and satellite identity are
+// validated here and never returned to the browser.
+func (h *AuthHandler) SatelliteSendVerifyCode(c *gin.Context) {
+	if _, ok := authenticateSatelliteApplication(c); !ok {
+		return
+	}
+	var req SendVerifyCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.authService.SendSatelliteRegistrationVerifyCodeAsync(c.Request.Context(), req.Email, c.GetHeader("Accept-Language"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, SendVerifyCodeResponse{Message: "Verification code sent successfully", Countdown: result.Countdown})
+}
+
+// SatelliteVerifyRegistrationEmail consumes the main site's one-time email
+// code before the satellite invokes its existing authoritative user-creation
+// path. It creates no user and issues no token by itself.
+func (h *AuthHandler) SatelliteVerifyRegistrationEmail(c *gin.Context) {
+	if _, ok := authenticateSatelliteApplication(c); !ok {
+		return
+	}
+	var req SatelliteVerifyRegistrationEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.authService.VerifySatelliteRegistrationEmailCode(c.Request.Context(), req.Email, req.VerifyCode); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"verified": true})
 }
 
 // Login handles user login
@@ -645,6 +693,32 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	})
 }
 
+// SatelliteForgotPassword sends a reset link back to the registered satellite
+// origin instead of the Sub2API panel. The browser never calls this endpoint
+// directly: the satellite backend authenticates with the shared application
+// credential and the reset origin is resolved from the server-side app catalog.
+func (h *AuthHandler) SatelliteForgotPassword(c *gin.Context) {
+	_, frontendBaseURL, ok := authenticateSatellitePasswordRecovery(c)
+	if !ok {
+		return
+	}
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr)
+	if err := h.authService.VerifyCaptcha(c.Request.Context(), proof, ip.GetClientIP(c)); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if err := h.authService.RequestPasswordResetAsync(c.Request.Context(), req.Email, frontendBaseURL, c.GetHeader("Accept-Language")); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, ForgotPasswordResponse{Message: "If your email is registered, you will receive a password reset link shortly."})
+}
+
 // ResetPasswordRequest 重置密码请求
 type ResetPasswordRequest struct {
 	Email       string `json:"email" binding:"required,email"`
@@ -675,6 +749,57 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	response.Success(c, ResetPasswordResponse{
 		Message: "Your password has been reset successfully. You can now log in with your new password.",
 	})
+}
+
+// SatelliteResetPassword consumes the same authoritative one-time token as the
+// main panel while keeping the application credential on the satellite server.
+func (h *AuthHandler) SatelliteResetPassword(c *gin.Context) {
+	if _, _, ok := authenticateSatellitePasswordRecovery(c); !ok {
+		return
+	}
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.authService.ResetPassword(c.Request.Context(), req.Email, req.Token, req.NewPassword); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, ResetPasswordResponse{Message: "Your password has been reset successfully. You can now log in with your new password."})
+}
+
+func authenticateSatellitePasswordRecovery(c *gin.Context) (satellite.App, string, bool) {
+	app, ok := authenticateSatelliteApplication(c)
+	if !ok {
+		return satellite.App{}, "", false
+	}
+	origin := satellite.ProjectOrigin(app.Slug, app.DefaultOrigin)
+	parsed, err := url.Parse(origin)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		response.Error(c, http.StatusServiceUnavailable, "Satellite password recovery is not configured")
+		return satellite.App{}, "", false
+	}
+	return app, parsed.Scheme + "://" + parsed.Host, true
+}
+
+func authenticateSatelliteApplication(c *gin.Context) (satellite.App, bool) {
+	if c == nil {
+		return satellite.App{}, false
+	}
+	slug := strings.TrimSpace(c.Param("slug"))
+	app, exists := satellite.Lookup(slug)
+	if !exists || slug == "" || strings.TrimSpace(c.GetHeader(middleware2.HeaderSatelliteApp)) != slug {
+		response.Error(c, http.StatusUnauthorized, "Invalid satellite identity")
+		return satellite.App{}, false
+	}
+	authorization := strings.TrimSpace(c.GetHeader("Authorization"))
+	scheme, credential, found := strings.Cut(authorization, " ")
+	if !found || !strings.EqualFold(strings.TrimSpace(scheme), "Bearer") || !middleware2.SatelliteBearerAccepted(strings.TrimSpace(credential)) {
+		response.Error(c, http.StatusUnauthorized, "Invalid satellite credential")
+		return satellite.App{}, false
+	}
+	return app, true
 }
 
 // ==================== Token Refresh Endpoints ====================

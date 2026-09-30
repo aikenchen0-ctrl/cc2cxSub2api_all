@@ -10,6 +10,23 @@ import (
 // Only publish workflows whose input contract is supported by both this app
 // and the Sub2API gateway. Workflow-specific body mapping stays in Sub2API.
 func sub2APIVideoCapabilityConfig(name string) (*ModelCapabilityConfig, error) {
+	if workflow, ok := sub2APIAutoDLWorkflowByID(strings.TrimSpace(name)); ok {
+		durationSupported := workflow.DurationSupported
+		video := &VideoCapabilityConfig{
+			References: VideoReferenceConfig{
+				PromptMaxChars: workflow.PromptMaxChars,
+				MinImages:      workflow.MinImages, MaxImages: workflow.MaxImages, MaxImageBytes: 30 * 1024 * 1024,
+				MaxVideos: workflow.MaxVideos, MaxVideoBytes: 200 * 1024 * 1024, MaxVideoDuration: 30,
+				MaxAudios: workflow.MaxAudios, MaxAudioBytes: 15 * 1024 * 1024, MaxAudioDuration: 30,
+			},
+			Duration:          VideoDurationConfig{Selection: "range", Min: workflow.DurationMin, Max: workflow.DurationMax, Step: 1, Default: workflow.DurationDefault},
+			DurationSupported: &durationSupported,
+			Ratios:            workflow.Ratios, DefaultRatio: workflow.DefaultRatio,
+			Resolutions: workflow.Resolutions, DefaultResolution: workflow.DefaultResolution,
+			Operations: workflow.Operations, DefaultOperation: workflow.DefaultOperation,
+		}
+		return &ModelCapabilityConfig{Version: 1, Video: video}, nil
+	}
 	video := &VideoCapabilityConfig{
 		References: VideoReferenceConfig{PromptMaxChars: 1000},
 		Duration:   VideoDurationConfig{Selection: "range", Min: 1, Max: 15, Step: 1, Default: 5},
@@ -22,19 +39,9 @@ func sub2APIVideoCapabilityConfig(name string) (*ModelCapabilityConfig, error) {
 	case "grok-imagine-video-1.5", "grok-imagine-video", "seedance-2.0", "seedance-2.0-fast",
 		"kling-v1", "kling-v1-5", "kling-v1-6", "kling-v2-5-turbo", "kling-v2-6", "kling-v3", "kling-v3-omni":
 		return DefaultModelCapabilityConfigForModel(sub2APIVideoProtocol, normalized), nil
-	case "minimax", "minimax-h3", "minimax_h3", "minimax_h3_b99_001":
-	case "minimax_h3_b99_002":
-		video.References.MinImages, video.References.MaxImages = 2, 2
-		video.References.MaxImageBytes = 30 * 1024 * 1024
-		video.Operations, video.DefaultOperation = []string{"image_to_video"}, "image_to_video"
-	case "minimax_h3_b99_003_12s":
-		video.References.PromptMaxChars = 10000
-		video.References.MinImages, video.References.MaxImages = 1, 9
-		video.References.MaxImageBytes = 30 * 1024 * 1024
-		video.Duration.Max = 12
-		video.Operations, video.DefaultOperation = []string{"image_to_video", "reference_to_video"}, "image_to_video"
+	case "minimax", "minimax-h3", "minimax_h3":
 	default:
-		return nil, fmt.Errorf("SUB2API_RELAY_VIDEO_MODELS contains unsupported model %q; supported models: grok-imagine-video-1.5, seedance-2.0, kling-v3, minimax_h3_b99_001, minimax_h3_b99_002, minimax_h3_b99_003_12s", name)
+		return nil, fmt.Errorf("SUB2API_RELAY_VIDEO_MODELS contains unsupported model %q", name)
 	}
 	return &ModelCapabilityConfig{Version: 1, Video: video}, nil
 }

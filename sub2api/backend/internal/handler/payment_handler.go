@@ -94,6 +94,22 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 // payment methods with limits, subscription plans, and configuration.
 // GET /api/v1/payment/checkout-info
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
+	h.getCheckoutInfo(c)
+}
+
+// SatelliteGetCheckoutInfo exposes the same browser-safe checkout catalogue
+// used by the main-site payment page. The satellite route is authenticated by
+// the application credential/OBO middleware; provider secrets never appear in
+// this DTO.
+// GET /v1/sub2api/payment/checkout-info
+func (h *PaymentHandler) SatelliteGetCheckoutInfo(c *gin.Context) {
+	if _, ok := satellitePaymentUserID(c); !ok {
+		return
+	}
+	h.getCheckoutInfo(c)
+}
+
+func (h *PaymentHandler) getCheckoutInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Fetch limits (methods + global range)
@@ -239,7 +255,8 @@ type CreateOrderRequest struct {
 	// IsMobile lets the frontend declare its mobile status directly. When
 	// nil we fall back to User-Agent heuristics (which miss iPadOS / some
 	// embedded browsers that strip the "Mobile" keyword).
-	IsMobile *bool `json:"is_mobile,omitempty"`
+	IsMobile        *bool `json:"is_mobile,omitempty"`
+	IsWechatBrowser *bool `json:"is_wechat_browser,omitempty"`
 }
 
 // CreateOrder creates a new payment order.
@@ -249,6 +266,21 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 	if !ok {
 		return
 	}
+	h.createOrderForUser(c, subject.UserID, false, "")
+}
+
+// SatelliteCreateOrder creates the authoritative main-site order for the
+// effective OBO user. It intentionally accepts no user selector.
+// POST /v1/sub2api/payment/orders
+func (h *PaymentHandler) SatelliteCreateOrder(c *gin.Context) {
+	userID, ok := satellitePaymentUserID(c)
+	if !ok {
+		return
+	}
+	h.createOrderForUser(c, userID, true, strings.TrimSpace(c.GetHeader(middleware2.HeaderSatelliteApp)))
+}
+
+func (h *PaymentHandler) createOrderForUser(c *gin.Context, userID int64, allowBrowserHint bool, satelliteSlug string) {
 
 	var req CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -271,18 +303,23 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 	if req.IsMobile != nil {
 		mobile = *req.IsMobile
 	}
+	wechatBrowser := isWeChatBrowser(c)
+	if allowBrowserHint && req.IsWechatBrowser != nil {
+		wechatBrowser = *req.IsWechatBrowser
+	}
 	result, err := h.paymentService.CreateOrder(c.Request.Context(), service.CreateOrderRequest{
-		UserID:          subject.UserID,
+		UserID:          userID,
 		Amount:          req.Amount,
 		PaymentType:     req.PaymentType,
 		OpenID:          req.OpenID,
 		ClientIP:        c.ClientIP(),
 		IsMobile:        mobile,
-		IsWeChatBrowser: isWeChatBrowser(c),
+		IsWeChatBrowser: wechatBrowser,
 		SrcHost:         c.Request.Host,
 		SrcURL:          c.Request.Referer(),
 		ReturnURL:       req.ReturnURL,
 		PaymentSource:   req.PaymentSource,
+		SatelliteSlug:   satelliteSlug,
 		OrderType:       req.OrderType,
 		PlanID:          req.PlanID,
 		Locale:          c.GetHeader("Accept-Language"),
@@ -339,14 +376,40 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 	if !ok {
 		return
 	}
+	h.getOrdersForUser(c, subject.UserID)
+}
 
+// SatelliteGetMyOrders returns only the effective satellite user's main-site
+// payment orders. The user identity is derived from the on-behalf-of API key;
+// no user selector is accepted from the request.
+// GET /v1/sub2api/orders
+func (h *PaymentHandler) SatelliteGetMyOrders(c *gin.Context) {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.getOrdersForUser(c, apiKey.User.ID)
+}
+
+func (h *PaymentHandler) getOrdersForUser(c *gin.Context, userID int64) {
 	page, pageSize := response.ParsePagination(c)
-	orders, total, err := h.paymentService.GetUserOrders(c.Request.Context(), subject.UserID, service.OrderListParams{
+	var paidSince *time.Time
+	if raw := strings.TrimSpace(c.Query("paid_since")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			response.BadRequest(c, "Invalid paid_since")
+			return
+		}
+		paidSince = &parsed
+	}
+	orders, total, err := h.paymentService.GetUserOrders(c.Request.Context(), userID, service.OrderListParams{
 		Page:        page,
 		PageSize:    pageSize,
 		Status:      c.Query("status"),
 		OrderType:   c.Query("order_type"),
 		PaymentType: c.Query("payment_type"),
+		PaidSince:   paidSince,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -384,14 +447,29 @@ func (h *PaymentHandler) CancelOrder(c *gin.Context) {
 	if !ok {
 		return
 	}
+	h.cancelOrderForUser(c, subject.UserID)
+}
 
+// SatelliteCancelOrder applies the normal main-site ownership checks to the
+// current satellite user.
+// POST /v1/sub2api/orders/:id/cancel
+func (h *PaymentHandler) SatelliteCancelOrder(c *gin.Context) {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.cancelOrderForUser(c, apiKey.User.ID)
+}
+
+func (h *PaymentHandler) cancelOrderForUser(c *gin.Context, userID int64) {
 	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid order ID")
 		return
 	}
 
-	msg, err := h.paymentService.CancelOrder(c.Request.Context(), orderID, subject.UserID)
+	msg, err := h.paymentService.CancelOrder(c.Request.Context(), orderID, userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -411,7 +489,22 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 	if !ok {
 		return
 	}
+	h.requestRefundForUser(c, subject.UserID)
+}
 
+// SatelliteRequestRefund submits a refund request for an order owned by the
+// effective satellite user.
+// POST /v1/sub2api/orders/:id/refund-request
+func (h *PaymentHandler) SatelliteRequestRefund(c *gin.Context) {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.requestRefundForUser(c, apiKey.User.ID)
+}
+
+func (h *PaymentHandler) requestRefundForUser(c *gin.Context, userID int64) {
 	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid order ID")
@@ -424,7 +517,7 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 		return
 	}
 
-	if err := h.paymentService.RequestRefund(c.Request.Context(), orderID, subject.UserID, req.Reason); err != nil {
+	if err := h.paymentService.RequestRefund(c.Request.Context(), orderID, userID, req.Reason); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -458,6 +551,21 @@ func (h *PaymentHandler) VerifyOrder(c *gin.Context) {
 	if !ok {
 		return
 	}
+	h.verifyOrderForUser(c, subject.UserID)
+}
+
+// SatelliteVerifyOrder verifies only an order owned by the effective OBO
+// user and returns the normal browser-safe order projection.
+// POST /v1/sub2api/payment/orders/verify
+func (h *PaymentHandler) SatelliteVerifyOrder(c *gin.Context) {
+	userID, ok := satellitePaymentUserID(c)
+	if !ok {
+		return
+	}
+	h.verifyOrderForUser(c, userID)
+}
+
+func (h *PaymentHandler) verifyOrderForUser(c *gin.Context, userID int64) {
 
 	var req VerifyOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -465,12 +573,21 @@ func (h *PaymentHandler) VerifyOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.paymentService.VerifyOrderByOutTradeNo(c.Request.Context(), req.OutTradeNo, subject.UserID)
+	order, err := h.paymentService.VerifyOrderByOutTradeNo(c.Request.Context(), req.OutTradeNo, userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, sanitizePaymentOrderForResponse(order))
+}
+
+func satellitePaymentUserID(c *gin.Context) (int64, bool) {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return 0, false
+	}
+	return apiKey.User.ID, true
 }
 
 // PublicOrderResult is returned after a signed resume-token lookup. The token

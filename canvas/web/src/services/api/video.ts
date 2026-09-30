@@ -7,7 +7,7 @@ import { dataUrlToGeminiInlineData, geminiActionUrl, geminiDirectHeaders, gemini
 import { isGeminiVeo31Model, normalizeGeminiVideoDuration, normalizeGeminiVideoRatio, normalizeGeminiVideoResolution } from "@/lib/gemini-video";
 import { boolConfig, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio } from "@/lib/seedance-video";
 import { isKIEGrokVideoModel, isKIEKlingV3Config, kieKlingOmniVariant } from "./protocols/kling-models";
-import { autoDLBaseUrl, getAutoDLCapabilities } from "@/lib/autodl";
+import { autoDLBaseUrl, getAutoDLCapabilities, isAutoDLConfig } from "@/lib/autodl";
 import { fetchAutoDLWorkflow } from "./autodl";
 import { amamVideoDefaultResolution, amamVideoReferenceLimits, isAgnesVideoV25Model, isAmamVideoModel, isCogVideoX3Model, modelKey, normalizeAmamVideoRatio, normalizeCogVideoX3Duration, supportsVideoAudioGeneration } from "@/lib/video-model-capabilities";
 import { resolveMediaUrl, uploadMediaFile, uploadRemoteMediaToServer } from "@/services/file-storage";
@@ -349,11 +349,21 @@ async function createVideoRequestBody(config: AiConfig, model: string, prompt: s
             baseUrl: config.channelMode === "remote" ? "" : localChannelForActiveModel(config)?.baseUrl || config.baseUrl,
         });
     }
-    if (videoChannelProtocol(config, model) === "autodl") {
+    if (isAutoDLConfig(config, model)) {
         const capabilities = getAutoDLCapabilities(await fetchAutoDLWorkflow(autoDLBaseUrl(config, model), model));
         if (!capabilities) throw new VideoRequestError("当前 AutoDL 工作流尚未适配");
-        const seconds = config.videoSeconds?.trim() === "6" ? "" : config.videoSeconds?.trim() || String(capabilities.duration?.default ?? "");
-        const resolution = config.vquality?.trim() === "720" ? "" : config.vquality?.trim() || String(capabilities.resolution?.default ?? "");
+        if (capabilities.promptRequired && !prompt.trim()) throw new VideoRequestError("请填写视频提示词");
+        if (input.references.length < capabilities.imageMin || input.videoReferences.length < capabilities.videoMin || input.audioReferences.length < capabilities.audioMin) {
+            throw new VideoRequestError(`当前工作流至少需要 ${capabilities.imageMin} 张参考图、${capabilities.videoMin} 个参考视频、${capabilities.audioMin} 个参考音频，请补充素材`);
+        }
+        if (capabilities.firstFrameRequired && !input.firstFrame || capabilities.lastFrameRequired && !input.lastFrame) throw new VideoRequestError("请补充当前工作流必需的首尾帧");
+        if (input.references.length > capabilities.imageMax || input.videoReferences.length > capabilities.videoMax || input.audioReferences.length > capabilities.audioMax) {
+            throw new VideoRequestError(`当前工作流最多支持 ${capabilities.imageMax} 张参考图、${capabilities.videoMax} 个参考视频、${capabilities.audioMax} 个参考音频，请移除多余素材`);
+        }
+        if (input.firstFrame && !capabilities.firstFrame || input.lastFrame && !capabilities.lastFrame) throw new VideoRequestError("当前工作流不支持所选首尾帧");
+        const seconds = capabilities.duration ? config.videoSeconds?.trim() || String(capabilities.duration.default ?? "") : "";
+        const resolution = capabilities.resolution?.options?.some((option) => option.label === config.vquality)
+            ? config.vquality : String(capabilities.resolution?.default ?? "");
         const { autoDLReferenceURL } = await import("./direct-ai");
         const [images, videos, audios, firstFrame, lastFrame] = await Promise.all([
             Promise.all((capabilities.imageMax ? input.references : []).map(autoDLReferenceURL)),

@@ -25,6 +25,7 @@ import { externalBridgeCanStart, type ExternalBridgeReadinessToken } from './ext
 import {
   EditorBridgeRequestError,
   editorBridgeHeaders,
+  fetchEditorBridge,
   registerEditorBridge,
   sendEditorBridgeResult,
   unregisterEditorBridge,
@@ -152,7 +153,7 @@ async function pollEditor(
       editorId: binding.editorInstanceId,
       baseRevision: browserProjectOwnership(projectId)?.baseRevision ?? binding.baseRevision,
     });
-    const response = await fetch(`/api/external-agent/poll?${query}`, {
+    const response = await fetchEditorBridge('poll', `/api/external-agent/poll?${query}`, {
       headers: editorBridgeHeaders(false, ownership.registrationCapability),
       signal,
     });
@@ -185,7 +186,7 @@ async function pollCancellations(
 ): Promise<void> {
   const query = new URLSearchParams({ projectId, editorId: editorInstanceId });
   while (!signal.aborted) {
-    const response = await fetch(`/api/external-agent/cancellation?${query}`, {
+    const response = await fetchEditorBridge('cancellation poll', `/api/external-agent/cancellation?${query}`, {
       headers: editorBridgeHeaders(false, registrationCapability),
       signal,
     });

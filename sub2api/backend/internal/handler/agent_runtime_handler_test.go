@@ -146,6 +146,12 @@ func TestSatelliteUserUsageUsesAuthenticatedKeyOwnerAndExistingUsageLogs(t *test
 	if !strings.Contains(body, `"model":"gpt-5.5"`) || strings.Contains(body, "must-not-leak") {
 		t.Fatalf("satellite usage returned an unsafe result: %s", body)
 	}
+	if !strings.Contains(body, `"id":91`) || strings.Contains(body, `"id":92`) || !strings.Contains(body, `"actual_cost":0.25`) {
+		t.Fatalf("satellite usage must expose only the authenticated user's billing record identity and actual cost: %s", body)
+	}
+	if recorder.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("user billing records must not be cached")
+	}
 }
 
 func TestAgentRuntimeModelPolicyUpdatesValidatedPerAgentScope(t *testing.T) {

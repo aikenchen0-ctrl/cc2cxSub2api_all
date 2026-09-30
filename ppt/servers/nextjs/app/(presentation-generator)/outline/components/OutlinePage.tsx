@@ -151,7 +151,7 @@ const OutlinePage: React.FC = () => {
   const outlineControlsBusy =
     isRegeneratingOutline || streamState.isLoading || streamState.isStreaming;
   const isOutlineReady =
-    hasSelectedTemplate && hasOutlineStreamFinished && !outlineControlsBusy;
+    hasSelectedTemplate && hasOutlineStreamFinished && !outlineControlsBusy && !streamState.error && outlines.length > 0;
   const isOutlineAssistantVisible = !isTemplateStage && hasSelectedTemplate;
   // Keep regeneration available when a completed outline is restored after a
   // downstream presentation-generation failure. The stream-finished flag is
@@ -426,6 +426,12 @@ const OutlinePage: React.FC = () => {
               />
 
               <div className="mt-12">
+                {streamState.error && (
+                  <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+                    <p>{streamState.error}</p>
+                    <button type="button" className="mt-3 underline" onClick={streamState.retry}>重新生成大纲</button>
+                  </div>
+                )}
                 <OutlineContent
                   outlines={outlines}
                   isLoading={streamState.isLoading}

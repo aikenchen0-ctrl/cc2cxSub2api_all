@@ -277,6 +277,11 @@ func configuredSub2APIChannel() (model.ModelChannel, error) {
 		} else if name == "SUB2API_RELAY_MODELS" && strings.TrimSpace(raw) == "" {
 			raw = "gpt-5.5"
 		}
+		if name == "SUB2API_RELAY_VIDEO_MODELS" {
+			// Existing deployments often explicitly list only the original three models.
+			// Managed AutoDL presets should appear there without a manual env edit.
+			raw += "," + strings.Join(AutoDLVideoModels, ",")
+		}
 		for _, item := range strings.Split(raw, ",") {
 			if strings.TrimSpace(item) == "" {
 				continue

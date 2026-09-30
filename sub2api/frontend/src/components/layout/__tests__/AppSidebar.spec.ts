@@ -120,7 +120,7 @@ describe('AppSidebar AI剪辑 SSO entry', () => {
 
 describe('AppSidebar AgentAPI SSO entry', () => {
   it('opens the user dashboard through the registered SSO route without passing a key', () => {
-    expect(zhCommon.nav.agentApi).toBe('代理分站')
+    expect(zhCommon.nav.agentApi).toBe('一键开分站')
     expect(componentSource).toContain("/auth/integrations/agentapi/start")
     expect(componentSource).toContain('?next=%2Fdashboard')
     expect(componentSource).toMatch(/label: t\('nav\.agentApi'\), href: agentApiSsoUrl, includeApiKey: false, sso: true, icon: 'server'/)
@@ -128,11 +128,11 @@ describe('AppSidebar AgentAPI SSO entry', () => {
   })
 })
 
-describe('AppSidebar ModelAudit SSO entry', () => {
-  it('opens ModelAudit through its registered SSO route without passing an API key', () => {
+describe('AppSidebar upstream audit module entry', () => {
+  it('opens upstream audit inside the Sub2API admin panel', () => {
     expect(componentSource).toContain("t('nav.modelAudit')")
-    expect(componentSource).toContain("buildApiUrl('/auth/integrations/modelaudit/start')")
-    expect(componentSource).toMatch(/label: t\('nav\.modelAudit'\), href: buildApiUrl\('\/auth\/integrations\/modelaudit\/start'\) \+ '\?next=%2F', includeApiKey: false, sso: true, icon: 'shield'/)
+    expect(componentSource).toMatch(/path: '\/admin\/upstream-audit', label: t\('nav\.modelAudit'\), icon: ShieldIcon/)
+    expect(componentSource).not.toContain('/auth/integrations/modelaudit/start')
   })
 })
 

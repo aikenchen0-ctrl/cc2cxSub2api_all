@@ -853,6 +853,11 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
 // （isDeepseekServableModel）——未知模型名透传上游只会得到 404/400，并误触发
 // per-(账号,模型) 30 分钟冷却；带 [1m] 上下文后缀的写法先归一化再比对。
 func (a *Account) IsModelSupported(requestedModel string) bool {
+	// ComfyUI workflows have their own catalog and are absent from AutoDL's
+	// OpenAI /models response (which only populates the text/image mapping).
+	if a.IsAutoDLVideoAccount() && IsAutoDLVideoModel(requestedModel) {
+		return true
+	}
 	// 透传模式仅替换认证、模型语义完全交由上游决定，因此放行所有模型。
 	// 该短路必须在 model_mapping 判定之前：账号从"白名单模式"切换到透传后，
 	// credentials 里常残留旧的非空 model_mapping，若不在此放行，透传账号会被
@@ -1830,6 +1835,9 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	}
 	if capability == "" {
 		return true
+	}
+	if capability == OpenAIEndpointCapabilityAutoDLVideo {
+		return a.IsAutoDLVideoAccount()
 	}
 	if !a.IsOpenAICompatible() {
 		return false

@@ -113,6 +113,12 @@ const currencyLabels: Record<string, string> = {
 }
 
 const reasonMessages: Record<string, string> = {
+  MAIN_ADMIN_NOT_CONFIGURED: '本站尚未配置主站注册权限，请联系站长。',
+  REGISTRATION_RATE_LIMITED: '注册尝试过于频繁，请一小时后重试。',
+  REGISTRATION_UNAVAILABLE: '注册安全检查暂不可用，请稍后重试。',
+  REGISTRATION_RECOVERY_UNAVAILABLE: '暂时无法核实注册归属，请稍后重新登录。',
+  REGISTERED_LOGIN_REQUIRED: '主站账号已创建，请转到登录页面登录，不要重复注册。',
+  USER_MAPPING_FAILED: '主站账号已创建，本站归属暂未保存。请尝试登录恢复，或联系站长。',
   HOST_NOT_ALLOWED: '当前访问域名未配置。',
   CORS_ORIGIN_REJECTED: '访问来源不受允许。',
   CSRF_ORIGIN_REJECTED: '请求来源校验失败，请刷新页面后重试。',

@@ -57,6 +57,11 @@ func TestSub2APIIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	t.Setenv("SUB2API_RELAY_BASE_URL", "http://sub2api:8080")
 	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-test-credential")
 	t.Setenv("SUB2API_RELAY_MODELS", "gpt-5.5,gpt-5.5")
@@ -74,7 +79,7 @@ func TestSub2APIIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	serialized, _ := json.Marshal(public)
-	if strings.Contains(string(serialized), channel.APIKey) || len(public.ModelChannel.AvailableModels) != 2 || !*public.ModelChannel.AllowUserRemoteChannel {
+	if strings.Contains(string(serialized), channel.APIKey) || len(public.ModelChannel.AvailableModels) != 5+len(AutoDLVideoModels) || !*public.ModelChannel.AllowUserRemoteChannel {
 		t.Fatal("public settings invalid or secret exposed")
 	}
 	if err := EnsureSub2APIRelayChannel(); err != nil {

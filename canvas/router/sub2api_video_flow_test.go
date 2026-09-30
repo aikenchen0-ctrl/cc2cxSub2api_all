@@ -19,6 +19,7 @@ import (
 	"github.com/tigerowo/infinite-canvas/config"
 	"github.com/tigerowo/infinite-canvas/handler"
 	"github.com/tigerowo/infinite-canvas/model"
+	"github.com/tigerowo/infinite-canvas/repository"
 	"github.com/tigerowo/infinite-canvas/service"
 )
 
@@ -36,20 +37,28 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 		return
 	}
 	config.Cfg = config.Config{StorageDriver: "sqlite", DatabaseDSN: t.TempDir() + "/test.db", JWTSecret: strings.Repeat("j", 32), AILogDir: t.TempDir()}
-	var polls, downloads atomic.Int32
+	t.Cleanup(func() {
+		if db, err := repository.DB(); err == nil {
+			if sqlDB, err := db.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
+		}
+	})
+	var creates, polls, downloads atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer satellite-video-credential" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "video-owner" || r.Header.Get("X-Sub2API-Satellite") != "canvas" {
 			t.Error("missing upstream credential")
 		}
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/v1/videos":
+			creates.Add(1)
 			if err := r.ParseMultipartForm(1 << 20); err != nil {
 				t.Error(err)
 				http.Error(w, "invalid multipart", 400)
 				return
 			}
 			defer r.MultipartForm.RemoveAll()
-			for key, expected := range map[string]string{"model": "sora-2", "prompt": "Test reference video", "seconds": "8", "size": "1280x720", "resolution_name": "720p"} {
+			for key, expected := range map[string]string{"model": "grok-imagine-video-1.5", "prompt": "Test reference video", "seconds": "8", "size": "1280x720", "resolution_name": "720p"} {
 				if got := r.FormValue(key); got != expected {
 					t.Errorf("%s = %q, want %q", key, got, expected)
 				}
@@ -66,9 +75,12 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 				t.Error("reference image changed")
 			}
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"id":"provider-video","status":"queued","model":"sora-2","seconds":"8","size":"1280x720"}`)
+			io.WriteString(w, `{"id":"provider-video","status":"queued","model":"grok-imagine-video-1.5","seconds":"8","size":"1280x720"}`)
 		case r.Method == "GET" && r.URL.Path == "/v1/videos/provider-video":
-			polls.Add(1)
+			if polls.Add(1) == 1 {
+				http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"id":"provider-video","status":"completed","progress":100,"seconds":"8","size":"1280x720"}`)
 		case r.Method == "GET" && r.URL.Path == "/v1/videos/provider-video/content":
@@ -85,7 +97,7 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 	t.Setenv("SUB2API_APP_CREDENTIAL", "satellite-video-credential")
 	t.Setenv("SUB2API_RELAY_MODELS", "")
 	t.Setenv("SUB2API_RELAY_IMAGE_MODELS", "")
-	t.Setenv("SUB2API_RELAY_VIDEO_MODELS", "sora-2")
+	t.Setenv("SUB2API_RELAY_VIDEO_MODELS", "grok-imagine-video-1.5")
 	if err := service.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +110,7 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 	handler.StartVideoTaskPoller()
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
-	for key, value := range map[string]string{"model": "sora-2", "prompt": "Test reference video", "seconds": "8", "size": "1280x720", "resolution_name": "720p"} {
+	for key, value := range map[string]string{"model": "grok-imagine-video-1.5", "prompt": "Test reference video", "seconds": "8", "size": "1280x720", "resolution_name": "720p"} {
 		if err := form.WriteField(key, value); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +127,7 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 	}
 	request := httptest.NewRequest("POST", "/api/v1/videos", &body)
 	request.Header.Set("Content-Type", form.FormDataContentType())
-	request.Header.Set("Authorization", "Bearer "+session.Token)
+	request.AddCookie(&http.Cookie{Name: service.SessionCookieName, Value: session.Token})
 	request.Header.Set("X-Model-Channel-ID", "sub2api-relay")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -145,12 +157,12 @@ func TestSub2APIVideoLifecycleHTTP(t *testing.T) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	if task.Status != "completed" || polls.Load() == 0 {
+	if task.Status != "completed" || polls.Load() < 2 || creates.Load() != 1 {
 		t.Fatalf("polling failed: status=%s polls=%d", task.Status, polls.Load())
 	}
 	for _, suffix := range []string{"", "/content"} {
 		request = httptest.NewRequest("GET", "/api/v1/videos/"+created.Data.ID+suffix, nil)
-		request.Header.Set("Authorization", "Bearer "+session.Token)
+		request.AddCookie(&http.Cookie{Name: service.SessionCookieName, Value: session.Token})
 		response = httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 		if suffix == "" {

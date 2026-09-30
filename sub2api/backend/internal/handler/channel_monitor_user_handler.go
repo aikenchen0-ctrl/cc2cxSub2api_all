@@ -7,6 +7,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -158,6 +159,24 @@ func userMonitorDetailToResponse(d *service.UserMonitorDetail) *channelMonitorUs
 
 // List GET /api/v1/channel-monitors
 func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
+	h.list(c)
+}
+
+// SatelliteList exposes the same field-whitelisted user monitor view through
+// the satellite gateway. Identity is resolved by the gateway's application
+// credential + on-behalf-of chain; AgentAPI never receives monitor admin data.
+//
+// GET /v1/sub2api/channel-monitors
+func (h *ChannelMonitorUserHandler) SatelliteList(c *gin.Context) {
+	apiKey, ok := servermiddleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.list(c)
+}
+
+func (h *ChannelMonitorUserHandler) list(c *gin.Context) {
 	if !h.featureEnabled(c) {
 		response.Success(c, gin.H{"items": []channelMonitorUserListItem{}})
 		return
@@ -177,6 +196,24 @@ func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
 
 // GetStatus GET /api/v1/channel-monitors/:id/status
 func (h *ChannelMonitorUserHandler) GetStatus(c *gin.Context) {
+	h.getStatus(c)
+}
+
+// SatelliteGetStatus is the read-only satellite counterpart of GetStatus.
+// The response contains only the public model/status aggregates already used
+// by the main-site user page.
+//
+// GET /v1/sub2api/channel-monitors/:id/status
+func (h *ChannelMonitorUserHandler) SatelliteGetStatus(c *gin.Context) {
+	apiKey, ok := servermiddleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.getStatus(c)
+}
+
+func (h *ChannelMonitorUserHandler) getStatus(c *gin.Context) {
 	if !h.featureEnabled(c) {
 		response.ErrorFrom(c, service.ErrChannelMonitorNotFound)
 		return

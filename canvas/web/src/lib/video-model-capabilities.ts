@@ -78,6 +78,7 @@ export function normalizeCogVideoX3Duration(value: string) {
 }
 
 export function supportsVideoFrameReferences(modelName: string, protocol = "") {
+    if (modelName.startsWith("minimax_h3_") || modelName === "wan2.2animate-v4-motion_retargeting") return modelName === "minimax_h3_b99_002" || modelName === "minimax_h3_lightx2v";
     if (protocol === "openai" && isAmamVideoModel(modelName)) return false;
     if (protocol === "autodl") return modelName === "minimax_h3_b99_002" || modelName === "minimax_h3_lightx2v";
     const model = modelKey(modelName);

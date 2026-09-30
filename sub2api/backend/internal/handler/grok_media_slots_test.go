@@ -120,10 +120,23 @@ func (s *grokMediaSlotsCache) assertReleased(t *testing.T) {
 
 type grokMediaSlotBindings struct {
 	testutil.StubGatewayCache
-	owner  int64
-	writes int
-	key    string
-	billed map[string]bool
+	owner   int64
+	writes  int
+	key     string
+	billed  map[string]bool
+	pending map[string][]byte
+}
+
+func (s *grokMediaSlotBindings) SetGrokVideoPendingBilling(_ context.Context, key string, value []byte, _ time.Duration) error {
+	if s.pending == nil {
+		s.pending = make(map[string][]byte)
+	}
+	s.pending[key] = value
+	return nil
+}
+
+func (s *grokMediaSlotBindings) GetGrokVideoPendingBilling(_ context.Context, key string) ([]byte, error) {
+	return s.pending[key], nil
 }
 
 func (s *grokMediaSlotBindings) GetSessionAccountID(_ context.Context, groupID int64, key string) (int64, error) {
@@ -402,4 +415,42 @@ func TestGrokMediaVideoCompletionStillClaimsBillingOnce(t *testing.T) {
 		}
 	}
 	require.Len(t, bindings.billed, 1)
+}
+
+func TestAutoDLVideoCompletionPreservesWorkflowBillingOnce(t *testing.T) {
+	for _, workflow := range []string{"minimax_h3_z0901", "wan2.2animate-v4-motion_retargeting"} {
+		t.Run(workflow, func(t *testing.T) {
+			h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false)
+			c, _ := grokMediaSlotContext(context.Background(), false)
+			key, ok := middleware2.GetAPIKeyFromContext(c)
+			require.True(t, ok)
+			subject := middleware2.AuthSubject{UserID: 10}
+			seconds := 7
+			if workflow == "wan2.2animate-v4-motion_retargeting" {
+				seconds = 21
+			}
+			require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "autodl_task", subject.UserID, key.ID, service.GrokVideoPendingBilling{Model: workflow, BillingModel: workflow, UpstreamModel: workflow, VideoDurationSeconds: seconds, VideoResolution: "768p"}))
+			result := &service.OpenAIForwardResult{ResponseID: "autodl_task", VideoCount: 1}
+			bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "autodl_task", result)
+			require.NotNil(t, bill)
+			require.Equal(t, workflow, bill.Model)
+			require.Equal(t, workflow, bill.UpstreamModel)
+			require.Equal(t, seconds, bill.VideoDurationSeconds)
+			require.Equal(t, "768p", bill.VideoResolution)
+			require.Nil(t, prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "autodl_task", result))
+			require.Len(t, bindings.billed, 1)
+		})
+	}
+}
+
+func TestAutoDLVideoMotionDoesNotChargeInventedDuration(t *testing.T) {
+	h, _, bindings, upstream := newGrokMediaSlotHandler(t, false, false)
+	c, _ := grokMediaSlotContext(context.Background(), false)
+	key, _ := middleware2.GetAPIKeyFromContext(c)
+	subject := middleware2.AuthSubject{UserID: 10}
+	require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "autodl_task", subject.UserID, key.ID, service.GrokVideoPendingBilling{Model: "wan2.2animate-v4-motion_retargeting"}))
+	result := &service.OpenAIForwardResult{ResponseID: "autodl_task", VideoCount: 1, VideoOutputURL: "https://127.0.0.1/private"}
+	require.Nil(t, prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "autodl_task", result))
+	require.Empty(t, bindings.billed)
+	require.Zero(t, upstream.calls)
 }

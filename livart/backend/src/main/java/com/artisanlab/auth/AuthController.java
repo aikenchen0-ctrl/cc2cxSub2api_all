@@ -3,6 +3,7 @@ package com.artisanlab.auth;
 import com.artisanlab.common.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -58,14 +59,16 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout() {
+    public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout();
+        SessionCookies.set(request, response, "", 0);
         return ApiResponse.ok(null);
     }
 
     @GetMapping(value = "/sso/callback", produces = MediaType.TEXT_HTML_VALUE)
     public void ssoCallback(
             @RequestParam(value = "ticket", required = false) String ticket,
+            HttpServletRequest request,
             HttpServletResponse response
     ) throws IOException {
         response.setHeader("Cache-Control", "no-store");
@@ -73,7 +76,9 @@ public class AuthController {
         try {
             Sub2ApiSsoTickets.Payload payload = ssoTickets.verify(ticket, ssoSecret, Instant.now());
             AuthDtos.AuthResponse session = authService.completeSso(payload);
-            writeSessionBootstrap(response, session, ssoTickets.safeNext(payload.next()));
+            SessionCookies.set(request, response, session.token(), 3 * 24 * 60 * 60);
+            var browserSession = new AuthDtos.AuthResponse(session.user(), "cookie:" + session.user().id(), session.expiresAt());
+            writeSessionBootstrap(response, browserSession, ssoTickets.safeNext(payload.next()));
         } catch (Exception exception) {
             System.err.println("[sso] callback failed: " + exception.getMessage());
             response.sendRedirect("/?sso_error=1");

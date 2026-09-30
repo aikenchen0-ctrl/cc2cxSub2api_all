@@ -449,7 +449,10 @@ export type ModelCapability = "image" | "video" | "text" | "audio";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
-const LEGACY_DEFAULT_MODEL_NAMES = new Set(["gpt-image-2", "grok-imagine-video", "gpt-5.5", "gpt-4o-mini-tts"]);
+const LEGACY_DEFAULT_MODEL_NAMES = new Set(["gpt-image-2", "grok-imagine-video", "gpt-5.5", "gpt-5.6-sol", "minimax_h3_z0901", "gpt-4o-mini-tts"]);
+const DEFAULT_TEXT_MODEL = "gpt-5.6-sol";
+const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+const DEFAULT_VIDEO_MODEL = "minimax_h3_z0901";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -461,10 +464,10 @@ export const defaultConfig: AiConfig = {
     runningHub: { enabled: false, baseUrl: "https://www.runninghub.cn", apiKey: "", walletApiKey: "", uploadApiKey: "", useWallet: false, capability: "image", selectedKind: "workflow", workflowId: "", workflows: [] },
     comfyBridge: { enabled: false, bridgeId: "", comfyUrl: "http://127.0.0.1:8188", workflowDir: "D:\\ComfyUI\\workflows", workflowId: "", capability: "image", workflows: [] },
     taskWorkflowProvider: "model",
-    model: "",
-    imageModel: "",
-    videoModel: "",
-    textModel: "",
+    model: DEFAULT_IMAGE_MODEL,
+    imageModel: DEFAULT_IMAGE_MODEL,
+    videoModel: DEFAULT_VIDEO_MODEL,
+    textModel: DEFAULT_TEXT_MODEL,
     audioModel: "",
     audioVoice: "alloy",
     audioFormat: "mp3",
@@ -737,9 +740,9 @@ export function normalizeConfigSnapshot(snapshot: ConfigStoreSnapshot | undefine
             channels,
             models,
             model,
-            imageModel: normalizeSelectedModel(config.imageModel || model, channels, imageModels),
-            videoModel: normalizeSelectedModel(config.videoModel, channels, videoModels),
-            textModel: normalizeSelectedModel(config.textModel || model, channels, textModels),
+            imageModel: normalizeSelectedModel(config.imageModel || DEFAULT_IMAGE_MODEL, channels, imageModels),
+            videoModel: normalizeSelectedModel(config.videoModel || DEFAULT_VIDEO_MODEL, channels, videoModels),
+            textModel: normalizeSelectedModel(config.textModel || DEFAULT_TEXT_MODEL, channels, textModels),
             audioModel: normalizeSelectedModel(config.audioModel || defaultConfig.audioModel, channels, audioModels),
             audioVoice: config.audioVoice || defaultConfig.audioVoice,
             audioFormat: config.audioFormat || defaultConfig.audioFormat,

@@ -13,6 +13,8 @@
 **/.vite/
 **/.turbo/
 **/build/
+!aiexcel/build/
+!aiexcel/build/sites-vite-plugin.ts
 **/dist/
 **/dist-ssr/
 **/out/

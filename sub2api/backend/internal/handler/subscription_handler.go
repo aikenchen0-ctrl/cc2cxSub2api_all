@@ -51,7 +51,24 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 		return
 	}
 
-	subscriptions, err := h.subscriptionService.ListUserSubscriptions(c.Request.Context(), subject.UserID)
+	h.listForUser(c, subject.UserID)
+}
+
+// SatelliteList exposes the same user-visible subscription list through the
+// satellite gateway. The effective user is resolved from the on-behalf-of API
+// key by middleware, so callers cannot select another main-site user.
+// GET /v1/sub2api/subscriptions
+func (h *SubscriptionHandler) SatelliteList(c *gin.Context) {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	h.listForUser(c, apiKey.User.ID)
+}
+
+func (h *SubscriptionHandler) listForUser(c *gin.Context, userID int64) {
+	subscriptions, err := h.subscriptionService.ListUserSubscriptions(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -465,7 +465,7 @@ func validateRuntimeSecretFiles(dir string, result result) error {
 
 func renderEnv(req request, res result) string {
 	q := strconv.Quote
-	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_PROVISIONING_CONTROL_ENABLED=false\nAGENT_BILLING_MODE=user_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL))
+	return fmt.Sprintf("AGENT_ID=%s\nAGENT_DOMAIN=%s\nAGENT_NAME=%s\nAGENT_SITE_NAME=%s\nAGENT_OWNER_MAIN_USER_ID=%s\nMAIN_API_URL=%s\nMAIN_MODEL_URL=%s\nLINK=%s\nAGENTAPI_DATABASE_PATH=/app/data/agentapi.db\nAGENT_ENABLED=true\nAGENT_PROVISIONING_CONTROL_ENABLED=false\nAGENT_BILLING_MODE=user_upstream\nCOOKIE_SECURE=true\nSUB2API_SATELLITE=agentapi\nAGENT_SETTLEMENT_RECONCILE_INTERVAL=5m\nAGENT_VIDEO_TASK_RECONCILE_AGE=30m\n", q(res.AgentID), q(req.Domain), q(req.DisplayName), q(req.DisplayName), q(req.OwnerMainUser), q(req.MainURL), q(req.MainURL), q(req.MainURL))
 }
 
 func renderCompose(req request, secretDir string) string {

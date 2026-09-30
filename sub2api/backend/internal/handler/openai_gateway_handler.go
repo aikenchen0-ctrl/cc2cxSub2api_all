@@ -493,8 +493,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
-	continuation := service.NewOpenAIContinuation(body)
-	previousResponseID := continuation.PreviousResponseID
+	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 		reqLog = reqLog.With(
@@ -625,7 +624,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
-	var forwardAttemptState service.OpenAIForwardAttemptState
+	var passthroughFailoverState openAIPassthroughFailoverState
 
 	// 生图意图的 /v1/responses 请求必须调度到确实支持 Responses API 的账号，否则
 	// 会在 forward 阶段被静默降级为无法生图的 Chat Completions 直转（#4417）。
@@ -766,14 +765,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// 跨 passthrough 边界的 failover：从 Kiro 等透传账号切到 Bedrock 等非透传账号前，
 		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
 		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
-		attemptBody, strippedContinuation := forwardAttemptState.Prepare(
-			forwardBody,
-			account,
-			continuation.ShouldStrip(service.NewOpenAIContinuationStripHint(scheduleDecision, switchCount > 0)),
-		)
-		if strippedContinuation {
-			reqLog.Info("openai.failover_cross_mode_reasoning_stripped", zap.Int64("account_id", account.ID))
-		}
+		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -921,9 +913,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
-					if preferImmediateAccountSwitch(failoverErr) {
-						h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionHash)
-					}
 					if switchCount >= maxAccountSwitches {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
@@ -1480,9 +1469,6 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
-					if preferImmediateAccountSwitch(failoverErr) {
-						h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionHash)
-					}
 					if switchCount >= maxAccountSwitches {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
@@ -2423,14 +2409,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			return
 		}
 	}
-	continuation := service.NewOpenAIContinuation(firstMessage)
-	previousResponseID := continuation.PreviousResponseID
-	previousResponseCanMove := continuation.CanMove
+	previousResponseID := strings.TrimSpace(gjson.GetBytes(firstMessage, "previous_response_id").String())
 	previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 	if previousResponseID != "" && previousResponseIDKind == service.OpenAIPreviousResponseIDKindMessageID {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "previous_response_id must be a response.id (resp_*), not a message id")
 		return
 	}
+	firstMessageToolCoverage := service.AnalyzeToolCallOutputContextCoverageBytes(firstMessage)
+	previousResponseCanMove := !firstMessageToolCoverage.HasFunctionCallOutput || firstMessageToolCoverage.ContextCoversAllCallIDs
 	reqLog = reqLog.With(
 		zap.Bool("ws_ingress", true),
 		zap.String("session_initial_model", reqModel),
@@ -2553,7 +2539,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
-	var forwardAttemptState service.OpenAIForwardAttemptState
 	wsAttemptMessage := append([]byte(nil), firstMessage...)
 	waitForWSSameAccountRetry := func(account *service.Account, failoverErr *service.UpstreamFailoverError) bool {
 		if account == nil || failoverErr == nil || failoverErr.StatusCode != http.StatusTooManyRequests || failoverErr.SameAccountRetryDeadline.IsZero() {
@@ -2596,9 +2581,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		h.gatewayService.RecordOpenAIAccountSwitch()
 		failedAccountIDs[account.ID] = struct{}{}
 		lastFailoverErr = failoverErr
-		if preferImmediateAccountSwitch(failoverErr) {
-			h.gatewayService.ClearStickySession(ctx, apiKey.GroupID, sessionHash)
-		}
 		if switchCount >= maxAccountSwitches {
 			closeOpenAIWSFailoverExhausted(c, wsConn, failoverErr)
 			return false
@@ -3020,24 +3002,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			},
 		}
 
-		if continuation.BlockAccountSwitch(scheduleDecision.StickyPreviousHit) {
-			releaseAccountSlot()
-			reqLog.Warn("openai.websocket_tool_continuation_cannot_switch_account",
-				zap.Int64("account_id", account.ID),
-				zap.String("schedule_layer", scheduleDecision.Layer),
-			)
-			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.OpenAIToolContinuationCannotSwitchMessage)
-			return
-		}
-
 		wsFirstMessage := wsAttemptMessage
-		if stripped, changed := forwardAttemptState.Prepare(
-			wsFirstMessage,
-			account,
-			continuation.ShouldStrip(service.NewOpenAIContinuationStripHint(scheduleDecision, switchCount > 0)),
-		); changed {
-			wsFirstMessage = stripped
-			reqLog.Debug("openai.websocket_continuation_stripped_on_account_switch",
+		// 切组/会话失配防护：previous_response_id 未在当前分组命中粘连账号（StickyPreviousHit=false），
+		// 说明该会话链不属于本次调度到的账号，原样转发会触发上游会话链鉴权失败（“鉴权失败，请检查 API Key”）。
+		// 故剥离首包里的 previous_response_id，改用首包内 input 重建上下文；带 function_call_output 的
+		// 工具续链无法重建，保持原样。仅作用于首轮首包，后续 turn 的续链由 WS 转发层既有逻辑处理。
+		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
+			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
+			reqLog.Debug("openai.websocket_previous_response_id_stripped_cross_group",
 				zap.Int64("account_id", account.ID),
 				zap.String("schedule_layer", scheduleDecision.Layer),
 			)

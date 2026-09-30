@@ -25,6 +25,7 @@ func New() *gin.Engine {
 	})
 	api.POST("/auth/register", gin.WrapF(handler.Register))
 	api.POST("/auth/login", gin.WrapF(handler.Login))
+	api.POST("/auth/logout", gin.WrapF(handler.Logout))
 	api.GET("/auth/sso/callback", gin.WrapF(handler.Sub2APISSOCallback))
 	api.POST("/auth/sso/exchange", gin.WrapF(handler.Sub2APISSOExchange))
 	api.GET("/auth/linux-do/authorize", gin.WrapF(handler.LinuxDoAuthorize))

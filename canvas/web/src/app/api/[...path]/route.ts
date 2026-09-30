@@ -13,8 +13,8 @@ function proxyHeaders(request: NextRequest) {
     headers.delete("content-length");
     headers.delete("connection");
     headers.delete("expect");
-    headers.set("x-forwarded-host", request.nextUrl.host);
-    headers.set("x-forwarded-proto", request.nextUrl.protocol.replace(":", ""));
+    headers.set("x-forwarded-host", request.headers.get("host") || request.nextUrl.host);
+    headers.set("x-forwarded-proto", request.headers.get("x-forwarded-proto") || request.nextUrl.protocol.replace(":", ""));
     return headers;
 }
 

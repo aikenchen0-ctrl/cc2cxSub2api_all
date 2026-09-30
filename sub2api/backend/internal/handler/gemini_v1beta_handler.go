@@ -605,9 +605,6 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				failoverAction := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
-				if failoverAction == FailoverContinue && preferImmediateAccountSwitch(failoverErr) {
-					h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionKey)
-				}
 				switch failoverAction {
 				case FailoverContinue:
 					continue

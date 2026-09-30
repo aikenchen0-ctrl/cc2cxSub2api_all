@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,108 @@ import (
 	"testing"
 	"time"
 )
+
+func TestPasswordRecoveryUsesOnlySatelliteApplicationCredential(t *testing.T) {
+	var paths []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path == "/api/v1/settings/public" {
+			if r.Header.Get("Authorization") != "" || r.Header.Get("X-Sub2API-Satellite") != "" {
+				t.Errorf("public settings unexpectedly received credentials: %v", r.Header)
+			}
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"password_reset_enabled": true}))
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer app-secret" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
+			t.Errorf("satellite password recovery headers are invalid: %v", r.Header)
+		}
+		if r.Header.Get("X-Sub2API-On-Behalf-Of") != "" || r.Header.Get("X-API-Key") != "" || r.Header.Get("Cookie") != "" {
+			t.Errorf("user, admin, or browser credentials leaked to password recovery: %v", r.Header)
+		}
+		if r.Header.Get("Accept-Language") != "zh-CN" {
+			t.Errorf("locale was not forwarded safely: %q", r.Header.Get("Accept-Language"))
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode password recovery payload: %v", err)
+		}
+		if body["email"] != "user@example.com" {
+			t.Errorf("unexpected password recovery payload: %#v", body)
+		}
+		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"message": "ok"}))
+	}))
+	defer upstream.Close()
+
+	client := NewMainClient(Config{
+		MainAPIBaseURL: upstream.URL + "/api/v1", MainRequestTimeout: time.Second,
+		AppCredential: "app-secret", SatelliteSlug: "agentapi",
+	})
+	if _, err := client.PublicSettings(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ForgotPassword(context.Background(), map[string]any{"email": "user@example.com"}, "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ResetPassword(context.Background(), map[string]any{"email": "user@example.com", "token": "one-time", "new_password": "secret123"}, "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"/api/v1/settings/public",
+		"/api/v1/auth/satellite/agentapi/forgot-password",
+		"/api/v1/auth/satellite/agentapi/reset-password",
+	}
+	if fmt.Sprint(paths) != fmt.Sprint(want) {
+		t.Fatalf("unexpected password recovery paths: got %v want %v", paths, want)
+	}
+}
+
+func TestRegistrationEmailVerificationUsesOnlySatelliteApplicationCredential(t *testing.T) {
+	var paths []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.Header.Get("Authorization") != "Bearer app-secret" || r.Header.Get("X-Sub2API-Satellite") != "agentapi" {
+			t.Errorf("satellite verification headers are invalid: %v", r.Header)
+		}
+		for _, forbidden := range []string{"X-Sub2API-On-Behalf-Of", "X-API-Key", "Cookie"} {
+			if r.Header.Get(forbidden) != "" {
+				t.Errorf("credential %s leaked to registration verification", forbidden)
+			}
+		}
+		if r.Header.Get("Accept-Language") != "zh-CN" {
+			t.Errorf("locale was not forwarded safely: %q", r.Header.Get("Accept-Language"))
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["email"] != "user@example.com" {
+			t.Errorf("unexpected verification payload: %#v", body)
+		}
+		if strings.HasSuffix(r.URL.Path, "/verify-registration-email") && body["verify_code"] != "123456" {
+			t.Errorf("verification code was not forwarded: %#v", body)
+		}
+		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"message": "ok", "countdown": 60}))
+	}))
+	defer upstream.Close()
+
+	client := NewMainClient(Config{
+		MainAPIBaseURL: upstream.URL + "/api/v1", MainRequestTimeout: time.Second,
+		AppCredential: "app-secret", SatelliteSlug: "agentapi",
+	})
+	if _, err := client.SendRegistrationVerifyCode(t.Context(), "user@example.com", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.VerifyRegistrationEmail(t.Context(), "user@example.com", "123456", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"/api/v1/auth/satellite/agentapi/send-verify-code",
+		"/api/v1/auth/satellite/agentapi/verify-registration-email",
+	}
+	if fmt.Sprint(paths) != fmt.Sprint(want) {
+		t.Fatalf("unexpected verification paths: got %v want %v", paths, want)
+	}
+}
 
 func TestRuntimeGetProvisioningAgentUsesPerAgentAPIAndValidatesAgentID(t *testing.T) {
 	const agentID = "agt_0123456789abcdef0123456789abcdef"
@@ -126,6 +229,54 @@ func TestMainClientProfileAndPasswordUseOnlyAuthenticatedUserEndpoints(t *testin
 	}
 	if profileCalls != 1 || updateCalls != 1 || passwordCalls != 1 {
 		t.Fatalf("unexpected user endpoint calls: profile=%d update=%d password=%d", profileCalls, updateCalls, passwordCalls)
+	}
+}
+
+func TestMainClientTOTPUsesOnlyAuthenticatedUserEndpoints(t *testing.T) {
+	const accessToken = "main-user-access-token"
+	var paths []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.Header.Get("Authorization") != "Bearer "+accessToken {
+			t.Errorf("user token missing from TOTP request: %v", r.Header)
+		}
+		for _, forbidden := range []string{"X-API-Key", "X-Sub2API-Satellite", "X-AgentAPI-Runtime-Control", "Cookie"} {
+			if r.Header.Get(forbidden) != "" {
+				t.Errorf("credential %s leaked to user TOTP endpoint", forbidden)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"success": true, "method": "password", "enabled": false, "feature_enabled": true, "secret": "S", "qr_code_url": "otpauth://totp/A?secret=S", "setup_token": "T", "countdown": 1}))
+	}))
+	defer upstream.Close()
+	client := NewMainClient(Config{MainAPIBaseURL: upstream.URL + "/api/v1", MainRequestTimeout: time.Second})
+	if _, err := client.UserTOTPStatus(t.Context(), accessToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.UserTOTPVerificationMethod(t.Context(), accessToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.UserTOTPSendCode(t.Context(), accessToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.UserTOTPSetup(t.Context(), accessToken, "", "password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.UserTOTPEnable(t.Context(), accessToken, "123456", "token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.UserTOTPDisable(t.Context(), accessToken, "", "password"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"GET /api/v1/user/totp/status",
+		"GET /api/v1/user/totp/verification-method",
+		"POST /api/v1/user/totp/send-code",
+		"POST /api/v1/user/totp/setup",
+		"POST /api/v1/user/totp/enable",
+		"POST /api/v1/user/totp/disable",
+	}
+	if fmt.Sprint(paths) != fmt.Sprint(want) {
+		t.Fatalf("unexpected TOTP endpoint paths: got %v want %v", paths, want)
 	}
 }
 
@@ -391,7 +542,7 @@ func TestOrdinaryOwnerBridgeIgnoresStaleRuntimeCredential(t *testing.T) {
 			t.Errorf("ordinary bridge headers are incorrect: %v", r.Header)
 		}
 		if r.URL.Path == "/v1/sub2api/balance" {
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"balance": 12.34}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"balance": 12.34, "frozen_balance": 2.5}})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
@@ -407,7 +558,7 @@ func TestOrdinaryOwnerBridgeIgnoresStaleRuntimeCredential(t *testing.T) {
 	}
 	client := NewMainClient(cfg)
 	owner, err := client.AdminGetUser(t.Context(), "42")
-	if err != nil || owner.Balance != 1234 {
+	if err != nil || owner.Balance != 1234 || owner.FrozenBalance != 250 {
 		t.Fatalf("ordinary owner balance did not use satellite bridge: owner=%+v err=%v", owner, err)
 	}
 	items, err := client.AdminFindUsage(t.Context(), "req-stale-control")
@@ -439,7 +590,7 @@ func TestAdminFindUsagePreservesZeroActualCostInsteadOfUsingStandardCost(t *test
 	}
 }
 
-func TestAdminFindUsageFallsBackOnlyWhenActualCostFieldIsAbsent(t *testing.T) {
+func TestAdminFindUsageRejectsStandardCostAsActualCharge(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(envelope(map[string]any{
 			"items": []map[string]any{{"id": 79, "request_id": "req-legacy-dto", "total_cost": 0.25}},
@@ -449,11 +600,8 @@ func TestAdminFindUsageFallsBackOnlyWhenActualCostFieldIsAbsent(t *testing.T) {
 
 	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
 	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-legacy-dto")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 1 || items[0].HasActualCost || items[0].ActualCents != 25 {
-		t.Fatalf("legacy DTO total_cost fallback was not applied: %+v", items)
+	if err == nil || len(items) != 0 {
+		t.Fatalf("missing actual_cost must not become a confirmed standard charge: items=%+v err=%v", items, err)
 	}
 }
 

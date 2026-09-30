@@ -181,7 +181,7 @@ export default {
     yibiao: 'AI找标投标',
     ai3d: '图生3D',
     aihuoke: 'AI获客',
-    agentApi: '代理分站',
+    agentApi: '一键开分站',
     modelAudit: '\u4e0a\u6e38\u5ba1\u8ba1',
     openAgentStation: '一键开分站',
     dashboard: '仪表盘',

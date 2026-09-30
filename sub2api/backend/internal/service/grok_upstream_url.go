@@ -112,6 +112,9 @@ func buildGrokBillingURL(account *Account, cfg *config.Config, weekly bool) (str
 }
 
 func buildGrokMediaURL(account *Account, cfg *config.Config, endpoint GrokMediaEndpoint, requestID string) (string, error) {
+	if account.IsAutoDLVideoAccount() && endpoint == GrokMediaEndpointVideoStatus {
+		return autoDLVideoURL(account, cfg, requestID, true)
+	}
 	validator, err := grokBaseURLValidator(account, cfg)
 	if err != nil {
 		return "", err

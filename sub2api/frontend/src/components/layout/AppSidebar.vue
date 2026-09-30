@@ -359,7 +359,6 @@ const quickAppItems = computed<QuickAppItem[]>(() => {
     { label: t('nav.ai3d'), href: ai3dSsoUrl, includeApiKey: false, sso: true, icon: 'cube', iconClass: 'quick-app-icon-cube' },
     { label: t('nav.aihuoke'), href: aihuokeSsoUrl, includeApiKey: false, sso: true, icon: 'users', iconClass: 'quick-app-icon-users' },
     { label: t('nav.agentApi'), href: agentApiSsoUrl, includeApiKey: false, sso: true, icon: 'server', iconClass: 'quick-app-icon-server' },
-    { label: t('nav.modelAudit'), href: buildApiUrl('/auth/integrations/modelaudit/start') + '?next=%2F', includeApiKey: false, sso: true, icon: 'shield', iconClass: 'quick-app-icon-shield' },
   ]
 })
 
@@ -925,6 +924,7 @@ const adminNavItems = computed((): NavItem[] => {
     // 「仅充值」站点连管理端的「订阅管理」入口也一并收起（路由本身不拦截）。
     { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true, featureFlag: flagSubscription },
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
+    { path: '/admin/upstream-audit', label: t('nav.modelAudit'), icon: ShieldIcon },
     { path: '/admin/plugins', label: t('nav.plugins'), icon: PluginIcon, featureFlag: flagPluginManagement },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },

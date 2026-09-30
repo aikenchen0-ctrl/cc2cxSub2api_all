@@ -17,7 +17,7 @@
             @create="showCreate = true"
           >
             <template #beforeCreate>
-              <button class="btn btn-primary" @click="showRefreshModelsConfirm = true">
+              <button class="btn btn-primary" @click="openRefreshModels">
                 <Icon name="sync" size="md" />
                 <span>{{ t('admin.accounts.refreshModels') }}</span>
               </button>
@@ -528,7 +528,7 @@
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-secondary" @click="closeRefreshModelsProgress">{{ t('common.close') }}</button>
+        <button class="btn btn-secondary" @click="closeRefreshModelsProgress">{{ t('admin.accounts.refreshModelsBackground') }}</button>
       </template>
     </BaseDialog>
     <ConfirmDialog :show="showExportDataDialog" :title="t('admin.accounts.dataExport')" :message="t('admin.accounts.dataExportConfirmMessage')" :confirm-text="t('admin.accounts.dataExportConfirm')" :cancel-text="t('common.cancel')" @confirm="handleExportData" @cancel="showExportDataDialog = false">
@@ -662,6 +662,8 @@ const showRefreshModelsConfirm = ref(false)
 const showRefreshModelsProgress = ref(false)
 const modelRefreshJob = ref<AccountModelRefreshJob | null>(null)
 let modelRefreshPollTimer: ReturnType<typeof setTimeout> | null = null
+let modelRefreshViewDisposed = false
+const modelRefreshStarting = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
 const showStats = ref(false)
@@ -2521,38 +2523,65 @@ const clearModelRefreshPollTimer = () => {
 
 const pollModelRefreshJob = async (jobId: string) => {
   clearModelRefreshPollTimer()
-  if (!showRefreshModelsProgress.value) return
+  if (modelRefreshViewDisposed) return
   try {
-    modelRefreshJob.value = await adminAPI.accounts.getModelRefreshJob(jobId)
-    if (modelRefreshJob.value.status === 'running' && showRefreshModelsProgress.value) {
+    const job = await adminAPI.accounts.getModelRefreshJob(jobId)
+    if (modelRefreshViewDisposed || modelRefreshJob.value?.id !== jobId) return
+    modelRefreshJob.value = job
+    if (modelRefreshJob.value.status === 'running') {
       modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(jobId), 1000)
     } else if (modelRefreshJob.value.status === 'completed') {
       void reload()
     }
   } catch (error) {
     console.error('Failed to poll account model refresh job:', error)
+    if (!modelRefreshViewDisposed && modelRefreshJob.value?.id === jobId) {
+      const status = (error as { status?: number })?.status
+      if (status === 404 || status === 401 || status === 403) {
+        modelRefreshJob.value = null
+        showRefreshModelsProgress.value = false
+        appStore.showError(extractApiErrorMessage(error, t('common.error')))
+        return
+      }
+      modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(jobId), 3000)
+    }
   }
 }
 
+const openRefreshModels = () => {
+  if (modelRefreshStarting.value || modelRefreshJob.value?.status === 'running') {
+    showRefreshModelsProgress.value = true
+    return
+  }
+  showRefreshModelsConfirm.value = true
+}
+
 const confirmRefreshModels = async () => {
+  if (modelRefreshStarting.value) return
+  modelRefreshStarting.value = true
   showRefreshModelsConfirm.value = false
   showRefreshModelsProgress.value = true
+  clearModelRefreshPollTimer()
+  modelRefreshJob.value = null
   try {
-    modelRefreshJob.value = await adminAPI.accounts.startModelRefreshJob()
+    const job = await adminAPI.accounts.startModelRefreshJob()
+    if (modelRefreshViewDisposed) return
+    modelRefreshJob.value = job
     if (modelRefreshJob.value.status === 'running') {
-      modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(modelRefreshJob.value!.id), 500)
+      modelRefreshPollTimer = setTimeout(() => void pollModelRefreshJob(job.id), 500)
     } else {
       void reload()
     }
   } catch (error) {
     showRefreshModelsProgress.value = false
     appStore.showError(extractApiErrorMessage(error, t('admin.accounts.refreshModelsStartFailed')))
+  } finally {
+    modelRefreshStarting.value = false
   }
 }
 
 const closeRefreshModelsProgress = () => {
   showRefreshModelsProgress.value = false
-  clearModelRefreshPollTimer()
 }
 
 const modelRefreshStatusLabel = (status: AccountModelRefreshStatus): string => {
@@ -2693,6 +2722,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  modelRefreshViewDisposed = true
   clearModelRefreshPollTimer()
   upstreamBillingRateAbortController?.abort()
   if (usageBatchFlushTimer !== null) {

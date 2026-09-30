@@ -102,6 +102,20 @@ func TestProvisioningControlIsExplicitlyEnabled(t *testing.T) {
 	}
 }
 
+func TestDirectBillingRejectsOwnerScopedRuntimeControl(t *testing.T) {
+	t.Setenv("SESSION_SECRET", strings.Repeat("s", 32))
+	t.Setenv("SESSION_SECRET_FILE", "")
+	t.Setenv("SUB2API_SATELLITE", "agentapi")
+	t.Setenv("AGENTAPI_SSO_AUDIENCE", "agentapi")
+	t.Setenv("AGENT_MAX_REQUEST_COST", "1")
+	t.Setenv("AGENT_BILLING_MODE", "user_upstream")
+	t.Setenv("AGENT_PROVISIONING_CONTROL_ENABLED", "true")
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "AGENT_PROVISIONING_CONTROL_ENABLED must be false for user_upstream") {
+		t.Fatalf("mixed billing/control configuration must fail closed, got %v", err)
+	}
+}
+
 func TestLoadConfigSeparatesControlAndModelRelayBases(t *testing.T) {
 	for name, value := range map[string]string{
 		"AGENT_ID":                              "agent-local",

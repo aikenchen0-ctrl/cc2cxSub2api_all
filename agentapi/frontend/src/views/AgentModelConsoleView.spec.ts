@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentModelConsoleView from './AgentModelConsoleView.vue'
 import { agentAPI } from '@/agent/api'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 describe('AgentModelConsoleView', () => {
   beforeEach(() => {
@@ -23,7 +24,7 @@ describe('AgentModelConsoleView', () => {
     await flushPromises()
 
     expect(list).toHaveBeenCalledOnce()
-    expect(wrapper.findAll('#agent-model option').map((option) => option.text())).toEqual(['gpt-5.5'])
+    expect(wrapper.get('#agent-model').text()).toContain('gpt-5.5')
 
     await wrapper.get('#agent-prompt').setValue('Say hello')
     await wrapper.get('form').trigger('submit')
@@ -32,6 +33,21 @@ describe('AgentModelConsoleView', () => {
     expect(chat).toHaveBeenCalledWith('gpt-5.5', [{ role: 'user', content: 'Say hello' }])
     expect(wrapper.text()).toContain('response from main site')
     expect(wrapper.text()).not.toContain('sk-super-')
+  })
+
+  it('opens the model selected from the model plaza when it is enabled', async () => {
+    vi.spyOn(agentAPI.model, 'list').mockResolvedValue(['gpt-5.5', 'gpt-image-2'])
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/console', component: AgentModelConsoleView }],
+    })
+    await router.push('/console?model=gpt-image-2&mode=image')
+    await router.isReady()
+    const wrapper = mount(AgentModelConsoleView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('nav button')[1].classes()).toContain('bg-blue-600')
+    expect(wrapper.get('#agent-model').text()).toContain('gpt-image-2')
   })
 
   it('generates an image and renders the returned public image URL', async () => {
@@ -82,7 +98,7 @@ describe('AgentModelConsoleView', () => {
     await flushPromises()
     await wrapper.findAll('nav button')[1].trigger('click')
     await wrapper.get('#agent-image-prompt').setValue('a quiet lake')
-    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('[aria-label="作为后台任务运行"]').trigger('click')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     await vi.advanceTimersByTimeAsync(3_000)
@@ -107,7 +123,7 @@ describe('AgentModelConsoleView', () => {
     await flushPromises()
     await wrapper.findAll('nav button')[1].trigger('click')
     await wrapper.get('#agent-image-prompt').setValue('a failed image')
-    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('[aria-label="作为后台任务运行"]').trigger('click')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 

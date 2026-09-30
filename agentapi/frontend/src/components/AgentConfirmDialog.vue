@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   open: boolean
   title: string
   message: string
@@ -19,84 +19,38 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const panel = ref<HTMLElement | null>(null)
-const cancelButton = ref<HTMLButtonElement | null>(null)
-const confirmButton = ref<HTMLButtonElement | null>(null)
-let previouslyFocused: HTMLElement | null = null
-
-watch(() => props.open, async (open) => {
-  if (typeof document === 'undefined') return
-  if (open) {
-    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    await nextTick()
-    confirmButton.value?.focus()
-    return
-  }
-
-  const target = previouslyFocused
-  previouslyFocused = null
-  await nextTick()
-  if (target?.isConnected) target.focus()
-})
-
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    emit('cancel')
-    return
-  }
-  if (event.key !== 'Tab') return
-
-  const active = document.activeElement
-  if (event.shiftKey && active === cancelButton.value) {
-    event.preventDefault()
-    confirmButton.value?.focus()
-  } else if (!event.shiftKey && active === confirmButton.value) {
-    event.preventDefault()
-    cancelButton.value?.focus()
-  } else if (!panel.value?.contains(active)) {
-    event.preventDefault()
-    confirmButton.value?.focus()
-  }
-}
+let messageIDSequence = 0
+const messageID = `agent-confirm-message-${++messageIDSequence}`
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      @click.self="emit('cancel')"
-      @keydown="handleKeydown"
-    >
-      <section
-        ref="panel"
-        class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="agent-confirm-title"
-        aria-describedby="agent-confirm-message"
-        tabindex="-1"
-      >
-        <h2 id="agent-confirm-title" class="text-lg font-semibold text-slate-900 dark:text-white">{{ title }}</h2>
-        <p id="agent-confirm-message" class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ message }}</p>
-        <div class="mt-6 flex justify-end gap-3">
-          <button
-            ref="cancelButton"
-            class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-            type="button"
-            @click="emit('cancel')"
-          >{{ cancelLabel }}</button>
-          <button
-            ref="confirmButton"
-            data-testid="agent-confirm-action"
-            class="rounded-lg px-4 py-2 text-sm font-medium text-white"
-            :class="destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'"
-            type="button"
-            @click="emit('confirm')"
-          >{{ confirmLabel }}</button>
-        </div>
-      </section>
+  <BaseDialog
+    :show="open"
+    :title="title"
+    width="narrow"
+    dialog-role="alertdialog"
+    :aria-describedby="messageID"
+    @close="emit('cancel')"
+  >
+    <div class="space-y-4">
+      <p :id="messageID" class="text-sm leading-6 text-gray-600 dark:text-gray-400">{{ message }}</p>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <div class="flex justify-end space-x-3">
+        <button
+          class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600 dark:focus:ring-offset-dark-800"
+          type="button"
+          @click="emit('cancel')"
+        >{{ cancelLabel }}</button>
+        <button
+          data-testid="agent-confirm-action"
+          class="rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-800"
+          :class="destructive ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500'"
+          type="button"
+          @click="emit('confirm')"
+        >{{ confirmLabel }}</button>
+      </div>
+    </template>
+  </BaseDialog>
 </template>

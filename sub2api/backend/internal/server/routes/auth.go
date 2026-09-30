@@ -75,6 +75,21 @@ func RegisterAuthRoutes(
 		auth.POST("/reset-password", rateLimiter.LimitWithOptions("reset-password", 10, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.ResetPassword)
+		// Satellite password recovery remains server-to-server. The handler
+		// validates the application credential and resolves the reset origin from
+		// the registered satellite catalog rather than accepting a browser URL.
+		auth.POST("/satellite/:slug/forgot-password", rateLimiter.LimitWithOptions("satellite-forgot-password", 5, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.SatelliteForgotPassword)
+		auth.POST("/satellite/:slug/reset-password", rateLimiter.LimitWithOptions("satellite-reset-password", 10, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.SatelliteResetPassword)
+		auth.POST("/satellite/:slug/send-verify-code", rateLimiter.LimitWithOptions("satellite-send-verify-code", 5, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.SatelliteSendVerifyCode)
+		auth.POST("/satellite/:slug/verify-registration-email", rateLimiter.LimitWithOptions("satellite-verify-registration-email", 10, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.SatelliteVerifyRegistrationEmail)
 		auth.GET("/oauth/linuxdo/start", h.Auth.LinuxDoOAuthStart)
 		auth.POST("/oauth/linuxdo/start", rateLimiter.LimitWithOptions("oauth-linuxdo-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

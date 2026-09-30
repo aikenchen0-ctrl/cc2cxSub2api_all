@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -104,11 +105,13 @@ public class ImageJobWebSocketHandler extends TextWebSocketHandler {
     private void authenticate(WebSocketSession session, JsonNode payload) throws Exception {
         String token = payload.path("token").asText("");
         try {
-            if (token.isBlank()) {
+            AuthDtos.AuthUser handshakeUser = session.getPrincipal() instanceof Authentication authentication
+                    && authentication.getPrincipal() instanceof AuthDtos.AuthUser user ? user : null;
+            if (handshakeUser == null && token.isBlank()) {
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "请先登录");
             }
 
-            UUID userId = jwtService.verifyAndReadUserId(token);
+            UUID userId = handshakeUser == null ? jwtService.verifyAndReadUserId(token) : handshakeUser.id();
             AuthDtos.AuthUser user = authService.findUserById(userId);
             if (user == null) {
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN", "登录状态已失效，请重新登录");

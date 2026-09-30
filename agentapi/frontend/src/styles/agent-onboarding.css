@@ -1,0 +1,44 @@
+.driver-popover.agentapi-onboarding-popover {
+  max-width: 340px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 14px;
+  color: rgb(17 24 39);
+  box-shadow: 0 18px 50px rgb(15 23 42 / 20%);
+}
+
+.driver-popover.agentapi-onboarding-popover .driver-popover-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.driver-popover.agentapi-onboarding-popover .driver-popover-description {
+  line-height: 1.65;
+}
+
+.driver-popover.agentapi-onboarding-popover .driver-popover-next-btn {
+  border: 0;
+  background: rgb(79 70 229);
+  color: white;
+  text-shadow: none;
+}
+
+.driver-popover.agentapi-onboarding-popover .driver-popover-prev-btn {
+  text-shadow: none;
+}
+
+.dark .driver-popover.agentapi-onboarding-popover {
+  border-color: rgb(55 65 81);
+  background: rgb(31 41 55);
+  color: rgb(243 244 246);
+}
+
+.dark .driver-popover.agentapi-onboarding-popover .driver-popover-description,
+.dark .driver-popover.agentapi-onboarding-popover .driver-popover-progress-text {
+  color: rgb(209 213 219);
+}
+
+.dark .driver-popover.agentapi-onboarding-popover .driver-popover-prev-btn {
+  border-color: rgb(75 85 99);
+  background: rgb(55 65 81);
+  color: rgb(243 244 246);
+}

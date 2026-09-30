@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { agentAPI, type AgentProfile } from '@/agent/api'
 import { useAgentSession } from '@/agent/session'
 import { errorMessage } from '@/agent/client'
 
+import ProfileEditForm from '@/components/user/profile/ProfileEditForm.vue'
+import ProfilePasswordForm from '@/components/user/profile/ProfilePasswordForm.vue'
+import AgentProfileAvatarCard from '@/components/user/profile/AgentProfileAvatarCard.vue'
+import AgentProfileTotpCard from '@/components/user/profile/AgentProfileTotpCard.vue'
+import AgentProfileBalanceNotifyCard from '@/components/user/profile/AgentProfileBalanceNotifyCard.vue'
+import AgentProfileIdentityBindingsCard from '@/components/user/profile/AgentProfileIdentityBindingsCard.vue'
+import AgentProfilePasskeyCard from '@/components/user/profile/AgentProfilePasskeyCard.vue'
+import { agentPasskeyAPI } from '@/agent/passkeys'
 const auth = useAgentSession()
 const router = useRouter()
 const profile = ref<AgentProfile | null>(null)
@@ -17,6 +25,35 @@ const savingProfile = ref(false)
 const changingPassword = ref(false)
 const error = ref('')
 const notice = ref('')
+const passkeyEnabled = ref(false)
+const displayName = computed(() => profile.value?.username || profile.value?.email || '用户')
+const avatarInitial = computed(() => Array.from(displayName.value)[0]?.toUpperCase() || 'U')
+const avatarUrl = computed(() => profile.value?.avatar_url?.trim() || '')
+
+function handleAvatarUpdated(updated: AgentProfile): void {
+  profile.value = updated
+  username.value = updated.username
+  if (auth.user) {
+    auth.user = {
+      ...auth.user,
+      username: updated.username,
+      avatar_url: updated.avatar_url,
+    }
+  }
+}
+
+function handleIdentityProfileUpdated(updated: AgentProfile): void {
+  profile.value = updated
+  username.value = updated.username
+  if (auth.user) {
+    auth.user = {
+      ...auth.user,
+      email: updated.email,
+      username: updated.username,
+      avatar_url: updated.avatar_url,
+    }
+  }
+}
 
 async function loadProfile(): Promise<void> {
   loading.value = true
@@ -31,7 +68,17 @@ async function loadProfile(): Promise<void> {
   }
 }
 
+async function loadPasskeyConfig(): Promise<void> {
+  try {
+    const config = await agentPasskeyAPI.config()
+    passkeyEnabled.value = config.enabled === true && config.supported_origin === true
+  } catch {
+    passkeyEnabled.value = false
+  }
+}
+
 async function saveProfile(): Promise<void> {
+  if (!profile.value?.can_edit || savingProfile.value) return
   const nextUsername = username.value.trim()
   if (!nextUsername) {
     error.value = '请填写用户名。'
@@ -52,6 +99,7 @@ async function saveProfile(): Promise<void> {
 }
 
 async function changePassword(): Promise<void> {
+  if (!profile.value?.can_edit || changingPassword.value) return
   if (!oldPassword.value) {
     error.value = '请输入当前密码。'
     return
@@ -79,6 +127,9 @@ async function changePassword(): Promise<void> {
     await agentAPI.profile.changePassword(oldPassword.value, newPassword.value)
     // Sub2API invalidates access and refresh tokens after a password change;
     // AgentAPI also revokes its local HttpOnly session in the same response.
+    oldPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
     auth.clear()
     await router.replace({ path: '/login', query: { passwordChanged: '1' } })
   } catch (err) {
@@ -93,107 +144,74 @@ async function logout(): Promise<void> {
   await router.replace('/home')
 }
 
-onMounted(loadProfile)
+onMounted(() => { void loadProfile(); void loadPasskeyConfig() })
 </script>
 
 <template>
-  <main class="mx-auto max-w-4xl space-y-6 p-6">
-    <header>
-      <p class="text-sm text-slate-500">AgentAPI</p>
-      <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">个人资料</h1>
-      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">在此代理站管理你的 Sub2API 账号。</p>
-    </header>
-
-    <p v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-      {{ error }}
-    </p>
-    <p v-if="notice" role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-      {{ notice }}
-    </p>
-    <p v-if="loading" role="status" class="text-sm text-slate-500">正在加载个人资料…</p>
-
-    <template v-else-if="profile">
-      <section class="rounded-xl border bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold text-slate-900 dark:text-white">账号信息</h2>
-          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">账号身份和登录信息由 Sub2API 管理。</p>
+  <main data-testid="profile-shell" class="mx-auto max-w-[950px] space-y-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">个人资料</h1>
+    <p v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{{ error }}</p>
+    <p v-if="notice" role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{{ notice }}</p>
+    <p v-if="loading" role="status" class="text-sm text-gray-500">正在加载个人资料…</p>
+    <button v-else-if="!profile" type="button" class="btn btn-secondary" @click="loadProfile">重新加载</button>
+    <template v-else>
+      <section data-testid="profile-overview-hero" class="card overflow-hidden border border-primary-100/80 bg-gradient-to-br from-primary-50 via-white to-amber-50/70 dark:border-primary-900/40 dark:from-primary-950/40 dark:via-dark-900 dark:to-dark-950">
+        <div class="px-6 py-6 md:px-8">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <div class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-primary-500 to-primary-600 text-2xl font-bold text-white shadow-lg shadow-primary-500/20">
+              <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" class="h-full w-full object-cover">
+              <span v-else>{{ avatarInitial }}</span>
+            </div>
+            <div class="min-w-0 flex-1 space-y-5">
+              <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="truncate text-2xl font-semibold text-gray-900 dark:text-white">{{ displayName }}</h2>
+                  <span :class="['badge', auth.isAgentAdmin ? 'badge-primary' : 'badge-gray']">{{ auth.isAgentAdmin ? '本站管理员' : '用户' }}</span>
+                </div>
+                <p class="truncate text-sm text-gray-600 dark:text-gray-300">{{ profile.email || '—' }}</p>
+              </div>
+              <dl class="grid gap-3 sm:grid-cols-2">
+                <div class="rounded-2xl bg-white/85 px-4 py-3 shadow-sm ring-1 ring-white/70 dark:bg-dark-900/60 dark:ring-dark-700">
+                  <dt class="text-xs font-medium text-gray-500">主站用户编号</dt>
+                  <dd class="mt-1 break-all text-lg font-semibold text-gray-900 dark:text-white">{{ profile.id }}</dd>
+                </div>
+                <div class="rounded-2xl bg-white/85 px-4 py-3 shadow-sm ring-1 ring-white/70 dark:bg-dark-900/60 dark:ring-dark-700">
+                  <dt class="text-xs font-medium text-gray-500">当前会话权限</dt>
+                  <dd class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ profile.can_edit ? '可修改个人资料' : '单点登录 · 只读' }}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
         </div>
-        <dl class="grid gap-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt class="text-slate-500 dark:text-slate-400">邮箱</dt>
-            <dd class="mt-1 font-medium text-slate-900 dark:text-white">{{ profile.email || '—' }}</dd>
-          </div>
-          <div>
-            <dt class="text-slate-500 dark:text-slate-400">主站用户编号</dt>
-            <dd class="mt-1 break-all font-mono text-slate-900 dark:text-white">{{ profile.id }}</dd>
-          </div>
-        </dl>
-
-        <form class="mt-6 border-t pt-5 dark:border-slate-700" novalidate @submit.prevent="saveProfile">
-          <label for="profile-username" class="block text-sm font-medium text-slate-700 dark:text-slate-200">用户名</label>
-          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">此操作会同步更新 Sub2API 主站账号名称。</p>
-          <div class="mt-3 flex flex-col gap-3 sm:flex-row">
-            <input
-              id="profile-username"
-              v-model="username"
-              name="username"
-              type="text"
-              maxlength="128"
-              autocomplete="nickname"
-              required
-              :disabled="!profile.can_edit || savingProfile"
-              class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
-            >
-            <button
-              type="submit"
-              :disabled="!profile.can_edit || savingProfile || username.trim() === profile.username"
-              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {{ savingProfile ? '正在保存…' : '保存资料' }}
-            </button>
-          </div>
-        </form>
       </section>
-
-      <section class="rounded-xl border bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <section data-testid="profile-basics-panel" class="card border border-gray-100 bg-white/90 p-6 dark:border-dark-700 dark:bg-dark-900/50">
         <div class="mb-5">
-          <h2 class="text-lg font-semibold text-slate-900 dark:text-white">修改密码</h2>
-          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前密码由 Sub2API 验证。密码修改成功后，主站的其他登录会话将失效。</p>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">基本资料</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">此操作会同步更新 Sub2API 主站账号名称。</p>
         </div>
-
-        <p v-if="!profile.can_edit" class="rounded-lg bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          当前会话通过单点登录创建，仅用于身份识别。如需修改账号安全设置，请使用主站邮箱和密码登录。
-        </p>
-        <form v-else class="space-y-4" novalidate @submit.prevent="changePassword">
-          <div class="grid gap-4 sm:grid-cols-2">
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              当前密码
-              <input v-model="oldPassword" name="old_password" aria-label="当前密码" type="password" autocomplete="current-password" required class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
-            </label>
-            <span class="hidden sm:block" />
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              新密码
-              <input v-model="newPassword" name="new_password" aria-label="新密码" type="password" autocomplete="new-password" minlength="8" required class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
-              <span class="mt-1 block text-xs font-normal text-slate-500">至少 8 个字符。</span>
-            </label>
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              确认新密码
-              <input v-model="confirmPassword" name="confirm_password" aria-label="确认新密码" type="password" autocomplete="new-password" minlength="8" required class="mt-1 w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
-            </label>
-          </div>
-          <div class="flex justify-end pt-2">
-            <button type="submit" :disabled="changingPassword" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {{ changingPassword ? '正在修改…' : '修改密码' }}
-            </button>
-          </div>
-        </form>
+        <div class="rounded-3xl border border-gray-100 bg-gray-50/80 p-5 dark:border-dark-700 dark:bg-dark-900/30">
+          <AgentProfileAvatarCard v-if="profile.can_edit" :profile="profile" class="mb-5" @updated="handleAvatarUpdated" />
+          <ProfileEditForm v-model="username" :initial-username="profile.username" :disabled="!profile.can_edit" :loading="savingProfile" embedded @submit="saveProfile" />
+        </div>
       </section>
+      <p v-if="!profile.can_edit" class="card p-6 text-sm text-gray-600 dark:text-gray-300">
+        当前会话通过单点登录创建，仅用于身份识别。如需修改账号安全设置，请使用主站邮箱和密码登录。
+      </p>
+      <div v-else class="space-y-3">
+        <p class="text-sm text-gray-500 dark:text-gray-400">当前密码由 Sub2API 验证。修改成功后需重新登录，主站其他登录会话也将失效。</p>
+        <AgentProfileIdentityBindingsCard :profile="profile" @updated="handleIdentityProfileUpdated" />
+        <ProfilePasswordForm v-model:old-password="oldPassword" v-model:new-password="newPassword" v-model:confirm-password="confirmPassword" :loading="changingPassword" @submit="changePassword" />
+        <AgentProfileBalanceNotifyCard />
+        <AgentProfileTotpCard />
+        <AgentProfilePasskeyCard :enabled="passkeyEnabled" />
+      </div>
     </template>
-
-    <section class="rounded-xl border bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">当前会话</h2>
-      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">退出此浏览器中的 AgentAPI 会话。</p>
-      <button class="mt-5 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40" type="button" @click="logout">退出登录</button>
+    <section class="card">
+      <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"><h2 class="text-lg font-medium text-gray-900 dark:text-white">当前会话</h2></div>
+      <div class="space-y-4 px-6 py-6">
+        <p class="text-sm text-gray-500 dark:text-gray-400">退出此浏览器中的代理站会话。</p>
+        <button class="btn btn-secondary text-red-600" type="button" @click="logout">退出登录</button>
+      </div>
     </section>
   </main>
 </template>

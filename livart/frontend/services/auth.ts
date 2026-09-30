@@ -59,7 +59,7 @@ export const clearAuthSession = () => {
 
 export const authHeaders = () => {
   const session = getStoredAuthSession();
-  return session ? { Authorization: `Bearer ${session.token}` } : {};
+  return session && !session.token.startsWith('cookie:') ? { Authorization: `Bearer ${session.token}` } : {};
 };
 
 export const register = async (username: string, password: string, displayName?: string) => {

@@ -1219,6 +1219,7 @@ export default {
         lowRatePriorityTitle: 'Prefer lower rates',
         lowRatePriorityDescription: 'When enabled, accounts with lower billing rates are preferred. If rates are equal, account priority, current load, and other scheduling factors are considered. This switch is ignored when the experimental scheduler is enabled.',
         oauthRateTitle: 'OAuth scheduling reference rate',
+        oauthRateInvalid: 'Enter a finite, non-negative OAuth scheduling reference rate, or leave it blank.',
         oauthRatePriorityDescription: 'When a group contains both API Key and OAuth accounts, this rate is used to order OAuth accounts alongside probed API Key billing rates.',
         oauthRateWeightedDescription: 'When a group contains both API Key and OAuth accounts, this rate is used for OAuth accounts when calculating the billing-rate score.',
         stickyWeightedTitle: 'Sticky weighting',

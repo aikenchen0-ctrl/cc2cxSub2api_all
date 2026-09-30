@@ -1,4 +1,5 @@
 import { Textarea } from "@/components/ui/textarea";
+import { useUiLanguage } from "@/components/UiLanguage";
 import { cn } from "@/lib/utils";
 import { PencilIcon, X } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
@@ -29,6 +30,7 @@ export function PromptInput({
   onSubmit,
   hasAttachments = false,
 }: PromptInputProps) {
+  const { t } = useUiLanguage();
   const isCommunityStart =
     variant === "smart" && references.length === 0 && !value.trim();
 
@@ -76,7 +78,7 @@ export function PromptInput({
         </span>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
           <p className="text-sm font-normal leading-normal text-[#333333]">
-            {isCommunityStart ? "从社区设计开始" : "输入生成描述"}
+            {isCommunityStart ? t("从社区设计开始", "Start from a community design") : t("输入生成描述", "Describe your presentation")}
           </p>
           <Textarea
             value={value}
@@ -86,8 +88,8 @@ export function PromptInput({
             onKeyDown={handleKeyDown}
             placeholder={
               isCommunityStart
-                ? "选择一个设计，然后告诉 AI 如何生成你的演示文稿。"
-                : "从你的想法开始，我们会处理后续页面"
+                ? t("选择一个设计，然后告诉 AI 如何生成你的演示文稿。", "Choose a design and tell AI how to create your presentation.")
+                : t("从你的想法开始，我们会处理后续页面", "Start with your idea. We will take care of the slides.")
             }
             data-testid="prompt-input"
             className={cn(

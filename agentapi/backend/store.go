@@ -42,11 +42,14 @@ type Session struct {
 }
 
 type AgentView struct {
+	AgentHomeSettings
 	ID              string `json:"agent_id"`
 	Domain          string `json:"domain"`
 	Name            string `json:"name"`
 	SiteName        string `json:"site_name"`
 	SiteLogo        string `json:"site_logo,omitempty"`
+	DocURL          string `json:"doc_url,omitempty"`
+	ContactInfo     string `json:"contact_info,omitempty"`
 	Status          string `json:"status"`
 	BillingMode     string `json:"billing_mode"`
 	OwnerMainUserID string `json:"owner_main_user_id,omitempty"`
@@ -64,15 +67,16 @@ type AgentModelPolicyView struct {
 }
 
 type AgentUserView struct {
-	AgentID      string `json:"agent_id"`
-	MainUserID   string `json:"main_user_id"`
-	Email        string `json:"email,omitempty"`
-	DisplayName  string `json:"display_name,omitempty"`
-	Status       string `json:"status"`
-	BalanceCents int64  `json:"balance_cents"`
-	BalanceError string `json:"balance_error,omitempty"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	AgentID            string `json:"agent_id"`
+	MainUserID         string `json:"main_user_id"`
+	Email              string `json:"email,omitempty"`
+	DisplayName        string `json:"display_name,omitempty"`
+	Status             string `json:"status"`
+	BalanceCents       int64  `json:"balance_cents"`
+	FrozenBalanceCents int64  `json:"frozen_balance_cents,omitempty"`
+	BalanceError       string `json:"balance_error,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
 }
 
 type AgentAPIKeyView struct {
@@ -82,6 +86,13 @@ type AgentAPIKeyView struct {
 	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at"`
 	LastUsedAt string `json:"last_used_at,omitempty"`
+}
+
+type ResolvedAgentAPIKey struct {
+	ID         int64
+	MainUserID string
+	Name       string
+	Prefix     string
 }
 
 type AgentUsageView struct {
@@ -150,6 +161,52 @@ type AuditEvent struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+// AgentAnnouncement is a tenant-owned announcement. It deliberately lives in
+// AgentAPI instead of Sub2API so an agent administrator can manage the copied
+// main-site UI without gaining access to main-site global configuration.
+type AgentAnnouncement struct {
+	ID         int64  `json:"id"`
+	AgentID    string `json:"-"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	Status     string `json:"status"`
+	NotifyMode string `json:"notify_mode"`
+	StartsAt   string `json:"starts_at,omitempty"`
+	EndsAt     string `json:"ends_at,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+	ReadAt     string `json:"read_at,omitempty"`
+}
+
+// AgentContentPage is a tenant-owned legal or custom page. Content is kept
+// local to AgentAPI so copying the Sub2API page experience never grants an
+// agent administrator access to the main site's global menu or legal config.
+type AgentContentPage struct {
+	ID        int64  `json:"id"`
+	AgentID   string `json:"-"`
+	Slug      string `json:"slug"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Status    string `json:"status"`
+	SortOrder int    `json:"sort_order"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// AgentPlanPolicy contains only tenant-owned presentation controls for one
+// main-site subscription plan. Price, currency, group and validity remain
+// authoritative in Sub2API and are never duplicated into this table.
+type AgentPlanPolicy struct {
+	PlanID      int64    `json:"plan_id"`
+	Enabled     bool     `json:"enabled"`
+	SortOrder   int      `json:"sort_order"`
+	DisplayName string   `json:"display_name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Features    []string `json:"features"`
+	UpdatedAt   string   `json:"updated_at"`
+}
+
 type VideoTask struct {
 	AgentID    string `json:"agent_id"`
 	MainUserID string `json:"main_user_id"`
@@ -190,19 +247,20 @@ type AgentTaskView struct {
 // local reservation. A settlement is created before the upstream request is
 // sent and is the durable idempotency record for that request.
 type SettlementRecord struct {
-	ID                int64
-	AgentID           string
-	ProxyMainUserID   string
-	BillingMainUserID string
-	RequestID         string
-	UsageID           string
-	ReservedCents     int64
-	ActualCents       int64
-	Status            string
-	Error             string
-	Model             string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	HasLocalReservation bool
+	ID                  int64
+	AgentID             string
+	ProxyMainUserID     string
+	BillingMainUserID   string
+	RequestID           string
+	UsageID             string
+	ReservedCents       int64
+	ActualCents         int64
+	Status              string
+	Error               string
+	Model               string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 func OpenStore(path string, secret string) (*Store, error) {
@@ -249,8 +307,314 @@ func OpenStore(path string, secret string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+func announcementTime(value int64) string {
+	if value <= 0 {
+		return ""
+	}
+	return time.Unix(value, 0).UTC().Format(time.RFC3339)
+}
+
+func scanAnnouncement(scanner interface{ Scan(...any) error }) (AgentAnnouncement, error) {
+	var item AgentAnnouncement
+	var startsAt, endsAt, createdAt, updatedAt, readAt int64
+	err := scanner.Scan(&item.ID, &item.AgentID, &item.Title, &item.Content, &item.Status, &item.NotifyMode,
+		&startsAt, &endsAt, &createdAt, &updatedAt, &readAt)
+	if err != nil {
+		return AgentAnnouncement{}, err
+	}
+	item.StartsAt = announcementTime(startsAt)
+	item.EndsAt = announcementTime(endsAt)
+	item.CreatedAt = announcementTime(createdAt)
+	item.UpdatedAt = announcementTime(updatedAt)
+	item.ReadAt = announcementTime(readAt)
+	return item, nil
+}
+
+func (s *Store) CreateAnnouncement(agentID, title, content, status, notifyMode string, startsAt, endsAt time.Time) (AgentAnnouncement, error) {
+	now := s.clock().UTC().Unix()
+	result, err := s.db.Exec(`INSERT INTO agent_announcements(agent_id,title,content,status,notify_mode,starts_at,ends_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		agentID, title, content, status, notifyMode, unixOrZero(startsAt), unixOrZero(endsAt), now, now)
+	if err != nil {
+		return AgentAnnouncement{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return AgentAnnouncement{}, err
+	}
+	return s.AdminAnnouncement(agentID, id)
+}
+
+func unixOrZero(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.UTC().Unix()
+}
+
+func (s *Store) AdminAnnouncement(agentID string, id int64) (AgentAnnouncement, error) {
+	item, err := scanAnnouncement(s.db.QueryRow(`SELECT id,agent_id,title,content,status,notify_mode,starts_at,ends_at,created_at,updated_at,0 FROM agent_announcements WHERE agent_id=? AND id=?`, agentID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentAnnouncement{}, errNotFound
+	}
+	return item, err
+}
+
+func (s *Store) AdminAnnouncements(agentID string) ([]AgentAnnouncement, error) {
+	rows, err := s.db.Query(`SELECT id,agent_id,title,content,status,notify_mode,starts_at,ends_at,created_at,updated_at,0 FROM agent_announcements WHERE agent_id=? ORDER BY id DESC`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AgentAnnouncement, 0)
+	for rows.Next() {
+		item, err := scanAnnouncement(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) UserAnnouncements(agentID, mainUserID string) ([]AgentAnnouncement, error) {
+	now := s.clock().UTC().Unix()
+	rows, err := s.db.Query(`SELECT a.id,a.agent_id,a.title,a.content,a.status,a.notify_mode,a.starts_at,a.ends_at,a.created_at,a.updated_at,COALESCE(r.read_at,0)
+		FROM agent_announcements a LEFT JOIN agent_announcement_reads r ON r.agent_id=a.agent_id AND r.announcement_id=a.id AND r.main_user_id=?
+		WHERE a.agent_id=? AND a.status='active' AND (a.starts_at=0 OR a.starts_at<=?) AND (a.ends_at=0 OR a.ends_at>?) ORDER BY a.id DESC`, mainUserID, agentID, now, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AgentAnnouncement, 0)
+	for rows.Next() {
+		item, err := scanAnnouncement(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) UpdateAnnouncement(agentID string, id int64, title, content, status, notifyMode string, startsAt, endsAt time.Time) (AgentAnnouncement, error) {
+	result, err := s.db.Exec(`UPDATE agent_announcements SET title=?,content=?,status=?,notify_mode=?,starts_at=?,ends_at=?,updated_at=? WHERE agent_id=? AND id=?`,
+		title, content, status, notifyMode, unixOrZero(startsAt), unixOrZero(endsAt), s.clock().UTC().Unix(), agentID, id)
+	if err != nil {
+		return AgentAnnouncement{}, err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return AgentAnnouncement{}, errNotFound
+	}
+	return s.AdminAnnouncement(agentID, id)
+}
+
+func (s *Store) DeleteAnnouncement(agentID string, id int64) error {
+	result, err := s.db.Exec(`DELETE FROM agent_announcements WHERE agent_id=? AND id=?`, agentID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func (s *Store) MarkAnnouncementRead(agentID, mainUserID string, id int64) error {
+	now := s.clock().UTC().Unix()
+	result, err := s.db.Exec(`INSERT INTO agent_announcement_reads(agent_id,announcement_id,main_user_id,read_at)
+		SELECT ?,id,?,? FROM agent_announcements WHERE agent_id=? AND id=? AND status='active' AND (starts_at=0 OR starts_at<=?) AND (ends_at=0 OR ends_at>?)
+		ON CONFLICT(agent_id,announcement_id,main_user_id) DO UPDATE SET read_at=excluded.read_at`, agentID, mainUserID, now, agentID, id, now, now)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func (s *Store) MarkAllAnnouncementsRead(agentID, mainUserID string) error {
+	now := s.clock().UTC().Unix()
+	_, err := s.db.Exec(`INSERT INTO agent_announcement_reads(agent_id,announcement_id,main_user_id,read_at)
+		SELECT ?,id,?,? FROM agent_announcements WHERE agent_id=? AND status='active' AND (starts_at=0 OR starts_at<=?) AND (ends_at=0 OR ends_at>?)
+		ON CONFLICT(agent_id,announcement_id,main_user_id) DO UPDATE SET read_at=excluded.read_at`, agentID, mainUserID, now, agentID, now, now)
+	return err
+}
+
+func scanContentPage(scanner interface{ Scan(...any) error }) (AgentContentPage, error) {
+	var item AgentContentPage
+	var createdAt, updatedAt int64
+	err := scanner.Scan(&item.ID, &item.AgentID, &item.Slug, &item.Kind, &item.Title, &item.Content,
+		&item.Status, &item.SortOrder, &createdAt, &updatedAt)
+	if err != nil {
+		return AgentContentPage{}, err
+	}
+	item.CreatedAt = announcementTime(createdAt)
+	item.UpdatedAt = announcementTime(updatedAt)
+	return item, nil
+}
+
+const contentPageColumns = `id,agent_id,slug,kind,title,content,status,sort_order,created_at,updated_at`
+
+func (s *Store) CreateContentPage(agentID, slug, kind, title, content, status string, sortOrder int) (AgentContentPage, error) {
+	now := s.clock().UTC().Unix()
+	result, err := s.db.Exec(`INSERT INTO agent_content_pages(agent_id,slug,kind,title,content,status,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		agentID, slug, kind, title, content, status, sortOrder, now, now)
+	if err != nil {
+		return AgentContentPage{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return AgentContentPage{}, err
+	}
+	return s.ContentPageByID(agentID, id)
+}
+
+func (s *Store) ContentPageByID(agentID string, id int64) (AgentContentPage, error) {
+	item, err := scanContentPage(s.db.QueryRow(`SELECT `+contentPageColumns+` FROM agent_content_pages WHERE agent_id=? AND id=?`, agentID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentContentPage{}, errNotFound
+	}
+	return item, err
+}
+
+func (s *Store) ActiveContentPage(agentID, kind, slug string) (AgentContentPage, error) {
+	item, err := scanContentPage(s.db.QueryRow(`SELECT `+contentPageColumns+` FROM agent_content_pages WHERE agent_id=? AND kind=? AND slug=? AND status='active'`, agentID, kind, slug))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentContentPage{}, errNotFound
+	}
+	return item, err
+}
+
+func (s *Store) ContentPages(agentID string, activeOnly bool) ([]AgentContentPage, error) {
+	query := `SELECT ` + contentPageColumns + ` FROM agent_content_pages WHERE agent_id=?`
+	if activeOnly {
+		query += ` AND status='active'`
+	}
+	query += ` ORDER BY sort_order ASC, id ASC`
+	rows, err := s.db.Query(query, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AgentContentPage, 0)
+	for rows.Next() {
+		item, err := scanContentPage(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) UpdateContentPage(agentID string, id int64, slug, kind, title, content, status string, sortOrder int) (AgentContentPage, error) {
+	result, err := s.db.Exec(`UPDATE agent_content_pages SET slug=?,kind=?,title=?,content=?,status=?,sort_order=?,updated_at=? WHERE agent_id=? AND id=?`,
+		slug, kind, title, content, status, sortOrder, s.clock().UTC().Unix(), agentID, id)
+	if err != nil {
+		return AgentContentPage{}, err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return AgentContentPage{}, errNotFound
+	}
+	return s.ContentPageByID(agentID, id)
+}
+
+func (s *Store) DeleteContentPage(agentID string, id int64) error {
+	result, err := s.db.Exec(`DELETE FROM agent_content_pages WHERE agent_id=? AND id=?`, agentID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func scanPlanPolicy(scanner interface{ Scan(...any) error }) (AgentPlanPolicy, error) {
+	var item AgentPlanPolicy
+	var enabled int
+	var featuresJSON string
+	var updatedAt int64
+	if err := scanner.Scan(&item.PlanID, &enabled, &item.SortOrder, &item.DisplayName, &item.Description, &featuresJSON, &updatedAt); err != nil {
+		return AgentPlanPolicy{}, err
+	}
+	item.Enabled = enabled != 0
+	item.UpdatedAt = time.Unix(updatedAt, 0).UTC().Format(time.RFC3339)
+	item.Features = []string{}
+	if strings.TrimSpace(featuresJSON) != "" {
+		if err := json.Unmarshal([]byte(featuresJSON), &item.Features); err != nil {
+			return AgentPlanPolicy{}, fmt.Errorf("decode agent plan policy features: %w", err)
+		}
+	}
+	return item, nil
+}
+
+func (s *Store) AgentPlanPolicies(agentID string) ([]AgentPlanPolicy, error) {
+	rows, err := s.db.Query(`SELECT plan_id,enabled,sort_order,display_name,description,features_json,updated_at FROM agent_plan_policies WHERE agent_id=? ORDER BY sort_order,plan_id`, strings.TrimSpace(agentID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AgentPlanPolicy, 0)
+	for rows.Next() {
+		item, err := scanPlanPolicy(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) AgentPlanPolicy(agentID string, planID int64) (AgentPlanPolicy, error) {
+	item, err := scanPlanPolicy(s.db.QueryRow(`SELECT plan_id,enabled,sort_order,display_name,description,features_json,updated_at FROM agent_plan_policies WHERE agent_id=? AND plan_id=?`, strings.TrimSpace(agentID), planID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentPlanPolicy{}, errNotFound
+	}
+	return item, err
+}
+
+func (s *Store) UpsertAgentPlanPolicy(agentID string, policy AgentPlanPolicy) (AgentPlanPolicy, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || policy.PlanID <= 0 {
+		return AgentPlanPolicy{}, fmt.Errorf("agent plan policy identity is invalid")
+	}
+	if _, err := s.Agent(agentID); err != nil {
+		return AgentPlanPolicy{}, err
+	}
+	features := make([]string, 0, len(policy.Features))
+	for _, feature := range policy.Features {
+		feature = strings.TrimSpace(feature)
+		if feature != "" {
+			features = append(features, feature)
+		}
+	}
+	encoded, err := json.Marshal(features)
+	if err != nil {
+		return AgentPlanPolicy{}, err
+	}
+	now := s.clock().UTC().Unix()
+	_, err = s.db.Exec(`INSERT INTO agent_plan_policies(agent_id,plan_id,enabled,sort_order,display_name,description,features_json,updated_at)
+		VALUES(?,?,?,?,?,?,?,?)
+		ON CONFLICT(agent_id,plan_id) DO UPDATE SET enabled=excluded.enabled,sort_order=excluded.sort_order,display_name=excluded.display_name,description=excluded.description,features_json=excluded.features_json,updated_at=excluded.updated_at`,
+		agentID, policy.PlanID, boolInt(policy.Enabled), policy.SortOrder, strings.TrimSpace(policy.DisplayName), strings.TrimSpace(policy.Description), string(encoded), now)
+	if err != nil {
+		return AgentPlanPolicy{}, err
+	}
+	return s.AgentPlanPolicy(agentID, policy.PlanID)
+}
+
 func (s *Store) migrate() error {
 	statements := []string{
+		`CREATE TABLE IF NOT EXISTS registration_intents (
+			agent_id TEXT NOT NULL, email TEXT NOT NULL, marker TEXT NOT NULL,
+			created_at INTEGER NOT NULL, PRIMARY KEY(agent_id, email)
+		)`,
+		`CREATE TABLE IF NOT EXISTS registration_limits (
+			agent_id TEXT NOT NULL, bucket_key TEXT NOT NULL, window_start INTEGER NOT NULL,
+			attempts INTEGER NOT NULL, PRIMARY KEY(agent_id, bucket_key)
+		)`,
 		`CREATE TABLE IF NOT EXISTS agent_config (
 			id INTEGER PRIMARY KEY CHECK (id = 1),
 			agent_id TEXT NOT NULL UNIQUE,
@@ -258,6 +622,11 @@ func (s *Store) migrate() error {
 			name TEXT NOT NULL,
 			site_name TEXT NOT NULL,
 			site_logo TEXT NOT NULL DEFAULT '',
+			doc_url TEXT NOT NULL DEFAULT '',
+			contact_info TEXT NOT NULL DEFAULT '',
+			site_subtitle TEXT NOT NULL DEFAULT 'AI API Gateway Platform',
+			compact_home_enabled INTEGER NOT NULL DEFAULT 0,
+			home_content TEXT NOT NULL DEFAULT '',
 			billing_mode TEXT NOT NULL DEFAULT 'user_upstream',
 			billing_main_user_id TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT 'active',
@@ -365,6 +734,7 @@ func (s *Store) migrate() error {
 			error TEXT NOT NULL DEFAULT '',
 			model TEXT NOT NULL DEFAULT '',
 			main_usage_snapshot TEXT NOT NULL DEFAULT '',
+			agent_api_key_id INTEGER NOT NULL DEFAULT 0,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,
 			UNIQUE(agent_id, request_id)
@@ -439,6 +809,70 @@ func (s *Store) migrate() error {
 			created_at INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_events_agent ON audit_events(agent_id, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS agent_announcements (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			content TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'draft',
+			notify_mode TEXT NOT NULL DEFAULT 'silent',
+			starts_at INTEGER NOT NULL DEFAULT 0,
+			ends_at INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_announcements_visible ON agent_announcements(agent_id, status, starts_at, ends_at, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS agent_announcement_reads (
+			agent_id TEXT NOT NULL,
+			announcement_id INTEGER NOT NULL,
+			main_user_id TEXT NOT NULL,
+			read_at INTEGER NOT NULL,
+			PRIMARY KEY(agent_id, announcement_id, main_user_id),
+			FOREIGN KEY(announcement_id) REFERENCES agent_announcements(id) ON DELETE CASCADE,
+			FOREIGN KEY(agent_id, main_user_id) REFERENCES agent_users(agent_id, main_user_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_announcement_reads_user ON agent_announcement_reads(agent_id, main_user_id, read_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS agent_content_pages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			slug TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			title TEXT NOT NULL,
+			content TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'draft',
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			UNIQUE(agent_id, kind, slug),
+			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_content_pages_visible ON agent_content_pages(agent_id, status, kind, sort_order, id)`,
+		`CREATE TABLE IF NOT EXISTS agent_plan_policies (
+			agent_id TEXT NOT NULL,
+			plan_id INTEGER NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			display_name TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			features_json TEXT NOT NULL DEFAULT '[]',
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY(agent_id, plan_id),
+			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_plan_policies_order ON agent_plan_policies(agent_id, enabled, sort_order, plan_id)`,
+		`CREATE TABLE IF NOT EXISTS agent_config_backups (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			file_name TEXT NOT NULL,
+			snapshot_json TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL DEFAULT 0,
+			created_by TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			restored_at INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_config_backups_list ON agent_config_backups(agent_id, id DESC)`,
 		`CREATE TABLE IF NOT EXISTS video_tasks (
 			agent_id TEXT NOT NULL,
 			main_user_id TEXT NOT NULL,
@@ -480,6 +914,11 @@ func (s *Store) migrate() error {
 	}{
 		{"agent_config", "billing_mode", "TEXT NOT NULL DEFAULT 'user_upstream'"},
 		{"agent_config", "billing_main_user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_config", "doc_url", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_config", "contact_info", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_config", "site_subtitle", "TEXT NOT NULL DEFAULT 'AI API Gateway Platform'"},
+		{"agent_config", "compact_home_enabled", "INTEGER NOT NULL DEFAULT 0"},
+		{"agent_config", "home_content", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_wallets", "owner_main_user_id", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_wallets", "main_balance_cents", "INTEGER NOT NULL DEFAULT 0"},
 		{"agent_wallets", "main_balance_checked_at", "INTEGER NOT NULL DEFAULT 0"},
@@ -490,10 +929,15 @@ func (s *Store) migrate() error {
 		{"wallet_ledger", "balance_before_cents", "INTEGER NOT NULL DEFAULT 0"},
 		{"settlements", "model", "TEXT NOT NULL DEFAULT ''"},
 		{"settlements", "main_usage_snapshot", "TEXT NOT NULL DEFAULT ''"},
+		{"settlements", "reconcile_sequence", "INTEGER NOT NULL DEFAULT 0"},
+		{"settlements", "agent_api_key_id", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := s.addColumnIfMissing(column.table, column.name, column.def); err != nil {
 			return fmt.Errorf("upgrade agentapi store: %w", err)
 		}
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_settlements_agent_key ON settlements(agent_id, agent_api_key_id, created_at DESC)`); err != nil {
+		return fmt.Errorf("upgrade agentapi settlement key index: %w", err)
 	}
 	return nil
 }
@@ -700,10 +1144,21 @@ func (s *Store) PendingImageTasks(agentID string, limit int) ([]ImageTask, error
 // image/video task identities. Provider task results are fetched separately
 // through the authenticated model relay when the user resumes a task.
 func (s *Store) TaskHistoryPage(agentID, mainUserID string, pageSize, offset int) ([]AgentTaskView, int, error) {
+	return s.TaskHistoryPageByType(agentID, mainUserID, "", pageSize, offset)
+}
+
+// TaskHistoryPageByType keeps pagination on the server when a user-facing
+// media page only needs image or video tasks. The agent and main-user keys stay
+// mandatory so a tenant UI can never enumerate another tenant's task index.
+func (s *Store) TaskHistoryPageByType(agentID, mainUserID, taskType string, pageSize, offset int) ([]AgentTaskView, int, error) {
 	agentID = strings.TrimSpace(agentID)
 	mainUserID = strings.TrimSpace(mainUserID)
+	taskType = strings.ToLower(strings.TrimSpace(taskType))
 	if agentID == "" || mainUserID == "" {
 		return nil, 0, fmt.Errorf("task history requires an agent and user identity")
+	}
+	if taskType != "" && taskType != "image" && taskType != "video" {
+		return nil, 0, fmt.Errorf("task history type must be image or video")
 	}
 	if pageSize <= 0 || pageSize > 200 {
 		pageSize = 50
@@ -726,7 +1181,7 @@ func (s *Store) TaskHistoryPage(agentID, mainUserID string, pageSize, offset int
 	}
 	defer tx.Rollback()
 	var total int
-	if err := tx.QueryRow(taskRows+`SELECT COUNT(*) FROM task_rows WHERE agent_id=? AND main_user_id=?`, agentID, mainUserID).Scan(&total); err != nil {
+	if err := tx.QueryRow(taskRows+`SELECT COUNT(*) FROM task_rows WHERE agent_id=? AND main_user_id=? AND (?='' OR task_type=?)`, agentID, mainUserID, taskType, taskType).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := tx.Query(taskRows+`
@@ -735,9 +1190,9 @@ func (s *Store) TaskHistoryPage(agentID, mainUserID string, pageSize, offset int
 		       t.created_at, t.updated_at
 		FROM task_rows t
 		LEFT JOIN settlements st ON st.agent_id=t.agent_id AND st.request_id=t.request_id
-		WHERE t.agent_id=? AND t.main_user_id=?
+		WHERE t.agent_id=? AND t.main_user_id=? AND (?='' OR t.task_type=?)
 		ORDER BY t.updated_at DESC, t.created_at DESC, t.task_type ASC, t.task_id ASC
-		LIMIT ? OFFSET ?`, agentID, mainUserID, pageSize, offset)
+		LIMIT ? OFFSET ?`, agentID, mainUserID, taskType, taskType, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -846,8 +1301,8 @@ func (s *Store) UpsertAgent(cfg Config) error {
 		}
 	} else {
 		_, err = tx.Exec(`
-			INSERT INTO agent_config (id, agent_id, domain, name, site_name, site_logo, billing_mode, billing_main_user_id, status, created_at, updated_at)
-			VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO agent_config (id, agent_id, domain, name, site_name, site_logo, doc_url, billing_mode, billing_main_user_id, status, created_at, updated_at)
+			VALUES (1, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)
 		`, cfg.AgentID, cfg.AgentDomain, cfg.AgentName, cfg.SiteName, cfg.SiteLogo, billingMode, cfg.OwnerMainUserID, status, now, now)
 	}
 	if err != nil {
@@ -960,15 +1415,16 @@ func (s *Store) Agent(agentID string) (AgentView, error) {
 	var view AgentView
 	var checkedAt, configUpdated int64
 	err := s.db.QueryRow(`
-		SELECT c.agent_id, c.domain, c.name, c.site_name, c.site_logo, c.status,
+		SELECT c.agent_id, c.domain, c.name, c.site_name, c.site_logo, c.doc_url, c.contact_info, c.status,
 		       c.billing_mode, c.billing_main_user_id,
 		       COALESCE(w.main_balance_cents, 0), COALESCE(w.main_balance_checked_at, 0),
 		       COALESCE(w.billing_status, 'unknown'),
-		       COALESCE(w.available_cents, 0), COALESCE(w.allocated_cents, 0), c.updated_at
+		       COALESCE(w.available_cents, 0), COALESCE(w.allocated_cents, 0), c.updated_at,
+		       c.site_subtitle, c.compact_home_enabled, c.home_content
 		FROM agent_config c
 		LEFT JOIN agent_wallets w ON w.agent_id = c.agent_id
 		WHERE c.agent_id = ?
-	`, agentID).Scan(&view.ID, &view.Domain, &view.Name, &view.SiteName, &view.SiteLogo, &view.Status, &view.BillingMode, &view.OwnerMainUserID, &view.MainBalance, &checkedAt, &view.BillingStatus, &view.WalletAvailable, &view.WalletAllocated, &configUpdated)
+	`, agentID).Scan(&view.ID, &view.Domain, &view.Name, &view.SiteName, &view.SiteLogo, &view.DocURL, &view.ContactInfo, &view.Status, &view.BillingMode, &view.OwnerMainUserID, &view.MainBalance, &checkedAt, &view.BillingStatus, &view.WalletAvailable, &view.WalletAllocated, &configUpdated, &view.SiteSubtitle, &view.CompactHomeEnabled, &view.HomeContent)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AgentView{}, errNotFound
 	}
@@ -1071,12 +1527,12 @@ func (s *Store) ResetAgentModelPolicy(agentID string) error {
 // UpdateBranding changes only the presentation fields for the current Agent.
 // It deliberately cannot change the agent id, domain, owner or billing mode;
 // those fields belong to provisioning and accounting configuration.
-func (s *Store) UpdateBranding(agentID, name, siteName, siteLogo string) (AgentView, error) {
+func (s *Store) UpdateBranding(agentID, name, siteName, siteLogo, docURL, contactInfo string, home AgentHomeSettings) (AgentView, error) {
 	now := s.clock().UTC().Unix()
 	result, err := s.db.Exec(`
-		UPDATE agent_config SET name=?, site_name=?, site_logo=?, updated_at=?
+		UPDATE agent_config SET name=?, site_name=?, site_logo=?, doc_url=?, contact_info=?, site_subtitle=?, compact_home_enabled=?, home_content=?, updated_at=?
 		WHERE agent_id=?
-	`, strings.TrimSpace(name), strings.TrimSpace(siteName), strings.TrimSpace(siteLogo), now, strings.TrimSpace(agentID))
+	`, strings.TrimSpace(name), strings.TrimSpace(siteName), strings.TrimSpace(siteLogo), strings.TrimSpace(docURL), strings.TrimSpace(contactInfo), home.SiteSubtitle, home.CompactHomeEnabled, home.HomeContent, now, strings.TrimSpace(agentID))
 	if err != nil {
 		return AgentView{}, err
 	}
@@ -1209,6 +1665,14 @@ func (s *Store) Users(agentID string, limit int) ([]AgentUserView, error) {
 // transaction so the UI cannot report a total from a different snapshot than
 // the visible rows.
 func (s *Store) UsersPage(agentID string, pageSize, offset int, search string) ([]AgentUserView, int, error) {
+	return s.UsersPageFiltered(agentID, pageSize, offset, search, "")
+}
+
+// UsersPageFiltered is the tenant-scoped backing query for the Agent user
+// table. Status is deliberately limited to the local agent_users row: an
+// Agent administrator may close access to this station, but never changes the
+// authoritative Sub2API account status.
+func (s *Store) UsersPageFiltered(agentID string, pageSize, offset int, search, status string) ([]AgentUserView, int, error) {
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
@@ -1230,6 +1694,11 @@ func (s *Store) UsersPage(agentID string, pageSize, offset int, search string) (
 			instr(lower(u.display_name), lower(?)) > 0
 		)`
 		args = append(args, search, search, search)
+	}
+	status = strings.TrimSpace(status)
+	if status != "" {
+		where += ` AND u.status=?`
+		args = append(args, status)
 	}
 	var total int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM agent_users u WHERE `+where, args...).Scan(&total); err != nil {
@@ -1676,20 +2145,28 @@ func (s *Store) RevokeAPIKey(agentID, mainUserID string, id int64) error {
 }
 
 func (s *Store) ResolveAPIKey(agentID, key string) (string, error) {
-	key = strings.TrimSpace(key)
-	if key == "" || len(key) > 256 {
-		return "", errNotFound
-	}
-	var mainUserID string
-	err := s.db.QueryRow(`SELECT k.main_user_id FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND k.key_hash=? AND k.status='active'`, agentID, hashToken(key)).Scan(&mainUserID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", errNotFound
-	}
+	resolved, err := s.ResolveAPIKeyDetails(agentID, key)
 	if err != nil {
 		return "", err
 	}
+	return resolved.MainUserID, nil
+}
+
+func (s *Store) ResolveAPIKeyDetails(agentID, key string) (ResolvedAgentAPIKey, error) {
+	key = strings.TrimSpace(key)
+	if key == "" || len(key) > 256 {
+		return ResolvedAgentAPIKey{}, errNotFound
+	}
+	var resolved ResolvedAgentAPIKey
+	err := s.db.QueryRow(`SELECT k.id, k.main_user_id, k.name, k.prefix FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND k.key_hash=? AND k.status='active'`, agentID, hashToken(key)).Scan(&resolved.ID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedAgentAPIKey{}, errNotFound
+	}
+	if err != nil {
+		return ResolvedAgentAPIKey{}, err
+	}
 	_, _ = s.db.Exec(`UPDATE agent_api_keys SET last_used_at=?, updated_at=? WHERE agent_id=? AND key_hash=?`, s.clock().UTC().Unix(), s.clock().UTC().Unix(), agentID, hashToken(key))
-	return mainUserID, nil
+	return resolved, nil
 }
 
 func (s *Store) CreateSession(mainUserID string, userJSON []byte, accessToken, refreshToken string, expiresAt time.Time) (string, error) {
@@ -2004,7 +2481,9 @@ func settlementQuery(db interface {
 }, agentID, requestID string) (SettlementRecord, error) {
 	var record SettlementRecord
 	var created, updated int64
-	err := db.QueryRow(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at FROM settlements WHERE agent_id=? AND request_id=?`, agentID, requestID).Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated)
+	err := db.QueryRow(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at,
+		EXISTS(SELECT 1 FROM wallet_ledger l WHERE l.agent_id=settlements.agent_id AND l.kind='consume' AND l.request_id='reserve:' || settlements.request_id)
+		FROM settlements WHERE agent_id=? AND request_id=?`, agentID, requestID).Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SettlementRecord{}, errNotFound
 	}
@@ -2019,6 +2498,33 @@ func settlementQuery(db interface {
 func (s *Store) SetSettlementModel(agentID, requestID, model string) error {
 	_, err := s.db.Exec(`UPDATE settlements SET model=?, updated_at=? WHERE agent_id=? AND request_id=?`, strings.TrimSpace(model), s.clock().UTC().Unix(), agentID, requestID)
 	return err
+}
+
+func (s *Store) SetSettlementAPIKey(agentID, requestID string, keyID int64) error {
+	if keyID <= 0 {
+		return nil
+	}
+	result, err := s.db.Exec(`UPDATE settlements SET agent_api_key_id=?, updated_at=? WHERE agent_id=? AND request_id=? AND agent_api_key_id=0`, keyID, s.clock().UTC().Unix(), agentID, requestID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		var existing int64
+		if err := s.db.QueryRow(`SELECT agent_api_key_id FROM settlements WHERE agent_id=? AND request_id=?`, agentID, requestID).Scan(&existing); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errNotFound
+			}
+			return err
+		}
+		if existing != keyID {
+			return errIdempotencyConflict
+		}
+	}
+	return nil
 }
 
 func settlementTx(tx *sql.Tx, agentID, requestID string) (SettlementRecord, error) {
@@ -2071,7 +2577,16 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 	if usageID == "" {
 		usageID = record.UsageID
 	}
-	if status != "pending" && actualCents > record.ReservedCents {
+	// Identity equality is not proof of direct billing: an old owner could
+	// consume their own local wallet. The transactional debit is authoritative.
+	reservedUser, reservedAmount, hasLocalReservation, lookupErr := ledgerEntry(tx, agentID, "consume", "reserve:"+requestID)
+	if lookupErr != nil {
+		return lookupErr
+	}
+	if hasLocalReservation && (reservedUser != record.ProxyMainUserID || reservedAmount != -record.ReservedCents) {
+		return errIdempotencyConflict
+	}
+	if status != "pending" && actualCents > record.ReservedCents && hasLocalReservation {
 		return fmt.Errorf("actual settlement exceeds reservation")
 	}
 	now := s.clock().UTC().Unix()
@@ -2091,7 +2606,7 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 		return tx.Commit()
 	}
 	refund := record.ReservedCents - actualCents
-	if record.ProxyMainUserID == record.BillingMainUserID {
+	if !hasLocalReservation {
 		// Direct user billing never debited the legacy local wallet, so there is
 		// no local reservation to refund.
 		return tx.Commit()
@@ -2143,7 +2658,9 @@ func (s *Store) PendingSettlements(agentID string, limit int) ([]SettlementRecor
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at FROM settlements WHERE agent_id=? AND status='pending' ORDER BY id ASC LIMIT ?`, agentID, limit)
+	rows, err := s.db.Query(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at,
+		EXISTS(SELECT 1 FROM wallet_ledger l WHERE l.agent_id=settlements.agent_id AND l.kind='consume' AND l.request_id='reserve:' || settlements.request_id)
+		FROM settlements WHERE agent_id=? AND status='pending' ORDER BY reconcile_sequence ASC, id ASC LIMIT ?`, agentID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -2152,7 +2669,7 @@ func (s *Store) PendingSettlements(agentID string, limit int) ([]SettlementRecor
 	for rows.Next() {
 		var record SettlementRecord
 		var created, updated int64
-		if err := rows.Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated); err != nil {
+		if err := rows.Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation); err != nil {
 			return nil, err
 		}
 		record.CreatedAt = time.Unix(created, 0).UTC()
@@ -2170,6 +2687,17 @@ func (s *Store) Usage(agentID, mainUserID string, limit int) ([]AgentUsageView, 
 // UsagePage returns a bounded page and the total number of settlements visible
 // to the requested user. The count and page share the same agent/user filter.
 func (s *Store) UsagePage(agentID, mainUserID string, pageSize, offset int) ([]AgentUsageView, int, error) {
+	return s.FilteredUsagePage(agentID, mainUserID, pageSize, offset, UsageFilter{})
+}
+
+type UsageFilter struct {
+	Model     string
+	RequestID string
+	Start     int64
+	End       int64
+}
+
+func (s *Store) FilteredUsagePage(agentID, mainUserID string, pageSize, offset int, search UsageFilter) ([]AgentUsageView, int, error) {
 	if pageSize <= 0 || pageSize > 200 {
 		pageSize = 50
 	}
@@ -2188,6 +2716,22 @@ func (s *Store) UsagePage(agentID, mainUserID string, pageSize, offset int) ([]A
 		countArgs = append(countArgs, mainUserID)
 	}
 	var total int
+	if search.Model != "" {
+		filter += ` AND st.model=?`
+		countArgs = append(countArgs, search.Model)
+	}
+	if search.RequestID != "" {
+		filter += ` AND st.request_id=?`
+		countArgs = append(countArgs, search.RequestID)
+	}
+	if search.Start != 0 {
+		filter += ` AND st.created_at>=?`
+		countArgs = append(countArgs, search.Start)
+	}
+	if search.End != 0 {
+		filter += ` AND st.created_at<?`
+		countArgs = append(countArgs, search.End)
+	}
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM settlements st`+filter, countArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}

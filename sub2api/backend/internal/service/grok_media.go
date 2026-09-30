@@ -174,6 +174,17 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 	appendJSONImageURLs(gjson.GetBytes(body, "image"))
 	appendJSONImageURLs(gjson.GetBytes(body, "images"))
 	appendJSONImageURLs(gjson.GetBytes(body, "reference_images"))
+	if IsAutoDLVideoModel(info.Model) {
+		appendJSONImageURLs(gjson.GetBytes(body, "input_reference[]"))
+		appendJSONImageURLs(gjson.GetBytes(body, "first_frame_url"))
+		appendJSONImageURLs(gjson.GetBytes(body, "last_frame_url"))
+		gjson.ParseBytes(body).ForEach(func(key, value gjson.Result) bool {
+			if strings.HasPrefix(key.String(), "ref_image") || key.String() == "first_frame" || key.String() == "last_frame" {
+				appendJSONImageURLs(value)
+			}
+			return true
+		})
+	}
 	info.MaskImageURL = extractGrokMediaImageURL(gjson.GetBytes(body, "mask"))
 }
 
@@ -337,6 +348,7 @@ func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccount(
 // the ownership key; video lookups must neither escape nor refresh that key.
 func (s *OpenAIGatewayService) SelectGrokMediaVideoRequestAccount(
 	ctx context.Context, groupID *int64, sessionHash string, accountID int64, requestedModel string,
+	platformOverride ...string,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	decision := OpenAIAccountScheduleDecision{Layer: openAIAccountScheduleLayerSessionSticky}
 	if accountID <= 0 || strings.TrimSpace(sessionHash) == "" {
@@ -344,8 +356,13 @@ func (s *OpenAIGatewayService) SelectGrokMediaVideoRequestAccount(
 	}
 	ctx = s.withOpenAIGroupPrivacyRequirement(WithOpenAIProfitControlSuppressed(ctx), groupID)
 	scheduler := &defaultOpenAIAccountScheduler{service: s}
+	platform := PlatformGrok
+	var capability OpenAIEndpointCapability
+	if len(platformOverride) > 0 && platformOverride[0] == PlatformOpenAI {
+		platform, capability = PlatformOpenAI, OpenAIEndpointCapabilityAutoDLVideo
+	}
 	selection, _, err := scheduler.selectBySessionHash(ctx, OpenAIAccountScheduleRequest{
-		GroupID: groupID, Platform: PlatformGrok, SessionHash: sessionHash,
+		GroupID: groupID, Platform: platform, SessionHash: sessionHash, RequiredCapability: capability,
 		StickyAccountID: accountID, PreserveStickyBinding: true, DisableStickyEscape: true,
 		RequestedModel: requestedModel, RequiredTransport: OpenAIUpstreamTransportHTTPSSE,
 		RequirePrivacySet: s.openAIGroupRequiresPrivacySet(ctx, groupID),
@@ -452,7 +469,7 @@ func (s *OpenAIGatewayService) StoreGrokVideoPendingBilling(
 		pending.VideoResolution = NormalizeVideoBillingResolutionOrDefault(pending.VideoResolution)
 	}
 	if pending.VideoDurationSeconds > 0 {
-		pending.VideoDurationSeconds = NormalizeVideoBillingDurationSecondsOrDefault(pending.VideoDurationSeconds)
+		pending.VideoDurationSeconds = NormalizeModelVideoBillingDuration(pending.Model, pending.VideoDurationSeconds)
 	}
 	// Always stamp create-accept time when missing so deferred duration_ms is E2E.
 	if strings.TrimSpace(pending.CreatedAt) == "" {
@@ -617,7 +634,7 @@ func ExtractGrokVideoBillingFromStatusBody(statusBody []byte, pending *GrokVideo
 		resolution = NormalizeVideoBillingResolutionOrDefault(resolution)
 	}
 	if durationSeconds > 0 {
-		durationSeconds = NormalizeVideoBillingDurationSecondsOrDefault(durationSeconds)
+		durationSeconds = NormalizeModelVideoBillingDuration(model, durationSeconds)
 	}
 	responseID := extractGrokMediaVideoRequestID(statusBody)
 	if responseID == "" {
@@ -646,6 +663,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	startTime := time.Now()
 	if account == nil {
 		return nil, fmt.Errorf("grok account is required")
+	}
+	if account.IsAutoDLVideoAccount() {
+		return s.forwardAutoDLVideo(ctx, c, account, endpoint, requestID, body)
 	}
 	if account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("account platform %s is not supported for grok media", account.Platform)
@@ -811,6 +831,9 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		return nil, err
 	}
 	statusReq.Header.Set("Authorization", "Bearer "+token)
+	if account.IsAutoDLVideoAccount() {
+		statusReq.Header.Set("Authorization", token)
+	}
 	statusReq.Header.Set("Accept", "application/json")
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(statusURL) {
 		applyGrokCLIHeaders(statusReq.Header)
@@ -843,7 +866,21 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		return nil, err
 	}
 
+	if account.IsAutoDLVideoAccount() {
+		var done bool
+		statusBody, _, done, err = normalizeAutoDLVideoResponse(statusBody, requestID, false)
+		if err != nil {
+			return nil, err
+		}
+		if !done {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"message": "AutoDL 视频尚未完成"}})
+			return nil, fmt.Errorf("AutoDL video is not complete")
+		}
+	}
 	contentURL, err := grokMediaSignedVideoContentURL(statusBody, requestID)
+	if account.IsAutoDLVideoAccount() {
+		contentURL, err = autoDLVideoContentURL(statusBody)
+	}
 	if err != nil {
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		return nil, err
@@ -857,8 +894,12 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		}
 	}
 
+	contentCtx := WithHTTPUpstreamRedirectsDisabled(upstreamCtx)
+	if account.IsAutoDLVideoAccount() {
+		contentCtx = WithHTTPUpstreamPublicHostsOnly(contentCtx)
+	}
 	contentReq, err := http.NewRequestWithContext(
-		WithHTTPUpstreamRedirectsDisabled(upstreamCtx),
+		contentCtx,
 		http.MethodGet,
 		contentURL,
 		nil,
@@ -895,7 +936,9 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		return s.handleGrokMediaErrorResponse(ctx, contentResp, c, account, contentRequestID, "")
 	}
 
-	s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, ""), account, contentResp.Header, contentResp.StatusCode)
+	if !account.IsAutoDLVideoAccount() {
+		s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, ""), account, contentResp.Header, contentResp.StatusCode)
+	}
 	if err := writeGrokMediaContentResponse(c, contentResp); err != nil {
 		return nil, err
 	}
@@ -916,6 +959,11 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		result.VideoCount = billed.VideoCount
 		result.VideoResolution = billed.VideoResolution
 		result.VideoDurationSeconds = billed.VideoDurationSeconds
+		if account.IsAutoDLVideoAccount() {
+			// AutoDL status omits model/duration; billing must use its create snapshot.
+			result.Model, result.BillingModel, result.UpstreamModel = "", "", ""
+			result.VideoOutputURL = contentURL
+		}
 	}
 	return result, nil
 }

@@ -37,6 +37,7 @@ var (
 	ErrRefreshTokenExpired          = infraerrors.Unauthorized("REFRESH_TOKEN_EXPIRED", "refresh token has expired")
 	ErrRefreshTokenReused           = infraerrors.Unauthorized("REFRESH_TOKEN_REUSED", "refresh token has been reused")
 	ErrEmailVerifyRequired          = infraerrors.BadRequest("EMAIL_VERIFY_REQUIRED", "email verification is required")
+	ErrEmailVerifyDisabled          = infraerrors.BadRequest("EMAIL_VERIFY_DISABLED", "email verification is not enabled")
 	ErrEmailSuffixNotAllowed        = infraerrors.BadRequest("EMAIL_SUFFIX_NOT_ALLOWED", "email suffix is not allowed")
 	ErrEmailDomainRegistrationLimit = infraerrors.BadRequest(
 		"EMAIL_DOMAIN_REGISTRATION_LIMIT",
@@ -450,10 +451,24 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 
 // SendVerifyCodeAsync 异步发送邮箱验证码并返回倒计时
 func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, locale ...string) (*SendVerifyCodeResult, error) {
+	return s.sendVerifyCodeAsync(ctx, email, true, locale...)
+}
+
+// SendSatelliteRegistrationVerifyCodeAsync sends the same authoritative
+// registration code for a trusted satellite. Satellite registration can be
+// enabled independently from the main panel's public registration switch, so
+// this path deliberately skips only that switch; the email-enabled setting,
+// reserved-address checks, existing-user checks, domain policy, cooldown and
+// one-time-code storage remain owned by Sub2API.
+func (s *AuthService) SendSatelliteRegistrationVerifyCodeAsync(ctx context.Context, email string, locale ...string) (*SendVerifyCodeResult, error) {
+	return s.sendVerifyCodeAsync(ctx, email, false, locale...)
+}
+
+func (s *AuthService) sendVerifyCodeAsync(ctx context.Context, email string, requirePublicRegistration bool, locale ...string) (*SendVerifyCodeResult, error) {
 	logger.LegacyPrintf("service.auth", "[Auth] SendVerifyCodeAsync called for email: %s", email)
 
 	// 检查是否开放注册（默认关闭）
-	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
+	if requirePublicRegistration && (s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx)) {
 		logger.LegacyPrintf("service.auth", "%s", "[Auth] Registration is disabled")
 		return nil, ErrRegDisabled
 	}
@@ -498,6 +513,20 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 	return &SendVerifyCodeResult{
 		Countdown: 60, // 60秒倒计时
 	}, nil
+}
+
+// VerifySatelliteRegistrationEmailCode consumes a one-time registration code
+// on behalf of a trusted satellite backend. It does not create a user or issue
+// a token; the satellite may proceed with its existing server-side main-user
+// creation flow only after this authoritative check succeeds.
+func (s *AuthService) VerifySatelliteRegistrationEmailCode(ctx context.Context, email, code string) error {
+	if s.emailService == nil {
+		return ErrServiceUnavailable
+	}
+	if strings.TrimSpace(email) == "" || strings.TrimSpace(code) == "" {
+		return ErrEmailVerifyRequired
+	}
+	return s.emailService.VerifyCode(ctx, strings.TrimSpace(email), strings.TrimSpace(code))
 }
 
 // VerifyCaptchaForRegister 在注册场景下验证当前启用的验证码。

@@ -4,6 +4,8 @@ import com.artisanlab.common.ApiException;
 import com.artisanlab.userconfig.UserApiConfigDtos;
 import com.artisanlab.userconfig.UserApiConfigService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
@@ -20,9 +22,95 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AgentPlannerServiceTest {
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "把背景换成海边，人物保持不动，整体色调偏暖",
+            "@05y2sr59e把背景换成海边，人物保持不动，整体色调偏暖",
+            "@20260929-120342.png\n把背景换成海边，人物保持不动，整体色调偏暖"
+    })
+    void lockedImageEditDoesNotDependOnTextUpstream(String prompt) {
+        UserApiConfigService configs = mock(UserApiConfigService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        KnowledgeAnswerService knowledge = mock(KnowledgeAnswerService.class);
+        AgentPlannerService service = new AgentPlannerService(
+                configs, textService, knowledge, new com.fasterxml.jackson.databind.ObjectMapper());
+        UUID userId = UUID.randomUUID();
+        when(configs.getRequiredConfig(userId)).thenReturn(new UserApiConfigDtos.ResolvedConfig(
+                "https://relay.example/v1", "test-key", "gpt-image-2", "gpt-5.5",
+                "https://relay.example/v1/images/generations", "https://relay.example/v1/images/edits", false));
+        AiProxyDtos.AgentPlanRequest request = new AiProxyDtos.AgentPlanRequest(
+                prompt, "05y2sr59e", "9:16", "", "", List.of(
+                new AiProxyDtos.ImageReferenceCandidate("ref", "背景参考", 1, 1024, 1024),
+                new AiProxyDtos.ImageReferenceCandidate("05y2sr59e", "20260929-120342.png", 2, 768, 1024)));
+
+        AiProxyDtos.AgentPlanResponse plan = service.createPlan(userId, request);
+
+        assertThat(plan.responseMode()).isEqualTo("execute");
+        assertThat(plan.taskType()).isEqualTo("image-edit");
+        assertThat(plan.mode()).isEqualTo("edit");
+        assertThat(plan.baseImageId()).isEqualTo("05y2sr59e");
+        assertThat(plan.referenceImageIds()).containsExactly("ref");
+        assertThat(plan.aspectRatio()).isEqualTo("9:16");
+        assertThat(plan.count()).isEqualTo(1);
+        verify(configs).getRequiredConfig(userId);
+        verifyNoInteractions(textService, knowledge);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"怎么把背景换成海边？", "你是谁", "帮我写代码把背景换成海边", "生成商品详情图，把背景换成海边", "把背景换成海边，生成3张"})
+    void lockedImageDoesNotTurnQuestionsOrSpecializedTasksIntoDirectEdits(String prompt) {
+        assertThat(AgentPlannerService.isExplicitImageEdit(new AiProxyDtos.AgentPlanRequest(
+                prompt, "base", "auto", "", "",
+                List.of(new AiProxyDtos.ImageReferenceCandidate("base", "照片", 1, 1024, 1024)))))
+                .isFalse();
+    }
+
+    @Test
+    void directImageEditStillRequiresUserConfiguration() {
+        UserApiConfigService configs = mock(UserApiConfigService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        UUID userId = UUID.randomUUID();
+        when(configs.getRequiredConfig(userId)).thenThrow(new ApiException(
+                HttpStatus.UNAUTHORIZED, "SUB2API_SESSION_REQUIRED", "当前会话未提供 Sub2API 用户身份"));
+        AgentPlannerService service = new AgentPlannerService(
+                configs, textService, null, new com.fasterxml.jackson.databind.ObjectMapper());
+        assertThatThrownBy(() -> service.createPlan(userId, new AiProxyDtos.AgentPlanRequest(
+                "把背景换成海边", "base", "auto", "", "",
+                List.of(new AiProxyDtos.ImageReferenceCandidate("base", "照片", 1, 1024, 1024)))))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("当前会话未提供 Sub2API 用户身份");
+        verifyNoInteractions(textService);
+    }
+
+    @Test
+    void directImageEditRequiresTheLockedImageToExist() {
+        assertThat(AgentPlannerService.isExplicitImageEdit(new AiProxyDtos.AgentPlanRequest(
+                "把背景换成海边", "missing", "auto", "", "",
+                List.of(new AiProxyDtos.ImageReferenceCandidate("base", "照片", 1, 1024, 1024)))))
+                .isFalse();
+    }
+
+    @Test
+    void singleReferencedImageCanBeEditedWithoutAnExplicitLock() {
+        assertThat(AgentPlannerService.isExplicitImageEdit(new AiProxyDtos.AgentPlanRequest(
+                "@05y2sr59e把背景换成海边，人物保持不动，整体色调偏暖", "", "auto", "", "",
+                List.of(new AiProxyDtos.ImageReferenceCandidate("05y2sr59e", "照片", 1, 1024, 1024)))))
+                .isTrue();
+    }
+
+    @Test
+    void multipleImagesWithoutALockStillRequirePlanning() {
+        assertThat(AgentPlannerService.isExplicitImageEdit(new AiProxyDtos.AgentPlanRequest(
+                "把背景换成海边", "", "auto", "", "", List.of(
+                new AiProxyDtos.ImageReferenceCandidate("first", "照片1", 1, 1024, 1024),
+                new AiProxyDtos.ImageReferenceCandidate("second", "照片2", 2, 1024, 1024)))))
+                .isFalse();
+    }
+
     @Test
     void fallbackPlanUsesContextImageAsBaseForEditTasks() {
         AiProxyDtos.AgentPlanRequest request = new AiProxyDtos.AgentPlanRequest(

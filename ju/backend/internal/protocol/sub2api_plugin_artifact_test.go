@@ -31,18 +31,24 @@ func TestSub2APIVideoPlugin(t *testing.T) {
 		t.Fatal("expected declarative public-media adapter")
 	}
 	spec, err := a.BuildCreate(context.Background(), RequestContext{Request: GenerationRequest{
-		Model: "minimax_h3_b99_002", Prompt: "scene", Duration: 5, Resolution: "736p", AspectRatio: "16:9",
+		Model: "minimax_h3_b99_002", Prompt: "scene", Duration: 5, Resolution: "736p横", AspectRatio: "16:9",
 		Images: []MediaReference{{URL: "https://media.example/last.png", Role: "last_frame", Order: 0}, {URL: "https://media.example/first.png", Role: "first_frame", Order: 1}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := spec.Body.(map[string]any)
-	if spec.Path != "/v1/videos" || spec.ContentType != "application/json" || spec.Auth.Type != "bearer" || body["duration"] != 5 {
+	if spec.Path != "/v1/videos" || spec.ContentType != "application/json" || spec.Auth.Type != "bearer" || body["model"] != "minimax_h3_b99_002" || body["duration"] != 5 || body["seconds"] != 5 || body["resolution_name"] != "736p横" {
 		t.Fatalf("spec = %#v", spec)
 	}
 	if !reflect.DeepEqual(body["images"], []any{"https://media.example/first.png", "https://media.example/last.png"}) {
 		t.Fatalf("images = %#v", body["images"])
+	}
+	if body["first_frame_url"] != "https://media.example/first.png" || body["last_frame_url"] != "https://media.example/last.png" {
+		t.Fatalf("AutoDL frame mapping = %#v", body)
+	}
+	if _, exists := body["input_reference[]"]; exists {
+		t.Fatalf("first/last-frame workflow must not receive generic image references: %#v", body)
 	}
 	if _, err := a.BuildCreate(context.Background(), RequestContext{Request: GenerationRequest{Model: "indextts2-v1"}}); err == nil {
 		t.Fatal("audio workflow accepted as video")

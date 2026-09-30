@@ -31,6 +31,15 @@ func NormalizeVideoBillingDurationSecondsOrDefault(durationSeconds int) int {
 	return durationSeconds
 }
 
+// Motion transfer follows the source clip and has no requested duration.
+// Its measured output must not inherit xAI's default or 15-second cap.
+func NormalizeModelVideoBillingDuration(model string, seconds int) int {
+	if model == "wan2.2animate-v4-motion_retargeting" {
+		return max(seconds, 0)
+	}
+	return NormalizeVideoBillingDurationSecondsOrDefault(seconds)
+}
+
 // LookupVideoBillingResolution 归一化分辨率并报告是否为已知档位。
 // 配置解析路径必须用它而不是 OrDefault：把无法识别的档位（如 "4k"、拼错的
 // "1080i"）静默折算成 480p，会让管理员配的高分辨率单价被挂到低分辨率档上。
@@ -40,6 +49,8 @@ func LookupVideoBillingResolution(resolution string) (string, bool) {
 		return VideoBillingResolution480P, true
 	case "720", "720p", "hd":
 		return VideoBillingResolution720P, true
+	case "768", "768p", "1088", "1088p", "1440", "1440p":
+		return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(resolution)), "p") + "p", true
 	case "1080", "1080p", "full_hd", "full-hd", "fhd":
 		return VideoBillingResolution1080P, true
 	default:

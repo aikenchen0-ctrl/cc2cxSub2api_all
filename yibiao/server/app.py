@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from pydantic import BaseModel
@@ -43,9 +43,11 @@ from auth_sso import (
     create_session,
     get_identity,
     is_managed,
+    relay_base_url,
     require_identity,
     reset_current_subject,
     safe_next,
+    satellite_headers,
     set_current_subject,
     verify_ticket,
 )

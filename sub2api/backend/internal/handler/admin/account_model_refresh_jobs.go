@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -17,8 +17,6 @@ import (
 )
 
 const accountModelRefreshPageSize = 500
-
-const accountModelRefreshMaxAttempts = 3
 
 type accountModelRefreshItem struct {
 	AccountID   int64  `json:"account_id"`
@@ -41,9 +39,10 @@ type accountModelRefreshJob struct {
 }
 
 type accountModelRefreshJobStore struct {
-	mu     sync.RWMutex
-	jobs   map[string]*accountModelRefreshJob
-	active string
+	mu      sync.RWMutex
+	jobs    map[string]*accountModelRefreshJob
+	active  string
+	startMu sync.Mutex
 }
 
 func newAccountModelRefreshJobStore() *accountModelRefreshJobStore {
@@ -139,10 +138,13 @@ func (s *accountModelRefreshJobStore) finish(jobID string) {
 // StartModelRefreshJob starts a server-owned background job. The request may end
 // and the browser may close the progress dialog without cancelling the refresh.
 func (h *AccountHandler) StartModelRefreshJob(c *gin.Context) {
-	if h.accountTestService == nil || h.modelRefreshJobs == nil {
+	if h.adminService == nil || h.modelRefreshJobs == nil {
 		response.InternalError(c, "Account model refresh service is not configured")
 		return
 	}
+	// Serialize check/list/create so simultaneous confirmations share one job.
+	h.modelRefreshJobs.startMu.Lock()
+	defer h.modelRefreshJobs.startMu.Unlock()
 	if active, ok := h.modelRefreshJobs.activeSnapshot(); ok && active.Status == "running" {
 		response.Success(c, active)
 		return
@@ -200,24 +202,36 @@ func (h *AccountHandler) runModelRefreshJob(jobID string, accounts []service.Acc
 			continue
 		}
 
-		catalog, err := h.syncAccountModelCatalogWithRetry(account)
-		if err != nil || catalog == nil || len(catalog.Models) == 0 {
-			slog.Warn("account_model_refresh_sync_failed",
-				"account_id", account.ID,
-				"account_name", account.Name,
-				"upstream_url", accountModelRefreshUpstreamURL(account),
-				"error", err,
-			)
-			h.modelRefreshJobs.setItemStatus(jobID, index, "failed", 0)
-			continue
-		}
-
+		// Match Edit -> fillRelated -> Update: add the shared built-in catalog,
+		// preserving custom aliases and every unrelated credential field.
 		credentials := cloneAccountCredentialsForModelRefresh(account.Credentials)
-		delete(credentials, "model_whitelist")
-		mapping := make(map[string]any, len(catalog.Models))
-		for _, rawModel := range catalog.Models {
-			model := strings.TrimSpace(rawModel)
-			if model != "" {
+		mapping := make(map[string]any)
+		switch existing := credentials["model_mapping"].(type) {
+		case map[string]any:
+			for key, value := range existing {
+				mapping[key] = value
+			}
+		case map[string]string:
+			for key, value := range existing {
+				mapping[key] = value
+			}
+		}
+		// Preserve legacy Antigravity whitelist entries when migrating to mappings.
+		if account.Platform == "antigravity" && credentials["model_mapping"] == nil {
+			if legacy, ok := credentials["model_whitelist"].([]any); ok {
+				for _, value := range legacy {
+					if model, ok := value.(string); ok && strings.TrimSpace(model) != "" {
+						model = strings.TrimSpace(model)
+						mapping[model] = model
+					}
+				}
+			}
+		}
+		if account.Platform == "antigravity" {
+			delete(credentials, "model_whitelist")
+		}
+		for _, model := range modelcatalog.ForPlatform(account.Platform) {
+			if _, exists := mapping[model]; !exists {
 				mapping[model] = model
 			}
 		}
@@ -233,38 +247,6 @@ func (h *AccountHandler) runModelRefreshJob(jobID string, accounts []service.Acc
 		}
 		h.modelRefreshJobs.setItemStatus(jobID, index, "success", len(mapping))
 	}
-}
-
-func (h *AccountHandler) syncAccountModelCatalogWithRetry(account *service.Account) (*service.UpstreamModelCatalog, error) {
-	var lastErr error
-	for attempt := 1; attempt <= accountModelRefreshMaxAttempts; attempt++ {
-		catalog, err := h.accountTestService.SyncUpstreamModelCatalog(context.Background(), account)
-		if err == nil {
-			return catalog, nil
-		}
-		lastErr = err
-		if !accountModelRefreshErrorRetryable(err) || attempt == accountModelRefreshMaxAttempts {
-			break
-		}
-		delay := time.Duration(attempt) * time.Second
-		slog.Info("account_model_refresh_retry",
-			"account_id", account.ID,
-			"attempt", attempt,
-			"next_attempt", attempt+1,
-			"delay", delay,
-			"error", err,
-		)
-		time.Sleep(delay)
-	}
-	return nil, lastErr
-}
-
-func accountModelRefreshErrorRetryable(err error) bool {
-	var syncErr *service.UpstreamModelSyncError
-	if !errors.As(err, &syncErr) {
-		return true
-	}
-	return syncErr.Kind == service.UpstreamModelSyncErrorUpstream
 }
 
 func cloneAccountCredentialsForModelRefresh(source map[string]any) map[string]any {

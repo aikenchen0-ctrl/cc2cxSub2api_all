@@ -224,10 +224,17 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
 		accountBalanceRequest := c.Request.URL.Path == "/v1/sub2api/balance"
 		satelliteUsageRequest := c.Request.URL.Path == "/v1/sub2api/usage"
+		satelliteAvailableChannelsRequest := c.Request.URL.Path == "/v1/sub2api/available-channels"
+		satelliteChannelMonitorRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/channel-monitors")
+		satellitePaymentRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/payment")
+		satelliteSubscriptionsRequest := c.Request.URL.Path == "/v1/sub2api/subscriptions"
+		satelliteAffiliateRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/affiliate")
+		satelliteOrdersRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/orders")
+		satelliteRedeemRequest := c.Request.URL.Path == "/v1/sub2api/redeem" || c.Request.URL.Path == "/v1/sub2api/redeem/history"
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || accountBalanceRequest || satelliteUsageRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || accountBalanceRequest || satelliteUsageRequest || satelliteAvailableChannelsRequest || satelliteChannelMonitorRequest || satellitePaymentRequest || satelliteSubscriptionsRequest || satelliteAffiliateRequest || satelliteOrdersRequest || satelliteRedeemRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -239,7 +246,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			})
 			c.Set(string(ContextKeyUserRole), apiKey.User.Role)
 			setGroupContext(c, apiKey.Group)
-			if !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest {
+			if !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
 				_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 			}
 			c.Next()
@@ -252,7 +259,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 
 		// 倍率/余额自省不需要订阅数据；/v1/usage 仍保留原有订阅读取行为。
-		if isSubscriptionType && subscriptionService != nil && !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest {
+		if isSubscriptionType && subscriptionService != nil && !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
 			sub, subErr := subscriptionService.GetActiveSubscription(
 				c.Request.Context(),
 				apiKey.User.ID,
@@ -337,7 +344,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		})
 		c.Set(string(ContextKeyUserRole), apiKey.User.Role)
 		setGroupContext(c, apiKey.Group)
-		if !billingInfoRequest && !accountBalanceRequest {
+		if !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
 			_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 		}
 

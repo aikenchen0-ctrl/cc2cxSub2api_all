@@ -361,9 +361,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
-					if preferImmediateAccountSwitch(failoverErr) {
-						h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionHash)
-					}
 					if switchCount >= maxAccountSwitches {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return

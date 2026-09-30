@@ -2,10 +2,12 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "../types/index";
 import { ChevronRight } from "lucide-react";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/store/store";
 
 interface GenerateButtonProps {
   loadingState: LoadingState;
-  streamState: { isStreaming: boolean; isLoading: boolean };
+  streamState: { isStreaming: boolean; isLoading: boolean; error?: string | null };
   selectedTemplateId: string | null;
   onSubmit: () => void;
 }
@@ -16,7 +18,10 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
   selectedTemplateId,
   onSubmit,
 }) => {
+  const outlines = useSelector((state: RootState) => state.presentationGeneration.outlines);
   const isDisabled =
+    Boolean(streamState.error) ||
+    !outlines.length || outlines.some((slide) => !slide.content?.trim()) ||
     loadingState.isLoading ||
     streamState.isLoading ||
     streamState.isStreaming ||

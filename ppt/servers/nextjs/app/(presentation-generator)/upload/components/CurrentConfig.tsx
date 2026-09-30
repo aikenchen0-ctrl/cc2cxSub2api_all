@@ -1,14 +1,16 @@
 import { RootState } from '@/store/store';
+import { useUiLanguage } from '@/components/UiLanguage';
 import { IMAGE_PROVIDERS, LLM_PROVIDERS, WEB_SEARCH_PROVIDERS } from '@/utils/providerConstants';
 import React from 'react'
 import { useSelector } from 'react-redux';
 
 const CurrentConfig = ({ webSearchEnabled }: { webSearchEnabled: boolean }) => {
+    const { t } = useUiLanguage();
     const userConfigState = useSelector((state: RootState) => state.userConfig);
     const llmConfig = userConfigState.llm_config;
     const textProviderKey = llmConfig.LLM || "openai";
     const textProviderLabel =
-        LLM_PROVIDERS[textProviderKey]?.label || textProviderKey;
+        textProviderKey === "custom" ? t("自定义", "Custom") : LLM_PROVIDERS[textProviderKey]?.label || textProviderKey;
     const selectedTextModel =
         textProviderKey === "openai"
             ? llmConfig.OPENAI_MODEL
@@ -48,14 +50,14 @@ const CurrentConfig = ({ webSearchEnabled }: { webSearchEnabled: boolean }) => {
         : textProviderLabel;
 
     const imageSummary = llmConfig.DISABLE_IMAGE_GENERATION
-        ? "Image generation disabled"
+        ? t("图片生成已关闭", "Image generation disabled")
         : llmConfig.IMAGE_PROVIDER
             ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]?.label || llmConfig.IMAGE_PROVIDER
-            : "未配置图片服务";
+            : t("未配置图片服务", "Image provider not configured");
     const webSearchProviderKey = (llmConfig.WEB_SEARCH_PROVIDER || "auto").toLowerCase();
     const webSearchProvider =
-        WEB_SEARCH_PROVIDERS[webSearchProviderKey]?.label || webSearchProviderKey;
-    const webSearchSummary = `Web: ${webSearchProvider} (${webSearchEnabled ? "On" : "Off"})`;
+        webSearchProviderKey === "auto" ? t("默认（模型）", "Default (model)") : WEB_SEARCH_PROVIDERS[webSearchProviderKey]?.label || webSearchProviderKey;
+    const webSearchSummary = `${t("联网", "Web")}: ${webSearchProvider} (${webSearchEnabled ? t("开", "On") : t("关", "Off")})`;
 
     return (
         <p className="rounded-[50px] border border-[#EDEEEF] px-2.5 py-0.5 text-[10px] font-medium text-[#7A5AF8] min-[1800px]:px-3 min-[1800px]:py-1 min-[1800px]:text-[11px] min-[2200px]:px-4 min-[2200px]:text-xs">

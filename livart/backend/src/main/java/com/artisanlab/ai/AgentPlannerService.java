@@ -293,6 +293,11 @@ public class AgentPlannerService {
 
     public AiProxyDtos.AgentPlanResponse createPlan(UUID userId, AiProxyDtos.AgentPlanRequest request) {
         UserApiConfigDtos.ResolvedConfig config = userApiConfigService.getRequiredConfig(userId);
+        // An unambiguous image and an explicit edit instruction identify the tool
+        // and its input. Do not make image editing depend on a text-model upstream.
+        if (isExplicitImageEdit(request)) {
+            return createForcedToolPlan(request, "tool.image.edit");
+        }
         long startedAt = System.currentTimeMillis();
         String userMemoryContext = buildUserMemoryContext(userId, config, request.prompt());
 
@@ -339,6 +344,30 @@ public class AgentPlannerService {
                     "Agent 任务规划失败：%s".formatted(safeMessage(exception))
             );
         }
+    }
+
+    static boolean isExplicitImageEdit(AiProxyDtos.AgentPlanRequest request) {
+        if (request.images() == null || request.images().isEmpty()
+                || request.productPoster() != null
+                || (request.requestedEditMode() != null && !request.requestedEditMode().isBlank())
+                || !"edit".equals(normalizeRequestedMode("", request.prompt()))
+                || inferForcedToolCount(request.prompt()) > 1) {
+            return false;
+        }
+        boolean hasLockedImage = request.contextImageId() != null && !request.contextImageId().isBlank();
+        if (hasLockedImage
+                ? request.images().stream().noneMatch(image -> request.contextImageId().equals(image.id()))
+                : request.images().size() != 1) {
+            return false;
+        }
+        String prompt = normalizeToken(request.prompt());
+        // Keep questions, unrelated requests and specialized/batch tasks on
+        // the planner; selecting an image alone is not permission to edit it.
+        if (isExplicitlyOutOfScopePrompt(prompt)
+                || prompt.matches("(?s).*(怎么|如何|为什么|是否|能否|能不能|可以吗|[?？]|\\bhow\\b|\\bwhy\\b).*")) {
+            return false;
+        }
+        return prompt.matches("(?s).*(换成|换为|改成|改为|替换|换背景|更换背景|调整色调|调成|调暖|调冷|变成|改色|\\breplace\\b|\\bchange\\b|\\brecolor\\b).*");
     }
 
     public AiProxyDtos.AgentPlanResponse createForcedToolPlan(AiProxyDtos.AgentPlanRequest request, String forcedToolId) {

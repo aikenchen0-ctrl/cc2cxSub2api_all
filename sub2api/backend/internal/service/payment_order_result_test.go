@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -409,6 +410,50 @@ func TestMaybeBuildWeChatOAuthRequiredResponse(t *testing.T) {
 	}
 	if resp.OAuth.AuthorizeURL != "/api/v1/auth/oauth/wechat/payment/start?amount=12.5&order_type=balance&payment_type=wxpay&redirect=%2Fpurchase%3Ffrom%3Dwechat&scope=snsapi_base" {
 		t.Fatalf("authorize_url = %q", resp.OAuth.AuthorizeURL)
+	}
+}
+
+func TestMaybeBuildWeChatOAuthRequiredResponseCarriesSignedSatelliteHandoff(t *testing.T) {
+	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "0123456789abcdef0123456789abcdef")
+
+	svc := newWeChatPaymentOAuthTestService(map[string]string{
+		SettingKeyWeChatConnectEnabled:             "true",
+		SettingKeyWeChatConnectAppID:               "wx123456",
+		SettingKeyWeChatConnectAppSecret:           "wechat-secret",
+		SettingKeyWeChatConnectMode:                "mp",
+		SettingKeyWeChatConnectScopes:              "snsapi_base",
+		SettingKeyWeChatConnectRedirectURL:         "https://api.example.com/api/v1/auth/oauth/wechat/callback",
+		SettingKeyWeChatConnectFrontendRedirectURL: "/auth/wechat/callback",
+	})
+
+	resp, err := svc.maybeBuildWeChatOAuthRequiredResponse(context.Background(), CreateOrderRequest{
+		Amount:          12.5,
+		PaymentType:     payment.TypeWxpay,
+		IsWeChatBrowser: true,
+		SrcURL:          "https://merchant.example/payment?from=wechat",
+		OrderType:       payment.OrderTypeBalance,
+		SatelliteSlug:   "agentapi",
+	}, 12.5, 12.88, 0.03)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp == nil || resp.OAuth == nil {
+		t.Fatalf("missing oauth response: %+v", resp)
+	}
+	parsed, err := url.Parse(resp.OAuth.AuthorizeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff := parsed.Query().Get("satellite_handoff")
+	if handoff == "" {
+		t.Fatalf("satellite_handoff missing from %q", resp.OAuth.AuthorizeURL)
+	}
+	claims, err := svc.paymentResume().ParseWeChatPaymentHandoffToken(handoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.SatelliteSlug != "agentapi" {
+		t.Fatalf("handoff satellite = %q", claims.SatelliteSlug)
 	}
 }
 

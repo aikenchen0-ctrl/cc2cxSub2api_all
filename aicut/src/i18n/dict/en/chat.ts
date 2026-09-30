@@ -1,6 +1,17 @@
 // EN dictionary (field fragmentation, key = Chinese original text). Data files are exempt from the upper limit of row count.
 // Override: components/chat/*. The chat message content ontology (LLM generated text) is not entered into the dictionary, but can only be translated into Chrome.
 export default {
+  '注册编辑器连接': 'Registering the editor connection',
+  '接收编辑任务': 'Receiving editing tasks',
+  '同步任务取消状态': 'Syncing task cancellation',
+  '回传编辑结果': 'Delivering editing results',
+  '同步编辑器连接': 'Syncing the editor connection',
+  '编辑器连接登录已失效，请从左侧菜单重新进入 AI剪辑。': 'Your editor session has expired. Reopen AI Editor from the sidebar.',
+  '编辑器连接无访问权限，请从左侧菜单重新进入 AI剪辑。': 'Editor connection access was denied. Reopen AI Editor from the sidebar.',
+  '编辑器连接正在恢复，请稍候；若持续失败，请关闭同一工程的其他窗口。': 'Restoring the editor connection. If this persists, close other windows editing this project.',
+  '{stage}失败：无法连接服务，正在自动重连。请检查网络；若持续失败，请稍后重试。': '{stage} failed: the service is unreachable. Reconnecting automatically. Check your network and try again later if this persists.',
+  '{stage}失败（HTTP {status}），正在自动重连；若持续失败，请联系管理员。': '{stage} failed (HTTP {status}). Reconnecting automatically; contact your administrator if this persists.',
+  '编辑器同步失败，请稍后重试；若持续失败，请联系管理员。': 'Editor sync failed. Try again later; contact your administrator if this persists.',
   'AI剪辑': 'AI Editor',
   '请按“{name}”工作流处理当前工程：{summary}。先检查素材和时间线，再执行并检查成片。': 'Follow the “{name}” workflow for the current project: {summary}. Inspect the media and timeline first, then execute and verify the result.',
   // ── ChatPanel shell ──

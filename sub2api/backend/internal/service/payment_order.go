@@ -591,7 +591,14 @@ func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, r
 		return nil, err
 	}
 
-	authorizeURL, err := buildWeChatPaymentOAuthStartURL(req, "snsapi_base")
+	handoffToken := ""
+	if satelliteSlug := strings.TrimSpace(req.SatelliteSlug); satelliteSlug != "" {
+		handoffToken, err = s.paymentResume().CreateWeChatPaymentHandoffToken(satelliteSlug)
+		if err != nil {
+			return nil, err
+		}
+	}
+	authorizeURL, err := buildWeChatPaymentOAuthStartURL(req, "snsapi_base", handoffToken)
 	if err != nil {
 		return nil, err
 	}
@@ -754,7 +761,7 @@ func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest,
 	}
 }
 
-func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (string, error) {
+func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope, handoffToken string) (string, error) {
 	u, err := url.Parse("/api/v1/auth/oauth/wechat/payment/start")
 	if err != nil {
 		return "", fmt.Errorf("build wechat payment oauth start url: %w", err)
@@ -772,6 +779,9 @@ func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (stri
 	}
 	if scope = strings.TrimSpace(scope); scope != "" {
 		q.Set("scope", scope)
+	}
+	if handoffToken = strings.TrimSpace(handoffToken); handoffToken != "" {
+		q.Set("satellite_handoff", handoffToken)
 	}
 	if redirectTo := paymentRedirectPathFromURL(req.SrcURL); redirectTo != "" {
 		q.Set("redirect", redirectTo)
@@ -850,6 +860,9 @@ func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p Orde
 	}
 	if p.PaymentType != "" {
 		q = q.Where(paymentorder.PaymentTypeEQ(p.PaymentType))
+	}
+	if p.PaidSince != nil {
+		q = q.Where(paymentorder.PaidAtGTE(*p.PaidSince))
 	}
 	total, err := q.Clone().Count(ctx)
 	if err != nil {

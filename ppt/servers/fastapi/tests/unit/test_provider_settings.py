@@ -69,6 +69,15 @@ def test_user_table_has_username_and_no_email_column():
     assert "email" not in columns
 
 
+def test_managed_settings_repair_image_model_and_partial_updates(monkeypatch):
+    monkeypatch.setenv("SUB2API_APP_CREDENTIAL", "test-credential")
+    monkeypatch.setenv("SUB2API_MODEL", "gpt-5.6-sol")
+    existing = {"LLM": "custom", "CUSTOM_MODEL": "gpt-image-2"}
+    assert sanitize_provider_settings(existing)["CUSTOM_MODEL"] == "gpt-5.6-sol"
+    assert merge_provider_settings(existing, {"CUSTOM_MODEL": "kling-v3"})["CUSTOM_MODEL"] == "gpt-5.6-sol"
+    assert merge_provider_settings(existing, {"CUSTOM_MODEL": "gpt-5.5"})["CUSTOM_MODEL"] == "gpt-5.5"
+
+
 def test_provider_settings_exclude_all_legacy_auth_fields():
     assert sanitize_provider_settings(
         {

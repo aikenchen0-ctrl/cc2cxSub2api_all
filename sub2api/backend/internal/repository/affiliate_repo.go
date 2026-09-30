@@ -385,7 +385,7 @@ LIMIT $2`, inviterID, limit)
 
 func (r *affiliateRepository) ListAffiliateInviteRecords(ctx context.Context, filter service.AffiliateRecordFilter) ([]service.AffiliateInviteRecord, int64, error) {
 	client := clientFromContext(ctx, r.client)
-	where, args := buildAffiliateRecordWhere(filter, "ua.created_at", []string{
+	where, args := buildAffiliateRecordWhere(filter, "ua.created_at", "ua.inviter_id", []string{
 		"inviter.email", "inviter.username", "invitee.email", "invitee.username",
 		"ua.inviter_id::text", "ua.user_id::text", "inviter_aff.aff_code",
 	})
@@ -462,7 +462,7 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 
 func (r *affiliateRepository) ListAffiliateRebateRecords(ctx context.Context, filter service.AffiliateRecordFilter) ([]service.AffiliateRebateRecord, int64, error) {
 	client := clientFromContext(ctx, r.client)
-	where, args := buildAffiliateRecordWhere(filter, "ual.created_at", []string{
+	where, args := buildAffiliateRecordWhere(filter, "ual.created_at", "ual.user_id", []string{
 		"inviter.email", "inviter.username", "invitee.email", "invitee.username",
 		"po.id::text", "po.out_trade_no", "po.payment_type", "po.status",
 	})
@@ -548,7 +548,7 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 
 func (r *affiliateRepository) ListAffiliateTransferRecords(ctx context.Context, filter service.AffiliateRecordFilter) ([]service.AffiliateTransferRecord, int64, error) {
 	client := clientFromContext(ctx, r.client)
-	where, args := buildAffiliateRecordWhere(filter, "ual.created_at", []string{
+	where, args := buildAffiliateRecordWhere(filter, "ual.created_at", "ual.user_id", []string{
 		"u.email", "u.username", "u.id::text",
 	})
 	baseJoin := `
@@ -672,9 +672,13 @@ func (r *affiliateRepository) GetAffiliateUserOverview(ctx context.Context, user
 	return &overview, rows.Err()
 }
 
-func buildAffiliateRecordWhere(filter service.AffiliateRecordFilter, timeColumn string, searchColumns []string) (string, []any) {
-	clauses := make([]string, 0, 3)
-	args := make([]any, 0, 3)
+func buildAffiliateRecordWhere(filter service.AffiliateRecordFilter, timeColumn, userColumn string, searchColumns []string) (string, []any) {
+	clauses := make([]string, 0, 4)
+	args := make([]any, 0, 4)
+	if filter.UserID > 0 && userColumn != "" {
+		args = append(args, filter.UserID)
+		clauses = append(clauses, fmt.Sprintf("%s = $%d", userColumn, len(args)))
+	}
 	if filter.StartAt != nil {
 		args = append(args, *filter.StartAt)
 		clauses = append(clauses, fmt.Sprintf("%s >= $%d", timeColumn, len(args)))
