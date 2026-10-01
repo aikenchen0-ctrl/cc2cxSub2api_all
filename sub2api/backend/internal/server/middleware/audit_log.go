@@ -109,7 +109,6 @@ func truncateAuditExtraString(value string, limit int) string {
 
 // auditSensitiveReads 需要审计的敏感 GET 读取（method+FullPath → 动作名）。
 var auditSensitiveReads = map[string]string{
-	"GET /api/v1/agent-provisioning/agents/:agent_id": "agent_provisioning.agent.read",
 	"GET /api/v1/admin/accounts/data":                 "admin.accounts.export",
 	"GET /api/v1/admin/proxies/data":                  "admin.proxies.export",
 	"GET /api/v1/admin/redeem-codes/export":           "admin.redeem_codes.export",
@@ -308,9 +307,6 @@ func (b *restoredBody) Close() error { return b.closer.Close() }
 
 // MaskedRequestCredential 提取请求头中的凭证并做首尾掩码。
 func MaskedRequestCredential(c *gin.Context) string {
-	if credential := maskedAgentProvisioningWorkerCredential(c); credential != "" {
-		return credential
-	}
 	if apiKey := strings.TrimSpace(c.GetHeader("x-api-key")); apiKey != "" {
 		return "x-api-key " + service.MaskAuditCredential(apiKey)
 	}

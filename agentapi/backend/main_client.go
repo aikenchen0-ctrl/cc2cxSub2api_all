@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,10 +18,9 @@ import (
 // deliberately has no database access and keeps per-Agent credentials server-
 // side, so they can never be serialized into a browser response.
 type MainClient struct {
-	cfg         Config
-	http        *http.Client
-	streamHTTP  *http.Client
-	controlHTTP *http.Client
+	cfg        Config
+	http       *http.Client
+	streamHTTP *http.Client
 }
 
 type MainAPIError struct {
@@ -67,11 +65,6 @@ type MainUserResult struct {
 	Balance         int64
 	FrozenBalance   int64
 	Raw             json.RawMessage
-}
-
-type MainProvisioningAgent struct {
-	AgentID string `json:"agent_id"`
-	Status  string `json:"status"`
 }
 
 type MainUsageResult struct {
@@ -139,17 +132,10 @@ func NewMainClient(cfg Config) *MainClient {
 	// not let a server redirect a request to a different origin (or even to a
 	// different endpoint) with those headers attached.
 	rejectRedirects := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
-	var controlTransport http.RoundTripper = http.DefaultTransport
-	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
-		transport := defaultTransport.Clone()
-		transport.ResponseHeaderTimeout = cfg.MainRequestTimeout
-		controlTransport = transport
-	}
 	return &MainClient{
-		cfg:         cfg,
-		http:        &http.Client{Timeout: cfg.MainRequestTimeout, CheckRedirect: rejectRedirects},
-		streamHTTP:  &http.Client{Timeout: cfg.ModelStreamTimeout, CheckRedirect: rejectRedirects},
-		controlHTTP: &http.Client{Transport: controlTransport, CheckRedirect: rejectRedirects},
+		cfg:        cfg,
+		http:       &http.Client{Timeout: cfg.MainRequestTimeout, CheckRedirect: rejectRedirects},
+		streamHTTP: &http.Client{Timeout: cfg.ModelStreamTimeout, CheckRedirect: rejectRedirects},
 	}
 }
 
@@ -493,69 +479,6 @@ func (c *MainClient) Logout(ctx context.Context, refreshToken string) error {
 	return err
 }
 
-func (c *MainClient) runtimeJSON(ctx context.Context, method, path string, payload any) (json.RawMessage, error) {
-	return c.runtimeJSONWithIdentityProof(ctx, method, path, payload, "", "")
-}
-
-func (c *MainClient) runtimeJSONWithIdentityProof(ctx context.Context, method, path string, payload any, userAccessToken, ssoTicket string) (json.RawMessage, error) {
-	credential := strings.TrimSpace(c.cfg.RuntimeControlCredential)
-	if !strings.HasPrefix(credential, "agt_ctl_") || len(credential) < 40 || len(credential) > 256 {
-		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
-	}
-	userAccessToken = strings.TrimSpace(userAccessToken)
-	ssoTicket = strings.TrimSpace(ssoTicket)
-	if userAccessToken != "" && (len(userAccessToken) > 8192 || strings.ContainsAny(userAccessToken, "\r\n")) {
-		return nil, fmt.Errorf("main user access token is invalid")
-	}
-	if ssoTicket != "" && (len(ssoTicket) > 8192 || strings.ContainsAny(ssoTicket, "\r\n")) {
-		return nil, fmt.Errorf("main SSO identity ticket is invalid")
-	}
-	if userAccessToken != "" && ssoTicket != "" {
-		return nil, fmt.Errorf("multiple main user identity proofs are not allowed")
-	}
-	var body []byte
-	var err error
-	if payload != nil {
-		body, err = json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-	}
-	headers := make(http.Header)
-	headers.Set("Accept", "application/json")
-	headers.Set("X-AgentAPI-Runtime-Control", credential)
-	if userAccessToken != "" {
-		headers.Set("Authorization", "Bearer "+userAccessToken)
-	}
-	if ssoTicket != "" {
-		headers.Set("X-AgentAPI-SSO-Ticket", ssoTicket)
-	}
-	if payload != nil {
-		headers.Set("Content-Type", "application/json")
-	}
-	resp, data, err := c.request(ctx, method, c.endpoint(path), body, headers)
-	if err != nil {
-		return nil, err
-	}
-	return unwrapMainResponse(resp.StatusCode, data)
-}
-
-func (c *MainClient) RuntimeGetOwner(ctx context.Context) (MainUserResult, error) {
-	data, err := c.runtimeJSON(ctx, http.MethodGet, "/agent-runtime/owner", nil)
-	if err != nil {
-		return MainUserResult{}, err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return MainUserResult{}, err
-	}
-	balance, frozenBalance, positive, err := decodeMainBalanceFacts(data)
-	if err != nil {
-		return MainUserResult{}, err
-	}
-	return MainUserResult{ID: jsonID(raw["id"]), Email: stringValue(raw["email"]), Balance: balance, FrozenBalance: frozenBalance, BalancePositive: positive, Raw: data}, nil
-}
-
 // SatelliteUserBalance reads one mapped Sub2API user's authoritative balance
 // through the public satellite relay contract. The application credential and
 // on-behalf-of identity are generated exclusively by AgentAPI's server.
@@ -623,108 +546,11 @@ func (c *MainClient) SatelliteOwnerBalance(ctx context.Context, ownerMainUserID 
 	return c.SatelliteUserBalance(ctx, ownerMainUserID)
 }
 
-func (c *MainClient) MapRuntimeUser(ctx context.Context, mainUserID, userAccessToken string) error {
-	mainUserID = strings.TrimSpace(mainUserID)
-	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
-		return fmt.Errorf("main user id is invalid")
-	}
-	if strings.TrimSpace(userAccessToken) == "" {
-		return fmt.Errorf("main user access token is required")
-	}
-	_, err := c.runtimeJSONWithIdentityProof(ctx, http.MethodPost, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/map", map[string]any{}, userAccessToken, "")
-	return err
-}
-
-func (c *MainClient) MapRuntimeUserWithSSOTicket(ctx context.Context, mainUserID, ticket string) error {
-	mainUserID = strings.TrimSpace(mainUserID)
-	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
-		return fmt.Errorf("main user id is invalid")
-	}
-	if strings.TrimSpace(ticket) == "" {
-		return fmt.Errorf("main SSO identity ticket is required")
-	}
-	_, err := c.runtimeJSONWithIdentityProof(ctx, http.MethodPost, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/map", map[string]any{}, "", ticket)
-	return err
-}
-
-// AdminGetUser reads a mapped user through the public satellite bridge in
-// ordinary mode. Legacy runtime mode remains Owner-scoped for old instances.
+// AdminGetUser reads a mapped user through the public satellite bridge. Shared
+// AgentAPI has no per-instance runtime credential or owner-only compatibility
+// path; every lookup is scoped to the requested main-site user.
 func (c *MainClient) AdminGetUser(ctx context.Context, mainUserID string) (MainUserResult, error) {
-	if c.cfg.ProvisioningControlEnabled {
-		if strings.TrimSpace(mainUserID) != strings.TrimSpace(c.cfg.OwnerMainUserID) {
-			return MainUserResult{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "legacy runtime credential is restricted to its configured Owner"}
-		}
-		return c.RuntimeGetOwner(ctx)
-	}
 	return c.SatelliteUserBalance(ctx, mainUserID)
-}
-
-func (c *MainClient) RuntimeUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
-	mainUserID, status = strings.TrimSpace(mainUserID), strings.TrimSpace(status)
-	if _, err := strconv.ParseInt(mainUserID, 10, 64); err != nil || mainUserID == "" {
-		return fmt.Errorf("main user id is invalid")
-	}
-	if status != "active" && status != "disabled" {
-		return fmt.Errorf("unsupported main user status")
-	}
-	data, err := c.runtimeJSON(ctx, http.MethodPatch, "/agent-runtime/users/"+url.PathEscape(mainUserID)+"/status", map[string]string{"status": status})
-	if err != nil {
-		return err
-	}
-	var updated struct {
-		UserID json.RawMessage `json:"user_id"`
-		Status string          `json:"status"`
-	}
-	if err := json.Unmarshal(data, &updated); err != nil {
-		return fmt.Errorf("decode updated Agent user status: %w", err)
-	}
-	updatedUserID := strings.TrimSpace(string(updated.UserID))
-	if err := json.Unmarshal(updated.UserID, &updatedUserID); err != nil {
-		// Sub2API returns its numeric user ID as a JSON number, while some
-		// compatible deployments serialize IDs as strings.
-		updatedUserID = strings.TrimSpace(string(updated.UserID))
-	}
-	if strings.TrimSpace(updatedUserID) != mainUserID || strings.TrimSpace(updated.Status) != status {
-		return fmt.Errorf("main site did not confirm the requested user status")
-	}
-	return nil
-}
-
-func (c *MainClient) RuntimeUpdateModelAllowlist(ctx context.Context, enabled []string) error {
-	models := make([]string, len(enabled))
-	copy(models, enabled)
-	data, err := c.runtimeJSON(ctx, http.MethodPut, "/agent-runtime/model-policy", map[string][]string{"enabled": models})
-	if err != nil {
-		return err
-	}
-	var result struct {
-		AgentID string   `json:"agent_id"`
-		Enabled []string `json:"enabled"`
-	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return fmt.Errorf("decode main-site model scope confirmation: %w", err)
-	}
-	if strings.TrimSpace(c.cfg.AgentID) == "" || strings.TrimSpace(result.AgentID) != strings.TrimSpace(c.cfg.AgentID) || !sameStringSet(result.Enabled, models) {
-		return fmt.Errorf("main site did not confirm the requested per-Agent model scope")
-	}
-	return nil
-}
-
-func sameStringSet(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	counts := make(map[string]int, len(left))
-	for _, value := range left {
-		counts[value]++
-	}
-	for _, value := range right {
-		if counts[value] == 0 {
-			return false
-		}
-		counts[value]--
-	}
-	return true
 }
 
 func sameStringSlice(left, right []string) bool {
@@ -739,114 +565,18 @@ func sameStringSlice(left, right []string) bool {
 	return true
 }
 
-func (c *MainClient) AdminUpdateUserStatus(ctx context.Context, mainUserID, status string) error {
-	return c.RuntimeUpdateUserStatus(ctx, mainUserID, status)
-}
-
-func (c *MainClient) RuntimeGetProvisioningAgent(ctx context.Context, agentID string) (MainProvisioningAgent, error) {
-	if strings.TrimSpace(agentID) != strings.TrimSpace(c.cfg.AgentID) {
-		return MainProvisioningAgent{}, &MainAPIError{Status: http.StatusForbidden, Code: "AGENT_RUNTIME_SCOPE_MISMATCH", Message: "runtime credential is restricted to its own Agent"}
-	}
-	data, err := c.runtimeJSON(ctx, http.MethodGet, "/agent-runtime/agent", nil)
-	if err != nil {
-		return MainProvisioningAgent{}, err
-	}
-	var result MainProvisioningAgent
-	if err := json.Unmarshal(data, &result); err != nil {
-		return MainProvisioningAgent{}, err
-	}
-	if result.AgentID != strings.TrimSpace(agentID) || strings.TrimSpace(result.Status) == "" {
-		return MainProvisioningAgent{}, fmt.Errorf("main site returned an invalid Agent runtime record")
-	}
-	return result, nil
-}
-
-// RuntimeAgentUpdates subscribes to ID-only wake-up events for this Agent.
-// Every event requires a fresh GET /agent; the event stream is never treated
-// as an authoritative state source.
-func (c *MainClient) RuntimeAgentUpdates(ctx context.Context) (<-chan struct{}, error) {
-	credential := strings.TrimSpace(c.cfg.RuntimeControlCredential)
-	if !strings.HasPrefix(credential, "agt_ctl_") || len(credential) < 40 || len(credential) > 256 {
-		return nil, &MainAPIError{Status: http.StatusServiceUnavailable, Code: "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING", Message: "per-Agent control credential is not configured"}
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint("/agent-runtime/agent/stream"), nil)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Accept", "text/event-stream")
-	request.Header.Set("X-AgentAPI-Runtime-Control", credential)
-	client := c.controlHTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	safeClient := *client
-	safeClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
-	response, err := safeClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-		_ = response.Body.Close()
-		_, apiErr := unwrapMainResponse(response.StatusCode, body)
-		return nil, apiErr
-	}
-	if !strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
-		_ = response.Body.Close()
-		return nil, &MainAPIError{Status: response.StatusCode, Code: "AGENT_RUNTIME_STREAM_INVALID", Message: "main site did not return an event stream"}
-	}
-	updates := make(chan struct{}, 1)
-	go func() {
-		defer close(updates)
-		defer response.Body.Close()
-		scanner := bufio.NewScanner(response.Body)
-		scanner.Buffer(make([]byte, 4096), 256<<10)
-		eventName := ""
-		for scanner.Scan() {
-			line := strings.TrimSuffix(scanner.Text(), "\r")
-			if line == "" {
-				if eventName == "agent" || eventName == "resync" {
-					select {
-					case updates <- struct{}{}:
-					default:
-					}
-				}
-				eventName = ""
-				continue
-			}
-			if strings.HasPrefix(line, "event:") {
-				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-			}
-		}
-	}()
-	return updates, nil
-}
-
-func (c *MainClient) AdminGetProvisioningAgent(ctx context.Context, agentID string) (MainProvisioningAgent, error) {
-	return c.RuntimeGetProvisioningAgent(ctx, agentID)
-}
-
-// AdminFindUsage uses the public Owner-scoped usage endpoint in ordinary mode.
-// The old runtime query remains available only when compatibility mode is
-// explicitly enabled.
+// AdminFindUsageForUser reads usage through the public, per-user satellite
+// contract. Shared AgentAPI never falls back to an owner-scoped runtime route.
 func (c *MainClient) AdminFindUsageForUser(ctx context.Context, mainUserID, requestID string) ([]MainUsageResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return nil, fmt.Errorf("request id is required")
 	}
-	var data json.RawMessage
-	var err error
-	source := "sub2api_user_usage"
-	if c.cfg.ProvisioningControlEnabled {
-		path := "/agent-runtime/usage?request_id=" + url.QueryEscape(requestID)
-		data, err = c.runtimeJSON(ctx, http.MethodGet, path, nil)
-		source = "sub2api_owner_usage"
-	} else {
-		data, err = c.satelliteUserJSON(ctx, mainUserID, "/v1/sub2api/usage?request_id="+url.QueryEscape(requestID))
-	}
+	data, err := c.satelliteUserJSON(ctx, mainUserID, "/v1/sub2api/usage?request_id="+url.QueryEscape(requestID))
 	if err != nil {
 		return nil, err
 	}
+	source := "sub2api_user_usage"
 	var envelope struct {
 		Items []json.RawMessage `json:"items"`
 	}
@@ -858,10 +588,6 @@ func (c *MainClient) AdminFindUsageForUser(ctx context.Context, mainUserID, requ
 		return nil, err
 	}
 	return decodeMainUsageItems(items, source)
-}
-
-func (c *MainClient) AdminFindUsage(ctx context.Context, requestID string) ([]MainUsageResult, error) {
-	return c.AdminFindUsageForUser(ctx, c.cfg.OwnerMainUserID, requestID)
 }
 
 func (c *MainClient) satelliteUserJSON(ctx context.Context, mainUserID, path string) (json.RawMessage, error) {

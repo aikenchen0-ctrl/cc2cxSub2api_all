@@ -69,10 +69,10 @@ async function verify(showError = false): Promise<void> {
     } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(order.status)) {
       cleanup()
       terminal.value = true
-      error.value = `主站订单状态：${order.status}`
+      error.value = `订单状态：${order.status}`
     }
   } catch (reason) {
-    if (showError) error.value = errorMessage(reason, '暂时无法确认主站订单状态。')
+    if (showError) error.value = errorMessage(reason, '暂时无法确认订单状态。')
   } finally {
     verifying.value = false
   }
@@ -88,7 +88,7 @@ async function cancelOrder(): Promise<void> {
     clearAgentPaymentRecovery(window.localStorage)
     await router.replace('/purchase')
   } catch (reason) {
-    error.value = errorMessage(reason, '取消主站订单失败。')
+    error.value = errorMessage(reason, '取消订单失败。')
   } finally {
     cancelling.value = false
   }
@@ -102,14 +102,14 @@ function startTimers(): void {
     : 30 * 60
   if (remainingSeconds.value <= 0) {
     terminal.value = true
-    error.value = '该主站订单已经过期。'
+    error.value = '该订单已经过期。'
     return
   }
   countdownTimer = window.setInterval(() => {
     remainingSeconds.value = Math.max(0, remainingSeconds.value - 1)
     if (remainingSeconds.value === 0) {
       terminal.value = true
-      error.value = '该主站订单已经过期。'
+      error.value = '该订单已经过期。'
       cleanup()
     }
   }, 1000)
@@ -121,7 +121,7 @@ onMounted(async () => {
   const outTradeNo = typeof route.query.out_trade_no === 'string' ? route.query.out_trade_no : undefined
   snapshot.value = readAgentPaymentRecovery(window.localStorage.getItem(AGENT_PAYMENT_RECOVERY_KEY), { orderId, outTradeNo })
   if (!snapshot.value || (!snapshot.value.qrCode && !safePaymentURL(snapshot.value.payURL))) {
-    error.value = '支付信息已失效，请返回购买页重新创建主站订单。'
+    error.value = '支付信息已失效，请返回购买页重新创建订单。'
     loading.value = false
     return
   }
@@ -138,7 +138,7 @@ onBeforeUnmount(cleanup)
     <header class="text-center">
       <p class="text-sm font-semibold text-primary-600 dark:text-primary-400">MAIN-SITE PAYMENT</p>
       <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">完成 {{ paymentLabel }}</h1>
-      <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">支付状态由 Sub2API 主站确认，代理站只显示和轮询当前订单。</p>
+      <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">支付状态由支付服务确认，页面会自动更新当前订单。</p>
     </header>
 
     <section v-if="loading" class="card flex min-h-72 items-center justify-center">
@@ -149,17 +149,17 @@ onBeforeUnmount(cleanup)
       <div v-if="error" role="alert" class="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{{ error }}</div>
       <template v-if="snapshot">
         <div v-if="snapshot.qrCode" class="mx-auto w-fit rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-          <canvas ref="qrCanvas" aria-label="主站支付二维码"></canvas>
+          <canvas ref="qrCanvas" aria-label="支付二维码"></canvas>
         </div>
         <div v-else class="mx-auto flex h-40 w-40 items-center justify-center rounded-full bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300">
           <Icon name="creditCard" size="xl" />
         </div>
-        <p class="mt-5 text-sm text-gray-500 dark:text-dark-400">{{ snapshot.qrCode ? `请使用${paymentLabel}扫码` : '请在主站支付窗口完成付款' }}</p>
+        <p class="mt-5 text-sm text-gray-500 dark:text-dark-400">{{ snapshot.qrCode ? `请使用${paymentLabel}扫码` : '请在支付窗口完成付款' }}</p>
         <p class="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-white">{{ countdown }}</p>
         <p class="mt-2 break-all font-mono text-xs text-gray-400">{{ snapshot.outTradeNo }}</p>
         <a v-if="payURL && !terminal" class="btn btn-primary mt-5 w-full" :href="payURL" target="_blank" rel="noopener noreferrer">打开支付窗口</a>
         <button class="btn btn-primary mt-3 w-full" type="button" :disabled="verifying || terminal" @click="verify(true)">
-          <Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在向主站确认…' : '我已完成支付' }}
+          <Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在确认…' : '我已完成支付' }}
         </button>
         <button class="btn btn-secondary mt-3 w-full" type="button" :disabled="cancelling || terminal" @click="cancelOrder">{{ cancelling ? '正在取消…' : '取消订单' }}</button>
       </template>

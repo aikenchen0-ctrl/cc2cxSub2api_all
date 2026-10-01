@@ -36,7 +36,6 @@ import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
 import pluginsAPI from './plugins'
-import agentProvisioningAPI from './agentProvisioning'
 import upstreamAuditAPI from './upstreamAudit'
 
 /**
@@ -76,7 +75,6 @@ export const adminAPI = {
   compliance: adminComplianceAPI,
   audit: auditAPI,
   plugins: pluginsAPI,
-  agentProvisioning: agentProvisioningAPI,
   upstreamAudit: upstreamAuditAPI
 }
 
@@ -114,7 +112,6 @@ export {
   adminComplianceAPI,
   auditAPI,
   pluginsAPI,
-  agentProvisioningAPI,
   upstreamAuditAPI
 }
 
@@ -135,10 +132,3 @@ export type {
   PluginUISession,
   PluginTestResult
 } from './plugins'
-export type {
-  AgentProvisioningAgent,
-  AgentProvisioningListParams,
-  AgentProvisioningListResponse,
-  AgentProvisioningStatus,
-  CreateAgentProvisioningRequest
-} from './agentProvisioning'

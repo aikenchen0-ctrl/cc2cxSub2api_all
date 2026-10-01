@@ -114,67 +114,6 @@ func TestRegistrationEmailVerificationUsesOnlySatelliteApplicationCredential(t *
 	}
 }
 
-func TestRuntimeGetProvisioningAgentUsesPerAgentAPIAndValidatesAgentID(t *testing.T) {
-	const agentID = "agt_0123456789abcdef0123456789abcdef"
-	var gotPath, gotCredential string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotCredential = r.Header.Get("X-AgentAPI-Runtime-Control")
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": agentID, "status": "suspended"}))
-	}))
-	defer upstream.Close()
-	credential := "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, AgentID: agentID, MainRequestTimeout: time.Second}
-	status, err := NewMainClient(cfg).RuntimeGetProvisioningAgent(t.Context(), agentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.AgentID != agentID || status.Status != "suspended" || gotPath != "/api/v1/agent-runtime/agent" || gotCredential != credential {
-		t.Fatalf("unexpected provisioning status read: status=%+v path=%q credential=%q", status, gotPath, gotCredential)
-	}
-	if _, err := NewMainClient(cfg).RuntimeGetProvisioningAgent(t.Context(), "agt_different000000000000000000000000"); err == nil || !strings.Contains(err.Error(), "restricted to its own Agent") {
-		t.Fatalf("mismatched main-site Agent ID was accepted: %v", err)
-	}
-}
-
-func TestMainClientDoesNotForwardCredentialsAcrossRedirects(t *testing.T) {
-	const controlCredential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	const userToken = "sub2api-user-jwt"
-	const ssoTicket = "existing-sub2api-hmac-ticket"
-	var redirectedRequests int
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		redirectedRequests++
-		if r.Header.Get("X-AgentAPI-Runtime-Control") != "" || r.Header.Get("Authorization") != "" || r.Header.Get("X-AgentAPI-SSO-Ticket") != "" {
-			t.Errorf("credential-bearing headers reached redirect target: %v", r.Header)
-		}
-	}))
-	defer target.Close()
-
-	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, target.URL+"/capture", http.StatusTemporaryRedirect)
-	}))
-	defer redirector.Close()
-
-	cfg := Config{
-		MainAPIBaseURL:           redirector.URL + "/api/v1",
-		RuntimeControlCredential: controlCredential,
-		AgentID:                  "agt_0123456789abcdef0123456789abcdef",
-		MainRequestTimeout:       time.Second,
-	}
-	if _, err := NewMainClient(cfg).RuntimeGetProvisioningAgent(t.Context(), cfg.AgentID); err == nil {
-		t.Fatal("runtime API redirect was followed instead of rejected")
-	}
-	if err := NewMainClient(cfg).MapRuntimeUser(t.Context(), "43", userToken); err == nil {
-		t.Fatal("identity mapping redirect was followed instead of rejected")
-	}
-	if err := NewMainClient(cfg).MapRuntimeUserWithSSOTicket(t.Context(), "43", ssoTicket); err == nil {
-		t.Fatal("SSO identity redirect was followed instead of rejected")
-	}
-	if redirectedRequests != 0 {
-		t.Fatalf("credential-bearing redirect target received %d request(s)", redirectedRequests)
-	}
-}
-
 func TestMainClientProfileAndPasswordUseOnlyAuthenticatedUserEndpoints(t *testing.T) {
 	const accessToken = "main-user-access-token"
 	var profileCalls, updateCalls, passwordCalls int
@@ -315,188 +254,6 @@ func TestModelRelayDoesNotForwardCredentialsAcrossRedirects(t *testing.T) {
 	}
 }
 
-func TestMapRuntimeUserSendsUserJWTOnlyForIdentityProof(t *testing.T) {
-	var gotMethod, gotPath, gotControl, gotAuthorization string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
-		gotControl = r.Header.Get("X-AgentAPI-Runtime-Control")
-		gotAuthorization = r.Header.Get("Authorization")
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agt_0123456789abcdef0123456789abcdef", "user_id": 43, "status": "mapped"}))
-	}))
-	defer upstream.Close()
-	const controlCredential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	const userAccessToken = "sub2api-user-jwt"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: controlCredential, MainRequestTimeout: time.Second}
-	if err := NewMainClient(cfg).MapRuntimeUser(t.Context(), "43", userAccessToken); err != nil {
-		t.Fatal(err)
-	}
-	if gotMethod != http.MethodPost || gotPath != "/api/v1/agent-runtime/users/43/map" || gotControl != controlCredential || gotAuthorization != "Bearer "+userAccessToken {
-		t.Fatalf("runtime mapping did not carry both scoped credentials: method=%q path=%q control=%q authorization=%q", gotMethod, gotPath, gotControl, gotAuthorization)
-	}
-}
-
-func TestMapRuntimeUserWithSSOTicketReusesExistingIdentityTicket(t *testing.T) {
-	var gotControl, gotAuthorization, gotTicket string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotControl = r.Header.Get("X-AgentAPI-Runtime-Control")
-		gotAuthorization = r.Header.Get("Authorization")
-		gotTicket = r.Header.Get("X-AgentAPI-SSO-Ticket")
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agt_0123456789abcdef0123456789abcdef", "user_id": 43, "status": "mapped"}))
-	}))
-	defer upstream.Close()
-	const controlCredential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	const ticket = "existing-sub2api-hmac-ticket"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: controlCredential, MainRequestTimeout: time.Second}
-	if err := NewMainClient(cfg).MapRuntimeUserWithSSOTicket(t.Context(), "43", ticket); err != nil {
-		t.Fatal(err)
-	}
-	if gotControl != controlCredential || gotAuthorization != "" || gotTicket != ticket {
-		t.Fatalf("SSO mapping did not reuse the identity ticket as a server-side proof: control=%q authorization=%q ticket=%q", gotControl, gotAuthorization, gotTicket)
-	}
-}
-
-func TestRuntimeAgentUpdatesUsesScopedIDOnlyStream(t *testing.T) {
-	const credential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	var gotPath, gotCredential, gotAuthorization string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotCredential = r.Header.Get("X-AgentAPI-Runtime-Control")
-		gotAuthorization = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "event: agent\ndata: {\"agent_id\":\"agt_0123456789abcdef0123456789abcdef\"}\n\n")
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-	}))
-	defer upstream.Close()
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
-	updates, err := NewMainClient(cfg).RuntimeAgentUpdates(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case _, open := <-updates:
-		if !open {
-			t.Fatal("ID-only Agent update stream closed without an event")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for Agent runtime event")
-	}
-	if gotPath != "/api/v1/agent-runtime/agent/stream" || gotCredential != credential || gotAuthorization != "" {
-		t.Fatalf("unexpected runtime stream request: path=%q credential=%q authorization=%q", gotPath, gotCredential, gotAuthorization)
-	}
-}
-
-func TestRuntimeUpdateUserStatusSendsOnlyStatusToScopedEndpoint(t *testing.T) {
-	var gotMethod, gotPath, gotCredential string
-	var gotPayload map[string]json.RawMessage
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath, gotCredential = r.Method, r.URL.Path, r.Header.Get("X-AgentAPI-Runtime-Control")
-		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
-			t.Errorf("decode update payload: %v", err)
-		}
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agt_0123456789abcdef0123456789abcdef", "user_id": 43, "status": "disabled"}))
-	}))
-	defer upstream.Close()
-	credential := "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
-	if err := NewMainClient(cfg).RuntimeUpdateUserStatus(t.Context(), "43", "disabled"); err != nil {
-		t.Fatal(err)
-	}
-	if gotMethod != http.MethodPatch || gotPath != "/api/v1/agent-runtime/users/43/status" || gotCredential != credential {
-		t.Fatalf("unexpected runtime status update: method=%q path=%q credential=%q", gotMethod, gotPath, gotCredential)
-	}
-	if len(gotPayload) != 1 || string(gotPayload["status"]) != `"disabled"` {
-		t.Fatalf("status update must not send other user fields: %s", mustJSON(gotPayload))
-	}
-}
-
-func TestRuntimeUpdateUserStatusRejectsUnexpectedResponse(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 43, "status": "active"}))
-	}))
-	defer upstream.Close()
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", MainRequestTimeout: time.Second}
-	if err := NewMainClient(cfg).RuntimeUpdateUserStatus(t.Context(), "43", "disabled"); err == nil || !strings.Contains(err.Error(), "did not confirm") {
-		t.Fatalf("unexpected status response was accepted: %v", err)
-	}
-}
-
-func TestRuntimeUpdateModelAllowlistUsesPerAgentControlAndRequiresConfirmation(t *testing.T) {
-	const agentID = "agt_0123456789abcdef0123456789abcdef"
-	const credential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	var gotMethod, gotPath, gotCredential string
-	var gotPayload map[string][]string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath, gotCredential = r.Method, r.URL.Path, r.Header.Get("X-AgentAPI-Runtime-Control")
-		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
-			t.Errorf("decode model allowlist update: %v", err)
-		}
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": agentID, "enabled": []string{"gpt-image-2", "gpt-5.5"}}))
-	}))
-	defer upstream.Close()
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, AgentID: agentID, MainRequestTimeout: time.Second}
-	models := []string{"gpt-5.5", "gpt-image-2"}
-	if err := NewMainClient(cfg).RuntimeUpdateModelAllowlist(t.Context(), models); err != nil {
-		t.Fatal(err)
-	}
-	if gotMethod != http.MethodPut || gotPath != "/api/v1/agent-runtime/model-policy" || gotCredential != credential || len(gotPayload) != 1 || !sameStringSlice(gotPayload["enabled"], models) {
-		t.Fatalf("unexpected model scope update: method=%q path=%q credential=%q payload=%v", gotMethod, gotPath, gotCredential, gotPayload)
-	}
-
-	wrongAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agt_other", "enabled": models}))
-	}))
-	defer wrongAgent.Close()
-	cfg.MainAPIBaseURL = wrongAgent.URL + "/api/v1"
-	if err := NewMainClient(cfg).RuntimeUpdateModelAllowlist(t.Context(), models); err == nil || !strings.Contains(err.Error(), "did not confirm") {
-		t.Fatalf("scope confirmation for another Agent was accepted: %v", err)
-	}
-}
-
-func TestRuntimeFindUsageDecodesOwnerScopedUsage(t *testing.T) {
-	var gotPath string
-	var gotCredential string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.String()
-		gotCredential = r.Header.Get("X-AgentAPI-Runtime-Control")
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{
-			"items": []map[string]any{{
-				"id": 77, "request_id": "req-usage", "model": "gpt-5.5", "total_cost": 1.25, "actual_cost": 1.10,
-				"input_tokens": 1000, "output_tokens": 250, "cache_creation_tokens": 12, "cache_read_tokens": 34,
-				"input_cost": 0.000000123, "output_cost": 0.000000456, "upstream_model": "provider-gpt-5.5",
-				"upstream_response_model": "provider-gpt-5.5-2026-01", "upstream_model_mismatch": true,
-				"service_tier": "priority", "reasoning_effort": "high", "inbound_endpoint": "/v1/responses",
-				"duration_ms": 900, "first_token_ms": 120, "image_size_breakdown": map[string]int{"1024x1024": 2},
-			}},
-			"total": 1, "page": 1, "page_size": 20,
-		}))
-	}))
-	defer upstream.Close()
-	credential := "agt_ctl_test-runtime-control-secret-0123456789abcdef"
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: credential, ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
-	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-usage")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotCredential != credential || gotPath != "/api/v1/agent-runtime/usage?request_id=req-usage" {
-		t.Fatalf("unexpected runtime usage request: path=%q credential=%q", gotPath, gotCredential)
-	}
-	if len(items) != 1 || items[0].ID != "77" || items[0].ActualCents != 110 || items[0].TotalCents != 125 {
-		t.Fatalf("unexpected decoded usage: %+v", items)
-	}
-	usage := items[0]
-	if usage.Snapshot.Source != "sub2api_owner_usage" || usage.Snapshot.InputTokens != 1000 || usage.Snapshot.OutputTokens != 250 || usage.Snapshot.CacheCreationTokens != 12 || usage.Snapshot.CacheReadTokens != 34 {
-		t.Fatalf("usage token facts were not decoded: %+v", usage.Snapshot)
-	}
-	if usage.Snapshot.InputCostNanos != 123 || usage.Snapshot.OutputCostNanos != 456 || usage.Snapshot.UpstreamModel != "provider-gpt-5.5" || usage.Snapshot.UpstreamResponseModel != "provider-gpt-5.5-2026-01" || usage.Snapshot.UpstreamModelMismatch == nil || !*usage.Snapshot.UpstreamModelMismatch {
-		t.Fatalf("usage cost/model provenance was not decoded: %+v", usage.Snapshot)
-	}
-	if usage.Snapshot.ServiceTier != "priority" || usage.Snapshot.ReasoningEffort != "high" || usage.Snapshot.InboundEndpoint != "/v1/responses" || usage.Snapshot.DurationMs != 900 || usage.Snapshot.FirstTokenMs != 120 || usage.Snapshot.ImageSizeBreakdown["1024x1024"] != 2 {
-		t.Fatalf("usage request metadata was not decoded: %+v", usage.Snapshot)
-	}
-}
-
 func TestAdminFindUsageUsesZeroSchemaOwnerBridgeWithoutRuntimeCredential(t *testing.T) {
 	var gotPath, gotAuthorization, gotOwner, gotSatellite string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -513,7 +270,7 @@ func TestAdminFindUsageUsesZeroSchemaOwnerBridgeWithoutRuntimeCredential(t *test
 		MainModelBaseURL: upstream.URL, AppCredential: "satellite-app-secret",
 		OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second,
 	}
-	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-owner-usage")
+	items, err := NewMainClient(cfg).AdminFindUsageForUser(t.Context(), "42", "req-owner-usage")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +282,7 @@ func TestAdminFindUsageUsesZeroSchemaOwnerBridgeWithoutRuntimeCredential(t *test
 	}
 }
 
-func TestOrdinaryOwnerBridgeIgnoresStaleRuntimeCredential(t *testing.T) {
+func TestOwnerBridgeUsesOnlyPublicSatelliteEndpoints(t *testing.T) {
 	var balanceCalls, usageCalls, runtimeCalls int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -552,36 +309,35 @@ func TestOrdinaryOwnerBridgeIgnoresStaleRuntimeCredential(t *testing.T) {
 	defer upstream.Close()
 	cfg := Config{
 		MainAPIBaseURL: upstream.URL + "/api/v1", MainModelBaseURL: upstream.URL,
-		AppCredential: "satellite-app-secret", RuntimeControlCredential: "agt_ctl_stale-migration-secret-0123456789abcdef",
+		AppCredential:   "satellite-app-secret",
 		OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second,
-		ProvisioningControlEnabled: false,
 	}
 	client := NewMainClient(cfg)
 	owner, err := client.AdminGetUser(t.Context(), "42")
 	if err != nil || owner.Balance != 1234 || owner.FrozenBalance != 250 {
 		t.Fatalf("ordinary owner balance did not use satellite bridge: owner=%+v err=%v", owner, err)
 	}
-	items, err := client.AdminFindUsage(t.Context(), "req-stale-control")
+	items, err := client.AdminFindUsageForUser(t.Context(), "42", "req-stale-control")
 	if err != nil || len(items) != 1 || items[0].ActualCents != 12 {
 		t.Fatalf("ordinary usage did not use satellite bridge: items=%+v err=%v", items, err)
 	}
 	if balanceCalls != 1 || usageCalls != 1 || runtimeCalls != 0 {
-		t.Fatalf("stale runtime credential changed ordinary routing: balance=%d usage=%d runtime=%d", balanceCalls, usageCalls, runtimeCalls)
+		t.Fatalf("public satellite routing changed unexpectedly: balance=%d usage=%d runtime=%d", balanceCalls, usageCalls, runtimeCalls)
 	}
 }
 
 func TestAdminFindUsagePreservesZeroActualCostInsteadOfUsingStandardCost(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 			"items": []map[string]any{{
 				"id": 78, "request_id": "req-zero-actual", "model": "free-model", "total_cost": 1.25, "actual_cost": 0,
 			}},
-		}))
+		}})
 	}))
 	defer upstream.Close()
 
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
-	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-zero-actual")
+	cfg := Config{MainModelBaseURL: upstream.URL, AppCredential: "satellite-app-secret", OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second}
+	items, err := NewMainClient(cfg).AdminFindUsageForUser(t.Context(), "42", "req-zero-actual")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,14 +348,14 @@ func TestAdminFindUsagePreservesZeroActualCostInsteadOfUsingStandardCost(t *test
 
 func TestAdminFindUsageRejectsStandardCostAsActualCharge(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 			"items": []map[string]any{{"id": 79, "request_id": "req-legacy-dto", "total_cost": 0.25}},
-		}))
+		}})
 	}))
 	defer upstream.Close()
 
-	cfg := Config{MainAPIBaseURL: upstream.URL + "/api/v1", RuntimeControlCredential: "agt_ctl_test-runtime-control-secret-0123456789abcdef", ProvisioningControlEnabled: true, MainRequestTimeout: time.Second}
-	items, err := NewMainClient(cfg).AdminFindUsage(t.Context(), "req-legacy-dto")
+	cfg := Config{MainModelBaseURL: upstream.URL, AppCredential: "satellite-app-secret", OwnerMainUserID: "42", SatelliteSlug: "agentapi", MainRequestTimeout: time.Second}
+	items, err := NewMainClient(cfg).AdminFindUsageForUser(t.Context(), "42", "req-legacy-dto")
 	if err == nil || len(items) != 0 {
 		t.Fatalf("missing actual_cost must not become a confirmed standard charge: items=%+v err=%v", items, err)
 	}

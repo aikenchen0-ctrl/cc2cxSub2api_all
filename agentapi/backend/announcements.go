@@ -77,7 +77,7 @@ func announcementPathID(path, prefix, suffix string) (int64, bool) {
 }
 
 func (s *Server) handleAgentAnnouncements(w http.ResponseWriter, r *http.Request, requestID string) {
-	session, _, ok := s.requireSession(w, r, requestID)
+	tenant, session, _, ok := s.requireTenantSession(w, r, requestID)
 	if !ok {
 		return
 	}
@@ -88,7 +88,7 @@ func (s *Server) handleAgentAnnouncements(w http.ResponseWriter, r *http.Request
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported announcement operation")
 			return
 		}
-		items, err := s.store.UserAnnouncements(s.cfg.AgentID, session.MainUserID)
+		items, err := s.store.UserAnnouncements(tenant.AgentID, session.MainUserID)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load announcements")
 			return
@@ -107,7 +107,7 @@ func (s *Server) handleAgentAnnouncements(w http.ResponseWriter, r *http.Request
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
 		}
-		if err := s.store.MarkAllAnnouncementsRead(s.cfg.AgentID, session.MainUserID); err != nil {
+		if err := s.store.MarkAllAnnouncementsRead(tenant.AgentID, session.MainUserID); err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to mark announcements as read")
 			return
 		}
@@ -119,7 +119,7 @@ func (s *Server) handleAgentAnnouncements(w http.ResponseWriter, r *http.Request
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
 		}
-		if err := s.store.MarkAnnouncementRead(s.cfg.AgentID, session.MainUserID, id); err != nil {
+		if err := s.store.MarkAnnouncementRead(tenant.AgentID, session.MainUserID, id); err != nil {
 			if errors.Is(err, errNotFound) {
 				s.writeError(w, http.StatusNotFound, requestID, "ANNOUNCEMENT_NOT_FOUND", "announcement not found")
 			} else {
@@ -133,13 +133,13 @@ func (s *Server) handleAgentAnnouncements(w http.ResponseWriter, r *http.Request
 	s.writeError(w, http.StatusNotFound, requestID, "NOT_FOUND", "announcement route not found")
 }
 
-func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Request, requestID string, session Session) {
+func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Request, requestID string, tenant TenantContext, session Session) {
 	w.Header().Set("Cache-Control", "no-store")
 	const base = "/api/v1/agent/admin/announcements"
 	if r.URL.Path == base {
 		switch r.Method {
 		case http.MethodGet:
-			items, err := s.store.AdminAnnouncements(s.cfg.AgentID)
+			items, err := s.store.AdminAnnouncements(tenant.AgentID)
 			if err != nil {
 				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load announcements")
 				return
@@ -160,12 +160,12 @@ func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Re
 				s.writeError(w, http.StatusBadRequest, requestID, "INVALID_ANNOUNCEMENT", err.Error())
 				return
 			}
-			item, err := s.store.CreateAnnouncement(s.cfg.AgentID, payload.Title, payload.Content, payload.Status, payload.NotifyMode, startsAt, endsAt)
+			item, err := s.store.CreateAnnouncement(tenant.AgentID, payload.Title, payload.Content, payload.Status, payload.NotifyMode, startsAt, endsAt)
 			if err != nil {
 				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to create announcement")
 				return
 			}
-			s.recordAudit("agent_admin", session.MainUserID, "announcement.create", "agent_announcement", strconv.FormatInt(item.ID, 10), requestID, "success", "")
+			s.recordTenantAudit(tenant.AgentID, "agent_admin", session.MainUserID, "announcement.create", "agent_announcement", strconv.FormatInt(item.ID, 10), requestID, "success", "")
 			s.writeData(w, http.StatusCreated, requestID, item)
 		default:
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported announcement operation")
@@ -193,7 +193,7 @@ func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Re
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_ANNOUNCEMENT", err.Error())
 			return
 		}
-		item, err := s.store.UpdateAnnouncement(s.cfg.AgentID, id, payload.Title, payload.Content, payload.Status, payload.NotifyMode, startsAt, endsAt)
+		item, err := s.store.UpdateAnnouncement(tenant.AgentID, id, payload.Title, payload.Content, payload.Status, payload.NotifyMode, startsAt, endsAt)
 		if err != nil {
 			if errors.Is(err, errNotFound) {
 				s.writeError(w, http.StatusNotFound, requestID, "ANNOUNCEMENT_NOT_FOUND", "announcement not found")
@@ -202,10 +202,10 @@ func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Re
 			}
 			return
 		}
-		s.recordAudit("agent_admin", session.MainUserID, "announcement.update", "agent_announcement", strconv.FormatInt(id, 10), requestID, "success", "")
+		s.recordTenantAudit(tenant.AgentID, "agent_admin", session.MainUserID, "announcement.update", "agent_announcement", strconv.FormatInt(id, 10), requestID, "success", "")
 		s.writeData(w, http.StatusOK, requestID, item)
 	case http.MethodDelete:
-		if err := s.store.DeleteAnnouncement(s.cfg.AgentID, id); err != nil {
+		if err := s.store.DeleteAnnouncement(tenant.AgentID, id); err != nil {
 			if errors.Is(err, errNotFound) {
 				s.writeError(w, http.StatusNotFound, requestID, "ANNOUNCEMENT_NOT_FOUND", "announcement not found")
 			} else {
@@ -213,7 +213,7 @@ func (s *Server) handleAgentAdminAnnouncements(w http.ResponseWriter, r *http.Re
 			}
 			return
 		}
-		s.recordAudit("agent_admin", session.MainUserID, "announcement.delete", "agent_announcement", strconv.FormatInt(id, 10), requestID, "success", "")
+		s.recordTenantAudit(tenant.AgentID, "agent_admin", session.MainUserID, "announcement.delete", "agent_announcement", strconv.FormatInt(id, 10), requestID, "success", "")
 		s.writeData(w, http.StatusOK, requestID, map[string]any{"id": id, "deleted": true})
 	default:
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported announcement operation")

@@ -122,7 +122,7 @@ onUnmounted(clearTimer)
       <div class="text-center">
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300"><Icon name="mail" size="lg" /></div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">验证邮箱</h1>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">验证码将由 Sub2API 主站发送至 <span class="font-medium text-gray-700 dark:text-gray-200">{{ maskedEmail }}</span></p>
+        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">验证码将发送至 <span class="font-medium text-gray-700 dark:text-gray-200">{{ maskedEmail }}</span></p>
       </div>
 
       <div v-if="!pending" role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">

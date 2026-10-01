@@ -11,5 +11,9 @@ func (s *Server) handlePublicModels(w http.ResponseWriter, r *http.Request, requ
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "public model catalog supports GET only")
 		return
 	}
-	s.writePublicModels(w, requestID)
+	if _, err := s.requestAgent(r); err != nil {
+		s.writeError(w, http.StatusMisdirectedRequest, requestID, "TENANT_NOT_FOUND", "request host is not assigned to an agent")
+		return
+	}
+	s.writePublicModels(w)
 }

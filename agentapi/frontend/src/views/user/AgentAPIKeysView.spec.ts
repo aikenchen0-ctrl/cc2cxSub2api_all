@@ -7,9 +7,9 @@ import { resetAgentToastsForTests, useAgentToast } from '@/composables/useAgentT
 describe('AgentAPIKeysView', () => {
   it('combines name/prefix search and status filters on tenant keys', async () => {
     vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({ total: 3, items: [
-      { id: 1, name: 'Desktop', prefix: 'sk-a-one', status: 'active', created_at: '' },
-      { id: 2, name: 'Desktop old', prefix: 'sk-a-two', status: 'revoked', created_at: '' },
-      { id: 3, name: 'Server', prefix: 'sk-a-three', status: 'active', created_at: '' },
+      { id: 1, name: 'Desktop', prefix: 'sk-a-one', key: 'sk-a-one-secret', status: 'active', created_at: '' },
+      { id: 2, name: 'Desktop old', prefix: 'sk-a-two', key: 'sk-a-two-secret', status: 'revoked', created_at: '' },
+      { id: 3, name: 'Server', prefix: 'sk-a-three', key: 'sk-a-three-secret', status: 'active', created_at: '' },
     ] })
     const wrapper = mount(AgentAPIKeysView)
     await flushPromises()
@@ -25,6 +25,7 @@ describe('AgentAPIKeysView', () => {
     await wrapper.get('[aria-label="搜索密钥"]').setValue('sk-a-three')
     expect(wrapper.text()).toContain('Server')
     expect(wrapper.text()).not.toContain('Desktop')
+    expect(wrapper.text()).not.toContain('历史密钥不可恢复')
     wrapper.unmount()
   })
 
@@ -50,13 +51,16 @@ describe('AgentAPIKeysView', () => {
   })
 
   it('loads local keys and displays a newly created key once', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({
       total: 1,
-      items: [{ id: 1, name: 'existing', prefix: 'sk-agent-old', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
+      api_base_url: 'https://agent.example.com/v1',
+      items: [{ id: 1, name: 'existing', prefix: 'sk-old', key: 'sk-existing-secret', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
     })
     const create = vi.spyOn(agentAPI.keys, 'create').mockResolvedValue({
-      item: { id: 2, name: 'desktop', prefix: 'sk-agent-new', status: 'active', created_at: '2026-09-22T00:00:00Z' },
-      key: 'sk-agent-new-secret',
+      item: { id: 2, name: 'desktop', prefix: 'sk-new', status: 'active', created_at: '2026-09-22T00:00:00Z' },
+      key: 'sk-new-secret',
     })
     const wrapper = mount(AgentAPIKeysView, { global: { stubs: { Teleport: true } } })
     await flushPromises()
@@ -67,17 +71,22 @@ describe('AgentAPIKeysView', () => {
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith('desktop')
-    expect(wrapper.text()).toContain('sk-agent-new-secret')
+    expect(wrapper.text()).toContain('sk-new-secret')
     expect(wrapper.text()).not.toContain('sk-super-')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(useAgentToast().toasts.value.at(-1)?.message).toContain('API 密钥已创建')
+    await wrapper.get('[data-testid="copy-key-2"]').trigger('click')
+    expect(writeText).toHaveBeenCalledWith('sk-new-secret')
+    expect(wrapper.get('[data-testid="copy-key-2"]').attributes('aria-label')).toBe('密钥已复制')
+    await wrapper.get('[data-testid="copy-api-base-url"]').trigger('click')
+    expect(writeText).toHaveBeenCalledWith('https://agent.example.com/v1')
     wrapper.unmount()
   })
 
   it('uses a Chinese confirmation dialog before revoking a key', async () => {
     vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({
       total: 1,
-      items: [{ id: 1, name: 'desktop', prefix: 'sk-agent-old', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
+      items: [{ id: 1, name: 'desktop', prefix: 'sk-old', key: 'sk-old-secret', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
     })
     const revoke = vi.spyOn(agentAPI.keys, 'revoke').mockResolvedValue(undefined)
     const wrapper = mount(AgentAPIKeysView)

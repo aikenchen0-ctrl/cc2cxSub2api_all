@@ -116,11 +116,11 @@ HUNYUAN_STATUS_PATH=/status
 The 3D generation backend supports these provider paths:
 
 ```text
-Hyper3D  Hyper3D Rodin cloud generation only (default)
-Tripo    Tripo cloud generation only
+Hunyuan  Tencent Hunyuan 3.1 cloud GLB generation (default); Hunyuan 3.0 for Sketch
+Tripo    Tripo cloud GLB generation
+Hyper3D  Hyper3D Rodin cloud generation only
 Fal      Fal.ai queue generation; model is selected in Settings
-Auto     Hyper3D first, then Tripo, Fal, Hunyuan, and JS Depth backup
-Hunyuan  Local Hunyuan3D generation only
+Auto     Hunyuan first, then Tripo, Fal, and Hyper3D; fails if no GLB backend succeeds
 ```
 
 The upload panel exposes the full generation mode choice before picking a file:
@@ -131,7 +131,7 @@ Tripo       Tripo cloud GLB generation
 Fal         Fal.ai queue GLB generation
 Hunyuan     Local Hunyuan3D GLB generation
 JS Depth    Browser-side image relief with layered PNG fallback
-Auto        Hyper3D, Tripo, Fal, Hunyuan, then JS Depth fallback
+Auto        Hunyuan, Tripo, Fal, then Hyper3D; returns a GLB or an explicit error
 Local GLB   Import an existing .glb or self-contained .gltf
 ```
 

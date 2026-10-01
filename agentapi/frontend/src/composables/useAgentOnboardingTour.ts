@@ -19,8 +19,8 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
   const steps: DriveStep[] = [
     {
       popover: {
-        title: '欢迎使用代理站控制台',
-        description: '这里保留 Sub2API 主站的操作习惯，但账户余额、计费和订阅仍以主站权威记录为准。',
+        title: '欢迎使用站点控制台',
+        description: '这里集中展示账户余额、用量和本站可用能力。',
         side: 'bottom',
         align: 'center',
       },
@@ -29,16 +29,7 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
       element: '[data-tour="sidebar-dashboard"]',
       popover: {
         title: '仪表盘',
-        description: '查看当前账户的主站余额、用量与代理站可用能力。',
-        side: 'right',
-        align: 'start',
-      },
-    },
-    {
-      element: '[data-tour="sidebar-model-plaza"]',
-      popover: {
-        title: '模型广场',
-        description: '浏览当前代理站允许使用的文本、图片与视频公开模型。',
+        description: '查看当前账户的余额、用量与可用能力。',
         side: 'right',
         align: 'start',
       },
@@ -47,7 +38,7 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
       element: '[data-tour="sidebar-api-keys"]',
       popover: {
         title: 'API 密钥',
-        description: '创建代理站 API Key，并使用当前代理站 URL 调用最终由 Sub2API 主站计费的接口。',
+        description: '创建 API Key，并使用本站提供的调用地址接入模型服务。',
         side: 'right',
         align: 'start',
       },
@@ -56,16 +47,7 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
       element: '[data-tour="sidebar-usage"]',
       popover: {
         title: '使用记录',
-        description: '查看当前用户的请求、令牌和费用记录，不会读取其他代理站用户的数据。',
-        side: 'right',
-        align: 'start',
-      },
-    },
-    {
-      element: '[data-tour="sidebar-profile"]',
-      popover: {
-        title: '个人资料',
-        description: '维护头像、安全验证和主站身份绑定等个人设置。',
+        description: '查看当前用户的请求、令牌和费用记录，不会读取其他站点的用户数据。',
         side: 'right',
         align: 'start',
       },
@@ -77,7 +59,7 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
       element: '[data-tour="sidebar-admin-dashboard"]',
       popover: {
         title: '站点管理',
-        description: '管理当前代理站的用户归属、品牌和租户策略；这里不会下放 Sub2API 主站全局配置。',
+        description: '管理本站用户、品牌展示和站点配置。',
         side: 'right',
         align: 'start',
       },

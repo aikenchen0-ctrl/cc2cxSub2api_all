@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { agentAPI, type AgentContentPage } from '@/agent/api'
 import { siteLogo, siteName } from '@/agent/branding'
 import { useAgentSession } from '@/agent/session'
 import { isDark, toggleTheme } from '@/agent/theme'
@@ -14,7 +13,6 @@ const emit = defineEmits<{ 'update:collapsed': [value: boolean]; 'close-mobile':
 
 const route = useRoute()
 const session = useAgentSession()
-const customPages = ref<AgentContentPage[]>([])
 const groupExpandOverrides = ref<Record<string, boolean>>({})
 
 interface SidebarItem {
@@ -29,70 +27,29 @@ interface SidebarSection {
   items: SidebarItem[]
 }
 
-const quickApps: SidebarItem[] = [
-  { path: '/model-plaza', label: '模型广场', icon: 'grid' },
-  { path: '/console', label: '模型工作台', icon: 'chat' },
-  { path: '/batch-image', label: '批量图片', icon: 'sparkles' },
-]
-
 const personal: SidebarItem[] = [
   { path: '/dashboard', label: '仪表盘', icon: 'chart' },
   { path: '/keys', label: 'API 密钥', icon: 'key' },
   { path: '/usage', label: '使用记录', icon: 'clock' },
   { path: '/purchase', label: '充值', icon: 'creditCard' },
   { path: '/orders', label: '订单记录', icon: 'dollar' },
-  { path: '/affiliate', label: '推广返利', icon: 'users' },
-  { path: '/profile', label: '个人资料', icon: 'user' },
 ]
 
 const management: SidebarItem[] = [
   { path: '/admin/dashboard', label: '仪表盘', icon: 'chart' },
-  { path: '/admin/agent-provisioning', label: '代理站开通', icon: 'server' },
-  { path: '/admin/ops', label: '运营监控', icon: 'chartBar' },
   { path: '/admin/users', label: '用户管理', icon: 'users' },
-  { path: '/admin/promo-codes', label: '优惠码管理', icon: 'badge' },
-  { path: '/admin/subscriptions', label: '订阅管理', icon: 'creditCard' },
-  {
-    path: '/admin/affiliates', label: '推广管理', icon: 'users',
-    children: [
-      { path: '/admin/affiliates/invites', label: '邀请记录', icon: 'users' },
-      { path: '/admin/affiliates/rebates', label: '返利记录', icon: 'gift' },
-      { path: '/admin/affiliates/transfers', label: '划转记录', icon: 'dollar' },
-    ],
-  },
-  {
-    path: '/admin/orders', label: '支付管理', icon: 'dollar',
-    children: [
-      { path: '/admin/orders/dashboard', label: '支付统计', icon: 'chartBar' },
-      { path: '/admin/orders', label: '订单管理', icon: 'dollar' },
-      { path: '/admin/orders/plans', label: '套餐管理', icon: 'creditCard' },
-    ],
-  },
-  {
-    path: '/admin/channels', label: '渠道管理', icon: 'server',
-    children: [
-      { path: '/admin/channels', label: '渠道列表', icon: 'server' },
-      { path: '/admin/channels/pricing', label: '模型定价', icon: 'dollar' },
-    ],
-  },
-  { path: '/admin/satellite-billing', label: '代理站计费', icon: 'dollar' },
   { path: '/admin/usage', label: '用量同步', icon: 'clock' },
-  { path: '/admin/audit-logs', label: '操作日志', icon: 'shield' },
   { path: '/admin/announcements', label: '公告管理', icon: 'bell' },
-  { path: '/admin/content', label: '内容页面', icon: 'document' },
-  { path: '/admin/backup', label: '备份管理', icon: 'database' },
   { path: '/admin/settings', label: '系统设置', icon: 'cog' },
 ]
 
 const sections = computed<SidebarSection[]>(() => [
   ...(session.isAgentAdmin ? [{ label: '站点管理', items: management }] : []),
-  ...(customPages.value.length ? [{ label: '站点内容', items: customPages.value.map<SidebarItem>(item => ({ path: `/custom/${item.slug}`, label: item.title, icon: 'document' })) }] : []),
   { label: '我的账户', items: personal },
 ])
 
 function isActive(path: string): boolean {
   if (path === '/admin/orders') return route.path === path
-  if (path === '/admin/channels') return route.path === path
   return route.path === path || (path.startsWith('/admin/') && route.path.startsWith(`${path}/`))
 }
 
@@ -115,20 +72,13 @@ function toggleGroup(item: SidebarItem): void {
 
 function tourName(path: string): string | undefined {
   const names: Record<string, string> = {
-    '/model-plaza': 'sidebar-model-plaza',
     '/dashboard': 'sidebar-dashboard',
     '/keys': 'sidebar-api-keys',
     '/usage': 'sidebar-usage',
-    '/profile': 'sidebar-profile',
     '/admin/dashboard': 'sidebar-admin-dashboard',
   }
   return names[path]
 }
-
-onMounted(async () => {
-  try { customPages.value = (await agentAPI.contentPages.list()).items }
-  catch { customPages.value = [] }
-})
 </script>
 
 <template>
@@ -139,10 +89,6 @@ onMounted(async () => {
     </div>
 
     <nav class="sidebar-nav scrollbar-hide">
-      <div class="sidebar-section">
-        <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': isCollapsed }" :aria-hidden="isCollapsed ? 'true' : undefined"><span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': isCollapsed }">快捷应用</span></div>
-        <router-link v-for="item in quickApps" :key="item.path" :to="item.path" class="sidebar-link mb-1" :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': isCollapsed }" :title="isCollapsed ? item.label : undefined" :aria-label="item.label" :aria-current="isActive(item.path) ? 'page' : undefined" :data-tour="tourName(item.path)" @click="emit('close-mobile')"><Icon :name="item.icon" class="shrink-0" /><span class="sidebar-label" :class="{ 'sidebar-label-collapsed': isCollapsed }" :aria-hidden="isCollapsed ? 'true' : undefined">{{ item.label }}</span></router-link>
-      </div>
       <div v-for="section in sections" :key="section.label" class="sidebar-section">
         <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': isCollapsed }" :aria-hidden="isCollapsed ? 'true' : undefined"><span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': isCollapsed }">{{ section.label }}</span></div>
         <template v-for="item in section.items" :key="item.path">

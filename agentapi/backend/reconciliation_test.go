@@ -49,16 +49,16 @@ func TestFailedTasksReplicateDelayedMainUsage(t *testing.T) {
 			}
 			s.store.clock = time.Now
 			if kind == "image" {
-				s.reconcileStaleImageTasks(context.Background())
+				s.reconcileStaleImageTasksForTenant(context.Background(), s.cfg.AgentID)
 			} else {
-				s.reconcileStaleVideoTasks(context.Background())
+				s.reconcileStaleVideoTasksForTenant(context.Background(), s.cfg.AgentID)
 			}
 			record, err := s.store.Settlement(s.cfg.AgentID, "delayed")
 			if err != nil || record.Status != "pending" {
 				t.Fatalf("missing usage must remain pending: %+v %v", record, err)
 			}
 			visible = true
-			if _, err := s.reconcileSettlements(context.Background(), ""); err != nil {
+			if _, err := s.reconcileTenantSettlements(context.Background(), s.cfg.AgentID, ""); err != nil {
 				t.Fatal(err)
 			}
 			record, err = s.store.Settlement(s.cfg.AgentID, "delayed")
@@ -117,7 +117,7 @@ func TestReconciliationWaitsForActualCostInsteadOfStandardCost(t *testing.T) {
 	if _, _, err := s.store.PrepareDirectSettlement(s.cfg.AgentID, "42", "42", "discounted", "discounted", 100); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.reconcileSettlements(context.Background(), ""); err != nil {
+	if _, err := s.reconcileTenantSettlements(context.Background(), s.cfg.AgentID, ""); err != nil {
 		t.Fatal(err)
 	}
 	record, err := s.store.Settlement(s.cfg.AgentID, "discounted")
@@ -125,7 +125,7 @@ func TestReconciliationWaitsForActualCostInsteadOfStandardCost(t *testing.T) {
 		t.Fatalf("standard cost was treated as an actual charge: %+v %v", record, err)
 	}
 	actualVisible = true
-	if _, err := s.reconcileSettlements(context.Background(), ""); err != nil {
+	if _, err := s.reconcileTenantSettlements(context.Background(), s.cfg.AgentID, ""); err != nil {
 		t.Fatal(err)
 	}
 	record, err = s.store.Settlement(s.cfg.AgentID, "discounted")
@@ -153,7 +153,7 @@ func TestReconciliationContinuesPastFailedUsageLookup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows, err := s.reconcileSettlements(context.Background(), "")
+	rows, err := s.reconcileTenantSettlements(context.Background(), s.cfg.AgentID, "")
 	if err != nil || len(rows) != 2 || len(calls) != 2 {
 		t.Fatalf("batch stopped %+v calls=%v err=%v", rows, calls, err)
 	}
@@ -186,7 +186,7 @@ func TestReconciliationWithoutUsageDoesNotStarveNextBatch(t *testing.T) {
 		}
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := s.reconcileSettlements(context.Background(), ""); err != nil {
+		if _, err := s.reconcileTenantSettlements(context.Background(), s.cfg.AgentID, ""); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -49,23 +49,23 @@ onMounted(async () => {
 
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ checking ? `正在检查${props.provider}登录状态` : `${props.provider}登录由主站完成` }}
+          {{ checking ? `正在检查${props.provider}登录状态` : `${props.provider}登录已完成` }}
         </h1>
         <p class="mt-2 text-sm leading-6 text-gray-500 dark:text-dark-400">
-          {{ checking ? '正在确认当前代理站会话，请稍候。' : '代理站不会保存或交换第三方授权码。请通过主站完成授权，然后由一次性 SSO 票据建立本站会话。' }}
+          {{ checking ? '正在确认本站会话，请稍候。' : '本站不会保存或交换第三方授权码，授权完成后将安全建立本站会话。' }}
         </p>
       </div>
 
       <div v-if="!checking" role="status" class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-left text-sm leading-6 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
         <div class="flex gap-3">
           <Icon name="shield" size="md" class="mt-0.5 shrink-0" />
-          <p>浏览器只保留代理站的 HttpOnly 会话；主站 OAuth 凭据、应用凭据、管理员 Key、SuperKey 与用户令牌都不会进入代理站前端。</p>
+          <p>浏览器只保留本站的 HttpOnly 会话；OAuth 凭据、应用凭据、管理员 Key、SuperKey 与用户令牌都不会进入前端。</p>
         </div>
       </div>
 
       <a v-if="!checking" data-testid="main-site-auth-restart" class="btn btn-primary w-full" :href="mainSiteLoginURL">
         <Icon name="externalLink" size="md" class="mr-2" />
-        返回主站继续登录
+        返回登录页
       </a>
       <RouterLink v-if="!checking" class="btn btn-secondary w-full" to="/login">使用本站账号登录</RouterLink>
     </section>

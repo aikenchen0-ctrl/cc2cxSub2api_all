@@ -56,7 +56,7 @@ describe('AgentPaymentQRCodeView', () => {
     const { wrapper, router } = await mountView()
 
     expect(wrapper.text()).toContain('PAY-000077')
-    expect(wrapper.get('[aria-label="主站支付二维码"]').exists()).toBe(true)
+    expect(wrapper.get('[aria-label="支付二维码"]').exists()).toBe(true)
     expect(QRCode.toCanvas).toHaveBeenCalled()
     expect(wrapper.get('a[href="https://pay.example/order/77"]').attributes('rel')).toContain('noopener')
 

@@ -11,7 +11,7 @@ import { analyzeAssetImage, getVisionHealth } from './server/providers/vision.mj
 import { consumeTicket, createSession, getIdentity, isManaged, loadTaskOwners, rememberTaskOwner, requireIdentity, safeNext, satelliteHeaders, sub2apiPurchaseUrl, sub2apiV1Base, verifyTicket } from './server/auth-sso.mjs'
 import { serveStaticApp } from './server/static-app.mjs'
 
-const DEFAULT_GENERATION_PROVIDER = 'rodin'
+const DEFAULT_GENERATION_PROVIDER = 'hunyuan'
 const taskOwners = new Map()
 const taskOwnersReady = loadTaskOwners().then((owners) => {
   for (const [taskId, subject] of Object.entries(owners)) taskOwners.set(taskId, subject)

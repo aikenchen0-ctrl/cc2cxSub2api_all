@@ -6,13 +6,18 @@ const onePixelPng = Buffer.from(
 )
 
 async function stubHealth(page) {
+  await page.route('**/api/auth/me', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: 'visual-test-user' }),
+  }))
   await page.route('**/api/3d/health', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
       providers: {
         hunyuan: { configured: true },
-        tripo: { configured: false },
+        tripo: { configured: true },
         fal: { configured: false },
         rodin: { configured: false },
       },
@@ -57,12 +62,19 @@ test('手机首屏始终显示图片生成主按钮', async ({ page }) => {
 
 test('普通图片选择后先确认再提交生成任务', async ({ page }) => {
   let requestBody = null
+  let releaseAnalysis
+  const analysisGate = new Promise((resolve) => {
+    releaseAnalysis = resolve
+  })
   await stubHealth(page)
-  await page.route('**/api/3d/analyze', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ configured: false }),
-  }))
+  await page.route('**/api/3d/analyze', async (route) => {
+    await analysisGate
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ configured: false }),
+    })
+  })
   await page.route('**/api/3d/generate', async (route) => {
     requestBody = JSON.parse(route.request().postData() || '{}')
     await route.fulfill({
@@ -86,6 +98,11 @@ test('普通图片选择后先确认再提交生成任务', async ({ page }) => 
   expect(requestBody).toBeNull()
 
   await page.getByRole('button', { name: '确认并生成' }).click()
+  await expect(page.getByRole('heading', { name: '生成队列' })).toBeVisible()
+  await expect(page.locator('.left-queue-list')).toContainText('cell')
+  await expect(page.locator('.left-queue-list')).toContainText('上传中')
+
+  releaseAnalysis()
   await expect.poll(() => requestBody).toMatchObject({
     provider: 'hunyuan',
     model: '3.1',

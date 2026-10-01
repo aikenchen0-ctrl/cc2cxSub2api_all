@@ -10,7 +10,7 @@ import (
 
 func TestAPIKeyUsageIsKeyScopedAndUsesAuthoritativeSnapshots(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/owner" {
+		if r.URL.Path != "/v1/sub2api/balance" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": 123.45}))

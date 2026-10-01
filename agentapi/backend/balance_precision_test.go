@@ -22,7 +22,7 @@ func TestInvalidMainBalanceDoesNotForwardModelRequest(t *testing.T) {
 			}))
 			defer upstream.Close()
 			s := testServer(t, upstream)
-			s.cfg.BillingMode = "user_upstream"
+			setTenantBillingModeForTest(t, s, "user_upstream")
 			s.main = NewMainClient(s.cfg)
 			_, key, err := s.store.CreateAPIKey(s.cfg.AgentID, "42", "balance test")
 			if err != nil {

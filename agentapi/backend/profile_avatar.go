@@ -48,7 +48,7 @@ func (s *Server) handleAgentProfileAvatar(w http.ResponseWriter, r *http.Request
 		s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 		return
 	}
-	session, _, ok := s.requireSession(w, r, requestID)
+	tenant, session, _, ok := s.requireTenantSession(w, r, requestID)
 	if !ok {
 		return
 	}
@@ -86,6 +86,6 @@ func (s *Server) handleAgentProfileAvatar(w http.ResponseWriter, r *http.Request
 		s.writeMainError(w, requestID, err)
 		return
 	}
-	s.recordAudit("user", session.MainUserID, "profile_avatar_update", "user", session.MainUserID, requestID, "success", "")
+	s.recordTenantAudit(tenant.AgentID, "user", session.MainUserID, "profile_avatar_update", "user", session.MainUserID, requestID, "success", "")
 	s.writeData(w, http.StatusOK, requestID, safeAgentProfile(profile, session.MainUserID, true))
 }

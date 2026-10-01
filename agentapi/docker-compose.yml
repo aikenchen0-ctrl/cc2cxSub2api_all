@@ -14,7 +14,10 @@ services:
     cap_drop:
       - ALL
     ports:
-      - "${AGENTAPI_PORT:-8080}:8080"
+      # Keep the repository's documented local port stable. Falling back to
+      # 8080 collides with the local Sub2API service and can leave AgentAPI
+      # stopped after an otherwise successful image upgrade.
+      - "${AGENTAPI_PORT:-18081}:8080"
     env_file:
       - path: ./backend/.env
         required: false
@@ -22,6 +25,13 @@ services:
       AGENTAPI_ADDR: ":8080"
       AGENTAPI_WEB_DIR: /app/web
       AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
+      AGENTAPI_SHARED_HOSTS: ${AGENTAPI_SHARED_HOSTS:-localhost,127.0.0.1}
+      # Shared mode must win over stale values that may still exist in an old
+      # backend/.env. These variables are only for an explicit one-off legacy
+      # migration run and must not bind the normal Compose service to one tenant.
+      AGENT_ID: ""
+      AGENT_DOMAIN: ""
+      AGENT_OWNER_MAIN_USER_ID: ""
       # The public-layer ticket is signed by Sub2API. Keep this injected from
       # the same deployment env file instead of relying on a stale container.
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}

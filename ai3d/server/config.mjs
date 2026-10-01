@@ -52,8 +52,12 @@ export const OUTBOUND_PROXY_AGENT = createProxyAgent()
 // .env.example contains readable placeholders; those must not make a
 // provider appear configured when the first request would fail.
 export function hasConfiguredSecret(value) {
-  const normalized = String(value || '').trim().toLowerCase()
+  const raw = String(value || '').trim()
+  const normalized = raw.toLowerCase()
   if (!normalized) return false
+  // Provider credentials are transported in HTTP headers and must be
+  // printable ASCII. This also rejects explanatory Chinese placeholder text.
+  if (!/^[\x21-\x7e]+$/.test(raw)) return false
   return !(
     normalized === 'changeme' ||
     normalized === 'change-me' ||
@@ -63,6 +67,7 @@ export function hasConfiguredSecret(value) {
     normalized === 'your-api-key' ||
     normalized.startsWith('your_') ||
     normalized.startsWith('your-') ||
+    normalized.startsWith('replace_') ||
     normalized.startsWith('replace-with-') ||
     normalized.startsWith('example-') ||
     normalized.startsWith('sk-super-') ||

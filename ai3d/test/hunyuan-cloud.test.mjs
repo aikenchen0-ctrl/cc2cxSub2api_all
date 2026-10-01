@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHunyuanCloudSubmitBody } from '../server/providers/hunyuan-cloud.mjs'
+import {
+  buildHunyuanCloudAuthHeaders,
+  buildHunyuanCloudSubmitBody,
+  findHunyuanGlbUrl,
+  normalizeHunyuanCloudStatus,
+} from '../server/providers/hunyuan-cloud.mjs'
 
 const IMAGE_BASE64 = 'data:image/png;base64,ZmFrZS1pbWFnZQ=='
 
@@ -15,7 +20,7 @@ describe('混元云端草图请求体', () => {
 
     assert.equal(body.Model, '3.0')
     assert.equal(body.GenerateType, 'Sketch')
-    assert.equal(body.ImageBase64, IMAGE_BASE64)
+    assert.equal(body.ImageUrl.Url, IMAGE_BASE64)
     assert.equal(body.Prompt, '一只上皮细胞，光滑表面，细胞核清晰')
   })
 
@@ -43,7 +48,43 @@ describe('混元云端草图请求体', () => {
 
     assert.equal(body.Model, '3.1')
     assert.equal(body.GenerateType, 'Normal')
-    assert.equal(body.ImageBase64, IMAGE_BASE64)
+    assert.equal(body.ImageUrl.Url, IMAGE_BASE64)
     assert.equal('Prompt' in body, false)
+  })
+
+  it('兼容接口回退时仅发送原始 base64，不发送 data URL 前缀', () => {
+    const body = buildHunyuanCloudSubmitBody({
+      imageDataUrl: IMAGE_BASE64,
+      generateType: 'Normal',
+      model: '3.1',
+      imageTransport: 'image-base64',
+    })
+
+    assert.equal(body.ImageBase64, 'ZmFrZS1pbWFnZQ==')
+    assert.equal('ImageUrl' in body, false)
+  })
+})
+
+describe('混元 TokenHub 协议', () => {
+  it('Authorization 直接发送 API Key，不增加 Bearer 前缀', () => {
+    assert.deepEqual(buildHunyuanCloudAuthHeaders('sk-test-key'), {
+      Authorization: 'sk-test-key',
+    })
+  })
+
+  it('识别专业版任务状态并只选择 GLB 文件', () => {
+    assert.equal(normalizeHunyuanCloudStatus('WAIT'), 'queued')
+    assert.equal(normalizeHunyuanCloudStatus('RUN'), 'running')
+    assert.equal(normalizeHunyuanCloudStatus('DONE'), 'success')
+    assert.equal(normalizeHunyuanCloudStatus('FAIL'), 'failed')
+    assert.equal(findHunyuanGlbUrl({
+      ResultFile3Ds: [
+        { Type: 'OBJ', Url: 'https://example.com/model.zip' },
+        { Type: 'GLB', Url: 'https://example.com/model.glb' },
+      ],
+    }), 'https://example.com/model.glb')
+    assert.equal(findHunyuanGlbUrl({
+      ResultFile3Ds: [{ Type: 'OBJ', Url: 'https://example.com/model.zip' }],
+    }), '')
   })
 })

@@ -17,10 +17,6 @@ func TestPublicModelCatalogIsAnonymousTenantFilteredAndLocal(t *testing.T) {
 	defer upstream.Close()
 
 	server := testServer(t, upstream)
-	if _, err := server.store.UpdateAgentModelPolicy(server.cfg.AgentID, []string{"gpt-5.5", "gpt-image-2"}); err != nil {
-		t.Fatal(err)
-	}
-
 	req := httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/public/models", nil)
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
@@ -40,7 +36,7 @@ func TestPublicModelCatalogIsAnonymousTenantFilteredAndLocal(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Object != "list" || len(payload.Data) != 2 || payload.Data[0].ID != "gpt-5.5" || payload.Data[1].ID != "gpt-image-2" {
+	if payload.Object != "list" || len(payload.Data) != len(publicModelCatalog) {
 		t.Fatalf("unexpected public model payload: %s", rec.Body.String())
 	}
 	for _, item := range payload.Data {

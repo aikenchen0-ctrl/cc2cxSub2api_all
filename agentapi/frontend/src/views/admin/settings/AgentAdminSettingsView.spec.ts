@@ -7,7 +7,7 @@ import { applyHomeSettings, compactHomeEnabled, homeContent, siteSubtitle } from
 function createContext() {
   return {
     agent: {
-      agent_id: 'agent-1', domain: 'agent.example.com', name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: 'https://docs.old.example.com/', contact_info: 'old-support@example.com', status: 'active',
+      agent_id: 'agent-1', domain: 'agent.example.com', api_base_url: 'https://agent.example.com/v1', name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: 'https://docs.old.example.com/', contact_info: 'old-support@example.com', status: 'active',
       billing_mode: 'user_upstream', owner_main_user_id: 'owner-1', main_balance_cents: 0, billing_status: 'ok', wallet_available_cents: 0, wallet_allocated_cents: 0,
     },
     authenticated: true,
@@ -20,7 +20,7 @@ describe('AgentAdminSettingsView', () => {
 
   it('loads tenant branding and saves only the current agent branding fields', async () => {
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
-    const update = vi.spyOn(agentAPI, 'updateBranding').mockResolvedValue({ name: 'New Agent', site_name: 'New Site', site_logo: '/new.svg', doc_url: 'https://docs.new.example.com/', contact_info: 'new-support@example.com' })
+    const update = vi.spyOn(agentAPI, 'updateBranding').mockResolvedValue({ name: 'New Agent', site_name: 'New Site', site_logo: '/new.svg', doc_url: 'https://docs.new.example.com/', contact_info: 'new-support@example.com', api_base_url: 'https://api.new.example.com/v1' })
     const wrapper = mount(AgentAdminSettingsView)
     await flushPromises()
 
@@ -30,16 +30,18 @@ describe('AgentAdminSettingsView', () => {
     expect(wrapper.get<HTMLInputElement>('#site-logo').element.value).toBe('/old.svg')
     expect(wrapper.get<HTMLInputElement>('#doc-url').element.value).toBe('https://docs.old.example.com/')
     expect(wrapper.get<HTMLInputElement>('#contact-info').element.value).toBe('old-support@example.com')
+    expect(wrapper.get<HTMLInputElement>('#api-base-url').element.value).toBe('https://agent.example.com/v1')
 
     await wrapper.get('#agent-name').setValue(' New Agent ')
     await wrapper.get('#site-name').setValue(' New Site ')
     await wrapper.get('#site-logo').setValue(' /new.svg ')
     await wrapper.get('#doc-url').setValue(' https://docs.new.example.com/ ')
     await wrapper.get('#contact-info').setValue(' new-support@example.com ')
+    await wrapper.get('#api-base-url').setValue(' https://api.new.example.com/v1 ')
     await wrapper.findAll('button').find(button => button.text().includes('保存品牌信息'))!.trigger('click')
     await flushPromises()
 
-    expect(update).toHaveBeenCalledWith({ name: 'New Agent', site_name: 'New Site', site_logo: '/new.svg', doc_url: 'https://docs.new.example.com/', contact_info: 'new-support@example.com', site_subtitle: '', compact_home_enabled: false, home_content: '' })
+    expect(update).toHaveBeenCalledWith({ name: 'New Agent', site_name: 'New Site', site_logo: '/new.svg', doc_url: 'https://docs.new.example.com/', contact_info: 'new-support@example.com', api_base_url: 'https://api.new.example.com/v1', site_subtitle: '', compact_home_enabled: false, home_content: '' })
     expect(wrapper.text()).toContain('本站品牌信息已保存')
     expect(wrapper.text()).not.toContain('Admin API Key')
   })
@@ -64,7 +66,7 @@ describe('AgentAdminSettingsView', () => {
     const settings = { site_subtitle: '本站副标题', compact_home_enabled: true, home_content: '<h1>本站首页</h1>' }
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
     const update = vi.spyOn(agentAPI, 'updateBranding').mockResolvedValue({
-      name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: '', contact_info: '', ...settings,
+      name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: '', contact_info: '', api_base_url: 'https://agent.example.com/v1', ...settings,
     })
     const wrapper = mount(AgentAdminSettingsView)
     await flushPromises()
@@ -100,8 +102,8 @@ describe('AgentAdminSettingsView', () => {
     await flushPromises()
 
     await wrapper.findAll('button').find(button => button.text().includes('数据边界'))!.trigger('click')
-    expect(wrapper.text()).toContain('不能修改主站全局设置或其他代理站配置')
-    expect(wrapper.text()).toContain('不能读取主站管理员 Key、JWT 或内部凭证')
-    expect(wrapper.text()).toContain('用户余额与实际计费记录始终以主站为准')
+    expect(wrapper.text()).toContain('不能修改其他站点的配置')
+    expect(wrapper.text()).toContain('不能读取平台级密钥、令牌或内部凭证')
+    expect(wrapper.text()).toContain('用户余额与实际计费记录由系统统一核算')
   })
 })

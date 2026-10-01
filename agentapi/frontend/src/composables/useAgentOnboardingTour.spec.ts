@@ -11,7 +11,6 @@ describe('useAgentOnboardingTour', () => {
     localStorage.clear()
     document.body.innerHTML = [
       '<a data-tour="sidebar-dashboard"></a>',
-      '<a data-tour="sidebar-model-plaza"></a>',
       '<a data-tour="sidebar-api-keys"></a>',
       '<a data-tour="sidebar-usage"></a>',
       '<a data-tour="sidebar-profile"></a>',

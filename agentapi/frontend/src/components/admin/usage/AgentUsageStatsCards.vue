@@ -42,7 +42,7 @@
         <p class="text-xl font-bold text-green-600">{{ reportedActual > 0 ? formatUSD(stats.actual_cost_usd_nanos) : '无数据' }}</p>
         <p class="text-xs text-gray-400">
           标准费用 {{ stats.measured ? formatUSD(stats.standard_cost_usd_nanos) : '无数据' }}
-          <span v-if="stats.missing_actual"> · {{ stats.missing_actual }} 条待主站报告</span>
+          <span v-if="stats.missing_actual"> · {{ stats.missing_actual }} 条待报告</span>
         </p>
       </div>
     </div>
@@ -52,7 +52,7 @@
         <Icon name="chart" size="md" />
       </div>
       <div>
-        <p class="text-xs font-medium text-gray-500">主站明细覆盖</p>
+        <p class="text-xs font-medium text-gray-500">用量明细覆盖</p>
         <p class="text-xl font-bold">{{ stats.requests ? `${stats.measured} / ${stats.requests}` : '无记录' }}</p>
         <p class="text-xs text-gray-400">{{ coverageLabel }}</p>
       </div>

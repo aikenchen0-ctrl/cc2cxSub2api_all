@@ -89,11 +89,13 @@ export interface AgentBranding extends AgentHomeSettings {
   site_logo: string
   doc_url: string
   contact_info: string
+  api_base_url?: string
 }
 
 export interface AgentView extends AgentHomeSettings {
   agent_id: string
   domain: string
+  api_base_url?: string
   name: string
   site_name: string
   site_logo?: string
@@ -107,49 +109,6 @@ export interface AgentView extends AgentHomeSettings {
   billing_status: string
   wallet_available_cents: number
   wallet_allocated_cents: number
-}
-
-export interface AgentAdminProvisioning {
-  agent_id: string
-  domain: string
-  display_name: string
-  site_name: string
-  site_logo?: string
-  owner_main_user_id: string
-  configured_status: string
-  runtime_status: string
-  control_enabled: boolean
-  control_available: boolean
-  ready: boolean
-  last_checked_at?: string
-  stale_after_seconds: number
-  billing_mode: string
-  satellite_slug: string
-  lifecycle_authority: 'sub2api_main'
-  management_scope: 'current_agent_read_only'
-}
-
-export interface AgentAdminPromoCode {
-  code: string
-  bonus_amount: number
-  max_uses: number
-  used_count: number
-  status: string
-  expires_at?: string | null
-  created_at: string
-}
-
-export interface AgentAdminPromoCodes {
-  feature_enabled: boolean
-  funding_mode: 'unconfigured' | 'owner_balance_on_redemption'
-  authority: 'sub2api_main'
-  management_scope: 'current_agent'
-  redemption_enabled: boolean
-  can_create: boolean
-  can_edit: boolean
-  can_delete: boolean
-  items: AgentAdminPromoCode[]
-  total: number
 }
 
 export type AgentAnnouncementStatus = 'draft' | 'active' | 'archived'
@@ -177,30 +136,6 @@ export interface AgentAnnouncementInput {
   ends_at?: string
 }
 
-export type AgentContentPageKind = 'legal' | 'custom'
-export type AgentContentPageStatus = 'draft' | 'active' | 'archived'
-
-export interface AgentContentPage {
-  id: number
-  slug: string
-  kind: AgentContentPageKind
-  title: string
-  content: string
-  status: AgentContentPageStatus
-  sort_order: number
-  created_at: string
-  updated_at: string
-}
-
-export interface AgentContentPageInput {
-  slug: string
-  kind: AgentContentPageKind
-  title: string
-  content: string
-  status: AgentContentPageStatus
-  sort_order: number
-}
-
 export interface AgentUserView {
   agent_id: string
   main_user_id: string
@@ -214,6 +149,13 @@ export interface AgentUserView {
   updated_at: string
 }
 
+export interface AgentUserPage {
+  items: AgentUserView[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface AgentContextResponse {
   agent: AgentView
   authenticated: boolean
@@ -221,60 +163,6 @@ export interface AgentContextResponse {
   main_user_id?: string
   user?: AgentUserView
   balance_error?: string
-}
-
-export interface AgentModelPolicy {
-  catalog: string[]
-  enabled: string[]
-  customized: boolean
-}
-
-export interface AgentAvailableGroup {
-  id: number
-  name: string
-  platform: string
-  subscription_type: string
-  rate_multiplier: number
-  peak_rate_enabled: boolean
-  peak_start: string
-  peak_end: string
-  peak_rate_multiplier: number
-  is_exclusive: boolean
-}
-
-export interface AgentAvailableModelPricing {
-  billing_mode?: string
-  input_price?: number | null
-  output_price?: number | null
-  cache_write_price?: number | null
-  cache_read_price?: number | null
-  image_input_price?: number | null
-  image_output_price?: number | null
-  per_request_price?: number | null
-  intervals?: unknown[]
-}
-
-export interface AgentAvailableModel {
-  name: string
-  platform: string
-  pricing: AgentAvailableModelPricing | null
-}
-
-export interface AgentAvailableChannelSection {
-  platform: string
-  groups: AgentAvailableGroup[]
-  supported_models: AgentAvailableModel[]
-}
-
-export interface AgentAvailableChannel {
-  name: string
-  description: string
-  platforms: AgentAvailableChannelSection[]
-}
-
-export interface AgentAvailableChannelsResponse {
-  channels: AgentAvailableChannel[]
-  user_group_rates: Record<string, number>
 }
 
 export interface AgentSubscriptionGroup {
@@ -306,20 +194,6 @@ export interface AgentSubscription {
   weekly_usage_usd: number
   monthly_usage_usd: number
   group?: AgentSubscriptionGroup
-}
-
-export interface AgentAdminSubscription extends AgentSubscription {
-  main_user_id: string
-  user_email?: string
-  user_display_name?: string
-}
-
-export interface AgentAdminSubscriptionPage {
-  items: AgentAdminSubscription[]
-  total: number
-  page: number
-  page_size: number
-  pages: number
 }
 
 export interface AgentOrder {
@@ -435,23 +309,6 @@ export interface AgentCheckoutPlan {
   validity_unit: string
   features: string[]
   product_name: string
-}
-
-export interface AgentAdminCheckoutPlan extends AgentCheckoutPlan {
-  enabled: boolean
-  sort_order: number
-  customized: boolean
-  source_name: string
-  source_description: string
-  source_features: string[]
-}
-
-export interface AgentPlanPolicyInput {
-  enabled: boolean
-  sort_order: number
-  display_name: string
-  description: string
-  features: string[]
 }
 
 export interface AgentCheckoutInfo {
@@ -677,74 +534,6 @@ export interface UsageInsights extends UsageMetrics {
   trend: Array<UsageMetrics & { key: string }>
 }
 
-export interface AgentTenantBackupRecord {
-  id: number
-  status: 'completed'
-  file_name: string
-  size_bytes: number
-  parts: string[]
-  triggered_by: 'manual'
-  created_by?: string
-  started_at: string
-  restored_at?: string
-}
-
-export interface AgentTenantBackupSnapshot {
-  version: number
-  source_agent_id: string
-  created_at: string
-  branding: { name: string; site_name: string; site_logo?: string; doc_url?: string; contact_info?: string }
-  model_policy: { customized: boolean; enabled: string[] }
-  announcements: Array<{
-    title: string
-    content: string
-    status: AgentAnnouncementStatus
-    notify_mode: AgentAnnouncementNotifyMode
-    starts_at?: string
-    ends_at?: string
-  }>
-  content_pages: Array<{
-    slug: string
-    kind: AgentContentPageKind
-    title: string
-    content: string
-    status: AgentContentPageStatus
-    sort_order: number
-  }>
-  plan_policies: Array<AgentPlanPolicyInput & { plan_id: number }>
-}
-
-export interface AgentTenantBackupList {
-  items: AgentTenantBackupRecord[]
-  total: number
-  parts: string[]
-}
-
-export interface AgentTenantBackupDownload {
-  record: AgentTenantBackupRecord
-  snapshot: AgentTenantBackupSnapshot
-}
-
-export interface AgentTaskHistoryItem {
-  task_type: 'image' | 'video'
-  task_id: string
-  request_id: string
-  model?: string
-  status: string
-  settlement_status?: string
-  reserved_cents: number
-  actual_cents: number
-  created_at: string
-  updated_at: string
-}
-
-export interface AgentTaskHistoryResponse {
-  items: AgentTaskHistoryItem[]
-  total: number
-  page: number
-  page_size: number
-}
-
 // Current records are sourced from the public user-scoped usage API. Keep the
 // earlier runtime/admin labels readable for snapshots persisted by older builds.
 export function isAuthoritativeAgentUsageSource(source?: string): boolean {
@@ -758,6 +547,7 @@ export interface AgentAPIKeyView {
   id: number
   name: string
   prefix: string
+  key?: string
   status: string
   created_at: string
   last_used_at?: string
@@ -776,71 +566,6 @@ export interface SettlementView {
   usage_id?: string
   created_at?: string
   updated_at?: string
-}
-
-export interface AuditEventView {
-  id: number
-  actor_type: string
-  actor_id: string
-  agent_id: string
-  operation: string
-  target_type: string
-  target_id?: string
-  request_id: string
-  result: string
-  reason?: string
-  created_at: string
-}
-
-export interface ChatCompletionResponse {
-  id?: string
-  model?: string
-  choices?: Array<{ message?: { role?: string; content?: string }; text?: string }>
-  output_text?: string
-  output?: Array<{ content?: Array<{ text?: string }> }>
-  [key: string]: unknown
-}
-
-export interface ImageGenerationItem {
-  url?: string
-  b64_json?: string
-  revised_prompt?: string
-  mime_type?: string
-  output_format?: string
-}
-
-export interface ImageGenerationResponse {
-  created?: number
-  data?: ImageGenerationItem[]
-  [key: string]: unknown
-}
-
-export interface ImageTaskResponse {
-  id?: string
-  task_id?: string
-  object?: string
-  status?: string
-  http_status?: number
-  result?: ImageGenerationResponse
-  error?: unknown
-  data?: ImageTaskResponse | ImageGenerationItem[]
-  [key: string]: unknown
-}
-
-export interface VideoTaskResponse {
-  id?: string
-  request_id?: string
-  task_id?: string
-  video_id?: string
-  status?: string
-  state?: string
-  progress?: number | string
-  video?: { url?: string; [key: string]: unknown }
-  url?: string
-  video_url?: string
-  download_url?: string
-  data?: VideoTaskResponse
-  [key: string]: unknown
 }
 
 export interface PublicSettings extends AgentHomeSettings {
@@ -995,41 +720,13 @@ export const agentAPI = {
     markRead: async (id: number) => (await agentClient.post<{ id: number; read: boolean }>(`/agent/announcements/${id}/read`, {})).data,
     markAllRead: async () => (await agentClient.post<{ read: boolean }>('/agent/announcements/read-all', {})).data,
   },
-  contentPages: {
-    list: async () => (await agentClient.get<{ items: AgentContentPage[]; total: number }>('/agent/content-pages')).data,
-    get: async (kind: AgentContentPageKind, slug: string) =>
-      (await agentClient.get<AgentContentPage>(`/agent/content/${kind}/${encodeURIComponent(slug)}`)).data,
-  },
   getWallet: async () => (await agentClient.get<{ agent: AgentView; user: AgentUserView }>('/agent/wallet')).data,
-  getUsers: async (page = 1, pageSize = 25, search = '', status: '' | 'active' | 'disabled' = '') =>
-    (await agentClient.get<{ items: AgentUserView[]; total: number; page: number; page_size: number }>('/agent/users', {
-      params: { page, page_size: pageSize, ...(search.trim() ? { q: search.trim() } : {}), ...(status ? { status } : {}) },
-    })).data,
   getUsageInsights: async (window: string) =>
     (await agentClient.get<UsageInsights>('/agent/usage/insights', { params: { window } })).data,
   getUsage: async (page = 1, pageSize = 25, filters: { model?: string; request_id?: string; start_time?: string; end_time?: string } = {}) =>
     (await agentClient.get<{ items: AgentUsageView[]; total: number; page: number; page_size: number }>('/agent/usage', {
       params: { ...filters, page, page_size: pageSize },
     })).data,
-  getTasks: async (page = 1, pageSize = 25, taskType: '' | 'image' | 'video' = '') =>
-    (await agentClient.get<AgentTaskHistoryResponse>('/agent/tasks', {
-      params: { page, page_size: pageSize, ...(taskType ? { task_type: taskType } : {}) },
-    })).data,
-  getAdminChannels: async () =>
-    (await agentClient.get<AgentAvailableChannelsResponse>('/agent/admin/channels')).data,
-  adminBackups: {
-    list: async () =>
-      (await agentClient.get<AgentTenantBackupList>('/agent/admin/backups')).data,
-    create: async () =>
-      (await agentClient.post<AgentTenantBackupRecord>('/agent/admin/backups', {})).data,
-    download: async (id: number) =>
-      (await agentClient.get<AgentTenantBackupDownload>(`/agent/admin/backups/${id}/download`)).data,
-    import: async (snapshot: AgentTenantBackupSnapshot) =>
-      (await agentClient.post<AgentTenantBackupRecord>('/agent/admin/backups/import', snapshot)).data,
-    restore: async (id: number) =>
-      (await agentClient.post<AgentTenantBackupRecord>(`/agent/admin/backups/${id}/restore`, {})).data,
-    remove: async (id: number) => { await agentClient.delete(`/agent/admin/backups/${id}`) },
-  },
   orders: {
     list: async (page = 1, pageSize = 20, status = '') =>
       (await agentClient.get<AgentOrderPage>('/agent/orders', {
@@ -1042,53 +739,10 @@ export const agentAPI = {
     refundEligibleProviders: async () =>
       (await agentClient.get<{ provider_instance_ids: string[] }>('/agent/orders/refund-eligible-providers')).data,
   },
-  adminOrders: {
-    list: async (page = 1, pageSize = 20, status = '', mainUserID = '') =>
-      (await agentClient.get<AgentAdminOrderPage>('/agent/admin/orders', {
-        params: {
-          page,
-          page_size: pageSize,
-          ...(status ? { status } : {}),
-          ...(mainUserID ? { main_user_id: mainUserID } : {}),
-        },
-      })).data,
-    cancel: async (mainUserID: string, id: number) =>
-      (await agentClient.post<{ message: string }>(`/agent/admin/orders/${encodeURIComponent(mainUserID)}/${id}/cancel`, {})).data,
-    dashboard: async (days: 7 | 30 | 90 = 30) =>
-      (await agentClient.get<AgentAdminPaymentDashboard>('/agent/admin/orders/dashboard', { params: { days } })).data,
-  },
-  adminPaymentPlans: {
-    list: async () =>
-      (await agentClient.get<{ items: AgentAdminCheckoutPlan[]; total: number }>('/agent/admin/payment/plans')).data,
-    update: async (id: number, payload: AgentPlanPolicyInput) =>
-      (await agentClient.put<AgentAdminCheckoutPlan>(`/agent/admin/payment/plans/${id}`, payload)).data,
-  },
-  adminSubscriptions: {
-    list: async (page = 1, pageSize = 20, filters: { status?: string; main_user_id?: string; group_id?: number; platform?: string } = {}) =>
-      (await agentClient.get<AgentAdminSubscriptionPage>('/agent/admin/subscriptions', {
-        params: { page, page_size: pageSize, ...filters },
-      })).data,
-  },
-  adminProvisioning: {
-    get: async () =>
-      (await agentClient.get<AgentAdminProvisioning>('/agent/admin/agent-provisioning')).data,
-  },
-  adminPromoCodes: {
-    get: async () =>
-      (await agentClient.get<AgentAdminPromoCodes>('/agent/admin/promo-codes')).data,
-  },
-  adminAffiliates: {
-    invites: async (page = 1, pageSize = 20, filters: AgentAffiliateRecordFilters = {}) =>
-      (await agentClient.get<AgentAffiliateRecordPage<AgentAffiliateInviteRecord>>('/agent/admin/affiliates/invites', {
-        params: { page, page_size: pageSize, ...filters },
-      })).data,
-    rebates: async (page = 1, pageSize = 20, filters: AgentAffiliateRecordFilters = {}) =>
-      (await agentClient.get<AgentAffiliateRecordPage<AgentAffiliateRebateRecord>>('/agent/admin/affiliates/rebates', {
-        params: { page, page_size: pageSize, ...filters },
-      })).data,
-    transfers: async (page = 1, pageSize = 20, filters: AgentAffiliateRecordFilters = {}) =>
-      (await agentClient.get<AgentAffiliateRecordPage<AgentAffiliateTransferRecord>>('/agent/admin/affiliates/transfers', {
-        params: { page, page_size: pageSize, ...filters },
+  adminUsers: {
+    list: async (page = 1, pageSize = 20, search = '', status = '') =>
+      (await agentClient.get<AgentUserPage>('/agent/admin/users', {
+        params: { page, page_size: pageSize, ...(search ? { search } : {}), ...(status ? { status } : {}) },
       })).data,
   },
   payment: {
@@ -1098,10 +752,6 @@ export const agentAPI = {
       (await agentClient.post<AgentPaymentCreateResult>('/agent/payment/orders', payload)).data,
     verifyOrder: async (outTradeNo: string) =>
       (await agentClient.post<AgentOrder>('/agent/payment/orders/verify', { out_trade_no: outTradeNo })).data,
-  },
-  affiliate: {
-    get: async () => (await agentClient.get<AgentAffiliateDetail>('/agent/affiliate')).data,
-    transfer: async () => (await agentClient.post<AgentAffiliateTransfer>('/agent/affiliate/transfer', {})).data,
   },
   getAdminWallet: async () => (await agentClient.get<AgentView>('/agent/admin/wallet')).data,
   getBranding: async () => (await agentClient.get<AgentBranding>('/agent/admin/branding')).data,
@@ -1113,84 +763,12 @@ export const agentAPI = {
     update: async (id: number, payload: AgentAnnouncementInput) => (await agentClient.put<AgentAnnouncement>(`/agent/admin/announcements/${id}`, payload)).data,
     delete: async (id: number) => { await agentClient.delete(`/agent/admin/announcements/${id}`) },
   },
-  adminContentPages: {
-    list: async () => (await agentClient.get<{ items: AgentContentPage[]; total: number }>('/agent/admin/content-pages')).data,
-    create: async (payload: AgentContentPageInput) => (await agentClient.post<AgentContentPage>('/agent/admin/content-pages', payload)).data,
-    update: async (id: number, payload: AgentContentPageInput) => (await agentClient.put<AgentContentPage>(`/agent/admin/content-pages/${id}`, payload)).data,
-    delete: async (id: number) => { await agentClient.delete(`/agent/admin/content-pages/${id}`) },
-  },
-  getAdminModelPolicy: async () =>
-    (await agentClient.get<AgentModelPolicy>('/agent/admin/model-policy')).data,
-  updateAdminModelPolicy: async (enabled: string[]) =>
-    (await agentClient.put<AgentModelPolicy>('/agent/admin/model-policy', { enabled })).data,
   getSettlements: async () => (await agentClient.get<{ items: SettlementView[]; total: number }>('/agent/admin/settlements')).data,
-  getAuditEvents: async (limit = 100) => (await agentClient.get<{ items: AuditEventView[]; total: number }>('/agent/admin/audit-events', { params: { limit } })).data,
   reconcileSettlements: async (requestId?: string) =>
     (await agentClient.post<{ items: SettlementView[]; total: number }>('/agent/admin/settlements/reconcile', requestId ? { request_id: requestId } : {})).data,
-  setMappedUserStatus: async (mainUserID: string, status: 'active' | 'disabled') =>
-    (await agentClient.patch<AgentUserView>(`/agent/admin/users/${encodeURIComponent(mainUserID)}/status`, { status })).data,
   keys: {
-    listForUser: async (userID: string) => (await agentClient.get<{ items: AgentAPIKeyView[]; total: number }>('/api-keys', { params: { main_user_id: userID } })).data,
-    createForUser: async (userID: string, name: string) => (await agentClient.post<{ item: AgentAPIKeyView; key: string }>('/api-keys', { name }, { params: { main_user_id: userID } })).data,
-    revokeForUser: async (userID: string, id: number) => (await agentClient.delete(`/api-keys/${id}`, { params: { main_user_id: userID } })).data,
-    list: async () => (await agentClient.get<{ items: AgentAPIKeyView[]; total: number }>('/api-keys')).data,
+    list: async () => (await agentClient.get<{ items: AgentAPIKeyView[]; total: number; api_base_url?: string }>('/api-keys')).data,
     create: async (name: string) => (await agentClient.post<{ item: AgentAPIKeyView; key: string }>('/api-keys', { name })).data,
     revoke: async (id: number) => (await agentClient.delete<{ id: number; status: string }>(`/api-keys/${id}`)).data,
-  },
-  model: {
-    publicList: async () => {
-      const response = await agentClient.get<{ data?: Array<{ id?: string }> }>('/public/models')
-      return (response.data.data || []).map((item) => item.id?.trim() || '').filter(Boolean)
-    },
-    list: async () => {
-      const response = await agentClient.get<{ data?: Array<{ id?: string }> }>('/v1/models', { baseURL: '' })
-      return (response.data.data || []).map((item) => item.id?.trim() || '').filter(Boolean)
-    },
-    chat: async (model: string, messages: Array<{ role: string; content: string }>) =>
-      (await agentClient.post<ChatCompletionResponse>('/v1/chat/completions', { model, messages }, { baseURL: '' })).data,
-    generateImage: async (model: string, prompt: string) =>
-      (await agentClient.post<ImageGenerationResponse>('/v1/images/generations', { model, prompt }, {
-        baseURL: '',
-        timeout: 180_000,
-      })).data,
-    editImage: async (model: string, prompt: string, image: File) => {
-      const body = new FormData()
-      body.append('model', model)
-      body.append('prompt', prompt)
-      body.append('image', image)
-      return (await agentClient.post<ImageGenerationResponse>('/v1/images/edits', body, {
-        baseURL: '',
-        timeout: 180_000,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })).data
-    },
-    generateImageAsync: async (model: string, prompt: string) =>
-      (await agentClient.post<ImageTaskResponse>('/v1/images/generations/async', { model, prompt }, {
-        baseURL: '',
-        timeout: 60_000,
-      })).data,
-    editImageAsync: async (model: string, prompt: string, image: File) => {
-      const body = new FormData()
-      body.append('model', model)
-      body.append('prompt', prompt)
-      body.append('image', image)
-      return (await agentClient.post<ImageTaskResponse>('/v1/images/edits/async', body, {
-        baseURL: '',
-        timeout: 60_000,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })).data
-    },
-    getImageTask: async (taskID: string) =>
-      (await agentClient.get<ImageTaskResponse>(`/v1/images/tasks/${encodeURIComponent(taskID)}`, { baseURL: '', timeout: 60_000 })).data,
-    createVideo: async (model: string, prompt: string) =>
-      (await agentClient.post<VideoTaskResponse>('/v1/videos', {
-        model,
-        prompt,
-        duration: 6,
-        aspect_ratio: '16:9',
-        resolution: '480p',
-      }, { baseURL: '', timeout: 60_000 })).data,
-    getVideo: async (taskID: string) =>
-      (await agentClient.get<VideoTaskResponse>(`/v1/videos/${encodeURIComponent(taskID)}`, { baseURL: '', timeout: 60_000 })).data,
   },
 }

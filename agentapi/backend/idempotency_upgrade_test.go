@@ -29,7 +29,7 @@ func TestLegacyIdempotencyBarrierSurvivesNamespacedUpgrade(t *testing.T) {
 					}))
 					defer upstream.Close()
 					s := testServer(t, upstream)
-					s.cfg.BillingMode = "user_upstream"
+					setTenantBillingModeForTest(t, s, "user_upstream")
 					s.main = NewMainClient(s.cfg)
 					if _, _, err := s.store.PrepareDirectSettlement(s.cfg.AgentID, "42", "42", "old-key", "old-key", 100); err != nil {
 						t.Fatal(err)
@@ -79,7 +79,7 @@ func TestOversizedRetryIdentifierDoesNotReachMain(t *testing.T) {
 			}))
 			defer upstream.Close()
 			s := testServer(t, upstream)
-			s.cfg.BillingMode = "user_upstream"
+			setTenantBillingModeForTest(t, s, "user_upstream")
 			s.main = NewMainClient(s.cfg)
 			if _, err := s.store.UpsertUser(s.cfg.AgentID, "42", "42@example.com", "42"); err != nil {
 				t.Fatal(err)
@@ -121,7 +121,7 @@ func TestRequestIDIsScopedToUserAndReplaysDoNotRelay(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := testServer(t, upstream)
-	s.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, s, "user_upstream")
 	s.main = NewMainClient(s.cfg)
 	for _, user := range []string{"42", "43"} {
 		if _, err := s.store.UpsertUser(s.cfg.AgentID, user, user+"@example.com", user); err != nil {

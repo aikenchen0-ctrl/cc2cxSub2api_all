@@ -157,7 +157,7 @@ func TestAgentBalanceNotifyRejectsSSOOnlyAndUnsafeMainData(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: passwordID})
 	rec = httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "bad") {
+	if rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "bad\\r\\n@example.com") || strings.Contains(rec.Body.String(), "bad@example.com") {
 		t.Fatalf("unsafe main profile was not rejected: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -410,9 +410,10 @@ test("POST /api/stylize-qr should accept one normal qr image and return artified
   }
 });
 
-test("POST /api/stylize-qr default path should use full artistic QR mode", async () => {
+test("POST /api/stylize-qr fallback path should use Sub2API artistic QR mode", async () => {
   let capturedArgs;
   const app = createQrApp({
+    stylize: null,
     generate: async (args) => {
       capturedArgs = args;
       return { imageDataUrl: "data:image/png;base64,ART" };

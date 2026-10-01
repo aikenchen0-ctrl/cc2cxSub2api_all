@@ -33,6 +33,21 @@ test("APP_CONFIG should use port 5221 when PORT is not set", async () => {
   }
 });
 
+test("APP_CONFIG should keep the legacy artistic QR model and URL", async () => {
+  const originalBaseUrl = process.env.QR_ART_API_BASE_URL;
+  delete process.env.QR_ART_API_BASE_URL;
+
+  try {
+    const { APP_CONFIG } = await import(`../src/config.js?legacy-art-qr-${Date.now()}`);
+    assert.equal(APP_CONFIG.artQr.apiBaseUrl, "https://open-qr.mewx.art");
+    assert.equal(APP_CONFIG.artQr.generateEndpoint, "/api/v1/images/generate");
+    assert.equal(APP_CONFIG.artQr.model, "67");
+  } finally {
+    if (originalBaseUrl === undefined) delete process.env.QR_ART_API_BASE_URL;
+    else process.env.QR_ART_API_BASE_URL = originalBaseUrl;
+  }
+});
+
 test("APP_CONFIG should read generate timeout and concurrency from environment", async () => {
   const originalTimeout = process.env.QR_GENERATE_TIMEOUT_MS;
   const originalConcurrency = process.env.QR_GENERATE_CONCURRENCY;

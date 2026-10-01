@@ -34,7 +34,7 @@ describe('AgentExternalAuthCallbackView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('LinuxDo登录由主站完成')
+    expect(wrapper.text()).toContain('LinuxDo登录已完成')
     expect(wrapper.text()).not.toContain('private-code')
     expect(wrapper.text()).not.toContain('private-state')
     expect(wrapper.get('[data-testid="main-site-auth-restart"]').attributes('href')).toBe('/api/v1/auth/main-site/login?next=%2Fusage%3Fpage%3D2')

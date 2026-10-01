@@ -111,7 +111,7 @@ func validAgentBindingEmail(value string) bool {
 
 func (s *Server) handleAgentProfileBindings(w http.ResponseWriter, r *http.Request, requestID string) {
 	w.Header().Set("Cache-Control", "no-store")
-	session, _, ok := s.requireSession(w, r, requestID)
+	tenant, session, _, ok := s.requireTenantSession(w, r, requestID)
 	if !ok {
 		return
 	}
@@ -209,7 +209,7 @@ func (s *Server) handleAgentProfileBindings(w http.ResponseWriter, r *http.Reque
 			s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_PROFILE_INVALID", "main-site identity bindings are invalid")
 			return
 		}
-		s.recordAudit("user", session.MainUserID, "profile_email_binding_update", "user", session.MainUserID, requestID, "success", "")
+		s.recordTenantAudit(tenant.AgentID, "user", session.MainUserID, "profile_email_binding_update", "user", session.MainUserID, requestID, "success", "")
 		s.writeData(w, http.StatusOK, requestID, result)
 	case "start_oauth_binding":
 		start, upstreamErr := s.main.SatelliteOAuthBindingStart(r.Context(), session.MainUserID, provider)
@@ -232,7 +232,7 @@ func (s *Server) handleAgentProfileBindings(w http.ResponseWriter, r *http.Reque
 		}
 		_ = s.store.DeleteSession(session.ID)
 		s.clearSessionCookie(w)
-		s.recordAudit("user", session.MainUserID, "profile_identity_unbind", "identity_provider", provider, requestID, "success", "")
+		s.recordTenantAudit(tenant.AgentID, "user", session.MainUserID, "profile_identity_unbind", "identity_provider", provider, requestID, "success", "")
 		s.writeData(w, http.StatusOK, requestID, map[string]any{"success": true, "reauthenticate": true})
 	}
 }

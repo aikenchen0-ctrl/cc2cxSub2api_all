@@ -8,6 +8,11 @@ const onePixelPng = Buffer.from(
 test('草图提示模式先确认线稿再提交 3.0 Sketch 请求', async ({ page }) => {
   let requestBody = null
 
+  await page.route('**/api/auth/me', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: 'visual-test-user' }),
+  }))
   await page.route('**/api/3d/health', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',

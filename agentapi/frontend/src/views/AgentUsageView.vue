@@ -56,8 +56,8 @@ function usd(nanos: number): string {
 }
 
 function usageSource(source?: string): string {
-  if (source === 'user_balance_delta_fallback') return '用户主站余额差额估算'
-  if (isAuthoritativeAgentUsageSource(source)) return 'Sub2API 用量记录'
+  if (source === 'user_balance_delta_fallback') return '账户余额差额估算'
+  if (isAuthoritativeAgentUsageSource(source)) return '已确认用量记录'
   if (source === 'owner_balance_delta_fallback') return '旧版主账户余额差额估算'
   return '暂无单次请求用量详情'
 }
@@ -110,7 +110,7 @@ onMounted(load)
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">用量记录</h1>
-        <p class="mt-1 text-sm text-slate-500">本站请求及已同步的 Sub2API 用量记录，不包含用户在主站其他入口产生的全部用量。</p>
+        <p class="mt-1 text-sm text-slate-500">查看通过本站发起的请求及已同步用量记录。</p>
       </div>
       <button class="btn btn-secondary" type="button" :disabled="loading" @click="load">刷新</button>
     </header>
@@ -129,16 +129,16 @@ onMounted(load)
     </form>
     <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <div class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <DataTable :columns='[{"key":"request_id","label":"请求"},{"key":"model","label":"模型 / 路由"},{"key":"usage","label":"Sub2API 用量"},{"key":"actual_cents","label":"主站结算"},{"key":"settlement_status","label":"状态"},{"key":"created_at","label":"创建时间"}]' :data="items" :loading="loading" row-key="request_id">
+      <DataTable :columns='[{"key":"request_id","label":"请求"},{"key":"model","label":"模型 / 路由"},{"key":"usage","label":"用量"},{"key":"actual_cents","label":"实际结算"},{"key":"settlement_status","label":"状态"},{"key":"created_at","label":"创建时间"}]' :data="items" :loading="loading" row-key="request_id">
         <template #cell-request_id="{ row: item }"><div class="max-w-xl whitespace-normal"><div class="truncate font-mono text-xs">{{ item.request_id }}</div><div v-if="item.usage_id" class="mt-1 truncate text-[11px] text-slate-400">用量编号 {{ item.usage_id }}</div></div></template>
-        <template #cell-model="{ row: item }"><div class="max-w-xl whitespace-normal"><div>{{ item.model || '未知模型' }}</div><div v-if="item.inbound_endpoint" class="mt-1 text-xs text-slate-500">{{ item.inbound_endpoint }}</div><div v-if="item.upstream_model || item.upstream_response_model" class="mt-1 text-xs text-slate-500">上游模型 {{ item.upstream_model || '—' }}<span v-if="item.upstream_response_model"> · 响应模型 {{ item.upstream_response_model }}</span></div><div v-if="item.upstream_model_mismatch === true" class="mt-1 text-xs text-amber-600">上游模型与请求的模型不一致</div></div></template>
+        <template #cell-model="{ row: item }"><div class="max-w-xl whitespace-normal"><div>{{ item.model || '未知模型' }}</div><div v-if="item.inbound_endpoint" class="mt-1 text-xs text-slate-500">{{ item.inbound_endpoint }}</div><div v-if="item.upstream_model || item.upstream_response_model" class="mt-1 text-xs text-slate-500">实际模型 {{ item.upstream_model || '—' }}<span v-if="item.upstream_response_model"> · 响应模型 {{ item.upstream_response_model }}</span></div><div v-if="item.upstream_model_mismatch === true" class="mt-1 text-xs text-amber-600">实际模型与请求模型不一致</div></div></template>
         <template #cell-usage="{ row: item }"><div class="max-w-xl whitespace-normal">
                 <div :class="item.usage_source === 'owner_balance_delta_fallback' ? 'text-amber-600' : 'text-slate-500'">{{ usageSource(item.usage_source) }}</div>
                 <template v-if="isAuthoritativeAgentUsageSource(item.usage_source)">
                   <div class="mt-1 text-slate-700 dark:text-slate-300">令牌 · 输入 {{ item.input_tokens }} / 输出 {{ item.output_tokens }} / 缓存读取 {{ item.cache_read_tokens }} / 缓存写入 {{ item.cache_creation_tokens }}（5 分钟 {{ item.cache_creation_5m_tokens }} / 1 小时 {{ item.cache_creation_1h_tokens }}）</div>
                   <div v-if="item.image_count || item.image_input_tokens || item.image_output_tokens" class="mt-1 text-slate-700 dark:text-slate-300">图片 {{ item.image_count }} 张 · 输入 {{ item.image_input_tokens }} / 输出 {{ item.image_output_tokens }} · 费用 {{ usd(item.image_input_cost_usd_nanos) }} / {{ usd(item.image_output_cost_usd_nanos) }}</div>
                   <div v-if="item.image_size || item.image_input_size || item.image_output_size || item.media_type" class="mt-1 text-slate-500">{{ item.media_type || '媒体' }}<span v-if="item.image_size"> · 尺寸 {{ item.image_size }}</span><span v-if="item.image_input_size"> · 输入尺寸 {{ item.image_input_size }}</span><span v-if="item.image_output_size"> · 输出尺寸 {{ item.image_output_size }}</span></div>
-                  <div class="mt-1 text-slate-700 dark:text-slate-300"><span v-if="item.actual_cost_reported">实际费用 {{ usd(item.actual_cost_usd_nanos) }}</span><span v-else>实际费用待主站确认</span> · 标准费用 {{ usd(item.total_cost_usd_nanos) }}</div>
+                  <div class="mt-1 text-slate-700 dark:text-slate-300"><span v-if="item.actual_cost_reported">实际费用 {{ usd(item.actual_cost_usd_nanos) }}</span><span v-else>实际费用待确认</span> · 标准费用 {{ usd(item.total_cost_usd_nanos) }}</div>
                   <div class="mt-1 text-slate-500">输入费用 {{ usd(item.input_cost_usd_nanos) }} · 输出费用 {{ usd(item.output_cost_usd_nanos) }} · 缓存费用 {{ usd(item.cache_read_cost_usd_nanos + item.cache_creation_cost_usd_nanos) }}</div>
                   <div v-if="item.reasoning_effort || item.service_tier || item.request_type || item.billing_mode || item.duration_ms || item.first_token_ms || item.rate_multiplier || item.long_context_billing_applied || item.openai_ws_mode || item.native_compaction_v2 || item.cache_ttl_overridden" class="mt-1 text-slate-500"><span v-if="item.reasoning_effort">推理强度 {{ enumLabel(item.reasoning_effort) }} · </span><span v-if="item.service_tier">服务等级 {{ enumLabel(item.service_tier) }} · </span><span v-if="item.request_type">请求类型 {{ enumLabel(item.request_type) }} · </span><span v-if="item.billing_mode">计费方式 {{ enumLabel(item.billing_mode) }} · </span><span v-if="item.duration_ms">耗时 {{ item.duration_ms }} 毫秒 · </span><span v-if="item.first_token_ms">首字延迟 {{ item.first_token_ms }} 毫秒 · </span><span v-if="item.rate_multiplier">倍率 ×{{ item.rate_multiplier }} · </span><span v-if="item.long_context_billing_applied">长上下文计费 · </span><span v-if="item.openai_ws_mode">兼容接口长连接模式 · </span><span v-if="item.native_compaction_v2">原生压缩 v2 · </span><span v-if="item.cache_ttl_overridden">缓存有效期已覆盖</span></div>
                 </template>

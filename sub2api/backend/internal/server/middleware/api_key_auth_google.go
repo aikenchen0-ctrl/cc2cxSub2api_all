@@ -65,7 +65,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
-		apiKey, satelliteHandled := loadSatelliteUserKey(c, apiKeyService, apiKeyString, nil)
+		apiKey, satelliteHandled := loadSatelliteUserKey(c, apiKeyService, apiKeyString)
 		if satelliteHandled && apiKey == nil {
 			return
 		}

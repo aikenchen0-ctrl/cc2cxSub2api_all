@@ -10,6 +10,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/pkg/satellite"
 	"github.com/gin-gonic/gin"
 )
@@ -59,6 +60,22 @@ func (h *AuthHandler) startSatelliteSSO(c *gin.Context, slug string) {
 		response.Forbidden(c, "User is disabled")
 		return
 	}
+	var sharedTenant *service.AgentSharedTenant
+	if app.Slug == "agentapi" {
+		if h.agentTenantSvc == nil {
+			response.Error(c, http.StatusServiceUnavailable, "agentapi tenant registry is unavailable")
+			return
+		}
+		sharedTenant, err = h.agentTenantSvc.EnsureSharedTenant(c.Request.Context(), subject.UserID, user.Username)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if sharedTenant == nil || sharedTenant.Status != "active" || sharedTenant.Role != "owner" {
+			response.Forbidden(c, "AgentAPI tenant is not active")
+			return
+		}
+	}
 	callback := ssoCallback(app.CallbackEnv, app.Slug, app.DefaultOrigin, app.CallbackPath)
 	parsed, err := url.Parse(callback)
 	if err != nil || !validSatelliteCallback(parsed, app.CallbackPath) {
@@ -75,6 +92,11 @@ func (h *AuthHandler) startSatelliteSSO(c *gin.Context, slug string) {
 		Email: user.Email, Username: user.Username, DisplayName: user.Username, AvatarURL: user.AvatarURL,
 		IssuedAt: now.Unix(), ExpiresAt: now.Add(ttl).Unix(),
 		Nonce: randomNonce(), Next: safeSatelliteNext(c.Query("next"), app.DefaultNext),
+	}
+	if sharedTenant != nil {
+		payload.AgentID = sharedTenant.AgentID
+		payload.AgentRole = sharedTenant.Role
+		payload.AgentName = sharedTenant.BrandName
 	}
 	raw, err := signJuTicket(payload, secret)
 	if err != nil {

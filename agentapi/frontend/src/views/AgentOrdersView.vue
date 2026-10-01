@@ -86,7 +86,7 @@ onMounted(() => { void load(); void loadEligibility() })
 <template>
   <main class="space-y-4">
     <header class="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div><p class="text-sm font-medium text-primary-600 dark:text-primary-300">MAIN-SITE ORDERS</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">订单记录</h1><p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">订单、余额与退款状态均来自 Sub2API 主站，代理站不创建第二套计费事实。</p></div>
+      <div><p class="text-sm font-medium text-primary-600 dark:text-primary-300">MY ORDERS</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">订单记录</h1><p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">查看当前账户的订单、余额与退款状态。</p></div>
       <button class="btn btn-primary" type="button" @click="router.push('/purchase')">充值 / 购买</button>
     </header>
     <div class="card flex flex-wrap items-center gap-3 p-4">
@@ -97,7 +97,7 @@ onMounted(() => { void load(); void loadEligibility() })
     <p v-if="success" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">{{ success }}</p>
     <div class="card overflow-hidden">
       <DataTable :columns="columns" :data="orders" :loading="loading" row-key="id">
-        <template #empty><div class="py-8 text-center text-gray-500">暂无主站订单</div></template>
+        <template #empty><div class="py-8 text-center text-gray-500">暂无订单</div></template>
         <template #cell-id="{ value }"><span class="font-mono">#{{ value }}</span></template>
         <template #cell-out_trade_no="{ value }"><span class="font-mono text-xs">{{ value }}</span></template>
         <template #cell-pay_amount="{ value, row }"><div><span class="font-semibold">{{ money(value, row.currency) }}</span><p v-if="row.amount !== row.pay_amount" class="text-xs text-gray-400">到账 {{ money(row.amount) }}</p></div></template>

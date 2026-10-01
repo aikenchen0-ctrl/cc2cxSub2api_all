@@ -69,7 +69,7 @@ describe('AgentPaymentResultView', () => {
     const wrapper = await mountResult('/payment/result')
 
     expect(agentAPI.payment.verifyOrder).not.toHaveBeenCalled()
-    expect(wrapper.get('[role="alert"]').text()).toContain('缺少可验证的主站订单号')
+    expect(wrapper.get('[role="alert"]').text()).toContain('缺少可验证的订单号')
     wrapper.unmount()
   })
 })

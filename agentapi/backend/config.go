@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,56 +14,53 @@ import (
 
 const sessionTTL = 3 * 24 * time.Hour
 
-var managedAgentDomainPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
-
 type Config struct {
-	Addr                          string
-	WebDir                        string
-	DatabasePath                  string
-	MainAPIBaseURL                string
-	MainAdminAPIKey               string
-	MainModelBaseURL              string
-	PublicMainURL                 string
-	RuntimeControlCredential      string
-	AppCredential                 string
-	SatelliteSlug                 string
-	SSOSecret                     string
-	SSOAudience                   string
-	SessionSecret                 string
-	SessionSecretWeak             bool
-	CookieName                    string
-	CookieSecure                  bool
-	AgentID                       string
-	AgentDomain                   string
-	AgentName                     string
-	SiteName                      string
-	SiteLogo                      string
-	BrandSync                     bool
-	EmailVerifyEnabled            bool
-	AgentDisabled                 bool
-	ProvisioningControlEnabled    bool
-	ProvisioningControlStaleAfter time.Duration
-	BillingMode                   string
-	OwnerMainUserID               string
-	InitialBalanceCents           int64
-	MaxRequestCostCents           int64
-	MainRequestTimeout            time.Duration
-	MainUsageAPI                  bool
-	ModelStreamTimeout            time.Duration
-	HTTPWriteTimeout              time.Duration
-	AutoBindExistingUsers         bool
-	SettlementReconcileInterval   time.Duration
-	SettlementReconcileBatch      int
-	VideoTaskReconcileAge         time.Duration
-	ImageTaskReconcileAge         time.Duration
-	PaymentEnabled                bool
-	PaymentProvider               string
-	PaymentCurrency               string
-	PaymentWebhookSecret          string
-	PaymentMinCents               int64
-	PaymentMaxCents               int64
-	PaymentOrderTTL               time.Duration
-	PaymentCheckoutURLTemplate    string
+	Addr                        string
+	WebDir                      string
+	DatabasePath                string
+	MainAPIBaseURL              string
+	MainAdminAPIKey             string
+	MainModelBaseURL            string
+	PublicMainURL               string
+	PreflightMainUserID         string
+	AppCredential               string
+	SatelliteSlug               string
+	SSOSecret                   string
+	SSOAudience                 string
+	SessionSecret               string
+	SessionSecretWeak           bool
+	CookieName                  string
+	CookieSecure                bool
+	SharedHosts                 []string
+	AgentID                     string
+	AgentDomain                 string
+	AgentName                   string
+	SiteName                    string
+	SiteLogo                    string
+	BrandSync                   bool
+	EmailVerifyEnabled          bool
+	AgentDisabled               bool
+	BillingMode                 string
+	OwnerMainUserID             string
+	InitialBalanceCents         int64
+	MaxRequestCostCents         int64
+	MainRequestTimeout          time.Duration
+	MainUsageAPI                bool
+	ModelStreamTimeout          time.Duration
+	HTTPWriteTimeout            time.Duration
+	AutoBindExistingUsers       bool
+	SettlementReconcileInterval time.Duration
+	SettlementReconcileBatch    int
+	VideoTaskReconcileAge       time.Duration
+	ImageTaskReconcileAge       time.Duration
+	PaymentEnabled              bool
+	PaymentProvider             string
+	PaymentCurrency             string
+	PaymentWebhookSecret        string
+	PaymentMinCents             int64
+	PaymentMaxCents             int64
+	PaymentOrderTTL             time.Duration
+	PaymentCheckoutURLTemplate  string
 }
 
 func LoadConfig() (Config, error) {
@@ -99,70 +95,98 @@ func LoadConfig() (Config, error) {
 		cookieSecure = false
 	}
 
-	agentID := firstNonEmpty(os.Getenv("AGENT_ID"), "agent-local")
+	// A shared AgentAPI process must not invent a process-wide tenant. AGENT_ID
+	// is retained only as an explicit single-tenant/local migration switch; in
+	// normal production it is empty and tenants are created from signed SSO
+	// tickets, then resolved from durable server-side state.
+	agentID := strings.TrimSpace(os.Getenv("AGENT_ID"))
 	cfg := Config{
-		Addr:                          firstNonEmpty(os.Getenv("AGENTAPI_ADDR"), ":8080"),
-		WebDir:                        firstNonEmpty(os.Getenv("AGENTAPI_WEB_DIR"), "./web"),
-		DatabasePath:                  firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
-		MainAPIBaseURL:                apiBase,
-		MainAdminAPIKey:               mainAdminCredential(),
-		MainModelBaseURL:              modelBase,
-		PublicMainURL:                 publicMainURL,
-		RuntimeControlCredential:      secretEnv("AGENT_RUNTIME_CONTROL_CREDENTIAL"),
-		AppCredential:                 secretEnv("SUB2API_APP_CREDENTIAL"),
-		SatelliteSlug:                 firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi"),
-		SSOSecret:                     secretEnv("SUB2API_SSO_SECRET"),
-		SSOAudience:                   firstNonEmpty(os.Getenv("AGENTAPI_SSO_AUDIENCE"), firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi")),
-		SessionSecret:                 secret,
-		SessionSecretWeak:             secretWeak,
-		CookieName:                    firstNonEmpty(os.Getenv("AGENTAPI_COOKIE_NAME"), "agentapi_session"),
-		CookieSecure:                  cookieSecure,
-		AgentID:                       agentID,
-		AgentDomain:                   strings.TrimSpace(os.Getenv("AGENT_DOMAIN")),
-		AgentName:                     firstNonEmpty(os.Getenv("AGENT_NAME"), "AgentAPI"),
-		SiteName:                      firstNonEmpty(os.Getenv("AGENT_SITE_NAME"), "AgentAPI"),
-		SiteLogo:                      strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
-		BrandSync:                     envBool("AGENT_BRAND_SYNC", false),
-		EmailVerifyEnabled:            envBool("AGENT_EMAIL_VERIFY_ENABLED", true),
-		AgentDisabled:                 !envBool("AGENT_ENABLED", true),
-		ProvisioningControlEnabled:    envBool("AGENT_PROVISIONING_CONTROL_ENABLED", false),
-		ProvisioningControlStaleAfter: envDuration("AGENT_PROVISIONING_CONTROL_STALE_AFTER", 90*time.Second),
-		BillingMode:                   firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "user_upstream"),
-		OwnerMainUserID:               strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
-		InitialBalanceCents:           envCents("AGENT_INITIAL_BALANCE", 0),
-		MaxRequestCostCents:           envCents("AGENT_MAX_REQUEST_COST", 100),
-		MainRequestTimeout:            envDuration("MAIN_REQUEST_TIMEOUT", 90*time.Second),
-		MainUsageAPI:                  envBool("AGENT_MAIN_USAGE_API", true),
-		ModelStreamTimeout:            envDurationAllowZero("MODEL_STREAM_TIMEOUT", 10*time.Minute),
-		HTTPWriteTimeout:              envDurationAllowZero("AGENTAPI_WRITE_TIMEOUT", 10*time.Minute),
-		AutoBindExistingUsers:         envBool("AGENT_AUTO_BIND_EXISTING_USERS", false),
-		SettlementReconcileInterval:   envDurationAllowZero("AGENT_SETTLEMENT_RECONCILE_INTERVAL", 5*time.Minute),
-		SettlementReconcileBatch:      envInt("AGENT_SETTLEMENT_RECONCILE_BATCH", 50, 1, 500),
-		VideoTaskReconcileAge:         envDuration("AGENT_VIDEO_TASK_RECONCILE_AGE", 30*time.Minute),
-		ImageTaskReconcileAge:         envDuration("AGENT_IMAGE_TASK_RECONCILE_AGE", 30*time.Minute),
-		PaymentEnabled:                envBool("AGENT_PAYMENT_ENABLED", false),
-		PaymentProvider:               firstNonEmpty(os.Getenv("AGENT_PAYMENT_PROVIDER"), "manual"),
-		PaymentCurrency:               strings.ToUpper(firstNonEmpty(os.Getenv("AGENT_PAYMENT_CURRENCY"), "CNY")),
-		PaymentWebhookSecret:          secretEnv("AGENT_PAYMENT_WEBHOOK_SECRET"),
-		PaymentMinCents:               envCents("AGENT_PAYMENT_MIN_AMOUNT", 100),
-		PaymentMaxCents:               envCents("AGENT_PAYMENT_MAX_AMOUNT", 1000000),
-		PaymentOrderTTL:               envDuration("AGENT_PAYMENT_ORDER_TTL", 30*time.Minute),
-		PaymentCheckoutURLTemplate:    strings.TrimSpace(os.Getenv("AGENT_PAYMENT_CHECKOUT_URL_TEMPLATE")),
+		Addr:                        firstNonEmpty(os.Getenv("AGENTAPI_ADDR"), ":8080"),
+		WebDir:                      firstNonEmpty(os.Getenv("AGENTAPI_WEB_DIR"), "./web"),
+		DatabasePath:                firstNonEmpty(os.Getenv("AGENTAPI_DATABASE_PATH"), "./data/agentapi.db"),
+		MainAPIBaseURL:              apiBase,
+		MainAdminAPIKey:             mainAdminCredential(),
+		MainModelBaseURL:            modelBase,
+		PublicMainURL:               publicMainURL,
+		PreflightMainUserID:         strings.TrimSpace(os.Getenv("AGENTAPI_PREFLIGHT_MAIN_USER_ID")),
+		AppCredential:               secretEnv("SUB2API_APP_CREDENTIAL"),
+		SatelliteSlug:               firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi"),
+		SSOSecret:                   secretEnv("SUB2API_SSO_SECRET"),
+		SSOAudience:                 firstNonEmpty(os.Getenv("AGENTAPI_SSO_AUDIENCE"), firstNonEmpty(os.Getenv("SUB2API_SATELLITE"), "agentapi")),
+		SessionSecret:               secret,
+		SessionSecretWeak:           secretWeak,
+		CookieName:                  firstNonEmpty(os.Getenv("AGENTAPI_COOKIE_NAME"), "agentapi_session"),
+		CookieSecure:                cookieSecure,
+		SharedHosts:                 nil,
+		AgentID:                     agentID,
+		AgentDomain:                 strings.TrimSpace(os.Getenv("AGENT_DOMAIN")),
+		AgentName:                   firstNonEmpty(os.Getenv("AGENT_NAME"), "AgentAPI"),
+		SiteName:                    firstNonEmpty(os.Getenv("AGENT_SITE_NAME"), "AgentAPI"),
+		SiteLogo:                    strings.TrimSpace(os.Getenv("AGENT_SITE_LOGO")),
+		BrandSync:                   envBool("AGENT_BRAND_SYNC", false),
+		EmailVerifyEnabled:          envBool("AGENT_EMAIL_VERIFY_ENABLED", true),
+		AgentDisabled:               !envBool("AGENT_ENABLED", true),
+		BillingMode:                 firstNonEmpty(os.Getenv("AGENT_BILLING_MODE"), "user_upstream"),
+		OwnerMainUserID:             strings.TrimSpace(os.Getenv("AGENT_OWNER_MAIN_USER_ID")),
+		InitialBalanceCents:         envCents("AGENT_INITIAL_BALANCE", 0),
+		MaxRequestCostCents:         envCents("AGENT_MAX_REQUEST_COST", 100),
+		MainRequestTimeout:          envDuration("MAIN_REQUEST_TIMEOUT", 90*time.Second),
+		MainUsageAPI:                envBool("AGENT_MAIN_USAGE_API", true),
+		ModelStreamTimeout:          envDurationAllowZero("MODEL_STREAM_TIMEOUT", 10*time.Minute),
+		HTTPWriteTimeout:            envDurationAllowZero("AGENTAPI_WRITE_TIMEOUT", 10*time.Minute),
+		AutoBindExistingUsers:       envBool("AGENT_AUTO_BIND_EXISTING_USERS", false),
+		SettlementReconcileInterval: envDurationAllowZero("AGENT_SETTLEMENT_RECONCILE_INTERVAL", 5*time.Minute),
+		SettlementReconcileBatch:    envInt("AGENT_SETTLEMENT_RECONCILE_BATCH", 50, 1, 500),
+		VideoTaskReconcileAge:       envDuration("AGENT_VIDEO_TASK_RECONCILE_AGE", 30*time.Minute),
+		ImageTaskReconcileAge:       envDuration("AGENT_IMAGE_TASK_RECONCILE_AGE", 30*time.Minute),
+		PaymentEnabled:              envBool("AGENT_PAYMENT_ENABLED", false),
+		PaymentProvider:             firstNonEmpty(os.Getenv("AGENT_PAYMENT_PROVIDER"), "manual"),
+		PaymentCurrency:             strings.ToUpper(firstNonEmpty(os.Getenv("AGENT_PAYMENT_CURRENCY"), "CNY")),
+		PaymentWebhookSecret:        secretEnv("AGENT_PAYMENT_WEBHOOK_SECRET"),
+		PaymentMinCents:             envCents("AGENT_PAYMENT_MIN_AMOUNT", 100),
+		PaymentMaxCents:             envCents("AGENT_PAYMENT_MAX_AMOUNT", 1000000),
+		PaymentOrderTTL:             envDuration("AGENT_PAYMENT_ORDER_TTL", 30*time.Minute),
+		PaymentCheckoutURLTemplate:  strings.TrimSpace(os.Getenv("AGENT_PAYMENT_CHECKOUT_URL_TEMPLATE")),
 	}
+	sharedHosts, err := parseSharedHosts(os.Getenv("AGENTAPI_SHARED_HOSTS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.SharedHosts = sharedHosts
 	if cfg.SatelliteSlug != "agentapi" {
 		return Config{}, fmt.Errorf("SUB2API_SATELLITE must be the registered slug agentapi")
 	}
 	if cfg.SSOAudience != "agentapi" {
 		return Config{}, fmt.Errorf("AGENTAPI_SSO_AUDIENCE must match the registered audience agentapi")
 	}
+	if cfg.AgentID == "" && (cfg.AgentDomain != "" || cfg.OwnerMainUserID != "") {
+		return Config{}, fmt.Errorf("AGENT_DOMAIN and AGENT_OWNER_MAIN_USER_ID require an explicit AGENT_ID compatibility tenant")
+	}
+	if cfg.AgentID == "" && len(cfg.SharedHosts) == 0 {
+		return Config{}, fmt.Errorf("AGENTAPI_SHARED_HOSTS is required for the shared runtime")
+	}
+	// The shared site has no alternative login or relay path: SSO establishes
+	// every tenant/user session and the satellite credential is required for
+	// every balance/model request.  Refuse a half-configured shared process at
+	// startup instead of advertising a healthy container whose core flows can
+	// only return 503. Compatibility single-tenant migrations retain the older
+	// warning/readiness behavior so operators can inspect or export their data.
+	if cfg.AgentID == "" {
+		if strings.TrimSpace(cfg.AppCredential) == "" {
+			return Config{}, fmt.Errorf("SUB2API_APP_CREDENTIAL is required for the shared runtime")
+		}
+		if len(cfg.SSOSecret) < 32 {
+			return Config{}, fmt.Errorf("SUB2API_SSO_SECRET must contain at least 32 characters for the shared runtime")
+		}
+		if cfg.SessionSecretWeak {
+			return Config{}, fmt.Errorf("SESSION_SECRET must contain at least 32 characters for the shared runtime")
+		}
+	}
 	if cfg.MaxRequestCostCents <= 0 {
 		return Config{}, fmt.Errorf("AGENT_MAX_REQUEST_COST must be greater than zero")
 	}
 	if cfg.BillingMode != "user_upstream" && cfg.BillingMode != "owner_upstream" {
 		return Config{}, fmt.Errorf("AGENT_BILLING_MODE must be user_upstream")
-	}
-	if cfg.BillingMode == "user_upstream" && cfg.ProvisioningControlEnabled {
-		return Config{}, fmt.Errorf("AGENT_PROVISIONING_CONTROL_ENABLED must be false for user_upstream billing; legacy runtime control is owner-scoped")
 	}
 	// Local wallet seeding is useful for unit tests, but would break the
 	// owner-authoritative accounting contract in a deployed AgentAPI. Refuse it
@@ -176,24 +200,31 @@ func LoadConfig() (Config, error) {
 	if cfg.PaymentOrderTTL <= 0 {
 		return Config{}, fmt.Errorf("AGENT_PAYMENT_ORDER_TTL must be greater than zero")
 	}
-	if cfg.ProvisioningControlEnabled {
-		if strings.TrimSpace(cfg.AgentDomain) == "" {
-			return Config{}, fmt.Errorf("AGENT_DOMAIN is required when provisioning control is enabled")
-		}
-		if !managedAgentDomainPattern.MatchString(strings.ToLower(cfg.AgentDomain)) {
-			return Config{}, fmt.Errorf("AGENT_DOMAIN must be a valid DNS hostname when provisioning control is enabled")
-		}
-	}
 	if cfg.AppCredential == "" {
 		slog.Warn("SUB2API_APP_CREDENTIAL is not set; model relay requests will be rejected")
 	}
-	if cfg.ProvisioningControlEnabled && !strings.HasPrefix(cfg.RuntimeControlCredential, "agt_ctl_") {
-		return Config{}, fmt.Errorf("AGENT_RUNTIME_CONTROL_CREDENTIAL must be a per-Agent agt_ctl_ credential")
-	}
-	if cfg.ProvisioningControlEnabled && !strings.HasPrefix(cfg.AppCredential, "agt_model_") {
-		return Config{}, fmt.Errorf("SUB2API_APP_CREDENTIAL must be a per-Agent agt_model_ credential")
-	}
 	return cfg, nil
+}
+
+func parseSharedHosts(raw string) ([]string, error) {
+	seen := make(map[string]struct{})
+	hosts := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		host, ok := normalizeTenantHost(item)
+		if !ok || strings.Contains(item, "://") || strings.ContainsAny(item, "*") {
+			return nil, fmt.Errorf("AGENTAPI_SHARED_HOSTS contains invalid host %q", item)
+		}
+		if _, exists := seen[host]; exists {
+			continue
+		}
+		seen[host] = struct{}{}
+		hosts = append(hosts, host)
+	}
+	return hosts, nil
 }
 
 func normalizeAPIBase(value string) string {

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { hasConfiguredSecret } from '../server/config.mjs'
 import { assertLocalDiagnosticsRequest, parseDataUrl, sanitizeFileName } from '../server/http-utils.mjs'
 import { getModelExtension, shouldAttachTripoAuth, validateModelBuffer } from '../server/model-store.mjs'
 import { findFirstValue, findModelUrl, isSuccessStatus } from '../server/object-utils.mjs'
@@ -9,6 +10,12 @@ import { extractJsonObject, normalizeVisionInsight } from '../server/providers/v
 import { compactCustomCellsForStorage, persistCustomCells } from '../src/domain/cellPersistence.js'
 
 describe('server utility functions', () => {
+  it('rejects placeholders and non-ASCII explanatory text as provider keys', () => {
+    assert.equal(hasConfiguredSecret('sk-valid-test-key'), true)
+    assert.equal(hasConfiguredSecret('replace_with_your_key'), false)
+    assert.equal(hasConfiguredSecret('请填写真实混元密钥'), false)
+  })
+
   it('sanitizes uploaded filenames without losing readable words', () => {
     assert.equal(sanitizeFileName('../plant cell ✨.png'), 'plant cell .png')
     assert.equal(sanitizeFileName(''), 'asset-reference.png')

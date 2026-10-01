@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -34,6 +35,8 @@ type Store struct {
 
 type Session struct {
 	ID           string
+	AgentID      string
+	Role         string
 	MainUserID   string
 	UserJSON     []byte
 	AccessToken  string
@@ -45,6 +48,7 @@ type AgentView struct {
 	AgentHomeSettings
 	ID              string `json:"agent_id"`
 	Domain          string `json:"domain"`
+	APIBaseURL      string `json:"api_base_url"`
 	Name            string `json:"name"`
 	SiteName        string `json:"site_name"`
 	SiteLogo        string `json:"site_logo,omitempty"`
@@ -58,12 +62,6 @@ type AgentView struct {
 	BillingStatus   string `json:"billing_status"`
 	WalletAvailable int64  `json:"wallet_available_cents"`
 	WalletAllocated int64  `json:"wallet_allocated_cents"`
-}
-
-type AgentModelPolicyView struct {
-	Catalog    []string `json:"catalog"`
-	Enabled    []string `json:"enabled"`
-	Customized bool     `json:"customized"`
 }
 
 type AgentUserView struct {
@@ -83,6 +81,7 @@ type AgentAPIKeyView struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
 	Prefix     string `json:"prefix"`
+	Key        string `json:"key,omitempty"`
 	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at"`
 	LastUsedAt string `json:"last_used_at,omitempty"`
@@ -90,6 +89,7 @@ type AgentAPIKeyView struct {
 
 type ResolvedAgentAPIKey struct {
 	ID         int64
+	AgentID    string
 	MainUserID string
 	Name       string
 	Prefix     string
@@ -178,35 +178,6 @@ type AgentAnnouncement struct {
 	ReadAt     string `json:"read_at,omitempty"`
 }
 
-// AgentContentPage is a tenant-owned legal or custom page. Content is kept
-// local to AgentAPI so copying the Sub2API page experience never grants an
-// agent administrator access to the main site's global menu or legal config.
-type AgentContentPage struct {
-	ID        int64  `json:"id"`
-	AgentID   string `json:"-"`
-	Slug      string `json:"slug"`
-	Kind      string `json:"kind"`
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	Status    string `json:"status"`
-	SortOrder int    `json:"sort_order"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-}
-
-// AgentPlanPolicy contains only tenant-owned presentation controls for one
-// main-site subscription plan. Price, currency, group and validity remain
-// authoritative in Sub2API and are never duplicated into this table.
-type AgentPlanPolicy struct {
-	PlanID      int64    `json:"plan_id"`
-	Enabled     bool     `json:"enabled"`
-	SortOrder   int      `json:"sort_order"`
-	DisplayName string   `json:"display_name,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Features    []string `json:"features"`
-	UpdatedAt   string   `json:"updated_at"`
-}
-
 type VideoTask struct {
 	AgentID    string `json:"agent_id"`
 	MainUserID string `json:"main_user_id"`
@@ -225,22 +196,6 @@ type ImageTask struct {
 	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
-}
-
-// AgentTaskView is the user-visible, server-owned index for resumable media
-// tasks. It intentionally omits provider payloads and only joins the local
-// settlement summary needed by the AgentAPI console.
-type AgentTaskView struct {
-	TaskType         string `json:"task_type"`
-	TaskID           string `json:"task_id"`
-	RequestID        string `json:"request_id"`
-	Model            string `json:"model,omitempty"`
-	Status           string `json:"status"`
-	SettlementStatus string `json:"settlement_status,omitempty"`
-	ReservedCents    int64  `json:"reserved_cents"`
-	ActualCents      int64  `json:"actual_cents"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
 }
 
 // SettlementRecord is the internal representation of a model request's
@@ -441,170 +396,6 @@ func (s *Store) MarkAllAnnouncementsRead(agentID, mainUserID string) error {
 	return err
 }
 
-func scanContentPage(scanner interface{ Scan(...any) error }) (AgentContentPage, error) {
-	var item AgentContentPage
-	var createdAt, updatedAt int64
-	err := scanner.Scan(&item.ID, &item.AgentID, &item.Slug, &item.Kind, &item.Title, &item.Content,
-		&item.Status, &item.SortOrder, &createdAt, &updatedAt)
-	if err != nil {
-		return AgentContentPage{}, err
-	}
-	item.CreatedAt = announcementTime(createdAt)
-	item.UpdatedAt = announcementTime(updatedAt)
-	return item, nil
-}
-
-const contentPageColumns = `id,agent_id,slug,kind,title,content,status,sort_order,created_at,updated_at`
-
-func (s *Store) CreateContentPage(agentID, slug, kind, title, content, status string, sortOrder int) (AgentContentPage, error) {
-	now := s.clock().UTC().Unix()
-	result, err := s.db.Exec(`INSERT INTO agent_content_pages(agent_id,slug,kind,title,content,status,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-		agentID, slug, kind, title, content, status, sortOrder, now, now)
-	if err != nil {
-		return AgentContentPage{}, err
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return AgentContentPage{}, err
-	}
-	return s.ContentPageByID(agentID, id)
-}
-
-func (s *Store) ContentPageByID(agentID string, id int64) (AgentContentPage, error) {
-	item, err := scanContentPage(s.db.QueryRow(`SELECT `+contentPageColumns+` FROM agent_content_pages WHERE agent_id=? AND id=?`, agentID, id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return AgentContentPage{}, errNotFound
-	}
-	return item, err
-}
-
-func (s *Store) ActiveContentPage(agentID, kind, slug string) (AgentContentPage, error) {
-	item, err := scanContentPage(s.db.QueryRow(`SELECT `+contentPageColumns+` FROM agent_content_pages WHERE agent_id=? AND kind=? AND slug=? AND status='active'`, agentID, kind, slug))
-	if errors.Is(err, sql.ErrNoRows) {
-		return AgentContentPage{}, errNotFound
-	}
-	return item, err
-}
-
-func (s *Store) ContentPages(agentID string, activeOnly bool) ([]AgentContentPage, error) {
-	query := `SELECT ` + contentPageColumns + ` FROM agent_content_pages WHERE agent_id=?`
-	if activeOnly {
-		query += ` AND status='active'`
-	}
-	query += ` ORDER BY sort_order ASC, id ASC`
-	rows, err := s.db.Query(query, agentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]AgentContentPage, 0)
-	for rows.Next() {
-		item, err := scanContentPage(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
-func (s *Store) UpdateContentPage(agentID string, id int64, slug, kind, title, content, status string, sortOrder int) (AgentContentPage, error) {
-	result, err := s.db.Exec(`UPDATE agent_content_pages SET slug=?,kind=?,title=?,content=?,status=?,sort_order=?,updated_at=? WHERE agent_id=? AND id=?`,
-		slug, kind, title, content, status, sortOrder, s.clock().UTC().Unix(), agentID, id)
-	if err != nil {
-		return AgentContentPage{}, err
-	}
-	if n, _ := result.RowsAffected(); n == 0 {
-		return AgentContentPage{}, errNotFound
-	}
-	return s.ContentPageByID(agentID, id)
-}
-
-func (s *Store) DeleteContentPage(agentID string, id int64) error {
-	result, err := s.db.Exec(`DELETE FROM agent_content_pages WHERE agent_id=? AND id=?`, agentID, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := result.RowsAffected(); n == 0 {
-		return errNotFound
-	}
-	return nil
-}
-
-func scanPlanPolicy(scanner interface{ Scan(...any) error }) (AgentPlanPolicy, error) {
-	var item AgentPlanPolicy
-	var enabled int
-	var featuresJSON string
-	var updatedAt int64
-	if err := scanner.Scan(&item.PlanID, &enabled, &item.SortOrder, &item.DisplayName, &item.Description, &featuresJSON, &updatedAt); err != nil {
-		return AgentPlanPolicy{}, err
-	}
-	item.Enabled = enabled != 0
-	item.UpdatedAt = time.Unix(updatedAt, 0).UTC().Format(time.RFC3339)
-	item.Features = []string{}
-	if strings.TrimSpace(featuresJSON) != "" {
-		if err := json.Unmarshal([]byte(featuresJSON), &item.Features); err != nil {
-			return AgentPlanPolicy{}, fmt.Errorf("decode agent plan policy features: %w", err)
-		}
-	}
-	return item, nil
-}
-
-func (s *Store) AgentPlanPolicies(agentID string) ([]AgentPlanPolicy, error) {
-	rows, err := s.db.Query(`SELECT plan_id,enabled,sort_order,display_name,description,features_json,updated_at FROM agent_plan_policies WHERE agent_id=? ORDER BY sort_order,plan_id`, strings.TrimSpace(agentID))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]AgentPlanPolicy, 0)
-	for rows.Next() {
-		item, err := scanPlanPolicy(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
-func (s *Store) AgentPlanPolicy(agentID string, planID int64) (AgentPlanPolicy, error) {
-	item, err := scanPlanPolicy(s.db.QueryRow(`SELECT plan_id,enabled,sort_order,display_name,description,features_json,updated_at FROM agent_plan_policies WHERE agent_id=? AND plan_id=?`, strings.TrimSpace(agentID), planID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return AgentPlanPolicy{}, errNotFound
-	}
-	return item, err
-}
-
-func (s *Store) UpsertAgentPlanPolicy(agentID string, policy AgentPlanPolicy) (AgentPlanPolicy, error) {
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" || policy.PlanID <= 0 {
-		return AgentPlanPolicy{}, fmt.Errorf("agent plan policy identity is invalid")
-	}
-	if _, err := s.Agent(agentID); err != nil {
-		return AgentPlanPolicy{}, err
-	}
-	features := make([]string, 0, len(policy.Features))
-	for _, feature := range policy.Features {
-		feature = strings.TrimSpace(feature)
-		if feature != "" {
-			features = append(features, feature)
-		}
-	}
-	encoded, err := json.Marshal(features)
-	if err != nil {
-		return AgentPlanPolicy{}, err
-	}
-	now := s.clock().UTC().Unix()
-	_, err = s.db.Exec(`INSERT INTO agent_plan_policies(agent_id,plan_id,enabled,sort_order,display_name,description,features_json,updated_at)
-		VALUES(?,?,?,?,?,?,?,?)
-		ON CONFLICT(agent_id,plan_id) DO UPDATE SET enabled=excluded.enabled,sort_order=excluded.sort_order,display_name=excluded.display_name,description=excluded.description,features_json=excluded.features_json,updated_at=excluded.updated_at`,
-		agentID, policy.PlanID, boolInt(policy.Enabled), policy.SortOrder, strings.TrimSpace(policy.DisplayName), strings.TrimSpace(policy.Description), string(encoded), now)
-	if err != nil {
-		return AgentPlanPolicy{}, err
-	}
-	return s.AgentPlanPolicy(agentID, policy.PlanID)
-}
-
 func (s *Store) migrate() error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS registration_intents (
@@ -616,9 +407,9 @@ func (s *Store) migrate() error {
 			attempts INTEGER NOT NULL, PRIMARY KEY(agent_id, bucket_key)
 		)`,
 		`CREATE TABLE IF NOT EXISTS agent_config (
-			id INTEGER PRIMARY KEY CHECK (id = 1),
-			agent_id TEXT NOT NULL UNIQUE,
+			agent_id TEXT PRIMARY KEY,
 			domain TEXT NOT NULL DEFAULT '',
+			api_base_url TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			site_name TEXT NOT NULL,
 			site_logo TEXT NOT NULL DEFAULT '',
@@ -645,13 +436,10 @@ func (s *Store) migrate() error {
 			UNIQUE(agent_id, main_user_id),
 			UNIQUE(agent_id, email)
 		)`,
-		`CREATE TABLE IF NOT EXISTS agent_model_policies (
-			agent_id TEXT PRIMARY KEY,
-			allowed_models_json TEXT NOT NULL,
-			updated_at INTEGER NOT NULL
-		)`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			id_hash TEXT PRIMARY KEY,
+			agent_id TEXT NOT NULL DEFAULT '',
+			role TEXT NOT NULL DEFAULT 'member',
 			main_user_id TEXT NOT NULL,
 			user_json TEXT NOT NULL,
 			access_token TEXT NOT NULL,
@@ -705,6 +493,8 @@ func (s *Store) migrate() error {
 			name TEXT NOT NULL DEFAULT '',
 			prefix TEXT NOT NULL,
 			key_hash TEXT NOT NULL UNIQUE,
+			legacy_key_hash TEXT NOT NULL DEFAULT '',
+			key_ciphertext TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,
@@ -739,6 +529,13 @@ func (s *Store) migrate() error {
 			updated_at INTEGER NOT NULL,
 			UNIQUE(agent_id, request_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS operation_leases (
+			lock_key TEXT PRIMARY KEY,
+			owner_token TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_operation_leases_expiry ON operation_leases(expires_at)`,
 		`CREATE TABLE IF NOT EXISTS recharge_orders (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			agent_id TEXT NOT NULL,
@@ -833,46 +630,26 @@ func (s *Store) migrate() error {
 			FOREIGN KEY(agent_id, main_user_id) REFERENCES agent_users(agent_id, main_user_id) ON DELETE CASCADE
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_announcement_reads_user ON agent_announcement_reads(agent_id, main_user_id, read_at DESC)`,
-		`CREATE TABLE IF NOT EXISTS agent_content_pages (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			agent_id TEXT NOT NULL,
-			slug TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			title TEXT NOT NULL,
-			content TEXT NOT NULL,
-			status TEXT NOT NULL DEFAULT 'draft',
-			sort_order INTEGER NOT NULL DEFAULT 0,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL,
-			UNIQUE(agent_id, kind, slug),
-			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_content_pages_visible ON agent_content_pages(agent_id, status, kind, sort_order, id)`,
-		`CREATE TABLE IF NOT EXISTS agent_plan_policies (
-			agent_id TEXT NOT NULL,
-			plan_id INTEGER NOT NULL,
-			enabled INTEGER NOT NULL DEFAULT 1,
-			sort_order INTEGER NOT NULL DEFAULT 0,
-			display_name TEXT NOT NULL DEFAULT '',
-			description TEXT NOT NULL DEFAULT '',
-			features_json TEXT NOT NULL DEFAULT '[]',
-			updated_at INTEGER NOT NULL,
-			PRIMARY KEY(agent_id, plan_id),
-			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_plan_policies_order ON agent_plan_policies(agent_id, enabled, sort_order, plan_id)`,
-		`CREATE TABLE IF NOT EXISTS agent_config_backups (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			agent_id TEXT NOT NULL,
-			file_name TEXT NOT NULL,
-			snapshot_json TEXT NOT NULL,
-			size_bytes INTEGER NOT NULL DEFAULT 0,
-			created_by TEXT NOT NULL DEFAULT '',
-			created_at INTEGER NOT NULL,
-			restored_at INTEGER NOT NULL DEFAULT 0,
-			FOREIGN KEY(agent_id) REFERENCES agent_config(agent_id) ON DELETE CASCADE
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_config_backups_list ON agent_config_backups(agent_id, id DESC)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_agent_announcement_reads_tenant_insert
+			BEFORE INSERT ON agent_announcement_reads
+			FOR EACH ROW
+			WHEN NOT EXISTS (
+				SELECT 1 FROM agent_announcements
+				WHERE agent_id=NEW.agent_id AND id=NEW.announcement_id
+			)
+			BEGIN
+				SELECT RAISE(ABORT, 'announcement tenant mismatch');
+			END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_agent_announcement_reads_tenant_update
+			BEFORE UPDATE OF agent_id, announcement_id ON agent_announcement_reads
+			FOR EACH ROW
+			WHEN NOT EXISTS (
+				SELECT 1 FROM agent_announcements
+				WHERE agent_id=NEW.agent_id AND id=NEW.announcement_id
+			)
+			BEGIN
+				SELECT RAISE(ABORT, 'announcement tenant mismatch');
+			END`,
 		`CREATE TABLE IF NOT EXISTS video_tasks (
 			agent_id TEXT NOT NULL,
 			main_user_id TEXT NOT NULL,
@@ -905,6 +682,17 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate agentapi store: %w", err)
 		}
 	}
+	var mismatchedAnnouncementReads int
+	if err := s.db.QueryRow(`SELECT COUNT(*)
+		FROM agent_announcement_reads r
+		LEFT JOIN agent_announcements a
+			ON a.agent_id=r.agent_id AND a.id=r.announcement_id
+		WHERE a.id IS NULL`).Scan(&mismatchedAnnouncementReads); err != nil {
+		return fmt.Errorf("audit announcement read tenancy: %w", err)
+	}
+	if mismatchedAnnouncementReads != 0 {
+		return fmt.Errorf("audit announcement read tenancy: found %d cross-tenant or orphaned rows", mismatchedAnnouncementReads)
+	}
 	// These ALTER statements keep an already-created prototype database
 	// upgradeable. SQLite has no IF NOT EXISTS form for ADD COLUMN.
 	for _, column := range []struct {
@@ -913,6 +701,7 @@ func (s *Store) migrate() error {
 		def   string
 	}{
 		{"agent_config", "billing_mode", "TEXT NOT NULL DEFAULT 'user_upstream'"},
+		{"agent_config", "api_base_url", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_config", "billing_main_user_id", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_config", "doc_url", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_config", "contact_info", "TEXT NOT NULL DEFAULT ''"},
@@ -931,13 +720,44 @@ func (s *Store) migrate() error {
 		{"settlements", "main_usage_snapshot", "TEXT NOT NULL DEFAULT ''"},
 		{"settlements", "reconcile_sequence", "INTEGER NOT NULL DEFAULT 0"},
 		{"settlements", "agent_api_key_id", "INTEGER NOT NULL DEFAULT 0"},
+		{"agent_api_keys", "key_ciphertext", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_api_keys", "legacy_key_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"sessions", "agent_id", "TEXT NOT NULL DEFAULT ''"},
+		{"sessions", "role", "TEXT NOT NULL DEFAULT 'member'"},
 	} {
 		if err := s.addColumnIfMissing(column.table, column.name, column.def); err != nil {
 			return fmt.Errorf("upgrade agentapi store: %w", err)
 		}
 	}
+	if err := s.migrateAgentConfigToMultiTenant(); err != nil {
+		return fmt.Errorf("upgrade agent config for multi-tenancy: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_config_domain_unique ON agent_config(domain COLLATE NOCASE) WHERE domain <> ''`); err != nil {
+		return fmt.Errorf("upgrade agent domain uniqueness: %w", err)
+	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_settlements_agent_key ON settlements(agent_id, agent_api_key_id, created_at DESC)`); err != nil {
 		return fmt.Errorf("upgrade agentapi settlement key index: %w", err)
+	}
+	// These management modules were removed from the AgentAPI product boundary.
+	// Drop prototype-era data so upgraded databases match a fresh core-only
+	// installation instead of carrying dead model/group/content/plan/backup and
+	// risk-review modules forever. The internal audit_events table is retained:
+	// it records security-sensitive core mutations and has no management UI.
+	for _, table := range []string{
+		"agent_content_pages",
+		"agent_plan_policies",
+		"agent_model_policies",
+		"agent_group_policies",
+		"agent_config_backups",
+		"agent_prompt_audit_events",
+		"agent_prompt_audit_policies",
+		"agent_risk_events",
+		"agent_risk_policies",
+		"agent_risk_rate_buckets",
+	} {
+		if _, err := s.db.Exec(`DROP TABLE IF EXISTS ` + table); err != nil {
+			return fmt.Errorf("remove retired agentapi table %s: %w", table, err)
+		}
 	}
 	return nil
 }
@@ -1140,88 +960,6 @@ func (s *Store) PendingImageTasks(agentID string, limit int) ([]ImageTask, error
 	return items, rows.Err()
 }
 
-// TaskHistoryPage returns a bounded, agent- and user-scoped page of persisted
-// image/video task identities. Provider task results are fetched separately
-// through the authenticated model relay when the user resumes a task.
-func (s *Store) TaskHistoryPage(agentID, mainUserID string, pageSize, offset int) ([]AgentTaskView, int, error) {
-	return s.TaskHistoryPageByType(agentID, mainUserID, "", pageSize, offset)
-}
-
-// TaskHistoryPageByType keeps pagination on the server when a user-facing
-// media page only needs image or video tasks. The agent and main-user keys stay
-// mandatory so a tenant UI can never enumerate another tenant's task index.
-func (s *Store) TaskHistoryPageByType(agentID, mainUserID, taskType string, pageSize, offset int) ([]AgentTaskView, int, error) {
-	agentID = strings.TrimSpace(agentID)
-	mainUserID = strings.TrimSpace(mainUserID)
-	taskType = strings.ToLower(strings.TrimSpace(taskType))
-	if agentID == "" || mainUserID == "" {
-		return nil, 0, fmt.Errorf("task history requires an agent and user identity")
-	}
-	if taskType != "" && taskType != "image" && taskType != "video" {
-		return nil, 0, fmt.Errorf("task history type must be image or video")
-	}
-	if pageSize <= 0 || pageSize > 200 {
-		pageSize = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	const taskRows = `
-		WITH task_rows AS (
-			SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at, 'video' AS task_type
-			FROM video_tasks
-			UNION ALL
-			SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at, 'image' AS task_type
-			FROM image_tasks
-		)
-	`
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, 0, err
-	}
-	defer tx.Rollback()
-	var total int
-	if err := tx.QueryRow(taskRows+`SELECT COUNT(*) FROM task_rows WHERE agent_id=? AND main_user_id=? AND (?='' OR task_type=?)`, agentID, mainUserID, taskType, taskType).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-	rows, err := tx.Query(taskRows+`
-		SELECT t.task_type, t.task_id, t.request_id, COALESCE(st.model, ''), t.status,
-		       COALESCE(st.status, ''), COALESCE(st.reserved_cents, 0), COALESCE(st.actual_cents, 0),
-		       t.created_at, t.updated_at
-		FROM task_rows t
-		LEFT JOIN settlements st ON st.agent_id=t.agent_id AND st.request_id=t.request_id
-		WHERE t.agent_id=? AND t.main_user_id=? AND (?='' OR t.task_type=?)
-		ORDER BY t.updated_at DESC, t.created_at DESC, t.task_type ASC, t.task_id ASC
-		LIMIT ? OFFSET ?`, agentID, mainUserID, taskType, taskType, pageSize, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	items := make([]AgentTaskView, 0)
-	for rows.Next() {
-		var item AgentTaskView
-		var createdAt, updatedAt int64
-		if err := rows.Scan(&item.TaskType, &item.TaskID, &item.RequestID, &item.Model, &item.Status,
-			&item.SettlementStatus, &item.ReservedCents, &item.ActualCents, &createdAt, &updatedAt); err != nil {
-			_ = rows.Close()
-			return nil, 0, err
-		}
-		item.CreatedAt = time.Unix(createdAt, 0).UTC().Format(time.RFC3339)
-		item.UpdatedAt = time.Unix(updatedAt, 0).UTC().Format(time.RFC3339)
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return nil, 0, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, 0, err
-	}
-	return items, total, nil
-}
-
 func (s *Store) addColumnIfMissing(table, name, definition string) error {
 	rows, err := s.db.Query("PRAGMA table_info(" + table + ")")
 	if err != nil {
@@ -1247,7 +985,90 @@ func (s *Store) addColumnIfMissing(table, name, definition string) error {
 	return err
 }
 
+// migrateAgentConfigToMultiTenant removes the prototype-era id=1 constraint.
+// All dependent tables already reference agent_config(agent_id), so rebuilding
+// the parent table preserves their foreign-key contract while allowing many
+// isolated agent rows in one shared AgentAPI database.
+func (s *Store) migrateAgentConfigToMultiTenant() (returnErr error) {
+	rows, err := s.db.Query(`PRAGMA table_info(agent_config)`)
+	if err != nil {
+		return err
+	}
+	hasLegacyID := false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "id" {
+			hasLegacyID = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if !hasLegacyID {
+		return nil
+	}
+
+	if _, err := s.db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		if _, err := s.db.Exec(`PRAGMA foreign_keys = ON`); returnErr == nil && err != nil {
+			returnErr = err
+		}
+	}()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`CREATE TABLE agent_config_multi (
+		agent_id TEXT PRIMARY KEY,
+		domain TEXT NOT NULL DEFAULT '',
+		api_base_url TEXT NOT NULL DEFAULT '',
+		name TEXT NOT NULL,
+		site_name TEXT NOT NULL,
+		site_logo TEXT NOT NULL DEFAULT '',
+		doc_url TEXT NOT NULL DEFAULT '',
+		contact_info TEXT NOT NULL DEFAULT '',
+		site_subtitle TEXT NOT NULL DEFAULT 'AI API Gateway Platform',
+		compact_home_enabled INTEGER NOT NULL DEFAULT 0,
+		home_content TEXT NOT NULL DEFAULT '',
+		billing_mode TEXT NOT NULL DEFAULT 'user_upstream',
+		billing_main_user_id TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'active',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO agent_config_multi(
+		agent_id,domain,api_base_url,name,site_name,site_logo,doc_url,contact_info,site_subtitle,
+		compact_home_enabled,home_content,billing_mode,billing_main_user_id,status,created_at,updated_at
+	) SELECT agent_id,domain,api_base_url,name,site_name,site_logo,doc_url,contact_info,site_subtitle,
+		compact_home_enabled,home_content,billing_mode,billing_main_user_id,status,created_at,updated_at
+		FROM agent_config`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DROP TABLE agent_config`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE agent_config_multi RENAME TO agent_config`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) UpsertAgent(cfg Config) error {
+	if strings.TrimSpace(cfg.AgentID) == "" {
+		return fmt.Errorf("agent id is required")
+	}
 	now := s.clock().UTC().Unix()
 	billingMode := cfg.BillingMode
 	if billingMode == "" {
@@ -1259,24 +1080,22 @@ func (s *Store) UpsertAgent(cfg Config) error {
 	}
 	defer tx.Rollback()
 
-	var existingAgentID, existingOwner, existingStatus string
+	var existingOwner, existingStatus string
 	var existingAvailable, existingAllocated, existingPending int64
-	existingErr := tx.QueryRow(`SELECT agent_id, billing_main_user_id, status FROM agent_config WHERE id=1`).Scan(&existingAgentID, &existingOwner, &existingStatus)
+	existingErr := tx.QueryRow(`SELECT billing_main_user_id, status FROM agent_config WHERE agent_id=?`, cfg.AgentID).Scan(&existingOwner, &existingStatus)
 	if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
 		return fmt.Errorf("read existing agent config: %w", existingErr)
 	}
-	if existingErr == nil && existingAgentID != "" && existingAgentID != cfg.AgentID {
-		return fmt.Errorf("agent id is immutable once initialized (existing %q, requested %q)", existingAgentID, cfg.AgentID)
-	}
 	if existingErr == nil {
-		// Never silently move spendable local credit to a different main-site
-		// owner. The operator must reconcile/reset the old wallet explicitly.
+		// Tenant ownership is an identity boundary, not an editable billing
+		// setting. In the shared runtime an SSO ticket may create a tenant, but
+		// neither a later ticket nor an operator restart may rebind that tenant
+		// to another main-site user. A deliberate ownership-transfer workflow
+		// would need a separate audited protocol; UpsertAgent is not that API.
 		if existingOwner != strings.TrimSpace(cfg.OwnerMainUserID) {
 			_ = tx.QueryRow(`SELECT available_cents, allocated_cents FROM agent_wallets WHERE agent_id=?`, cfg.AgentID).Scan(&existingAvailable, &existingAllocated)
 			_ = tx.QueryRow(`SELECT COALESCE(SUM(reserved_cents), 0) FROM settlements WHERE agent_id=? AND status='pending'`, cfg.AgentID).Scan(&existingPending)
-			if existingAvailable != 0 || existingAllocated != 0 || existingPending != 0 {
-				return fmt.Errorf("billing owner change requires wallet reconciliation (available=%d allocated=%d pending=%d)", existingAvailable, existingAllocated, existingPending)
-			}
+			return fmt.Errorf("agent owner is immutable (existing=%q requested=%q available=%d allocated=%d pending=%d)", existingOwner, strings.TrimSpace(cfg.OwnerMainUserID), existingAvailable, existingAllocated, existingPending)
 		}
 	}
 
@@ -1288,21 +1107,21 @@ func (s *Store) UpsertAgent(cfg Config) error {
 		if cfg.BrandSync {
 			_, err = tx.Exec(`
 				UPDATE agent_config SET domain=?, name=?, site_name=?, site_logo=?, billing_mode=?, billing_main_user_id=?, status=?, updated_at=?
-				WHERE id=1
-			`, cfg.AgentDomain, cfg.AgentName, cfg.SiteName, cfg.SiteLogo, billingMode, cfg.OwnerMainUserID, status, now)
+				WHERE agent_id=?
+			`, cfg.AgentDomain, cfg.AgentName, cfg.SiteName, cfg.SiteLogo, billingMode, cfg.OwnerMainUserID, status, now, cfg.AgentID)
 		} else {
 			// Branding can be edited from the Agent administrator console. Keep
 			// that durable value across restarts unless an operator explicitly
 			// opts into env-driven replacement with AGENT_BRAND_SYNC=true.
 			_, err = tx.Exec(`
 				UPDATE agent_config SET domain=?, billing_mode=?, billing_main_user_id=?, status=?, updated_at=?
-				WHERE id=1
-			`, cfg.AgentDomain, billingMode, cfg.OwnerMainUserID, status, now)
+				WHERE agent_id=?
+			`, cfg.AgentDomain, billingMode, cfg.OwnerMainUserID, status, now, cfg.AgentID)
 		}
 	} else {
 		_, err = tx.Exec(`
-			INSERT INTO agent_config (id, agent_id, domain, name, site_name, site_logo, doc_url, billing_mode, billing_main_user_id, status, created_at, updated_at)
-			VALUES (1, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)
+			INSERT INTO agent_config (agent_id, domain, api_base_url, name, site_name, site_logo, doc_url, billing_mode, billing_main_user_id, status, created_at, updated_at)
+			VALUES (?, ?, '', ?, ?, ?, '', ?, ?, ?, ?, ?)
 		`, cfg.AgentID, cfg.AgentDomain, cfg.AgentName, cfg.SiteName, cfg.SiteLogo, billingMode, cfg.OwnerMainUserID, status, now, now)
 	}
 	if err != nil {
@@ -1405,7 +1224,11 @@ func boolInt(value bool) int {
 }
 
 func agentConfigStatus(cfg Config) string {
-	if cfg.AgentDisabled || cfg.ProvisioningControlEnabled && strings.TrimSpace(cfg.RuntimeControlCredential) == "" || strings.TrimSpace(cfg.AppCredential) == "" || strings.TrimSpace(cfg.OwnerMainUserID) == "" || cfg.BillingMode != "" && cfg.BillingMode != "user_upstream" && cfg.BillingMode != "owner_upstream" {
+	billingMode := strings.TrimSpace(cfg.BillingMode)
+	if billingMode == "" {
+		billingMode = "user_upstream"
+	}
+	if cfg.AgentDisabled || strings.TrimSpace(cfg.AppCredential) == "" || billingMode != "user_upstream" && billingMode != "owner_upstream" || billingMode == "owner_upstream" && strings.TrimSpace(cfg.OwnerMainUserID) == "" {
 		return "suspended"
 	}
 	return "active"
@@ -1415,7 +1238,7 @@ func (s *Store) Agent(agentID string) (AgentView, error) {
 	var view AgentView
 	var checkedAt, configUpdated int64
 	err := s.db.QueryRow(`
-		SELECT c.agent_id, c.domain, c.name, c.site_name, c.site_logo, c.doc_url, c.contact_info, c.status,
+		SELECT c.agent_id, c.domain, c.api_base_url, c.name, c.site_name, c.site_logo, c.doc_url, c.contact_info, c.status,
 		       c.billing_mode, c.billing_main_user_id,
 		       COALESCE(w.main_balance_cents, 0), COALESCE(w.main_balance_checked_at, 0),
 		       COALESCE(w.billing_status, 'unknown'),
@@ -1424,7 +1247,7 @@ func (s *Store) Agent(agentID string) (AgentView, error) {
 		FROM agent_config c
 		LEFT JOIN agent_wallets w ON w.agent_id = c.agent_id
 		WHERE c.agent_id = ?
-	`, agentID).Scan(&view.ID, &view.Domain, &view.Name, &view.SiteName, &view.SiteLogo, &view.DocURL, &view.ContactInfo, &view.Status, &view.BillingMode, &view.OwnerMainUserID, &view.MainBalance, &checkedAt, &view.BillingStatus, &view.WalletAvailable, &view.WalletAllocated, &configUpdated, &view.SiteSubtitle, &view.CompactHomeEnabled, &view.HomeContent)
+	`, agentID).Scan(&view.ID, &view.Domain, &view.APIBaseURL, &view.Name, &view.SiteName, &view.SiteLogo, &view.DocURL, &view.ContactInfo, &view.Status, &view.BillingMode, &view.OwnerMainUserID, &view.MainBalance, &checkedAt, &view.BillingStatus, &view.WalletAvailable, &view.WalletAllocated, &configUpdated, &view.SiteSubtitle, &view.CompactHomeEnabled, &view.HomeContent)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AgentView{}, errNotFound
 	}
@@ -1437,102 +1260,70 @@ func (s *Store) Agent(agentID string) (AgentView, error) {
 	return view, nil
 }
 
-// AgentModelPolicy returns the local model allowlist for one Agent. A missing
-// row preserves the historical behavior: the complete public satellite model
-// catalog is available until an agent administrator explicitly configures a
-// narrower policy.
-func (s *Store) AgentModelPolicy(agentID string) (AgentModelPolicyView, error) {
-	view := AgentModelPolicyView{
-		Catalog: append([]string(nil), publicModelCatalog...),
-		Enabled: append([]string(nil), publicModelCatalog...),
+// ActiveAgents returns every tenant that should participate in shared
+// background work. Keep the query tenant-neutral: a shared AgentAPI process
+// must not silently limit reconciliation to the bootstrap tenant from env.
+func (s *Store) ActiveAgents() ([]AgentView, error) {
+	rows, err := s.db.Query(`SELECT agent_id FROM agent_config WHERE status='active' ORDER BY agent_id`)
+	if err != nil {
+		return nil, err
 	}
-	var raw string
-	err := s.db.QueryRow(`SELECT allowed_models_json FROM agent_model_policies WHERE agent_id=?`, strings.TrimSpace(agentID)).Scan(&raw)
+	ids := make([]string, 0)
+	for rows.Next() {
+		var agentID string
+		if err := rows.Scan(&agentID); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		ids = append(ids, agentID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	agents := make([]AgentView, 0, len(ids))
+	for _, agentID := range ids {
+		agent, err := s.Agent(agentID)
+		if err != nil {
+			return nil, err
+		}
+		agents = append(agents, agent)
+	}
+	return agents, nil
+}
+
+// AgentByDomain resolves a public request host to exactly one tenant. Domains
+// are persisted by the trusted control plane; callers never select a tenant by
+// query parameter or request header.
+func (s *Store) AgentByDomain(domain string) (AgentView, error) {
+	domain = strings.TrimSpace(strings.ToLower(domain))
+	if domain == "" {
+		return AgentView{}, errNotFound
+	}
+	var agentID string
+	err := s.db.QueryRow(`SELECT agent_id FROM agent_config WHERE domain = ? COLLATE NOCASE`, domain).Scan(&agentID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return view, nil
+		return AgentView{}, errNotFound
 	}
 	if err != nil {
-		return AgentModelPolicyView{}, err
+		return AgentView{}, err
 	}
-	var stored []string
-	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
-		return AgentModelPolicyView{}, fmt.Errorf("decode Agent model policy: %w", err)
-	}
-	enabled := make(map[string]struct{}, len(stored))
-	for _, model := range stored {
-		enabled[model] = struct{}{}
-	}
-	view.Enabled = make([]string, 0, len(enabled))
-	for _, model := range publicModelCatalog {
-		if _, ok := enabled[model]; ok {
-			view.Enabled = append(view.Enabled, model)
-		}
-	}
-	view.Customized = true
-	return view, nil
-}
-
-// UpdateAgentModelPolicy stores only names from the immutable public model
-// catalog. Ordering follows that catalog so API/UI responses remain stable.
-func (s *Store) UpdateAgentModelPolicy(agentID string, requested []string) (AgentModelPolicyView, error) {
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return AgentModelPolicyView{}, fmt.Errorf("agent id is required")
-	}
-	if _, err := s.Agent(agentID); err != nil {
-		return AgentModelPolicyView{}, err
-	}
-	requestedSet := make(map[string]struct{}, len(requested))
-	for _, raw := range requested {
-		model := strings.TrimSpace(raw)
-		if _, ok := publicModelNames[model]; !ok {
-			return AgentModelPolicyView{}, fmt.Errorf("model %q is not in the AgentAPI public model catalog", model)
-		}
-		if _, duplicate := requestedSet[model]; duplicate {
-			return AgentModelPolicyView{}, fmt.Errorf("model %q is duplicated", model)
-		}
-		requestedSet[model] = struct{}{}
-	}
-	ordered := make([]string, 0, len(requestedSet))
-	for _, model := range publicModelCatalog {
-		if _, ok := requestedSet[model]; ok {
-			ordered = append(ordered, model)
-		}
-	}
-	payload, err := json.Marshal(ordered)
-	if err != nil {
-		return AgentModelPolicyView{}, err
-	}
-	_, err = s.db.Exec(`
-		INSERT INTO agent_model_policies (agent_id, allowed_models_json, updated_at)
-		VALUES (?, ?, ?)
-		ON CONFLICT(agent_id) DO UPDATE SET
-			allowed_models_json=excluded.allowed_models_json,
-			updated_at=excluded.updated_at
-	`, agentID, string(payload), s.clock().UTC().Unix())
-	if err != nil {
-		return AgentModelPolicyView{}, err
-	}
-	return s.AgentModelPolicy(agentID)
-}
-
-func (s *Store) ResetAgentModelPolicy(agentID string) error {
-	if strings.TrimSpace(agentID) == "" {
-		return fmt.Errorf("agent id is required")
-	}
-	_, err := s.db.Exec(`DELETE FROM agent_model_policies WHERE agent_id=?`, strings.TrimSpace(agentID))
-	return err
+	return s.Agent(agentID)
 }
 
 // UpdateBranding changes only the presentation fields for the current Agent.
 // It deliberately cannot change the agent id, domain, owner or billing mode;
 // those fields belong to provisioning and accounting configuration.
-func (s *Store) UpdateBranding(agentID, name, siteName, siteLogo, docURL, contactInfo string, home AgentHomeSettings) (AgentView, error) {
+func (s *Store) UpdateBranding(agentID, name, siteName, siteLogo, docURL, contactInfo, apiBaseURL string, home AgentHomeSettings) (AgentView, error) {
 	now := s.clock().UTC().Unix()
 	result, err := s.db.Exec(`
-		UPDATE agent_config SET name=?, site_name=?, site_logo=?, doc_url=?, contact_info=?, site_subtitle=?, compact_home_enabled=?, home_content=?, updated_at=?
+		UPDATE agent_config SET name=?, site_name=?, site_logo=?, doc_url=?, contact_info=?, api_base_url=?, site_subtitle=?, compact_home_enabled=?, home_content=?, updated_at=?
 		WHERE agent_id=?
-	`, strings.TrimSpace(name), strings.TrimSpace(siteName), strings.TrimSpace(siteLogo), strings.TrimSpace(docURL), strings.TrimSpace(contactInfo), home.SiteSubtitle, home.CompactHomeEnabled, home.HomeContent, now, strings.TrimSpace(agentID))
+	`, strings.TrimSpace(name), strings.TrimSpace(siteName), strings.TrimSpace(siteLogo), strings.TrimSpace(docURL), strings.TrimSpace(contactInfo), strings.TrimRight(strings.TrimSpace(apiBaseURL), "/"), home.SiteSubtitle, home.CompactHomeEnabled, home.HomeContent, now, strings.TrimSpace(agentID))
 	if err != nil {
 		return AgentView{}, err
 	}
@@ -2085,17 +1876,17 @@ func (s *Store) CreateAPIKey(agentID, mainUserID, name string) (AgentAPIKeyView,
 	if _, err := s.User(agentID, mainUserID); err != nil {
 		return AgentAPIKeyView{}, "", err
 	}
-	raw := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+	key, err := generateAPIKey()
+	if err != nil {
 		return AgentAPIKeyView{}, "", err
 	}
-	key := "sk-agent-" + base64.RawURLEncoding.EncodeToString(raw)
-	prefix := key
-	if len(prefix) > 18 {
-		prefix = prefix[:18]
+	keyCiphertext, err := s.encrypt(key)
+	if err != nil {
+		return AgentAPIKeyView{}, "", err
 	}
+	prefix := apiKeyPrefix(key)
 	now := s.clock().UTC().Unix()
-	result, err := s.db.Exec(`INSERT INTO agent_api_keys(agent_id, main_user_id, name, prefix, key_hash, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`, agentID, mainUserID, strings.TrimSpace(name), prefix, hashToken(key), now, now)
+	result, err := s.db.Exec(`INSERT INTO agent_api_keys(agent_id, main_user_id, name, prefix, key_hash, key_ciphertext, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`, agentID, mainUserID, strings.TrimSpace(name), prefix, hashToken(key), keyCiphertext, now, now)
 	if err != nil {
 		return AgentAPIKeyView{}, "", err
 	}
@@ -2103,12 +1894,76 @@ func (s *Store) CreateAPIKey(agentID, mainUserID, name string) (AgentAPIKeyView,
 	if err != nil {
 		return AgentAPIKeyView{}, "", err
 	}
-	view := AgentAPIKeyView{ID: id, Name: strings.TrimSpace(name), Prefix: prefix, Status: "active", CreatedAt: time.Unix(now, 0).UTC().Format(time.RFC3339)}
+	view := AgentAPIKeyView{ID: id, Name: strings.TrimSpace(name), Prefix: prefix, Key: key, Status: "active", CreatedAt: time.Unix(now, 0).UTC().Format(time.RFC3339)}
 	return view, key, nil
 }
 
+func generateAPIKey() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+		return "", err
+	}
+	return "sk-" + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func apiKeyPrefix(key string) string {
+	prefix := key
+	if len(prefix) > 18 {
+		prefix = prefix[:18]
+	}
+	return prefix
+}
+
+// ensureRecoverableAPIKeys upgrades legacy hash-only rows to encrypted,
+// recoverable keys. The original secret cannot be reconstructed from its hash,
+// so the row is atomically rotated before it is returned to the user.
+func (s *Store) ensureRecoverableAPIKeys(agentID, mainUserID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT id FROM agent_api_keys WHERE agent_id=? AND main_user_id=? AND key_ciphertext='' ORDER BY id`, agentID, mainUserID)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	now := s.clock().UTC().Unix()
+	for _, id := range ids {
+		key, err := generateAPIKey()
+		if err != nil {
+			return err
+		}
+		ciphertext, err := s.encrypt(key)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE agent_api_keys SET prefix=?, legacy_key_hash=CASE WHEN legacy_key_hash='' THEN key_hash ELSE legacy_key_hash END, key_hash=?, key_ciphertext=?, updated_at=? WHERE id=? AND agent_id=? AND main_user_id=? AND key_ciphertext=''`, apiKeyPrefix(key), hashToken(key), ciphertext, now, id, agentID, mainUserID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) APIKeys(agentID, mainUserID string) ([]AgentAPIKeyView, error) {
-	rows, err := s.db.Query(`SELECT id, name, prefix, status, created_at, COALESCE(last_used_at, 0) FROM agent_api_keys WHERE agent_id=? AND main_user_id=? ORDER BY id DESC`, agentID, mainUserID)
+	if err := s.ensureRecoverableAPIKeys(agentID, mainUserID); err != nil {
+		return nil, fmt.Errorf("upgrade recoverable AgentAPI keys: %w", err)
+	}
+	rows, err := s.db.Query(`SELECT id, name, prefix, key_ciphertext, status, created_at, COALESCE(last_used_at, 0) FROM agent_api_keys WHERE agent_id=? AND main_user_id=? ORDER BY id DESC`, agentID, mainUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -2116,9 +1971,16 @@ func (s *Store) APIKeys(agentID, mainUserID string) ([]AgentAPIKeyView, error) {
 	result := make([]AgentAPIKeyView, 0)
 	for rows.Next() {
 		var view AgentAPIKeyView
+		var keyCiphertext string
 		var created, lastUsed int64
-		if err := rows.Scan(&view.ID, &view.Name, &view.Prefix, &view.Status, &created, &lastUsed); err != nil {
+		if err := rows.Scan(&view.ID, &view.Name, &view.Prefix, &keyCiphertext, &view.Status, &created, &lastUsed); err != nil {
 			return nil, err
+		}
+		if keyCiphertext != "" {
+			view.Key, err = s.decrypt(keyCiphertext)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt AgentAPI key %d: %w", view.ID, err)
+			}
 		}
 		view.CreatedAt = time.Unix(created, 0).UTC().Format(time.RFC3339)
 		if lastUsed > 0 {
@@ -2158,18 +2020,50 @@ func (s *Store) ResolveAPIKeyDetails(agentID, key string) (ResolvedAgentAPIKey, 
 		return ResolvedAgentAPIKey{}, errNotFound
 	}
 	var resolved ResolvedAgentAPIKey
-	err := s.db.QueryRow(`SELECT k.id, k.main_user_id, k.name, k.prefix FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND k.key_hash=? AND k.status='active'`, agentID, hashToken(key)).Scan(&resolved.ID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
+	keyHash := hashToken(key)
+	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND (k.key_hash=? OR k.legacy_key_hash=?) AND k.status='active'`, agentID, keyHash, keyHash).Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResolvedAgentAPIKey{}, errNotFound
 	}
 	if err != nil {
 		return ResolvedAgentAPIKey{}, err
 	}
-	_, _ = s.db.Exec(`UPDATE agent_api_keys SET last_used_at=?, updated_at=? WHERE agent_id=? AND key_hash=?`, s.clock().UTC().Unix(), s.clock().UTC().Unix(), agentID, hashToken(key))
+	_, _ = s.db.Exec(`UPDATE agent_api_keys SET last_used_at=?, updated_at=? WHERE id=?`, s.clock().UTC().Unix(), s.clock().UTC().Unix(), resolved.ID)
+	return resolved, nil
+}
+
+// ResolveAPIKeyDetailsAnyTenant derives the tenant from the stored key. The
+// key hash is globally unique, so callers cannot redirect a credential to a
+// different tenant with an Agent-ID header or query parameter.
+func (s *Store) ResolveAPIKeyDetailsAnyTenant(key string) (ResolvedAgentAPIKey, error) {
+	key = strings.TrimSpace(key)
+	if key == "" || len(key) > 256 {
+		return ResolvedAgentAPIKey{}, errNotFound
+	}
+	keyHash := hashToken(key)
+	var resolved ResolvedAgentAPIKey
+	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix
+		FROM agent_api_keys k
+		JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id
+		JOIN agent_config a ON a.agent_id=k.agent_id
+		WHERE (k.key_hash=? OR k.legacy_key_hash=?) AND k.status='active' AND a.status='active'`, keyHash, keyHash).
+		Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedAgentAPIKey{}, errNotFound
+	}
+	if err != nil {
+		return ResolvedAgentAPIKey{}, err
+	}
+	now := s.clock().UTC().Unix()
+	_, _ = s.db.Exec(`UPDATE agent_api_keys SET last_used_at=?, updated_at=? WHERE id=?`, now, now, resolved.ID)
 	return resolved, nil
 }
 
 func (s *Store) CreateSession(mainUserID string, userJSON []byte, accessToken, refreshToken string, expiresAt time.Time) (string, error) {
+	return s.CreateTenantSession("", mainUserID, tenantRoleMember, userJSON, accessToken, refreshToken, expiresAt)
+}
+
+func (s *Store) CreateTenantSession(agentID, mainUserID, role string, userJSON []byte, accessToken, refreshToken string, expiresAt time.Time) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
 		return "", fmt.Errorf("generate session id: %w", err)
@@ -2185,9 +2079,9 @@ func (s *Store) CreateSession(mainUserID string, userJSON []byte, accessToken, r
 	}
 	now := s.clock().UTC().Unix()
 	_, err = s.db.Exec(`
-		INSERT INTO sessions (id_hash, main_user_id, user_json, access_token, refresh_token, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, hashToken(sessionID), mainUserID, string(userJSON), encAccess, encRefresh, expiresAt.UTC().Unix(), now, now)
+		INSERT INTO sessions (id_hash, agent_id, role, main_user_id, user_json, access_token, refresh_token, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, hashToken(sessionID), strings.TrimSpace(agentID), normalizeTenantRole(role), mainUserID, string(userJSON), encAccess, encRefresh, expiresAt.UTC().Unix(), now, now)
 	if err != nil {
 		return "", fmt.Errorf("create session: %w", err)
 	}
@@ -2199,9 +2093,9 @@ func (s *Store) LoadSession(rawID string) (Session, error) {
 	var userJSON, access, refresh string
 	var expiresAt, createdAt int64
 	err := s.db.QueryRow(`
-		SELECT main_user_id, user_json, access_token, refresh_token, expires_at, created_at
+		SELECT agent_id, role, main_user_id, user_json, access_token, refresh_token, expires_at, created_at
 		FROM sessions WHERE id_hash=?
-	`, hashToken(rawID)).Scan(&session.MainUserID, &userJSON, &access, &refresh, &expiresAt, &createdAt)
+	`, hashToken(rawID)).Scan(&session.AgentID, &session.Role, &session.MainUserID, &userJSON, &access, &refresh, &expiresAt, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, errNotFound
 	}
@@ -2474,6 +2368,71 @@ func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUse
 
 func (s *Store) Settlement(agentID, requestID string) (SettlementRecord, error) {
 	return settlementQuery(s.db, agentID, requestID)
+}
+
+// AcquireOperationLease obtains a durable, expiring mutex shared by every
+// AgentAPI process using this database. The caller-provided token identifies
+// ownership; an expired lease may be taken over after a crashed process stops
+// renewing it. Waiting obeys ctx so request cancellation cannot leak workers.
+func (s *Store) AcquireOperationLease(ctx context.Context, lockKey, ownerToken string, lease time.Duration) error {
+	lockKey = strings.TrimSpace(lockKey)
+	ownerToken = strings.TrimSpace(ownerToken)
+	if lockKey == "" || ownerToken == "" {
+		return fmt.Errorf("operation lease key and owner token are required")
+	}
+	if lease < time.Second {
+		return fmt.Errorf("operation lease duration must be at least one second")
+	}
+	const retryInterval = 25 * time.Millisecond
+	for {
+		now := s.clock().UTC()
+		expiresAt := now.Add(lease).UnixMilli()
+		result, err := s.db.ExecContext(ctx, `
+			INSERT INTO operation_leases(lock_key, owner_token, expires_at, updated_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(lock_key) DO UPDATE SET
+				owner_token=excluded.owner_token,
+				expires_at=excluded.expires_at,
+				updated_at=excluded.updated_at
+			WHERE operation_leases.expires_at<=? OR operation_leases.owner_token=excluded.owner_token
+		`, lockKey, ownerToken, expiresAt, now.UnixMilli(), now.UnixMilli())
+		if err != nil {
+			return err
+		}
+		if rows, err := result.RowsAffected(); err != nil {
+			return err
+		} else if rows == 1 {
+			return nil
+		}
+		timer := time.NewTimer(retryInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// RenewOperationLease extends a lease only while the supplied token remains
+// its owner. false means another process took over after expiry.
+func (s *Store) RenewOperationLease(ctx context.Context, lockKey, ownerToken string, lease time.Duration) (bool, error) {
+	now := s.clock().UTC()
+	result, err := s.db.ExecContext(ctx, `UPDATE operation_leases SET expires_at=?, updated_at=? WHERE lock_key=? AND owner_token=?`, now.Add(lease).UnixMilli(), now.UnixMilli(), strings.TrimSpace(lockKey), strings.TrimSpace(ownerToken))
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
+}
+
+// ReleaseOperationLease never deletes a successor's lease: ownership must
+// still match the token created by the releasing process.
+func (s *Store) ReleaseOperationLease(ctx context.Context, lockKey, ownerToken string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM operation_leases WHERE lock_key=? AND owner_token=?`, strings.TrimSpace(lockKey), strings.TrimSpace(ownerToken))
+	return err
 }
 
 func settlementQuery(db interface {

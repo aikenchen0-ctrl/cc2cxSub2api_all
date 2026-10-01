@@ -52,7 +52,7 @@ func TestRecoveryRejectsEmailMismatchDespiteMatchingMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ok, err := s.recoverRegistration(t.Context(), "43", "new@example.com", "New")
+	ok, err := s.recoverRegistrationForTenant(t.Context(), s.cfg.AgentID, "43", "new@example.com", "New")
 	if err != nil || ok {
 		t.Fatalf("mismatched recovery: %v %v", ok, err)
 	}

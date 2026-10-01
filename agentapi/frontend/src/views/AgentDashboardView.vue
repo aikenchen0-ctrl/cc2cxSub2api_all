@@ -38,17 +38,17 @@ function date(value: string): string {
 }
 
 function settlementLabel(item: AgentUsageView): string {
-  if (item.settlement_status === 'confirmed') return `主站扣费 ${money(item.actual_cents)}`
+  if (item.settlement_status === 'confirmed') return `实际扣费 ${money(item.actual_cents)}`
   if (item.settlement_status === 'released') return `请求前校验已释放 · ${money(item.reserved_cents)}`
   return `请求前余额校验 · ${money(item.reserved_cents)}`
 }
 
 function sub2ApiUsageLabel(item: AgentUsageView): string {
-  if (item.usage_source === 'user_balance_delta_fallback') return '用户主站余额差额估算；暂无单次请求用量'
+  if (item.usage_source === 'user_balance_delta_fallback') return '账户余额差额估算；暂无单次请求用量'
   if (item.usage_source === 'owner_balance_delta_fallback') return '旧版主账户余额差额估算；暂无单次请求用量'
-  if (!isAuthoritativeAgentUsageSource(item.usage_source)) return '暂无单次请求的 Sub2API 用量详情'
-  if (item.actual_cost_reported) return `Sub2API 实际费用 ${usd(item.actual_cost_usd_nanos)} · 标准费用 ${usd(item.total_cost_usd_nanos)}`
-  return `暂无 Sub2API 实际费用 · 标准费用 ${usd(item.total_cost_usd_nanos)}`
+  if (!isAuthoritativeAgentUsageSource(item.usage_source)) return '暂无单次请求的用量详情'
+  if (item.actual_cost_reported) return `实际费用 ${usd(item.actual_cost_usd_nanos)} · 标准费用 ${usd(item.total_cost_usd_nanos)}`
+  return `实际费用待确认 · 标准费用 ${usd(item.total_cost_usd_nanos)}`
 }
 
 async function load(): Promise<void> {
@@ -105,7 +105,7 @@ onMounted(load)
       <div>
         <p class="text-sm text-slate-500">{{ context?.agent.site_name || 'AgentAPI' }}</p>
         <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">总览</h1>
-        <p class="mt-1 text-sm text-slate-500">余额和模型费用均来自你的 Sub2API 主站账户；AgentAPI 只负责代理站身份和请求转发。</p>
+        <p class="mt-1 text-sm text-slate-500">余额、模型费用和请求记录会在本站控制台统一展示。</p>
       </div>
       <div class="flex gap-2">
         <RouterLink to="/purchase" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">充值</RouterLink>
@@ -119,9 +119,9 @@ onMounted(load)
     <section v-if="context" class="grid grid-cols-1 gap-6 md:grid-cols-3">
       <StatCard v-if="context.user" title="可用余额" :value="context.balance_error ? '暂不可用' : money(context.user.balance_cents)" :icon="balanceIcon" />
       <StatCard title="代理站" :value="context.agent.site_name" :icon="siteIcon" icon-variant="success" />
-      <StatCard title="计费方式" value="用户主站直扣" :icon="billingIcon" icon-variant="warning" />
+      <StatCard title="计费方式" value="账户余额计费" :icon="billingIcon" icon-variant="warning" />
     </section>
-    <p v-if="context?.balance_error" class="text-sm text-amber-600">主站余额读取失败，请刷新重试；不使用本地余额替代。</p>
+    <p v-if="context?.balance_error" class="text-sm text-amber-600">余额读取失败，请刷新重试。</p>
 
     <AgentUsageInsights :key="insightsVersion" />
 
@@ -164,7 +164,7 @@ onMounted(load)
     <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <h2 class="font-semibold">计费说明</h2>
       <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-        你的账号是 Sub2API 主站中的正式账号。AgentAPI 只维护代理站归属、API Key 和请求审计；余额、用量与扣费均以主站为最终依据。如果暂时无法确认单次用量，请求会保持待核对状态，不会被重复收费。
+        本站会统一维护你的站点归属、API Key 和请求记录。余额、用量与扣费由系统核算；暂时无法确认的单次用量会保持待核对状态，不会重复收费。
       </p>
     </section>
   </main>

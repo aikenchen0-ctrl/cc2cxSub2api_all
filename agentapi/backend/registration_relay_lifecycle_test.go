@@ -61,7 +61,7 @@ func TestRegisteredUserKeyBillingAndRevocationLifecycle(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := testServer(t, upstream)
-	s.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, s, "user_upstream")
 	s.cfg.MainUsageAPI = true
 	s.main = NewMainClient(s.cfg)
 	request := func(method, path, body string, cookie *http.Cookie, key string) *httptest.ResponseRecorder {
@@ -113,8 +113,8 @@ func TestRegisteredUserKeyBillingAndRevocationLifecycle(t *testing.T) {
 		t.Fatal("missing created key")
 	}
 	listed := request("GET", "/api/v1/api-keys", "", cookie, "")
-	if listed.Code != 200 || strings.Contains(listed.Body.String(), keyBody.Data.Key) {
-		t.Fatal("key list failed or repeated plaintext")
+	if listed.Code != 200 || !strings.Contains(listed.Body.String(), keyBody.Data.Key) || !strings.Contains(listed.Header().Get("Cache-Control"), "no-store") {
+		t.Fatal("key list failed to return the current user's recoverable key with no-store")
 	}
 	model := `{"model":"gpt-5.5","messages":[]}`
 	if rec := request("POST", "/v1/chat/completions", model, nil, keyBody.Data.Key); rec.Code != 200 {

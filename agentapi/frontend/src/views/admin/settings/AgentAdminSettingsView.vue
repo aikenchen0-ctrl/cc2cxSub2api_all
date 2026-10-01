@@ -16,6 +16,7 @@ const brandingSiteName = ref('')
 const brandingLogo = ref('')
 const brandingDocURL = ref('')
 const brandingContactInfo = ref('')
+const brandingAPIBaseURL = ref('')
 const brandingSubtitle = ref('')
 const brandingCompactHome = ref(false)
 const brandingHomeContent = ref('')
@@ -27,6 +28,7 @@ function applyContext(nextContext: AgentContextResponse): void {
   brandingLogo.value = nextContext.agent.site_logo || ''
   brandingDocURL.value = nextContext.agent.doc_url || ''
   brandingContactInfo.value = nextContext.agent.contact_info || ''
+  brandingAPIBaseURL.value = nextContext.agent.api_base_url || ''
   brandingSubtitle.value = nextContext.agent.site_subtitle || ''
   brandingCompactHome.value = nextContext.agent.compact_home_enabled === true
   brandingHomeContent.value = nextContext.agent.home_content || ''
@@ -40,7 +42,7 @@ async function loadContext(): Promise<void> {
     applyContext(await agentAPI.getContext())
   } catch (cause) {
     context.value = null
-    error.value = errorMessage(cause, '代理站信息加载失败，暂时不能安全修改本站设置。')
+    error.value = errorMessage(cause, '站点信息加载失败，暂时不能安全修改本站设置。')
   } finally {
     loading.value = false
   }
@@ -58,6 +60,7 @@ async function saveBranding(): Promise<void> {
       site_logo: brandingLogo.value.trim(),
       doc_url: brandingDocURL.value.trim(),
       contact_info: brandingContactInfo.value.trim(),
+      api_base_url: brandingAPIBaseURL.value.trim(),
       site_subtitle: brandingSubtitle.value.trim(),
       compact_home_enabled: brandingCompactHome.value,
       home_content: brandingHomeContent.value.trim(),
@@ -67,6 +70,7 @@ async function saveBranding(): Promise<void> {
     context.value.agent.site_logo = updated.site_logo || undefined
     context.value.agent.doc_url = updated.doc_url || undefined
     context.value.agent.contact_info = updated.contact_info || undefined
+    context.value.agent.api_base_url = updated.api_base_url || undefined
     context.value.agent.site_subtitle = updated.site_subtitle
     context.value.agent.compact_home_enabled = updated.compact_home_enabled
     context.value.agent.home_content = updated.home_content
@@ -75,13 +79,14 @@ async function saveBranding(): Promise<void> {
     brandingLogo.value = updated.site_logo || ''
     brandingDocURL.value = updated.doc_url || ''
     brandingContactInfo.value = updated.contact_info || ''
+    brandingAPIBaseURL.value = updated.api_base_url || ''
     brandingSubtitle.value = updated.site_subtitle || ''
     brandingCompactHome.value = updated.compact_home_enabled === true
     brandingHomeContent.value = updated.home_content || ''
     applyBranding(updated.site_name, updated.site_logo, updated.doc_url, updated.contact_info)
     applyHomeSettings(updated)
     applyPageTitle('系统设置')
-    notice.value = '本站品牌信息已保存，并已应用到当前代理站界面。'
+    notice.value = '本站品牌信息已保存，并已应用到当前界面。'
   } catch (cause) {
     error.value = errorMessage(cause, '更新本站品牌信息失败，请稍后重试。')
   } finally {
@@ -98,7 +103,7 @@ onMounted(() => void loadContext())
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">本站管理</p>
         <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
-        <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-dark-400">配置当前代理站的名称、标题、Logo、文档入口和客服信息；主站全局系统、网关、认证、支付和管理员凭据保持隔离。</p>
+        <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-dark-400">配置本站名称、标题、Logo、文档入口、客服信息和 API 调用地址。</p>
       </div>
       <span v-if="context" class="badge badge-gray">{{ context.agent.domain || context.agent.site_name || context.agent.name }}</span>
     </header>
@@ -106,7 +111,7 @@ onMounted(() => void loadContext())
     <div v-if="loading" class="card flex min-h-48 items-center justify-center" role="status">
       <div class="text-center text-sm text-gray-500">
         <Icon name="refresh" size="lg" class="mx-auto animate-spin text-primary-500" />
-        <p class="mt-3">正在确认代理站设置边界…</p>
+        <p class="mt-3">正在确认站点设置边界…</p>
       </div>
     </div>
 
@@ -126,6 +131,7 @@ onMounted(() => void loadContext())
         v-model:site-logo="brandingLogo"
         v-model:doc-url="brandingDocURL"
         v-model:contact-info="brandingContactInfo"
+        v-model:api-base-url="brandingAPIBaseURL"
         v-model:site-subtitle="brandingSubtitle"
         v-model:compact-home-enabled="brandingCompactHome"
         v-model:home-content="brandingHomeContent"

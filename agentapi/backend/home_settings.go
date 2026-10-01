@@ -41,6 +41,7 @@ func agentBrandingData(agent AgentView) map[string]any {
 	return map[string]any{
 		"name": agent.Name, "site_name": agent.SiteName, "site_logo": agent.SiteLogo,
 		"doc_url": agent.DocURL, "contact_info": agent.ContactInfo,
+		"api_base_url":  agent.APIBaseURL,
 		"site_subtitle": agent.SiteSubtitle, "compact_home_enabled": agent.CompactHomeEnabled,
 		"home_content": agent.HomeContent,
 	}

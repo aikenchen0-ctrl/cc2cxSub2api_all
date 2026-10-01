@@ -25,12 +25,12 @@ func TestApplicationErrorCannotConfirmSettlementAndRecovers(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := testServer(t, upstream)
-	s.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, s, "user_upstream")
 	s.main = NewMainClient(s.cfg)
 	if _, _, err := s.store.PrepareDirectSettlement(s.cfg.AgentID, "42", "42", "recover", "recover", 100); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.reconcileSettlements(t.Context(), "recover"); err == nil {
+	if _, err := s.reconcileTenantSettlements(t.Context(), s.cfg.AgentID, "recover"); err == nil {
 		t.Fatal("application failure accepted")
 	}
 	record, err := s.store.Settlement(s.cfg.AgentID, "recover")
@@ -38,7 +38,7 @@ func TestApplicationErrorCannotConfirmSettlementAndRecovers(t *testing.T) {
 		t.Fatalf("error confirmed a charge: %+v %v", record, err)
 	}
 	healthy = true
-	if _, err := s.reconcileSettlements(t.Context(), "recover"); err != nil {
+	if _, err := s.reconcileTenantSettlements(t.Context(), s.cfg.AgentID, "recover"); err != nil {
 		t.Fatal(err)
 	}
 	record, err = s.store.Settlement(s.cfg.AgentID, "recover")
@@ -139,7 +139,7 @@ func TestUsageLookupFailurePersistsOnlySafeError(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := testServer(t, upstream)
-	s.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, s, "user_upstream")
 	s.cfg.MainUsageAPI = true
 	s.main = NewMainClient(s.cfg)
 	if _, err := s.store.UpsertUser(s.cfg.AgentID, "42", "member@example.com", "Member"); err != nil {

@@ -175,7 +175,7 @@ onMounted(load)
       </div>
     </div>
 
-    <p class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">公告仅属于当前代理站并按本站用户隔离，不会修改 Sub2API 主站公告。</p>
+    <p class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">公告仅属于当前站点，并严格按本站用户范围隔离。</p>
     <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <p v-if="notice" role="status" class="rounded-lg bg-green-50 p-4 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-300">{{ notice }}</p>
 
@@ -187,7 +187,7 @@ onMounted(load)
         <template #cell-time_range="{ row }"><div class="space-y-1 text-xs text-gray-500 dark:text-dark-400"><p>开始：{{ row.starts_at ? formatTime(row.starts_at) : '立即' }}</p><p>结束：{{ row.ends_at ? formatTime(row.ends_at) : '永久' }}</p></div></template>
         <template #cell-created_at="{ row }"><span class="text-sm text-gray-500">{{ formatTime(row.created_at) }}</span></template>
         <template #cell-actions="{ row }"><div class="flex items-center justify-end gap-1"><button class="rounded-lg p-2 text-gray-500 hover:bg-blue-50 hover:text-blue-600" title="预览" @click="previewing = row"><Icon name="eye" size="sm" /><span class="sr-only">预览</span></button><button class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800" title="编辑" @click="openEdit(row)"><Icon name="edit" size="sm" /><span class="sr-only">编辑</span></button><button class="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600" title="删除" @click="requestDelete(row)"><Icon name="trash" size="sm" /><span class="sr-only">删除</span></button></div></template>
-        <template #empty><EmptyState title="暂无公告" description="创建第一条当前代理站公告。" action-text="创建公告" @action="openCreate" /></template>
+        <template #empty><EmptyState title="暂无公告" description="创建第一条本站公告。" action-text="创建公告" @action="openCreate" /></template>
       </DataTable>
       <div v-if="filteredItems.length" class="border-t border-gray-200 p-4 dark:border-dark-700"><AgentPagination :total="filteredItems.length" :page="page" :page-size="pageSize" item-label="条公告" @update:page="page = $event" @update:page-size="changePageSize" /></div>
     </div>

@@ -4,7 +4,7 @@ export const GENERATION_HISTORY_STORAGE_KEY = 'bio-demo-generation-history'
 export const NOTES_STORAGE_KEY = 'bio-demo-notes'
 export const PROJECT_FALLBACK_STORAGE_KEY = 'bio-demo-projects'
 const VITE_ENV = import.meta.env || {}
-export const SETTINGS_STORAGE_VERSION = 10
+export const SETTINGS_STORAGE_VERSION = 12
 export const UI_STATE_STORAGE_KEY = 'bio-demo-ui-state'
 export const UI_STATE_STORAGE_VERSION = 1
 export const FAL_MODEL_OPTIONS = [
@@ -20,10 +20,9 @@ export const DEFAULT_SETTINGS = {
   quality: 'balanced',
   compactUi: false,
   generationProvider: 'hunyuan',
-  // JS Depth is an immediate browser-side fallback when no cloud/local 3D
-  // provider key is configured. Users can still choose a configured provider
-  // after the authenticated health check completes.
-  generationMode: 'cinematic',
+  // Image uploads should create a real GLB by default. JS Depth remains an
+  // explicit preview mode and must not silently replace backend generation.
+  generationMode: 'hunyuan',
   falModelId: DEFAULT_FAL_MODEL,
   screenshotScale: 2,
   language: 'zh',
@@ -55,7 +54,7 @@ export const DEFAULT_HUNYUAN_SKETCH_PROMPT = '一只上皮细胞，光滑表面�
 export const HUNYUAN_SKETCH_MODE = 'hunyuan-sketch'
 export const GENERATION_PROVIDER_OPTIONS = [
   { id: 'rodin', label: 'Hyper3D', description: 'Hyper3D Rodin cloud generation.' },
-  { id: 'auto', label: 'Auto', description: 'Hunyuan first, then Tripo, Fal, Hyper3D, and JS Depth backup.' },
+  { id: 'auto', label: 'Auto', description: 'Hunyuan first, then Tripo, Fal, and Hyper3D GLB generation.' },
   { id: 'tripo', label: 'Tripo', description: 'Cloud generation.' },
   { id: 'fal', label: 'Fal', description: 'Fal queue with selectable 3D models.' },
   { id: 'hunyuan', label: 'Hunyuan', description: 'Tencent Hunyuan 3D cloud, with local Hunyuan fallback.' },
@@ -68,7 +67,7 @@ export const GENERATION_MODE_OPTIONS = [
   { id: 'rodin', label: 'Hyper3D', description: 'Hyper3D Rodin GLB generation.' },
   { id: 'fal', label: 'Fal', description: 'Fal.ai queue with selectable model.' },
   { id: 'cinematic', label: 'JS Depth', description: 'Browser-side image relief with layered PNG fallback.' },
-  { id: 'auto', label: 'Auto', description: 'Hunyuan first, then Tripo, Fal, Hyper3D, then JS Depth fallback.' },
+  { id: 'auto', label: 'Auto', description: 'Hunyuan first, then Tripo, Fal, and Hyper3D GLB generation.' },
   { id: 'local', label: 'Local GLB', description: 'Import an existing GLB or GLTF file.' },
 ]
 export const GENERATION_MODE_IDS = new Set(GENERATION_MODE_OPTIONS.map((mode) => mode.id))

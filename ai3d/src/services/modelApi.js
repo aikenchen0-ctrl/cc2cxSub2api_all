@@ -31,7 +31,7 @@ export async function readApiResponse(response) {
 
 export function getProviderPlan(provider) {
   if (provider === 'hunyuan-sketch') return ['hunyuan']
-  return provider === 'auto' ? ['hunyuan', 'tripo', 'fal', 'rodin', 'cinematic'] : [provider || 'hunyuan']
+  return provider === 'auto' ? ['hunyuan', 'tripo', 'fal', 'rodin'] : [provider || 'hunyuan']
 }
 
 export function getGenerationRequestOptions(mode, prompt = '') {

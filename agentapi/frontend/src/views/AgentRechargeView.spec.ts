@@ -127,7 +127,7 @@ describe('AgentRechargeView', () => {
     expect(wrapper.text()).toContain('支付宝')
     expect(wrapper.text()).toContain('Stripe')
     expect(wrapper.text()).toContain('支付帮助')
-    expect(wrapper.text()).toContain('代理站不会维护第二套支付账本')
+    expect(wrapper.text()).toContain('点击后将安全创建并计费订单')
     expect(wrapper.find('a[href="https://main.example.com/purchase"]').exists()).toBe(false)
     expect(agentAPI.payment.checkoutInfo).toHaveBeenCalledTimes(1)
     wrapper.unmount()
@@ -137,7 +137,7 @@ describe('AgentRechargeView', () => {
     const { wrapper } = await mountView()
     await wrapper.get('#recharge-amount').setValue('5')
 
-    expect(wrapper.text()).toContain('主站最低充值金额')
+    expect(wrapper.text()).toContain('最低充值金额')
     expect(wrapper.get('button.btn-primary.w-full').attributes('disabled')).toBeDefined()
     expect(agentAPI.payment.createOrder).not.toHaveBeenCalled()
     wrapper.unmount()
@@ -293,8 +293,8 @@ describe('AgentRechargeView', () => {
     vi.mocked(agentAPI.payment.checkoutInfo).mockRejectedValueOnce(new Error('checkout unavailable'))
     const { wrapper } = await mountView()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('加载主站支付配置失败')
-    expect(wrapper.text()).toContain('主站支付配置暂不可用')
+    expect(wrapper.get('[role="alert"]').text()).toContain('加载支付配置失败')
+    expect(wrapper.text()).toContain('支付配置暂不可用')
     wrapper.unmount()
   })
 
@@ -378,7 +378,7 @@ describe('AgentRechargeView', () => {
     await wrapper.get('[aria-label="刷新支付配置"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('button.btn-primary.w-full').exists()).toBe(false)
-    expect(wrapper.text()).toContain('加载主站支付配置失败')
+    expect(wrapper.text()).toContain('加载支付配置失败')
     expect(agentAPI.payment.createOrder).not.toHaveBeenCalled()
     wrapper.unmount()
   })

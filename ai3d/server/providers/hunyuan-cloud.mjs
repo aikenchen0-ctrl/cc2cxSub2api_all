@@ -14,9 +14,9 @@ import {
 } from '../config.mjs'
 import { parseDataUrl } from '../http-utils.mjs'
 import { cacheRemoteModel, hasLocalModel, localModelUrl } from '../model-store.mjs'
-import { findFirstValue, findModelUrl, isSuccessStatus } from '../object-utils.mjs'
+import { findFirstValue, isSuccessStatus } from '../object-utils.mjs'
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 export const DEFAULT_HUNYUAN_SKETCH_PROMPT = '一只上皮细胞，光滑表面，细胞核清晰'
 
 export function isHunyuanCloudConfigured() {
@@ -41,7 +41,7 @@ export function getHunyuanCloudHealth() {
 export function buildHunyuanCloudSubmitBody({
   imageDataUrl = '',
   imageBase64 = '',
-  imageField = 'ImageBase64',
+  imageTransport = 'image-url',
   generateType = HUNYUAN_CLOUD_GENERATE_TYPE,
   model = HUNYUAN_CLOUD_MODEL,
   enablePbr = HUNYUAN_CLOUD_ENABLE_PBR,
@@ -56,7 +56,9 @@ export function buildHunyuanCloudSubmitBody({
   if (legacy) {
     return {
       Model: resolvedModel,
-      [imageField]: imageDataUrl,
+      ...(imageTransport === 'image-base64'
+        ? { ImageBase64: imageBase64 || extractImageBase64(imageDataUrl) }
+        : { ImageUrl: { Url: imageDataUrl } }),
       EnablePBR: enablePbr,
       FaceCount: faceCount,
       GenerateType: normalizedType,
@@ -78,7 +80,7 @@ export async function createHunyuanCloudTask(payload) {
   requireCloudKey()
   const image = parseDataUrl(payload.imageDataUrl)
   if (image.buffer.length > MAX_IMAGE_BYTES) {
-    throw Object.assign(new Error('Hunyuan cloud image must be 5MB or smaller after encoding.'), { status: 413 })
+    throw Object.assign(new Error('Hunyuan cloud image must be 6MB or smaller.'), { status: 413 })
   }
 
   const generateType = payload.generateType || HUNYUAN_CLOUD_GENERATE_TYPE
@@ -86,32 +88,35 @@ export async function createHunyuanCloudTask(payload) {
   const enablePbr = payload.pbr ?? payload.enablePbr ?? HUNYUAN_CLOUD_ENABLE_PBR
   const faceCount = payload.faceCount ?? HUNYUAN_CLOUD_FACE_COUNT
   const prompt = clipPrompt(payload.prompt)
-  const imageDataUrl = `data:${image.mime};base64,${image.buffer.toString('base64')}`
+  const imageBase64 = image.buffer.toString('base64')
+  const imageDataUrl = `data:${image.mime};base64,${imageBase64}`
   const bodies = usesLegacyAi3dApi()
     ? [
         buildHunyuanCloudSubmitBody({
           imageDataUrl,
+          imageBase64,
           generateType,
           model,
           enablePbr,
           faceCount,
           prompt,
-          imageField: 'ImageBase64',
+          imageTransport: 'image-url',
         }),
         buildHunyuanCloudSubmitBody({
           imageDataUrl,
+          imageBase64,
           generateType,
           model,
           enablePbr,
           faceCount,
           prompt,
-          imageField: 'ImageUrl',
+          imageTransport: 'image-base64',
         }),
       ]
     : [
         buildHunyuanCloudSubmitBody({
           imageDataUrl,
-          imageBase64: image.buffer.toString('base64'),
+          imageBase64,
           generateType,
           model,
           enablePbr,
@@ -183,7 +188,7 @@ export async function getHunyuanCloudTask(taskId) {
   })
   const data = unwrapCloudPayload(raw)
   const status = normalizeCloudStatus(data.Status || data.status || data.task_status || data.state || 'running')
-  const rawModelUrl = findGlbUrl(data) || findModelUrl(data)
+  const rawModelUrl = findGlbUrl(data)
   let modelUrl = ''
   let cacheError = ''
   let nextStatus = status
@@ -193,8 +198,11 @@ export async function getHunyuanCloudTask(taskId) {
       modelUrl = await cacheRemoteModel(taskId, rawModelUrl)
     } catch (error) {
       cacheError = error.message || 'Model cache failed.'
-      nextStatus = 'running'
+      nextStatus = 'failed'
     }
+  } else if (isSuccessStatus(status)) {
+    cacheError = 'Hunyuan task completed without a GLB result.'
+    nextStatus = 'failed'
   }
 
   return {
@@ -266,13 +274,17 @@ function unwrapCloudPayload(raw) {
   return raw
 }
 
-function findGlbUrl(value) {
+export function findHunyuanGlbUrl(value) {
   const files = []
   collectFiles(value, files)
   const glb = files.find((item) => ['glb', 'GLB'].includes(String(item.Type || item.type || '')) && (item.Url || item.url))
   if (glb) return glb.Url || glb.url
   const byExt = files.find((item) => /\.glb(?:[?#]|$)/i.test(item.Url || item.url || ''))
   return byExt?.Url || byExt?.url || ''
+}
+
+function findGlbUrl(value) {
+  return findHunyuanGlbUrl(value)
 }
 
 function collectFiles(value, files) {
@@ -288,13 +300,23 @@ function collectFiles(value, files) {
   })
 }
 
-function normalizeCloudStatus(status) {
+export function normalizeHunyuanCloudStatus(status) {
   const value = String(status || '').toLowerCase()
   if (['success', 'succeeded', 'completed', 'complete', 'done', 'finish', 'finished'].includes(value)) return 'success'
   if (['failed', 'fail', 'error', 'cancelled', 'canceled'].includes(value)) return 'failed'
   if (['queued', 'pending', 'waiting', 'wait'].includes(value)) return 'queued'
   if (['running', 'in_progress', 'processing', 'run'].includes(value)) return 'running'
   return 'running'
+}
+
+function normalizeCloudStatus(status) {
+  return normalizeHunyuanCloudStatus(status)
+}
+
+export function buildHunyuanCloudAuthHeaders(apiKey = HUNYUAN_CLOUD_API_KEY) {
+  return {
+    Authorization: String(apiKey || '').trim(),
+  }
 }
 
 async function hunyuanCloudRequest(requestPath, options = {}) {
@@ -305,7 +327,7 @@ async function hunyuanCloudRequest(requestPath, options = {}) {
       ...options,
       ...(OUTBOUND_PROXY_AGENT ? { dispatcher: OUTBOUND_PROXY_AGENT } : {}),
       headers: {
-        Authorization: `Bearer ${HUNYUAN_CLOUD_API_KEY}`,
+        ...buildHunyuanCloudAuthHeaders(),
         ...(options.headers || {}),
       },
     })
@@ -350,6 +372,7 @@ function extractCloudError(data) {
     : data.Error || data.Response?.Error
   const candidates = [
     data.ErrorMessage,
+    data.Response?.ErrorMessage,
     nested?.Message,
     nested?.message_zh,
     nested?.message,
@@ -365,7 +388,7 @@ function sanitizeCloudRaw(raw) {
   if (!raw || typeof raw !== 'object') return raw
   return JSON.parse(JSON.stringify(raw, (key, value) => {
     if (['image_base64', 'ImageBase64'].includes(key)) return '[base64 omitted]'
-    if (['Url', 'ImageUrl'].includes(key) && typeof value === 'string' && value.startsWith('data:')) return '[base64 omitted]'
+    if (key === 'Url' && typeof value === 'string' && value.startsWith('data:')) return '[base64 omitted]'
     return value
   }))
 }

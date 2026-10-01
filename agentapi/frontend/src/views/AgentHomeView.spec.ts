@@ -50,7 +50,7 @@ describe('AgentHomeView homepage modes', () => {
     expect(page.text()).toContain('独立品牌副标题')
     expect(page.findAll('img').every(image => image.attributes('src') === '/tenant.svg')).toBe(true)
     expect(page.get('a[title="查看文档"]').attributes('href')).toBe('https://docs.tenant.example/')
-    expect(page.find('a[href="/model-plaza"]').exists()).toBe(true)
+    expect(page.find('a[href="/model-plaza"]').exists()).toBe(false)
     expect(page.find('a[href="/downloads"]').exists()).toBe(true)
   })
 

@@ -117,11 +117,11 @@ HUNYUAN_STATUS_PATH=/status
 3D 生成后端支持这些路径：
 
 ```text
-Hyper3D  只走 Hyper3D Rodin 云端生成，默认模式
-Tripo    只走 Tripo 云端生成
+Hunyuan  腾讯混元 3.1 云端 GLB 生成，默认模式；草图使用混元 3.0
+Tripo    Tripo 云端 GLB 生成
+Hyper3D  只走 Hyper3D Rodin 云端生成
 Fal      只走 Fal.ai 队列生成，具体模型在 Settings 里选择
-Auto     先 Hyper3D，再 Tripo、Fal、Hunyuan，最后 JS Depth 兜底
-Hunyuan  只走本地 Hunyuan3D
+Auto     依次尝试 Hunyuan、Tripo、Fal、Hyper3D；都失败时明确报错
 ```
 
 上传面板支持这些模式：
@@ -132,7 +132,7 @@ Tripo       Tripo 云端 GLB 生成
 Fal         Fal.ai 队列 GLB 生成
 Hunyuan     本地 Hunyuan3D GLB 生成
 JS Depth    浏览器侧图片深度浮雕，WebGL 不可用时降级到透明 PNG 分层
-Auto        Hyper3D -> Tripo -> Fal -> Hunyuan -> JS Depth 依次降级
+Auto        Hunyuan -> Tripo -> Fal -> Hyper3D，只返回 GLB 或明确错误
 Local GLB   导入已有 .glb 或自包含 .gltf
 ```
 

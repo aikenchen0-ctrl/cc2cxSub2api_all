@@ -103,7 +103,7 @@ async function confirmWechat(instance: Stripe, clientSecret: string): Promise<vo
   } else if (paymentIntent?.status === 'succeeded') {
     await finishWithoutRedirect()
   } else {
-    paymentError.value = '主站没有返回可用的微信支付二维码。'
+    paymentError.value = '支付服务没有返回可用的微信支付二维码。'
   }
 }
 
@@ -152,7 +152,7 @@ onMounted(async () => {
   }
   try {
     const config = await agentAPI.payment.checkoutInfo()
-    if (!config.stripe_publishable_key) throw new Error('主站未配置 Stripe 公钥。')
+    if (!config.stripe_publishable_key) throw new Error('本站未配置 Stripe 公钥。')
     const { loadStripe } = await import('@stripe/stripe-js/pure')
     stripe = await loadStripe(config.stripe_publishable_key)
     if (!stripe) throw new Error('Stripe 组件加载失败。')
@@ -186,7 +186,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <section class="card overflow-hidden">
         <div class="bg-gradient-to-br from-[#635bff] to-[#4f46e5] px-6 py-6 text-center text-white">
-          <p class="text-sm font-medium text-indigo-100">主站订单应付金额</p>
+          <p class="text-sm font-medium text-indigo-100">订单应付金额</p>
           <p class="mt-1 text-3xl font-bold">{{ formattedAmount }}</p>
           <p class="mt-2 break-all font-mono text-xs text-indigo-200">{{ snapshot?.outTradeNo }}</p>
         </div>
@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
       <section v-if="wechatQR" class="card p-6 text-center">
         <h1 class="text-lg font-bold text-gray-900 dark:text-white">使用微信扫描二维码</h1>
         <img v-if="wechatQRSafe" :src="wechatQRSafe" alt="微信支付二维码" class="mx-auto mt-5 h-64 w-64 rounded-xl bg-white p-3" />
-        <p class="mt-4 text-sm text-gray-500 dark:text-dark-400">页面会自动向 Sub2API 主站确认支付结果。</p>
+        <p class="mt-4 text-sm text-gray-500 dark:text-dark-400">页面会自动确认支付结果。</p>
       </section>
 
       <section v-else-if="redirecting" class="card p-10 text-center">

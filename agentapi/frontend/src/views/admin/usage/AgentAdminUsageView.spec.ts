@@ -33,8 +33,8 @@ describe('AgentAdminUsageView', () => {
     expect(wrapper.text()).toContain('Example Agent')
     expect(wrapper.text()).toContain('req-pending')
     expect(wrapper.text()).toContain('req-confirmed')
-    expect(wrapper.text()).toContain('主站用户直扣')
-    expect(wrapper.text()).toContain('不能查看其他代理站或主站全局用量')
+    expect(wrapper.text()).toContain('用户余额计费')
+    expect(wrapper.text()).toContain('不能查看其他站点数据')
   })
 
   it('does not read usage before context succeeds on retry', async () => {
@@ -66,7 +66,7 @@ describe('AgentAdminUsageView', () => {
     await flushPromises()
 
     expect(reconcile).toHaveBeenCalledOnce()
-    expect(wrapper.text()).toContain('已向主站核对 1 条待确认记录')
+    expect(wrapper.text()).toContain('已核对 1 条待确认记录')
     expect(wrapper.text()).not.toContain('req-pending')
     expect(wrapper.text()).toContain('req-confirmed')
   })

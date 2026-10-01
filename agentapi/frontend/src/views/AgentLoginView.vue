@@ -148,11 +148,11 @@ async function submit(): Promise<void> {
         </div>
         <a data-testid="main-site-login" class="btn btn-secondary w-full" :href="mainSiteLoginURL">
           <Icon name="externalLink" size="md" class="mr-2" />
-          使用主站账号登录
+          使用账号登录
         </a>
       </template>
 
-      <div class="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/60 dark:text-dark-400">浏览器仅保存本站 HttpOnly 会话；主站应用凭据与运行时控制凭据始终保留在服务端。</div>
+      <div class="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/60 dark:text-dark-400">浏览器仅保存本站 HttpOnly 会话；应用凭据与运行时控制凭据始终安全保留在服务端。</div>
       <p class="text-center text-sm text-gray-500">还没有账号？ <RouterLink class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400" to="/register">立即注册</RouterLink></p>
     </section>
   </main>

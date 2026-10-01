@@ -29,7 +29,7 @@ async function load(): Promise<void> {
     if (sequence !== loadSequence) return
     context.value = null
     settlements.value = []
-    contextError.value = errorMessage(cause, '代理站信息加载失败，暂时不能安全查看本站用量同步记录。')
+    contextError.value = errorMessage(cause, '站点信息加载失败，暂时不能安全查看本站用量记录。')
     loading.value = false
     return
   }
@@ -55,7 +55,7 @@ async function reconcile(): Promise<void> {
     const response = await agentAPI.reconcileSettlements()
     settlements.value = response.items
     notice.value = response.total > 0
-      ? `已向主站核对 ${response.total} 条待确认记录。`
+      ? `已核对 ${response.total} 条待确认记录。`
       : '当前没有需要核对的待确认记录。'
   } catch (cause) {
     settlementsError.value = errorMessage(cause, '核对本站用量同步记录失败，请稍后重试。')
@@ -73,7 +73,7 @@ onMounted(() => void load())
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">账本核对</p>
         <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">用量同步</h1>
-        <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-dark-400">查看当前代理站请求与 Sub2API 主站权威用量账本的同步状态；扣费、余额和最终费用仍全部由主站确认。</p>
+        <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-dark-400">查看本站请求、用量和结算记录的同步状态。</p>
       </div>
       <div class="flex items-center gap-3">
         <span v-if="context" class="badge badge-gray">{{ context.agent.site_name || context.agent.name }}</span>
@@ -86,7 +86,7 @@ onMounted(() => void load())
     <div v-if="loading && !context" class="card flex min-h-48 items-center justify-center" role="status">
       <div class="text-center text-sm text-gray-500">
         <Icon name="refresh" size="lg" class="mx-auto animate-spin text-primary-500" />
-        <p class="mt-3">正在确认代理站用量边界…</p>
+        <p class="mt-3">正在确认站点用量边界…</p>
       </div>
     </div>
 
@@ -101,17 +101,17 @@ onMounted(() => void load())
         <div class="card p-5">
           <p class="text-sm text-gray-500 dark:text-dark-400">同步记录</p>
           <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ settlements.length }}</p>
-          <p class="mt-1 text-xs text-gray-400">仅当前代理站请求</p>
+          <p class="mt-1 text-xs text-gray-400">仅本站请求</p>
         </div>
         <div class="card p-5">
-          <p class="text-sm text-gray-500 dark:text-dark-400">待主站确认</p>
+          <p class="text-sm text-gray-500 dark:text-dark-400">待确认</p>
           <p class="mt-2 text-2xl font-semibold text-amber-600 dark:text-amber-400">{{ settlements.filter(item => item.status === 'pending').length }}</p>
           <p class="mt-1 text-xs text-gray-400">不会以本站估算替代最终费用</p>
         </div>
         <div class="card p-5">
           <p class="text-sm text-gray-500 dark:text-dark-400">计费边界</p>
-          <p class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">主站用户直扣</p>
-          <p class="mt-1 text-xs text-gray-400">不修改主站账本或全局定价</p>
+          <p class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">用户余额计费</p>
+          <p class="mt-1 text-xs text-gray-400">只读展示，不修改计费记录</p>
         </div>
       </div>
 
@@ -131,7 +131,7 @@ onMounted(() => void load())
           <Icon name="infoCircle" size="lg" class="mt-0.5 shrink-0 text-primary-500" />
           <div>
             <h2 class="font-medium text-gray-900 dark:text-white">数据与权限边界</h2>
-            <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-dark-400">本页只核对当前代理站已记录请求与主站用量事实。代理站管理员不能查看其他代理站或主站全局用量，不能调整主站费用、余额、退款、账号池和全局计费配置。</p>
+            <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-dark-400">本页只核对本站已记录的请求与用量。站点管理员不能查看其他站点数据，也不能调整平台级费用、余额或计费配置。</p>
           </div>
         </div>
       </section>

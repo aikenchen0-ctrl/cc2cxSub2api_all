@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"math"
 	"net/http"
 	"net/url"
@@ -235,7 +234,7 @@ func invalidPaymentResponse() error {
 
 func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requestID string) {
 	w.Header().Set("Cache-Control", "no-store")
-	session, _, ok := s.requireSession(w, r, requestID)
+	tenant, session, _, ok := s.requireTenantSession(w, r, requestID)
 	if !ok {
 		return
 	}
@@ -246,11 +245,6 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 		checkout, err := s.main.PaymentCheckoutInfo(r.Context(), session.MainUserID)
 		if err != nil {
 			s.writeMainError(w, requestID, err)
-			return
-		}
-		checkout, err = s.applyAgentPlanPolicies(checkout)
-		if err != nil {
-			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to apply agent plan policy")
 			return
 		}
 		s.writeData(w, http.StatusOK, requestID, checkout)
@@ -268,22 +262,12 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAYMENT_ORDER", err)
 			return
 		}
-		if request.OrderType == "subscription" {
-			if err := s.ensureAgentPlanEnabled(request.PlanID); err != nil {
-				if errors.Is(err, errAgentPlanDisabled) {
-					s.writeError(w, http.StatusBadRequest, requestID, "PLAN_NOT_AVAILABLE", "subscription plan is not available on this agent")
-					return
-				}
-				s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to verify agent plan policy")
-				return
-			}
-		}
 		result, err := s.main.CreatePaymentOrder(r.Context(), session.MainUserID, request, s.paymentReturnURL(r))
 		if err != nil {
 			s.writeMainError(w, requestID, err)
 			return
 		}
-		s.recordAudit("agent_user", session.MainUserID, "payment.order.create", "main_order", result.OutTradeNo, requestID, "success", request.OrderType)
+		s.recordTenantAudit(tenant.AgentID, "agent_user", session.MainUserID, "payment.order.create", "main_order", result.OutTradeNo, requestID, "success", request.OrderType)
 		s.writeData(w, http.StatusCreated, requestID, result)
 	case r.URL.Path == basePath+"/orders/verify" && r.Method == http.MethodPost:
 		if !sameOrigin(r) {

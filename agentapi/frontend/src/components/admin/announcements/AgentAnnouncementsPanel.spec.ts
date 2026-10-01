@@ -44,7 +44,7 @@ describe('AgentAnnouncementsPanel', () => {
     await flushPromises()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ title: '维护通知', content: '今晚维护', status: 'active', notify_mode: 'popup' }))
     expect(wrapper.text()).toContain('公告已创建')
-    expect(wrapper.text()).toContain('不会修改 Sub2API 主站公告')
+    expect(wrapper.text()).toContain('严格按本站用户范围隔离')
   })
 
   it('edits and deletes only the selected announcement', async () => {

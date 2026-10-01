@@ -31,6 +31,7 @@ type AuthHandler struct {
 	totpService          *service.TotpService
 	userAttributeService *service.UserAttributeService
 	apiKeyService        *service.APIKeyService
+	agentTenantSvc       *service.AgentTenantService
 
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
@@ -42,6 +43,15 @@ type AuthHandler struct {
 func (h *AuthHandler) SetAPIKeyService(apiKeyService *service.APIKeyService) {
 	if h != nil {
 		h.apiKeyService = apiKeyService
+	}
+}
+
+// SetAgentTenantService wires the shared AgentAPI tenant registry into
+// the common satellite SSO entry. AgentAPI is the only satellite that consumes
+// this tenant claim; all other satellites keep the existing ticket contract.
+func (h *AuthHandler) SetAgentTenantService(agentTenantSvc *service.AgentTenantService) {
+	if h != nil {
+		h.agentTenantSvc = agentTenantSvc
 	}
 }
 

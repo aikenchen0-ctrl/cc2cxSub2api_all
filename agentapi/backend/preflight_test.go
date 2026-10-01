@@ -63,7 +63,7 @@ func TestPreflightReadOnlyAndRedacted(t *testing.T) {
 
 func preflightTestConfig(base string) Config {
 	return Config{MainAPIBaseURL: base + "/api/v1", MainModelBaseURL: base + "/v1", PublicMainURL: base,
-		MainAdminAPIKey: "admin-secret", AppCredential: "app-secret", SatelliteSlug: "agentapi", OwnerMainUserID: "42",
+		MainAdminAPIKey: "admin-secret", AppCredential: "app-secret", SatelliteSlug: "agentapi", PreflightMainUserID: "42",
 		SSOSecret: strings.Repeat("s", 32), SessionSecret: strings.Repeat("t", 32), BillingMode: "user_upstream"}
 }
 
@@ -94,7 +94,7 @@ func TestPreflightInvalidIdentityNeverSendsCredentials(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
 	defer upstream.Close()
 	cfg := preflightTestConfig(upstream.URL)
-	cfg.OwnerMainUserID = "../users"
+	cfg.PreflightMainUserID = "../users"
 	if runPreflight(context.Background(), cfg).OK || calls != 0 {
 		t.Fatal("invalid identity reached main")
 	}
@@ -153,7 +153,8 @@ func TestPreflightCLIExitsBeforeCreatingDatabase(t *testing.T) {
 	// Do not inherit deployment credentials into the diagnostic child.
 	cmd.Env = []string{"AGENTAPI_PREFLIGHT_TEST_CHILD=1", "AGENTAPI_DATABASE_PATH=" + dbPath,
 		"SYSTEMROOT=" + os.Getenv("SYSTEMROOT"), "TEMP=" + os.TempDir(), "TMP=" + os.TempDir(),
-		"SESSION_SECRET=" + strings.Repeat("t", 32)}
+		"SESSION_SECRET=" + strings.Repeat("t", 32), "SUB2API_SSO_SECRET=" + strings.Repeat("s", 32),
+		"SUB2API_APP_CREDENTIAL=app-secret", "AGENTAPI_SHARED_HOSTS=agent.example.test"}
 	output, err := cmd.Output()
 	if ctx.Err() != nil {
 		t.Fatal("preflight started a server or hung")

@@ -63,9 +63,9 @@ func (s *Store) RegistrationMarker(agentID, email string) (string, error) {
 	return marker, err
 }
 
-func (s *Server) recoverRegistration(ctx context.Context, userID, email, displayName string) (bool, error) {
+func (s *Server) recoverRegistrationForTenant(ctx context.Context, agentID, userID, email, displayName string) (bool, error) {
 	var marker string
-	if err := s.store.db.QueryRow(`SELECT marker FROM registration_intents WHERE agent_id=? AND email=?`, s.cfg.AgentID, strings.ToLower(email)).Scan(&marker); err != nil {
+	if err := s.store.db.QueryRow(`SELECT marker FROM registration_intents WHERE agent_id=? AND email=?`, agentID, strings.ToLower(email)).Scan(&marker); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
@@ -105,7 +105,7 @@ func (s *Server) recoverRegistration(ctx context.Context, userID, email, display
 	if mainUserIDFromJSON(data) != userID || profile.Role != "user" || profile.Notes != marker || !strings.EqualFold(strings.TrimSpace(profile.Email), strings.TrimSpace(email)) {
 		return false, nil
 	}
-	_, err = s.store.UpsertUser(s.cfg.AgentID, userID, email, displayName)
+	_, err = s.store.UpsertUser(agentID, userID, email, displayName)
 	return err == nil, err
 }
 

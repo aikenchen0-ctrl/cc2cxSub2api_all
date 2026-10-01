@@ -98,7 +98,7 @@ async function submit(): Promise<void> {
       password.value = ''
       confirmPassword.value = ''
       error.value = code === 'USER_MAPPING_FAILED'
-        ? '主站账号已创建，本站关联尚未完成。请前往登录页面尝试恢复；若仍失败，请联系站长，不要重复注册。'
+        ? '账号已创建，本站关联尚未完成。请前往登录页面尝试恢复；若仍失败，请联系站长，不要重复注册。'
         : '账号已创建，自动登录暂未完成。请前往登录页面登录，不要重复注册。'
       return
     }
@@ -113,7 +113,7 @@ async function submit(): Promise<void> {
       <div class="text-center">
         <div v-if="tempToken" class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300"><Icon name="shield" size="lg" /></div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ tempToken ? '完成双重验证' : '创建账号' }}</h1>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ tempToken ? '输入验证器动态代码以完成登录' : '注册主站正式账号并关联到当前代理站' }}</p>
+        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ tempToken ? '输入验证器动态代码以完成登录' : '注册本站账号' }}</p>
       </div>
 
       <div v-if="error" role="alert" class="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="sm" class="mt-0.5 shrink-0" />{{ error }}</div>
@@ -125,7 +125,7 @@ async function submit(): Promise<void> {
       </div>
 
       <div v-if="availability === 'enabled' && emailVerifyEnabled && !tempToken" class="flex gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm leading-5 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
-        <Icon name="mail" size="sm" class="mt-0.5 shrink-0" />提交后将向该邮箱发送主站验证码，验证成功后才会创建账号。
+        <Icon name="mail" size="sm" class="mt-0.5 shrink-0" />提交后将向该邮箱发送验证码，验证成功后才会创建账号。
       </div>
 
       <form v-if="!loginRequired && (availability === 'enabled' || tempToken)" class="space-y-5" novalidate @submit.prevent="submit">
@@ -162,7 +162,7 @@ async function submit(): Promise<void> {
         </button>
       </form>
 
-      <div class="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/60 dark:text-dark-400">提交注册后，账号先由 Sub2API 主站创建，再由服务端记录本站归属。遇到“账号已创建”提示时请直接登录，不要重复注册。</div>
+      <div class="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/60 dark:text-dark-400">提交注册后，系统会创建账号并记录本站归属。遇到“账号已创建”提示时请直接登录，不要重复注册。</div>
       <p class="text-center text-sm text-gray-500">已有账号？ <RouterLink class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400" to="/login">登录</RouterLink></p>
     </section>
   </main>

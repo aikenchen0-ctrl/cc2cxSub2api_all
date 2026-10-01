@@ -26,17 +26,20 @@ const statusOptions = [
 ]
 const filteredKeys = computed(() => keys.value.filter(key => (!filterStatus.value || key.status === filterStatus.value) && (key.name + ' ' + key.prefix).toLowerCase().includes(search.value.trim().toLowerCase())))
 const keys = ref<AgentAPIKeyView[]>([])
+const configuredAPIBaseURL = ref('')
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 const name = ref('')
-const oneTimeKey = ref('')
+const copiedKeyID = ref<number | null>(null)
+const addressCopied = ref(false)
 const revokeConfirmation = ref<AgentAPIKeyView | null>(null)
 const revokeConfirmationMessage = computed(() => {
   const key = revokeConfirmation.value
   return key ? `确定撤销“${key.name || key.prefix}”吗？撤销后无法继续使用此密钥。` : ''
 })
+const apiBaseURL = computed(() => configuredAPIBaseURL.value.trim() || `${window.location.origin}/v1`)
 
 function formatDate(value?: string): string {
   if (!value) return '—'
@@ -50,6 +53,7 @@ async function load(): Promise<void> {
   try {
     const response = await agentAPI.keys.list()
     keys.value = response.items
+    configuredAPIBaseURL.value = response.api_base_url || ''
   } catch (err) {
     error.value = errorMessage(err, '加载 API 密钥失败，请稍后重试。')
   } finally {
@@ -65,11 +69,10 @@ async function create(): Promise<void> {
   try {
     const response = await agentAPI.keys.create(name.value.trim() || 'AgentAPI 密钥')
     showCreate.value = false
-    oneTimeKey.value = response.key
-    keys.value = [response.item, ...keys.value]
+    keys.value = [{ ...response.item, key: response.item.key || response.key }, ...keys.value]
     name.value = ''
-    notice.value = '完整密钥仅显示一次，请在关闭此提示前复制保存。'
-    showSuccess('API 密钥已创建，请立即复制并妥善保存。')
+    notice.value = 'API 密钥已创建，可随时在密钥列表中复制。'
+    showSuccess('API 密钥已创建。')
   } catch (err) {
     error.value = errorMessage(err, '创建 API 密钥失败，请稍后重试。')
   } finally {
@@ -92,22 +95,35 @@ async function confirmRevoke(): Promise<void> {
   try {
     await agentAPI.keys.revoke(key.id)
     key.status = 'revoked'
-    if (oneTimeKey.value && oneTimeKey.value.startsWith(key.prefix)) oneTimeKey.value = ''
     showSuccess('API 密钥已撤销。')
   } catch (err) {
     error.value = errorMessage(err, '撤销 API 密钥失败，请稍后重试。')
   }
 }
 
-async function copyKey(): Promise<void> {
-  if (!oneTimeKey.value) return
+async function copyStoredKey(key: AgentAPIKeyView): Promise<void> {
+  if (!key.key) {
+    showWarning('密钥正在更新，请刷新后重试。')
+    return
+  }
   try {
-    await navigator.clipboard.writeText(oneTimeKey.value)
+    await navigator.clipboard.writeText(key.key)
+    copiedKeyID.value = key.id
     notice.value = '已复制到剪贴板。请像保护密码一样妥善保管此密钥。'
     showSuccess('密钥已复制到剪贴板。')
   } catch {
     notice.value = '剪贴板访问被阻止，请手动选中并复制密钥。'
     showWarning('剪贴板访问被阻止，请手动复制密钥。')
+  }
+}
+
+async function copyAPIBaseURL(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(apiBaseURL.value)
+    addressCopied.value = true
+    showSuccess('API 调用地址已复制。')
+  } catch {
+    showWarning('剪贴板访问被阻止，请手动复制 API 调用地址。')
   }
 }
 
@@ -123,19 +139,22 @@ onMounted(load)
     </header>
 
     <section class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-      AgentAPI 密钥仅用于本地网关。此处不会显示主站管理员密钥或主站身份令牌。新密钥以哈希形式保存，完整密钥仅显示一次。
+      API 密钥仅用于本站模型接口。所有密钥都会加密保存，可随时点击密钥旁的复制图标复制完整值。
+    </section>
+
+    <section class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+      <p class="text-sm font-medium text-gray-900 dark:text-white">API 调用地址</p>
+      <div class="mt-2 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-dark-900">
+        <code class="min-w-0 flex-1 select-all break-all text-sm text-gray-700 dark:text-dark-200">{{ apiBaseURL }}</code>
+        <button type="button" data-testid="copy-api-base-url" class="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-200" :aria-label="addressCopied ? '调用地址已复制' : '复制 API 调用地址'" :title="addressCopied ? '已复制' : '复制到剪贴板'" @click="copyAPIBaseURL">
+          <Icon v-if="addressCopied" name="check" size="sm" />
+          <Icon v-else name="clipboard" size="sm" />
+        </button>
+      </div>
     </section>
 
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <p v-if="notice" class="rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">{{ notice }}</p>
-
-    <section v-if="oneTimeKey" class="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900/60 dark:bg-blue-950/30">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="font-semibold text-blue-900 dark:text-blue-100">新密钥 — 请立即复制</h2>
-        <button class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700" type="button" @click="copyKey">复制密钥</button>
-      </div>
-      <code class="block select-all break-all rounded-lg bg-white p-3 text-sm text-slate-900 dark:bg-slate-950 dark:text-slate-100">{{ oneTimeKey }}</code>
-    </section>
 
     <TablePageLayout>
       <template #actions>
@@ -154,9 +173,17 @@ onMounted(load)
         </div>
       </template>
       <template #table>
-      <DataTable :columns='[{"key":"name","label":"名称"},{"key":"prefix","label":"前缀"},{"key":"created_at","label":"创建时间"},{"key":"last_used_at","label":"最后使用时间"},{"key":"status","label":"状态"},{"key":"actions","label":"操作"}]' :data="filteredKeys" :loading="loading" row-key="id">
+      <DataTable :columns='[{"key":"name","label":"名称"},{"key":"key","label":"API Key"},{"key":"created_at","label":"创建时间"},{"key":"last_used_at","label":"最后使用时间"},{"key":"status","label":"状态"},{"key":"actions","label":"操作"}]' :data="filteredKeys" :loading="loading" row-key="id">
         <template #cell-name="{ row: key }"><div class="max-w-xl whitespace-normal">{{ key.name || '—' }}</div></template>
-        <template #cell-prefix="{ row: key }"><div class="max-w-xl whitespace-normal">{{ key.prefix }}…</div></template>
+        <template #cell-key="{ row: key }">
+          <div class="flex max-w-xl items-center gap-2">
+            <code class="min-w-0 select-all break-all text-xs">{{ key.key || `${key.prefix}…` }}</code>
+            <button type="button" :data-testid="`copy-key-${key.id}`" class="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300" :class="copiedKeyID === key.id ? 'text-green-500' : ''" :aria-label="copiedKeyID === key.id ? '密钥已复制' : '复制 API 密钥'" :title="copiedKeyID === key.id ? '已复制' : '复制到剪贴板'" @click="copyStoredKey(key)">
+              <Icon v-if="copiedKeyID === key.id" name="check" size="sm" />
+              <Icon v-else name="clipboard" size="sm" />
+            </button>
+          </div>
+        </template>
         <template #cell-created_at="{ row: key }"><div class="max-w-xl whitespace-normal">{{ formatDate(key.created_at) }}</div></template>
         <template #cell-last_used_at="{ row: key }"><div class="max-w-xl whitespace-normal">{{ formatDate(key.last_used_at) }}</div></template>
         <template #cell-status="{ row: key }"><div class="max-w-xl whitespace-normal"><AgentStatusBadge :status="key.status" :label="statusLabel(key.status)" /></div></template>
@@ -170,7 +197,7 @@ onMounted(load)
       <form class="space-y-4" @submit.prevent="create">
         <label for="key-name" class="input-label">密钥名称</label>
         <AgentInput id="key-name" v-model="name" maxlength="100" placeholder="密钥名称，例如：桌面客户端" :disabled="saving" />
-        <p class="text-sm text-gray-500">密钥只用于本代理站；完整密钥仅在创建成功时显示一次。</p>
+        <p class="text-sm text-gray-500">密钥只用于本站；创建后会加密保存，可随时在密钥列表中复制。</p>
         <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
         <div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="saving" @click="showCreate = false">取消</button><button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? '正在创建…' : '创建密钥' }}</button></div>
       </form>

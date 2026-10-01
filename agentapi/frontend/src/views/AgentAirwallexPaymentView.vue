@@ -58,7 +58,7 @@ onMounted(async () => {
     <section v-if="loading" class="card p-10 text-center">
       <span class="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500"></span>
       <h1 class="mt-5 text-xl font-bold text-gray-900 dark:text-white">正在打开 Airwallex</h1>
-      <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">订单由 Sub2API 主站创建，正在加载安全支付页面。</p>
+      <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">订单已创建，正在加载安全支付页面。</p>
     </section>
     <section v-else-if="error" class="card p-8 text-center">
       <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="xl" /></span>

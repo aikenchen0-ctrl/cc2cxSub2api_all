@@ -40,10 +40,16 @@ func runPreflight(ctx context.Context, cfg Config) preflightReport {
 	static("public_link", validPreflightURL(cfg.PublicMainURL))
 	static("session_secret", !cfg.SessionSecretWeak && len(cfg.SessionSecret) >= 32)
 	static("sso_secret", len(cfg.SSOSecret) >= 32)
-	static("user_upstream_mode", cfg.BillingMode == "user_upstream" && !cfg.ProvisioningControlEnabled)
-	uid, err := strconv.ParseInt(cfg.OwnerMainUserID, 10, 64)
+	static("user_upstream_mode", cfg.BillingMode == "user_upstream")
+	probeUserID := strings.TrimSpace(cfg.PreflightMainUserID)
+	if probeUserID == "" && strings.TrimSpace(cfg.AgentID) != "" {
+		// Explicit single-tenant migration mode may reuse its configured owner.
+		// Shared production must configure a separate read-only probe identity.
+		probeUserID = strings.TrimSpace(cfg.OwnerMainUserID)
+	}
+	uid, err := strconv.ParseInt(probeUserID, 10, 64)
 	validUser := err == nil && uid > 0
-	static("owner_identity", validUser)
+	static("probe_identity", validUser)
 	client := NewMainClient(cfg)
 	probe := func(name, target string, headers http.Header, ready bool, validate func(json.RawMessage) bool) {
 		if !ready || !validUser || !validPreflightURL(target) {
@@ -95,12 +101,12 @@ func runPreflight(ctx context.Context, cfg Config) preflightReport {
 	}
 	adminHeaders := make(http.Header)
 	adminHeaders.Set("x-api-key", cfg.MainAdminAPIKey)
-	probe("admin_user_read", client.endpoint("/admin/users/"+url.PathEscape(cfg.OwnerMainUserID)), adminHeaders,
-		cfg.MainAdminAPIKey != "", func(data json.RawMessage) bool { return mainUserIDFromJSON(data) == cfg.OwnerMainUserID })
+	probe("admin_user_read", client.endpoint("/admin/users/"+url.PathEscape(probeUserID)), adminHeaders,
+		cfg.MainAdminAPIKey != "", func(data json.RawMessage) bool { return mainUserIDFromJSON(data) == probeUserID })
 	satelliteHeaders := make(http.Header)
 	satelliteHeaders.Set("Authorization", "Bearer "+cfg.AppCredential)
 	satelliteHeaders.Set("X-Sub2API-Satellite", cfg.SatelliteSlug)
-	satelliteHeaders.Set("X-Sub2API-On-Behalf-Of", cfg.OwnerMainUserID)
+	satelliteHeaders.Set("X-Sub2API-On-Behalf-Of", probeUserID)
 	base := strings.TrimSuffix(strings.TrimRight(cfg.MainModelBaseURL, "/"), "/v1")
 	probe("satellite_balance_read", base+"/v1/sub2api/balance", satelliteHeaders,
 		cfg.AppCredential != "" && cfg.SatelliteSlug == "agentapi", func(data json.RawMessage) bool {

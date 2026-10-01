@@ -78,20 +78,21 @@ func (s *Server) handleAPIKeyUsage(w http.ResponseWriter, r *http.Request, reque
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_DATE_RANGE", err.Error())
 		return
 	}
-	selected, err := s.store.APIKeyUsageInsights(s.cfg.AgentID, principal.ProxyMainUserID, principal.APIKeyID, start, end)
+	agentID := principal.Tenant.AgentID
+	selected, err := s.store.APIKeyUsageInsights(agentID, principal.ProxyMainUserID, principal.APIKeyID, start, end)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load API key usage")
 		return
 	}
 	now := s.store.clock().UTC()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	today, err := s.store.APIKeyUsageInsights(s.cfg.AgentID, principal.ProxyMainUserID, principal.APIKeyID, todayStart, todayStart.Add(24*time.Hour))
+	today, err := s.store.APIKeyUsageInsights(agentID, principal.ProxyMainUserID, principal.APIKeyID, todayStart, todayStart.Add(24*time.Hour))
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load today's API key usage")
 		return
 	}
 	dailyStart := time.Date(now.Year(), now.Month(), now.Day()+1-dailyDays, 0, 0, 0, 0, time.UTC)
-	daily, err := s.store.APIKeyUsageInsights(s.cfg.AgentID, principal.ProxyMainUserID, principal.APIKeyID, dailyStart, todayStart.Add(24*time.Hour))
+	daily, err := s.store.APIKeyUsageInsights(agentID, principal.ProxyMainUserID, principal.APIKeyID, dailyStart, todayStart.Add(24*time.Hour))
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load daily API key usage")
 		return
@@ -134,11 +135,15 @@ func (s *Server) handleAPIKeyUsage(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) requireAgentAPIKeyPrincipal(w http.ResponseWriter, r *http.Request, requestID string) (modelPrincipal, bool) {
 	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
 	parts := strings.SplitN(authorization, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(strings.TrimSpace(parts[0]), "Bearer") || !strings.HasPrefix(strings.TrimSpace(parts[1]), "sk-agent-") {
+	key := ""
+	if len(parts) == 2 {
+		key = strings.TrimSpace(parts[1])
+	}
+	if len(parts) != 2 || !strings.EqualFold(strings.TrimSpace(parts[0]), "Bearer") || !strings.HasPrefix(key, "sk-") || strings.HasPrefix(key, "sk-super-") {
 		s.writeError(w, http.StatusUnauthorized, requestID, "INVALID_AGENT_API_KEY", "a valid AgentAPI bearer key is required")
 		return modelPrincipal{}, false
 	}
-	resolved, err := s.store.ResolveAPIKeyDetails(s.cfg.AgentID, strings.TrimSpace(parts[1]))
+	resolved, err := s.store.ResolveAPIKeyDetailsAnyTenant(key)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			s.writeError(w, http.StatusUnauthorized, requestID, "INVALID_AGENT_API_KEY", "AgentAPI API key is invalid or revoked")
@@ -147,10 +152,11 @@ func (s *Server) requireAgentAPIKeyPrincipal(w http.ResponseWriter, r *http.Requ
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to resolve AgentAPI API key")
 		return modelPrincipal{}, false
 	}
-	user, err := s.store.User(s.cfg.AgentID, resolved.MainUserID)
+	user, err := s.store.User(resolved.AgentID, resolved.MainUserID)
 	if err != nil || user.Status != "active" {
 		s.writeError(w, http.StatusUnauthorized, requestID, "AGENT_USER_NOT_FOUND", "AgentAPI user mapping is unavailable")
 		return modelPrincipal{}, false
 	}
-	return modelPrincipal{ProxyMainUserID: resolved.MainUserID, User: user, APIKeyID: resolved.ID, APIKeyName: resolved.Name, APIKeyPrefix: resolved.Prefix}, true
+	tenant := TenantContext{AgentID: resolved.AgentID, MainUserID: resolved.MainUserID, Role: tenantRoleMember, Source: tenantSourceAPIKey}
+	return modelPrincipal{Tenant: tenant, ProxyMainUserID: resolved.MainUserID, User: user, APIKeyID: resolved.ID, APIKeyName: resolved.Name, APIKeyPrefix: resolved.Prefix}, true
 }

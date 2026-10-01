@@ -64,7 +64,7 @@ function settlementLabel(value: string): string {
             <Icon name="sync" size="lg" class="text-primary-600 dark:text-primary-400" />
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">用量同步</h2>
           </div>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">核对本站请求与主站用量事实。代理站不在这里扣费或退款，最终金额以 Sub2API 账本为准。</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">核对本站请求与已同步用量记录；此处仅用于查看和核对。</p>
         </div>
         <button type="button" class="btn btn-primary" :disabled="reconciling" @click="$emit('reconcile')">
           <Icon name="refresh" size="sm" :class="['mr-2', reconciling ? 'animate-spin' : '']" />
@@ -93,7 +93,7 @@ function settlementLabel(value: string): string {
 
     <template #table>
       <DataTable
-        :columns='[{"key":"request_id","label":"请求编号"},{"key":"user","label":"归属用户"},{"key":"model","label":"模型"},{"key":"cost","label":"主站实际费用"},{"key":"status","label":"同步状态"},{"key":"updated_at","label":"更新时间"},{"key":"error","label":"说明"}]'
+        :columns='[{"key":"request_id","label":"请求编号"},{"key":"user","label":"归属用户"},{"key":"model","label":"模型"},{"key":"cost","label":"实际费用"},{"key":"status","label":"同步状态"},{"key":"updated_at","label":"更新时间"},{"key":"error","label":"说明"}]'
         :data="filteredItems"
         :loading="loading"
         row-key="request_id"
@@ -106,10 +106,10 @@ function settlementLabel(value: string): string {
           </div>
         </template>
         <template #cell-model="{ row: item }"><span class="font-mono text-xs">{{ item.model || '—' }}</span></template>
-        <template #cell-cost="{ row: item }"><span :class="item.status === 'pending' ? 'text-gray-400' : 'font-medium text-gray-900 dark:text-white'">{{ item.status === 'pending' ? '待主站确认' : formatMoney(item.actual_cents) }}</span></template>
+        <template #cell-cost="{ row: item }"><span :class="item.status === 'pending' ? 'text-gray-400' : 'font-medium text-gray-900 dark:text-white'">{{ item.status === 'pending' ? '待确认' : formatMoney(item.actual_cents) }}</span></template>
         <template #cell-status="{ row: item }"><AgentStatusBadge :status="item.status" :label="settlementLabel(item.status)" /></template>
         <template #cell-updated_at="{ row: item }"><span class="whitespace-nowrap text-gray-500 dark:text-dark-400">{{ formatTime(item.updated_at || item.created_at) }}</span></template>
-        <template #cell-error="{ row: item }"><span class="max-w-xs whitespace-normal text-sm text-gray-500 dark:text-dark-400">{{ errorMessage({ message: item.error }, item.status === 'pending' ? '等待主站用量记录' : '—') }}</span></template>
+        <template #cell-error="{ row: item }"><span class="max-w-xs whitespace-normal text-sm text-gray-500 dark:text-dark-400">{{ errorMessage({ message: item.error }, item.status === 'pending' ? '等待用量记录' : '—') }}</span></template>
         <template #empty>
           <div class="flex flex-col items-center py-8">
             <Icon :name="loadFailed ? 'exclamationTriangle' : 'sync'" size="xl" class="mb-3 text-gray-300 dark:text-dark-600" />

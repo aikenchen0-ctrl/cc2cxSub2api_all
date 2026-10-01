@@ -3,12 +3,35 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func pragmaIndexColumns(t *testing.T, db *sql.DB, index string) []string {
+	t.Helper()
+	rows, err := db.Query(fmt.Sprintf(`PRAGMA index_info(%q)`, index))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var sequence, columnID int
+		var name string
+		if err := rows.Scan(&sequence, &columnID, &name); err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return columns
+}
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
@@ -27,6 +50,190 @@ func testStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+func TestFreshStoreDoesNotCreateRemovedManagementTables(t *testing.T) {
+	store := testStore(t)
+	for _, table := range []string{
+		"agent_content_pages",
+		"agent_plan_policies",
+		"agent_model_policies",
+		"agent_group_policies",
+		"agent_config_backups",
+		"agent_prompt_audit_events",
+		"agent_prompt_audit_policies",
+		"agent_risk_events",
+		"agent_risk_policies",
+		"agent_risk_rate_buckets",
+	} {
+		var name string
+		err := store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("removed management table %q still exists: name=%q err=%v", table, name, err)
+		}
+	}
+}
+
+func TestTenantSchemaContracts(t *testing.T) {
+	store := testStore(t)
+	tenantTables := []string{
+		"registration_intents", "registration_limits", "agent_config", "agent_users", "sessions",
+		"agent_wallets", "agent_user_wallets", "wallet_ledger", "agent_api_keys", "agent_balance_snapshots",
+		"settlements", "recharge_orders", "payment_events", "payment_config", "audit_events",
+		"agent_announcements", "agent_announcement_reads", "video_tasks", "image_tasks",
+	}
+	for _, table := range tenantTables {
+		rows, err := store.db.Query(fmt.Sprintf(`PRAGMA table_info(%q)`, table))
+		if err != nil {
+			t.Fatalf("inspect %s: %v", table, err)
+		}
+		foundAgentID, agentIDNotNull := false, false
+		for rows.Next() {
+			var position, notNull, primaryKey int
+			var name, dataType string
+			var defaultValue any
+			if err := rows.Scan(&position, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+				_ = rows.Close()
+				t.Fatalf("inspect %s column: %v", table, err)
+			}
+			if name == "agent_id" {
+				foundAgentID = true
+				agentIDNotNull = notNull == 1 || primaryKey > 0
+			}
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatalf("close %s schema rows: %v", table, err)
+		}
+		if !foundAgentID || !agentIDNotNull {
+			t.Fatalf("tenant table %s must have a non-null agent_id column", table)
+		}
+	}
+
+	expectedIndexes := map[string][]string{
+		"idx_agent_api_keys_user":           {"agent_id", "main_user_id", "status"},
+		"idx_agent_balance_snapshots_agent": {"agent_id", "checked_at"},
+		"idx_settlements_agent_user":        {"agent_id", "proxy_main_user_id", "created_at"},
+		"idx_settlements_agent_key":         {"agent_id", "agent_api_key_id", "created_at"},
+		"idx_recharge_orders_user":          {"agent_id", "main_user_id", "created_at"},
+		"idx_recharge_orders_status":        {"agent_id", "status", "updated_at"},
+		"idx_audit_events_agent":            {"agent_id", "id"},
+		"idx_agent_announcements_visible":   {"agent_id", "status", "starts_at", "ends_at", "id"},
+		"idx_agent_announcement_reads_user": {"agent_id", "main_user_id", "read_at"},
+		"idx_video_tasks_user":              {"agent_id", "main_user_id", "updated_at"},
+		"idx_image_tasks_user":              {"agent_id", "main_user_id", "updated_at"},
+	}
+	for index, expected := range expectedIndexes {
+		actual := pragmaIndexColumns(t, store.db, index)
+		if strings.Join(actual, ",") != strings.Join(expected, ",") {
+			t.Fatalf("index %s columns = %v, want %v", index, actual, expected)
+		}
+	}
+}
+
+func TestAnnouncementReadSchemaRejectsCrossTenantParent(t *testing.T) {
+	store := testStore(t)
+	other := Config{AgentID: "agent-other", AgentName: "Other", SiteName: "Other"}
+	if err := store.UpsertAgent(other); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertUser(other.AgentID, "42", "other@example.com", "Other User"); err != nil {
+		t.Fatal(err)
+	}
+	announcement, err := store.CreateAnnouncement("agent-test", "Tenant A", "Only tenant A may read this", "active", "silent", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.db.Exec(`INSERT INTO agent_announcement_reads(agent_id, announcement_id, main_user_id, read_at) VALUES (?, ?, ?, ?)`, other.AgentID, announcement.ID, "42", time.Now().UTC().Unix())
+	if err == nil || !strings.Contains(err.Error(), "announcement tenant mismatch") {
+		t.Fatalf("cross-tenant announcement read insert error = %v, want tenant mismatch", err)
+	}
+}
+
+func TestStoreStartupRejectsLegacyCrossTenantAnnouncementRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-cross-tenant-read.sqlite")
+	store, err := OpenStore(path, "test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cfg := range []Config{
+		{AgentID: "agent-a", AgentName: "Agent A", SiteName: "Agent A"},
+		{AgentID: "agent-b", AgentName: "Agent B", SiteName: "Agent B"},
+	} {
+		if err := store.UpsertAgent(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpsertUser(cfg.AgentID, "42", cfg.AgentID+"@example.com", cfg.AgentName); err != nil {
+			t.Fatal(err)
+		}
+	}
+	announcement, err := store.CreateAnnouncement("agent-a", "Agent A", "Tenant-owned", "active", "silent", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, trigger := range []string{
+		"trg_agent_announcement_reads_tenant_insert",
+		"trg_agent_announcement_reads_tenant_update",
+	} {
+		if _, err := store.db.Exec(`DROP TRIGGER ` + trigger); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.db.Exec(`INSERT INTO agent_announcement_reads(agent_id, announcement_id, main_user_id, read_at) VALUES ('agent-b', ?, '42', ?)`, announcement.ID, time.Now().UTC().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenStore(path, "test-secret")
+	if reopened != nil {
+		_ = reopened.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "cross-tenant or orphaned rows") {
+		t.Fatalf("OpenStore error = %v, want legacy tenant audit failure", err)
+	}
+}
+
+func TestStoreMigrationDropsRetiredManagementTables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-management.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removedTables := []string{
+		"agent_content_pages",
+		"agent_plan_policies",
+		"agent_model_policies",
+		"agent_group_policies",
+		"agent_config_backups",
+		"agent_prompt_audit_events",
+		"agent_prompt_audit_policies",
+		"agent_risk_events",
+		"agent_risk_policies",
+		"agent_risk_rate_buckets",
+	}
+	for _, table := range removedTables {
+		if _, err := db.Exec(`CREATE TABLE ` + table + ` (id INTEGER PRIMARY KEY)`); err != nil {
+			_ = db.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenStore(path, "test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	for _, table := range removedTables {
+		var name string
+		err := store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("retired table %q survived migration: name=%q err=%v", table, name, err)
+		}
+	}
 }
 
 func TestPaymentConfigIsInstanceScopedAndEncryptsWebhookSecret(t *testing.T) {
@@ -180,44 +387,6 @@ func TestUsersPageReturnsStablePagesAndAgentScopedTotals(t *testing.T) {
 	activeItems, activeTotal, err := store.UsersPageFiltered("agent-test", 20, 0, "", "active")
 	if err != nil || activeTotal != 10 || len(activeItems) != 10 {
 		t.Fatalf("active status filter returned the wrong page: items=%+v total=%d err=%v", activeItems, activeTotal, err)
-	}
-}
-
-func TestAgentModelPolicyDefaultsToPublicCatalogAndPersistsAValidatedSubset(t *testing.T) {
-	store := testStore(t)
-	policy, err := store.AgentModelPolicy("agent-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(publicModelCatalog, ",") {
-		t.Fatalf("unexpected default model policy: customized=%v enabled=%v", policy.Customized, policy.Enabled)
-	}
-
-	policy, err = store.UpdateAgentModelPolicy("agent-test", []string{"gpt-image-2", "gpt-5.5"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"gpt-5.5", "gpt-image-2"}
-	if !policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(want, ",") {
-		t.Fatalf("unexpected saved model policy: customized=%v enabled=%v", policy.Customized, policy.Enabled)
-	}
-
-	policy, err = store.AgentModelPolicy("agent-test")
-	if err != nil || !policy.Customized || strings.Join(policy.Enabled, ",") != strings.Join(want, ",") {
-		t.Fatalf("model policy was not persisted: policy=%+v err=%v", policy, err)
-	}
-	if _, err := store.UpdateAgentModelPolicy("agent-test", []string{"private-provider-model"}); err == nil {
-		t.Fatal("model outside the public catalog was accepted")
-	}
-	if _, err := store.UpdateAgentModelPolicy("agent-test", []string{"gpt-5.5", "gpt-5.5"}); err == nil {
-		t.Fatal("duplicate models were accepted")
-	}
-	policy, err = store.UpdateAgentModelPolicy("agent-test", []string{})
-	if err != nil || !policy.Customized || len(policy.Enabled) != 0 {
-		t.Fatalf("explicit empty policy should disable all models: policy=%+v err=%v", policy, err)
-	}
-	if _, err := store.UpdateAgentModelPolicy("missing-agent", []string{"gpt-5.5"}); !errors.Is(err, errNotFound) {
-		t.Fatalf("unknown Agent policy update error=%v, want not found", err)
 	}
 }
 
@@ -588,6 +757,40 @@ func TestOwnerChangeRejectsPendingSettlement(t *testing.T) {
 	}
 }
 
+func TestAgentOwnerIsImmutableWithoutFinancialActivity(t *testing.T) {
+	store := testStore(t)
+	const agentID = "owner-immutable-empty"
+	if err := store.UpsertAgent(Config{
+		AgentID:         agentID,
+		AgentName:       "Owner Immutable",
+		SiteName:        "Owner Immutable",
+		OwnerMainUserID: "original-owner",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ownership identifies the tenant itself. It must remain immutable even
+	// before the tenant has a wallet balance, allocation or settlement; those
+	// financial rows are diagnostic context, not the security boundary.
+	err := store.UpsertAgent(Config{
+		AgentID:         agentID,
+		AgentName:       "Test",
+		SiteName:        "Test",
+		OwnerMainUserID: "different-owner",
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent owner is immutable") {
+		t.Fatalf("owner change without financial activity was accepted: %v", err)
+	}
+
+	agent, getErr := store.Agent(agentID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if agent.OwnerMainUserID != "original-owner" {
+		t.Fatalf("owner changed after rejected upsert: %q", agent.OwnerMainUserID)
+	}
+}
+
 func TestDisabledAgentStartsSuspended(t *testing.T) {
 	store, err := OpenStore(":memory:", "test-secret")
 	if err != nil {
@@ -596,7 +799,7 @@ func TestDisabledAgentStartsSuspended(t *testing.T) {
 	defer store.Close()
 	cfg := Config{
 		AgentID: "disabled-agent", AgentName: "Disabled", SiteName: "Disabled",
-		RuntimeControlCredential: "agt_ctl_test-control-secret", AppCredential: "app", OwnerMainUserID: "owner", BillingMode: "owner_upstream", AgentDisabled: true,
+		AppCredential: "app", OwnerMainUserID: "owner", BillingMode: "owner_upstream", AgentDisabled: true,
 	}
 	if err := store.UpsertAgent(cfg); err != nil {
 		t.Fatal(err)
@@ -610,26 +813,6 @@ func TestDisabledAgentStartsSuspended(t *testing.T) {
 	}
 }
 
-func TestRuntimeControlCredentialIsRequiredOnlyForProvisionedAgents(t *testing.T) {
-	cfg := Config{
-		AgentID: "agent-local", AppCredential: "app", OwnerMainUserID: "owner",
-		BillingMode: "owner_upstream",
-	}
-	if got := agentConfigStatus(cfg); got != "active" {
-		t.Fatalf("local agent without provisioning control status=%q, want active", got)
-	}
-
-	cfg.AgentID = "agt_test"
-	cfg.ProvisioningControlEnabled = true
-	if got := agentConfigStatus(cfg); got != "suspended" {
-		t.Fatalf("managed agent without runtime control credential status=%q, want suspended", got)
-	}
-	cfg.RuntimeControlCredential = "agt_ctl_test-runtime-control-secret"
-	if got := agentConfigStatus(cfg); got != "active" {
-		t.Fatalf("managed agent with runtime control credential status=%q, want active", got)
-	}
-}
-
 func TestBrandingUpdateSurvivesRestartUnlessEnvSyncIsExplicit(t *testing.T) {
 	store, err := OpenStore(":memory:", "test-secret")
 	if err != nil {
@@ -640,7 +823,7 @@ func TestBrandingUpdateSurvivesRestartUnlessEnvSyncIsExplicit(t *testing.T) {
 	if err := store.UpsertAgent(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.UpdateBranding(cfg.AgentID, "Edited", "Edited Site", "https://cdn.example.com/edited.svg", "https://docs.example.com/agent", "support@example.com", AgentHomeSettings{SiteSubtitle: "Edited subtitle", CompactHomeEnabled: true, HomeContent: "<h1>Edited home</h1>"}); err != nil {
+	if _, err := store.UpdateBranding(cfg.AgentID, "Edited", "Edited Site", "https://cdn.example.com/edited.svg", "https://docs.example.com/agent", "support@example.com", "https://agent.example.com/v1", AgentHomeSettings{SiteSubtitle: "Edited subtitle", CompactHomeEnabled: true, HomeContent: "<h1>Edited home</h1>"}); err != nil {
 		t.Fatal(err)
 	}
 	// A normal restart keeps the admin-edited branding instead of silently
@@ -693,12 +876,28 @@ func TestAgentAPIKeyIsOneTimeVisibleAndRevocable(t *testing.T) {
 	if raw == "" || view.Prefix == "" || view.Status != "active" {
 		t.Fatalf("unexpected key creation result: view=%+v raw=%q", view, raw)
 	}
+	if view.Key != raw {
+		t.Fatalf("created key view did not retain the recoverable key")
+	}
+	if !strings.HasPrefix(raw, "sk-") || strings.HasPrefix(raw, "sk-agent-") {
+		t.Fatalf("new AgentAPI key has unexpected format: %q", raw)
+	}
 	keys, err := store.APIKeys("agent-test", "42")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(keys) != 1 || keys[0].Prefix != view.Prefix || keys[0].Name != "desktop client" {
 		t.Fatalf("unexpected key list: %+v", keys)
+	}
+	if keys[0].Key != raw {
+		t.Fatalf("listed key is not recoverable: %+v", keys[0])
+	}
+	var storedHash, storedCiphertext string
+	if err := store.db.QueryRow(`SELECT key_hash,key_ciphertext FROM agent_api_keys WHERE id=?`, view.ID).Scan(&storedHash, &storedCiphertext); err != nil {
+		t.Fatal(err)
+	}
+	if storedHash == raw || storedCiphertext == raw || storedCiphertext == "" {
+		t.Fatalf("key was not protected at rest: hash=%q ciphertext_present=%v", storedHash, storedCiphertext != "")
 	}
 	if _, err := store.ResolveAPIKey("agent-test", raw); err != nil {
 		t.Fatalf("created key did not resolve: %v", err)
@@ -711,6 +910,42 @@ func TestAgentAPIKeyIsOneTimeVisibleAndRevocable(t *testing.T) {
 	}
 	if _, err := store.ResolveAPIKey("agent-test", raw); !errors.Is(err, errNotFound) {
 		t.Fatalf("revoked key resolved: %v", err)
+	}
+}
+
+func TestLegacyAgentAPIKeyBecomesRecoverableWithoutBreakingExistingCredential(t *testing.T) {
+	store := testStore(t)
+	legacyKey := "sk-legacy-client-secret"
+	now := time.Now().UTC().Unix()
+	result, err := store.db.Exec(`INSERT INTO agent_api_keys(agent_id,main_user_id,name,prefix,key_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?)`,
+		"agent-test", "42", "legacy client", "sk-legacy-client", hashToken(legacyKey), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys, err := store.APIKeys("agent-test", "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 1 || keys[0].ID != id || !strings.HasPrefix(keys[0].Key, "sk-") || keys[0].Key == legacyKey {
+		t.Fatalf("legacy key was not upgraded to a recoverable value: %+v", keys)
+	}
+	var currentHash, legacyHash, ciphertext string
+	if err := store.db.QueryRow(`SELECT key_hash,legacy_key_hash,key_ciphertext FROM agent_api_keys WHERE id=?`, id).Scan(&currentHash, &legacyHash, &ciphertext); err != nil {
+		t.Fatal(err)
+	}
+	if currentHash != hashToken(keys[0].Key) || legacyHash != hashToken(legacyKey) || ciphertext == "" {
+		t.Fatalf("legacy key upgrade was not persisted safely: current=%q legacy=%q ciphertext_present=%v", currentHash, legacyHash, ciphertext != "")
+	}
+	if _, err := store.ResolveAPIKey("agent-test", legacyKey); err != nil {
+		t.Fatalf("existing credential stopped resolving after upgrade: %v", err)
+	}
+	if _, err := store.ResolveAPIKey("agent-test", keys[0].Key); err != nil {
+		t.Fatalf("recoverable credential did not resolve after upgrade: %v", err)
 	}
 }
 

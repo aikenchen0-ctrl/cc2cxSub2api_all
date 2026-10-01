@@ -120,8 +120,7 @@ func TestOwnerKeyManagementCannotEscapeMembership(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		actor, target string
-		code          int
-	}{{"42", "43", 201}, {"43", "42", 403}, {"42", "999", 404}} {
+	}{{"42", "43"}, {"43", "42"}, {"42", "999"}} {
 		session, err := s.store.CreateSession(tc.actor, []byte(`{"id":"`+tc.actor+`"}`), "", "", time.Now().Add(sessionTTL))
 		if err != nil {
 			t.Fatal(err)
@@ -130,17 +129,17 @@ func TestOwnerKeyManagementCannotEscapeMembership(t *testing.T) {
 		req.AddCookie(&http.Cookie{Name: s.cfg.CookieName, Value: session})
 		rec := httptest.NewRecorder()
 		s.ServeHTTP(rec, req)
-		if rec.Code != tc.code {
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "CROSS_USER_KEY_MANAGEMENT_DISABLED") {
 			t.Fatalf("%s -> %s: %d %s", tc.actor, tc.target, rec.Code, rec.Body.String())
 		}
 	}
 	keys, err := s.store.APIKeys(s.cfg.AgentID, "43")
-	if err != nil || len(keys) != 1 {
+	if err != nil || len(keys) != 0 {
 		t.Fatalf("wrong key owner: %+v %v", keys, err)
 	}
 	events, err := s.store.AuditEvents(s.cfg.AgentID, 10)
-	if err != nil || len(events) != 1 || events[0].ActorType != "agent_admin" || events[0].ActorID != "42" || events[0].Reason != "key_user_id=43" {
-		t.Fatalf("missing delegated key audit: %+v %v", events, err)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("forbidden delegated key operation produced audit events: %+v %v", events, err)
 	}
 }
 
@@ -164,7 +163,7 @@ func TestDirectRelayUsesMainRecordWithoutReservationLimit(t *testing.T) {
 	}))
 	defer upstream.Close()
 	s := testServer(t, upstream)
-	s.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, s, "user_upstream")
 	s.cfg.MainUsageAPI = true
 	s.main = NewMainClient(s.cfg)
 	for _, id := range []string{"42", "43"} {

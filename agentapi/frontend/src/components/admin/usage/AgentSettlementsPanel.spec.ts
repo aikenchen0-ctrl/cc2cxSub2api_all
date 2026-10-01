@@ -12,7 +12,7 @@ describe('AgentSettlementsPanel', () => {
     const wrapper = mount(AgentSettlementsPanel, { props: { items } })
     expect(wrapper.text()).toContain('req-pending')
     expect(wrapper.text()).toContain('req-confirmed')
-    expect(wrapper.text()).toContain('待主站确认')
+    expect(wrapper.text()).toContain('待确认')
 
     await wrapper.get('#settlement-status').trigger('click')
     await flushPromises()

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { DEFAULT_SETTINGS, SETTINGS_STORAGE_VERSION } from '../src/config/appConfig.js'
 import { getGenerationRequestOptions, getProviderPlan } from '../src/services/modelApi.js'
 
 describe('前端混元生成模式映射', () => {
@@ -22,5 +23,15 @@ describe('前端混元生成模式映射', () => {
     assert.equal(sketch.model, '3.0')
     assert.equal(sketch.generateType, 'Sketch')
     assert.deepEqual(photo, { provider: 'hunyuan', model: '3.1', generateType: 'Normal', prompt: '' })
+  })
+})
+
+describe('GLB 生成后端默认值', () => {
+  it('默认使用混元，自动模式也只尝试真实 GLB 后端', () => {
+    assert.equal(DEFAULT_SETTINGS.generationMode, 'hunyuan')
+    assert.equal(DEFAULT_SETTINGS.generationProvider, 'hunyuan')
+    assert.ok(SETTINGS_STORAGE_VERSION >= 12)
+    assert.deepEqual(getProviderPlan('auto'), ['hunyuan', 'tripo', 'fal', 'rodin'])
+    assert.equal(getProviderPlan('auto').includes('cinematic'), false)
   })
 })

@@ -135,13 +135,13 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
     <main class="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
       <div class="text-center">
         <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Key 用量查询</h1>
-        <p class="mx-auto mt-3 max-w-xl text-gray-500 dark:text-dark-400">输入当前代理站创建的 API Key，查询该 Key 在主站结算后的用量与费用。</p>
+        <p class="mx-auto mt-3 max-w-xl text-gray-500 dark:text-dark-400">输入本站创建的 API Key，查询该 Key 的用量与费用。</p>
       </div>
 
       <section class="mx-auto mt-10 max-w-2xl">
         <div class="flex flex-col gap-3 sm:flex-row">
           <div class="min-w-0 flex-1">
-            <AgentInput v-model="apiKey" aria-label="API Key" :type="keyVisible ? 'text' : 'password'" autocomplete="off" placeholder="sk-agent-..." class="h-12 rounded-xl" @enter="queryKey">
+            <AgentInput v-model="apiKey" aria-label="API Key" :type="keyVisible ? 'text' : 'password'" autocomplete="off" placeholder="sk-..." class="h-12 rounded-xl" @enter="queryKey">
               <template #suffix>
                 <button type="button" class="rounded p-1 text-gray-400" :aria-label="keyVisible ? '隐藏 Key' : '显示 Key'" @click="keyVisible = !keyVisible">
                   <Icon :name="keyVisible ? 'eyeOff' : 'eye'" size="sm" />
@@ -153,7 +153,7 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
             {{ loading ? '查询中…' : '查询' }}
           </button>
         </div>
-        <p class="mt-3 text-center text-xs text-gray-400">Key 仅发送到当前代理站，不会写入浏览器存储，也不会作为主站 Key 转发。</p>
+        <p class="mt-3 text-center text-xs text-gray-400">Key 仅发送到本站，不会写入浏览器存储，也不会被转发或泄露。</p>
         <p v-if="error" role="alert" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
       </section>
 
@@ -177,14 +177,14 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
             <p class="mt-1 text-sm text-gray-500">{{ result.key?.name || 'AgentAPI Key' }} · {{ result.key?.prefix }}…</p>
           </article>
           <article class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-dark-800 dark:bg-dark-900">
-            <p class="text-xs uppercase tracking-wider text-gray-400">主站钱包余额</p>
+            <p class="text-xs uppercase tracking-wider text-gray-400">账户余额</p>
             <p class="mt-3 text-3xl font-bold tabular-nums">{{ formatUSD(result.balance) }}</p>
-            <p class="mt-1 text-sm text-gray-500">计费仍由 Sub2API 主站完成</p>
+            <p class="mt-1 text-sm text-gray-500">按本站统一计费规则结算</p>
           </article>
           <article class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-dark-800 dark:bg-dark-900">
             <p class="text-xs uppercase tracking-wider text-gray-400">数据完整度</p>
             <p class="mt-3 text-xl font-semibold">{{ result.status_detail === 'partial' ? '部分同步' : result.status_detail === 'empty' ? '暂无用量' : '已同步' }}</p>
-            <p class="mt-1 text-sm text-gray-500">展示代理站已记录的主站权威用量快照</p>
+            <p class="mt-1 text-sm text-gray-500">展示本站已记录的权威用量快照</p>
           </article>
         </section>
 

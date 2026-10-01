@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 
 import { generateQrArtwork } from "./qr-generator.js";
 import { buildSquareQrPlatePreview } from "./mask-processor.js";
+import { stylizeQrImage } from "./art-qr.js";
 import { urlToQrImage, isValidUrl } from "./url-to-qr.js";
 import { APP_CONFIG } from "./config.js";
 import {
@@ -527,10 +528,7 @@ async function readWechatJson(response, fallbackMessage) {
 
 export function createQrApp({
   generate = generateQrArtwork,
-  // Keep an injection point for tests and local extensions. The production
-  // path intentionally uses the same Sub2API image relay as /api/generate;
-  // it must not call the retired third-party art-QR API.
-  stylize = null,
+  stylize = stylizeQrImage,
   wechatFetch = fetch,
   corsOrigin = APP_CONFIG.corsOrigin,
   generateConcurrency = APP_CONFIG.generateConcurrency,

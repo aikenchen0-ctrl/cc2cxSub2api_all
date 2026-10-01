@@ -170,7 +170,7 @@ func (s *Server) handleUsageInsights(w http.ResponseWriter, r *http.Request, req
 		s.writeError(w, 405, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
 		return
 	}
-	session, _, ok := s.requireSession(w, r, requestID)
+	tenant, session, _, ok := s.requireTenantSession(w, r, requestID)
 	if !ok {
 		return
 	}
@@ -186,7 +186,7 @@ func (s *Server) handleUsageInsights(w http.ResponseWriter, r *http.Request, req
 	// Persisted request times have second precision. A single end anchors all
 	// dimensions, using the half-open interval [start,end).
 	end := s.store.clock().UTC().Truncate(time.Second)
-	result, err := s.store.UsageInsights(s.cfg.AgentID, userID, end.Add(-duration), end)
+	result, err := s.store.UsageInsights(tenant.AgentID, userID, end.Add(-duration), end)
 	if err != nil {
 		s.writeError(w, 500, requestID, "STORE_ERROR", "failed to load usage insights")
 		return

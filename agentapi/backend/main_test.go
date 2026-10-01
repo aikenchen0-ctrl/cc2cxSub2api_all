@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -15,13 +16,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
-
-const testRuntimeControlCredential = "agt_ctl_test-runtime-control-secret-0123456789abcdef"
 
 func makeSSOTicket(t *testing.T, secret string, payload map[string]any) string {
 	t.Helper()
@@ -35,26 +33,38 @@ func makeSSOTicket(t *testing.T, secret string, payload map[string]any) string {
 	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
+func makeSharedAgentSSOTicket(t *testing.T, server *Server, subject, agentID, role, agentName, jti string) string {
+	t.Helper()
+	now := time.Now().UTC()
+	return makeSSOTicket(t, server.cfg.SSOSecret, map[string]any{
+		"iss": "sub2api", "aud": server.cfg.SSOAudience, "sub": subject,
+		"email": subject + "@example.com", "displayName": "User " + subject,
+		"agent_id": agentID, "agent_role": role, "agent_name": agentName,
+		"iat": now.Unix(), "exp": now.Add(90 * time.Second).Unix(), "jti": jti, "next": "/dashboard",
+	})
+}
+
 func testServer(t *testing.T, upstream *httptest.Server) *Server {
 	t.Helper()
 	cfg := Config{
-		Addr:                       ":0",
-		DatabasePath:               ":memory:",
-		MainAPIBaseURL:             upstream.URL + "/api/v1",
-		MainAdminAPIKey:            "test-main-admin-key",
-		MainModelBaseURL:           upstream.URL + "/v1",
-		RuntimeControlCredential:   testRuntimeControlCredential,
-		AppCredential:              "app-secret",
-		SatelliteSlug:              "agentapi",
-		SessionSecret:              "session-secret",
-		CookieName:                 "agentapi_session",
-		AgentID:                    "agent-test",
-		AgentName:                  "Agent Test",
-		SiteName:                   "Agent Test",
-		OwnerMainUserID:            "42",
-		MaxRequestCostCents:        100,
-		MainRequestTimeout:         0,
-		ProvisioningControlEnabled: false,
+		Addr:                ":0",
+		DatabasePath:        ":memory:",
+		MainAPIBaseURL:      upstream.URL + "/api/v1",
+		MainAdminAPIKey:     "test-main-admin-key",
+		MainModelBaseURL:    upstream.URL + "/v1",
+		AppCredential:       "app-secret",
+		SatelliteSlug:       "agentapi",
+		SSOSecret:           "test-sso-secret-0123456789abcdef",
+		SSOAudience:         "agentapi",
+		SessionSecret:       "session-secret",
+		CookieName:          "agentapi_session",
+		AgentID:             "agent-test",
+		AgentName:           "Agent Test",
+		SiteName:            "Agent Test",
+		BillingMode:         "owner_upstream",
+		OwnerMainUserID:     "42",
+		MaxRequestCostCents: 100,
+		MainRequestTimeout:  0,
 	}
 	// http.Client treats a zero timeout as no timeout; use the normal value for
 	// the production client path.
@@ -69,11 +79,161 @@ func testServer(t *testing.T, upstream *httptest.Server) *Server {
 	if _, err := store.UpsertUser(cfg.AgentID, "42", "u@example.com", "User"); err != nil {
 		t.Fatal(err)
 	}
-	legacyClientConfig := cfg
-	legacyClientConfig.ProvisioningControlEnabled = true
-	s := &Server{cfg: cfg, store: store, main: NewMainClient(legacyClientConfig), webDir: "", settleByUser: map[string]*sync.Mutex{}}
+	s := &Server{cfg: cfg, store: store, main: NewMainClient(cfg), webDir: ""}
 	t.Cleanup(func() { _ = store.Close() })
 	return s
+}
+
+func setTenantBillingModeForTest(t *testing.T, s *Server, mode string) {
+	t.Helper()
+	if _, err := s.store.db.Exec(`UPDATE agent_config SET billing_mode=? WHERE agent_id=?`, mode, s.cfg.AgentID); err != nil {
+		t.Fatalf("set persisted tenant billing mode: %v", err)
+	}
+}
+
+func TestHealthDoesNotExposeProcessTenant(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), "agent_id") {
+		t.Fatalf("health response leaked process tenant: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSharedAgentSSOCreatesTenantAndOwnerSession(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	agentID := "agt_0123456789abcdef0123456789abcdef"
+	raw := makeSharedAgentSSOTicket(t, server, "77", agentID, tenantRoleOwner, "Alice Station", "shared-create")
+
+	request := httptest.NewRequest(http.MethodGet, "http://shared.example/api/auth/sso/callback?ticket="+url.QueryEscape(raw), nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/dashboard" {
+		t.Fatalf("shared SSO status=%d location=%q body=%s", response.Code, response.Header().Get("Location"), response.Body.String())
+	}
+	agent, err := server.store.Agent(agentID)
+	if err != nil || agent.OwnerMainUserID != "77" || agent.BillingMode != "user_upstream" || agent.Status != "active" || agent.SiteName != "Alice Station" {
+		t.Fatalf("unexpected shared tenant: agent=%+v err=%v", agent, err)
+	}
+	cookies := response.Result().Cookies()
+	if len(cookies) != 1 || !cookies[0].HttpOnly {
+		t.Fatalf("unexpected shared SSO cookie: %#v", cookies)
+	}
+	session, err := server.store.LoadSession(cookies[0].Value)
+	if err != nil || session.AgentID != agentID || session.MainUserID != "77" || session.Role != tenantRoleOwner {
+		t.Fatalf("unexpected shared tenant session: session=%+v err=%v", session, err)
+	}
+}
+
+func TestSharedAgentSSOIgnoresLegacyDomainClaimOnSharedHost(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.SharedHosts = []string{"shared.example"}
+
+	legacy := server.cfg
+	legacy.AgentID = "agt_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	legacy.AgentDomain = "shared.example"
+	legacy.OwnerMainUserID = "10"
+	legacy.BillingMode = "user_upstream"
+	if err := server.store.UpsertAgent(legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	newAgentID := "agt_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	raw := makeSharedAgentSSOTicket(t, server, "77", newAgentID, tenantRoleOwner, "Shared Station", "shared-host-legacy-domain")
+	request := httptest.NewRequest(http.MethodGet, "http://shared.example/api/auth/sso/callback?ticket="+url.QueryEscape(raw), nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/dashboard" {
+		t.Fatalf("shared SSO was captured by legacy domain mapping: status=%d body=%s", response.Code, response.Body.String())
+	}
+	agent, err := server.store.Agent(newAgentID)
+	if err != nil || agent.OwnerMainUserID != "77" {
+		t.Fatalf("shared tenant was not created from signed claims: agent=%+v err=%v", agent, err)
+	}
+}
+
+func TestSharedAgentSSONeverReassignsOwner(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	agentID := "agt_11111111111111111111111111111111"
+	first := makeSharedAgentSSOTicket(t, server, "77", agentID, tenantRoleOwner, "Owner Station", "owner-first")
+	firstRequest := httptest.NewRequest(http.MethodGet, "http://shared.example/api/auth/sso/callback?ticket="+url.QueryEscape(first), nil)
+	firstResponse := httptest.NewRecorder()
+	server.ServeHTTP(firstResponse, firstRequest)
+	if firstResponse.Code != http.StatusFound {
+		t.Fatalf("initial owner SSO failed: status=%d body=%s", firstResponse.Code, firstResponse.Body.String())
+	}
+
+	second := makeSharedAgentSSOTicket(t, server, "88", agentID, tenantRoleOwner, "Hijacked", "owner-second")
+	secondRequest := httptest.NewRequest(http.MethodGet, "http://shared.example/api/auth/sso/callback?ticket="+url.QueryEscape(second), nil)
+	secondResponse := httptest.NewRecorder()
+	server.ServeHTTP(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusForbidden || !strings.Contains(secondResponse.Body.String(), "SSO_TENANT_FORBIDDEN") {
+		t.Fatalf("owner reassignment was not rejected: status=%d body=%s", secondResponse.Code, secondResponse.Body.String())
+	}
+	agent, err := server.store.Agent(agentID)
+	if err != nil || agent.OwnerMainUserID != "77" || agent.SiteName != "Owner Station" {
+		t.Fatalf("tenant owner or branding changed: agent=%+v err=%v", agent, err)
+	}
+}
+
+func TestSharedAgentSSORejectsCrossTenantHost(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	other := server.cfg
+	other.AgentID = "agt_22222222222222222222222222222222"
+	other.AgentDomain = "other.example"
+	other.OwnerMainUserID = "22"
+	other.BillingMode = "user_upstream"
+	if err := server.store.UpsertAgent(other); err != nil {
+		t.Fatal(err)
+	}
+	raw := makeSharedAgentSSOTicket(t, server, "77", "agt_33333333333333333333333333333333", tenantRoleOwner, "Shared", "host-conflict")
+	request := httptest.NewRequest(http.MethodGet, "http://other.example/api/auth/sso/callback?ticket="+url.QueryEscape(raw), nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "SSO_TENANT_FORBIDDEN") {
+		t.Fatalf("cross-tenant host was not rejected: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, err := server.store.Agent("agt_33333333333333333333333333333333"); !errors.Is(err, errNotFound) {
+		t.Fatalf("cross-host callback created a tenant: %v", err)
+	}
+}
+
+func TestVerifySSOTicketRejectsMalformedSharedTenantClaims(t *testing.T) {
+	secret := "test-sso-secret-0123456789abcdef"
+	now := time.Now().UTC()
+	base := map[string]any{
+		"iss": "sub2api", "aud": "agentapi", "sub": "77", "iat": now.Unix(),
+		"exp": now.Add(90 * time.Second).Unix(), "jti": "claim-validation",
+	}
+	for name, values := range map[string]map[string]any{
+		"role without id": {"agent_role": tenantRoleOwner},
+		"invalid id":      {"agent_id": "agent-77", "agent_role": tenantRoleOwner},
+		"invalid role":    {"agent_id": "agt_44444444444444444444444444444444", "agent_role": "admin"},
+		"control in name": {"agent_id": "agt_55555555555555555555555555555555", "agent_role": tenantRoleOwner, "agent_name": "bad\nname"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload := make(map[string]any, len(base)+len(values))
+			for key, value := range base {
+				payload[key] = value
+			}
+			for key, value := range values {
+				payload[key] = value
+			}
+			if _, err := verifySSOTicket(makeSSOTicket(t, secret, payload), secret, "agentapi", now); !errors.Is(err, errInvalidSSOTicket) {
+				t.Fatalf("malformed tenant claim was accepted: %v", err)
+			}
+		})
+	}
 }
 
 func enableTestPayment(t *testing.T, server *Server, secret string) PaymentConfig {
@@ -538,16 +698,12 @@ func TestLoginRejectsMappedUserDisabledOnThisAgent(t *testing.T) {
 
 func TestFailedMainRegistrationDoesNotCreateLocalAgentMapping(t *testing.T) {
 	var registerCalls atomic.Int32
-	var mapCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/admin/users":
 			registerCalls.Add(1)
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": "REGISTRATION_REJECTED", "message": "registration rejected"})
-		case "/api/v1/agent-runtime/users/43/map":
-			mapCalls.Add(1)
-			http.Error(w, "mapping must not run after registration failure", http.StatusInternalServerError)
 		default:
 			t.Errorf("unexpected Sub2API request: %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -556,9 +712,6 @@ func TestFailedMainRegistrationDoesNotCreateLocalAgentMapping(t *testing.T) {
 	defer upstream.Close()
 
 	server := testServer(t, upstream)
-	server.cfg.ProvisioningControlEnabled = true
-	server.setProvisioningState("active", time.Now().UTC())
-	server.main = NewMainClient(server.cfg)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"email":"new@example.com","password":"password"}`))
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
@@ -568,36 +721,23 @@ func TestFailedMainRegistrationDoesNotCreateLocalAgentMapping(t *testing.T) {
 	if _, err := server.store.User(server.cfg.AgentID, "43"); err != errNotFound {
 		t.Fatalf("failed main-site registration left a local Agent mapping: user err=%v", err)
 	}
-	if registerCalls.Load() != 1 || mapCalls.Load() != 0 {
-		t.Fatalf("unexpected registration/mapping calls: register=%d map=%d", registerCalls.Load(), mapCalls.Load())
+	if registerCalls.Load() != 1 {
+		t.Fatalf("unexpected registration calls: %d", registerCalls.Load())
 	}
 }
 
-func TestRegistrationMappingFailureCanRetryThroughLoginWithoutDuplicateMainUser(t *testing.T) {
+func TestRegistrationCreatesLocalMappingWithoutLegacyRuntimeCall(t *testing.T) {
 	var registerCalls atomic.Int32
-	var loginCalls atomic.Int32
-	var mapCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/admin/users":
 			registerCalls.Add(1)
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 43, "email": "new@example.com", "role": "user"}))
 		case "/api/v1/auth/login":
-			loginCalls.Add(1)
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
-				"access_token": "login-access", "refresh_token": "login-refresh", "expires_in": 3600,
+				"access_token": "register-access", "refresh_token": "register-refresh", "expires_in": 3600,
 				"user": map[string]any{"id": 43, "email": "new@example.com", "role": "user"},
 			}))
-		case "/api/v1/agent-runtime/users/43/map":
-			if r.Header.Get("X-AgentAPI-Runtime-Control") != testRuntimeControlCredential || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
-				t.Errorf("runtime mapping did not receive its scoped credentials: %v", r.Header)
-			}
-			if mapCalls.Add(1) == 1 {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_ = json.NewEncoder(w).Encode(map[string]any{"code": "TEMPORARY_FAILURE", "message": "try again"})
-				return
-			}
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agent-test", "user_id": 43, "status": "mapped"}))
 		default:
 			t.Errorf("unexpected Sub2API request: %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -606,27 +746,17 @@ func TestRegistrationMappingFailureCanRetryThroughLoginWithoutDuplicateMainUser(
 	defer upstream.Close()
 
 	server := testServer(t, upstream)
-	server.cfg.ProvisioningControlEnabled = true
-	server.setProvisioningState("active", time.Now().UTC())
-	server.main = NewMainClient(server.cfg)
 	registerRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"email":"new@example.com","password":"password"}`))
 	registerResponse := httptest.NewRecorder()
 	server.ServeHTTP(registerResponse, registerRequest)
-	if registerResponse.Code == http.StatusOK || len(registerResponse.Result().Cookies()) != 0 {
-		t.Fatalf("registration with failed mapping unexpectedly created a session: status=%d cookies=%v", registerResponse.Code, registerResponse.Result().Cookies())
+	if registerResponse.Code != http.StatusOK || len(registerResponse.Result().Cookies()) != 1 {
+		t.Fatalf("registration did not create a shared-site session: status=%d cookies=%v body=%s", registerResponse.Code, registerResponse.Result().Cookies(), registerResponse.Body.String())
 	}
 	if user, err := server.store.User(server.cfg.AgentID, "43"); err != nil || user.Status != "active" {
-		t.Fatalf("retryable local mapping was not retained: user=%+v err=%v", user, err)
+		t.Fatalf("local tenant mapping was not created: user=%+v err=%v", user, err)
 	}
-
-	loginRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"new@example.com","password":"password"}`))
-	loginResponse := httptest.NewRecorder()
-	server.ServeHTTP(loginResponse, loginRequest)
-	if loginResponse.Code != http.StatusOK || len(loginResponse.Result().Cookies()) != 1 {
-		t.Fatalf("login retry did not recover the mapping: status=%d cookies=%v body=%s", loginResponse.Code, loginResponse.Result().Cookies(), loginResponse.Body.String())
-	}
-	if registerCalls.Load() != 1 || loginCalls.Load() != 2 || mapCalls.Load() != 2 {
-		t.Fatalf("mapping retry duplicated main-site account creation: register=%d login=%d map=%d", registerCalls.Load(), loginCalls.Load(), mapCalls.Load())
+	if registerCalls.Load() != 1 {
+		t.Fatalf("registration called main site %d times", registerCalls.Load())
 	}
 }
 
@@ -718,26 +848,24 @@ func TestReadyEndpointChecksAgentAndModelCredential(t *testing.T) {
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.cfg.ProvisioningControlEnabled = false
-	server.cfg.RuntimeControlCredential = ""
 
 	ready := httptest.NewRecorder()
 	server.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if ready.Code != http.StatusOK {
-		t.Fatalf("standalone ready status=%d body=%s", ready.Code, ready.Body.String())
+		t.Fatalf("shared runtime ready status=%d body=%s", ready.Code, ready.Body.String())
 	}
-	server.cfg.ProvisioningControlEnabled = true
-	controlNotReady := httptest.NewRecorder()
-	server.ServeHTTP(controlNotReady, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if controlNotReady.Code != http.StatusServiceUnavailable || !strings.Contains(controlNotReady.Body.String(), "AGENT_RUNTIME_CONTROL_CREDENTIAL_MISSING") {
-		t.Fatalf("managed agent without control credential status=%d body=%s", controlNotReady.Code, controlNotReady.Body.String())
-	}
-	server.cfg.ProvisioningControlEnabled = false
 	server.cfg.AppCredential = ""
 	notReady := httptest.NewRecorder()
 	server.ServeHTTP(notReady, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if notReady.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing credential ready status=%d body=%s", notReady.Code, notReady.Body.String())
+	}
+	server.cfg.AppCredential = "app-secret"
+	server.cfg.SSOSecret = "short"
+	weakSSO := httptest.NewRecorder()
+	server.ServeHTTP(weakSSO, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if weakSSO.Code != http.StatusServiceUnavailable || !strings.Contains(weakSSO.Body.String(), "SSO_SECRET_WEAK") {
+		t.Fatalf("weak SSO secret ready status=%d body=%s", weakSSO.Code, weakSSO.Body.String())
 	}
 }
 
@@ -764,6 +892,27 @@ func TestHealthAndReadinessProbesDoNotContactSub2API(t *testing.T) {
 	}
 }
 
+func TestHealthProbeRequiresLocalPersistence(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "STORE_UNAVAILABLE") {
+		t.Fatalf("closed store health status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	method := httptest.NewRecorder()
+	server.ServeHTTP(method, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+	if method.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("health POST status=%d body=%s", method.Code, method.Body.String())
+	}
+}
+
 func TestModelRelayAddsSatelliteHeadersAndNeverCopiesCookies(t *testing.T) {
 	var gotHeaders http.Header
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -774,7 +923,7 @@ func TestModelRelayAddsSatelliteHeadersAndNeverCopiesCookies(t *testing.T) {
 			}))
 			return
 		}
-		if r.URL.Path == "/api/v1/agent-runtime/owner" {
+		if r.URL.Path == "/v1/sub2api/balance" {
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": 10.0}))
 			return
 		}
@@ -861,282 +1010,10 @@ func TestModelsEndpointExposesOnlyTheAgentPublicCatalog(t *testing.T) {
 	}
 }
 
-func TestAgentAdminModelPolicyFiltersDiscoveryAndBlocksDisabledRequests(t *testing.T) {
-	upstreamCalls := 0
-	var syncedModels []string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/agent-runtime/model-policy" {
-			var payload struct {
-				Enabled []string `json:"enabled"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Errorf("decode main model policy request: %v", err)
-			}
-			syncedModels = append([]string(nil), payload.Enabled...)
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agent-test", "enabled": payload.Enabled}))
-			return
-		}
-		upstreamCalls++
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"ok":true}`)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
-	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	update := httptest.NewRequest(http.MethodPut, "http://agent.local/api/v1/agent/admin/model-policy", strings.NewReader(`{"enabled":["gpt-5.5","gpt-image-2"]}`))
-	update.Header.Set("Content-Type", "application/json")
-	update.Header.Set("Origin", "http://agent.local")
-	update.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	updateResponse := httptest.NewRecorder()
-	server.ServeHTTP(updateResponse, update)
-	if updateResponse.Code != http.StatusOK {
-		t.Fatalf("model policy update status=%d body=%s", updateResponse.Code, updateResponse.Body.String())
-	}
-	if len(syncedModels) != 2 || syncedModels[0] != "gpt-5.5" || syncedModels[1] != "gpt-image-2" {
-		t.Fatalf("Agent model policy was not synchronized to Sub2API: %v", syncedModels)
-	}
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "99", "member@example.com", "Member"); err != nil {
-		t.Fatal(err)
-	}
-	nonOwnerSession, err := server.store.CreateSession("99", []byte(`{"id":"99","email":"member@example.com","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	nonOwnerUpdate := httptest.NewRequest(http.MethodPut, "http://agent.local/api/v1/agent/admin/model-policy", strings.NewReader(`{"enabled":["gpt-image-1"]}`))
-	nonOwnerUpdate.Header.Set("Content-Type", "application/json")
-	nonOwnerUpdate.Header.Set("Origin", "http://agent.local")
-	nonOwnerUpdate.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: nonOwnerSession})
-	nonOwnerResponse := httptest.NewRecorder()
-	server.ServeHTTP(nonOwnerResponse, nonOwnerUpdate)
-	if nonOwnerResponse.Code != http.StatusForbidden {
-		t.Fatalf("non-owner model policy update status=%d body=%s, want forbidden", nonOwnerResponse.Code, nonOwnerResponse.Body.String())
-	}
-
-	modelsRequest := httptest.NewRequest(http.MethodGet, "http://agent.local/v1/models", nil)
-	modelsRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	modelsResponse := httptest.NewRecorder()
-	server.ServeHTTP(modelsResponse, modelsRequest)
-	var models struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(modelsResponse.Body.Bytes(), &models); err != nil {
-		t.Fatal(err)
-	}
-	if modelsResponse.Code != http.StatusOK || len(models.Data) != 2 || models.Data[0].ID != "gpt-5.5" || models.Data[1].ID != "gpt-image-2" {
-		t.Fatalf("unexpected filtered models response: status=%d body=%s", modelsResponse.Code, modelsResponse.Body.String())
-	}
-
-	for _, test := range []struct {
-		body, reason string
-	}{
-		{body: `{"model":"grok-imagine-video-1.5"}`, reason: "MODEL_NOT_ALLOWED"},
-		{body: `{"messages":[]}`, reason: "MODEL_REQUIRED"},
-	} {
-		request := httptest.NewRequest(http.MethodPost, "http://agent.local/v1/chat/completions", strings.NewReader(test.body))
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Origin", "http://agent.local")
-		request.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-		response := httptest.NewRecorder()
-		server.ServeHTTP(response, request)
-		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), test.reason) {
-			t.Fatalf("model request %s returned %d %s, want %s", test.body, response.Code, response.Body.String(), test.reason)
-		}
-	}
-
-	var multipartBody bytes.Buffer
-	multipartWriter := multipart.NewWriter(&multipartBody)
-	if err := multipartWriter.WriteField("model", "gpt-image-1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := multipartWriter.Close(); err != nil {
-		t.Fatal(err)
-	}
-	imageRequest := httptest.NewRequest(http.MethodPost, "http://agent.local/v1/images/generations", &multipartBody)
-	imageRequest.Header.Set("Content-Type", multipartWriter.FormDataContentType())
-	imageRequest.Header.Set("Origin", "http://agent.local")
-	imageRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	imageResponse := httptest.NewRecorder()
-	server.ServeHTTP(imageResponse, imageRequest)
-	if imageResponse.Code != http.StatusBadRequest || !strings.Contains(imageResponse.Body.String(), "MODEL_NOT_ALLOWED") {
-		t.Fatalf("disabled multipart image model returned %d %s", imageResponse.Code, imageResponse.Body.String())
-	}
-	var duplicateModelBody bytes.Buffer
-	duplicateModelWriter := multipart.NewWriter(&duplicateModelBody)
-	if err := duplicateModelWriter.WriteField("model", "gpt-5.5"); err != nil {
-		t.Fatal(err)
-	}
-	if err := duplicateModelWriter.WriteField("model", "gpt-image-1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := duplicateModelWriter.Close(); err != nil {
-		t.Fatal(err)
-	}
-	duplicateModelRequest := httptest.NewRequest(http.MethodPost, "http://agent.local/v1/images/generations", &duplicateModelBody)
-	duplicateModelRequest.Header.Set("Content-Type", duplicateModelWriter.FormDataContentType())
-	duplicateModelRequest.Header.Set("Origin", "http://agent.local")
-	duplicateModelRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	duplicateModelResponse := httptest.NewRecorder()
-	server.ServeHTTP(duplicateModelResponse, duplicateModelRequest)
-	if duplicateModelResponse.Code != http.StatusBadRequest || !strings.Contains(duplicateModelResponse.Body.String(), "MODEL_NOT_ALLOWED") {
-		t.Fatalf("duplicate multipart model fields returned %d %s", duplicateModelResponse.Code, duplicateModelResponse.Body.String())
-	}
-	if upstreamCalls != 0 {
-		t.Fatalf("disabled or underspecified model reached Sub2API: calls=%d", upstreamCalls)
-	}
-}
-
-func TestAgentModelPolicyRemainsUnchangedWhenMainSiteScopeCannotBeConfirmed(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"ok":true}`)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
-	mainControl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
-	}))
-	defer mainControl.Close()
-	server.cfg.MainAPIBaseURL = mainControl.URL + "/api/v1"
-	server.main = NewMainClient(server.cfg)
-	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest(http.MethodPut, "http://agent.local/api/v1/agent/admin/model-policy", strings.NewReader(`{"enabled":["gpt-5.5"]}`))
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Origin", "http://agent.local")
-	request.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	recorder := httptest.NewRecorder()
-	server.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusBadGateway {
-		t.Fatalf("unconfirmed model scope status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-	policy, err := server.store.AgentModelPolicy(server.cfg.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if policy.Customized || len(policy.Enabled) != len(publicModelCatalog) {
-		t.Fatalf("local policy changed despite failed main-site confirmation: %+v", policy)
-	}
-}
-
-func TestConcurrentModelPolicyUpdateFailureCannotRollbackConfirmedNewerPolicy(t *testing.T) {
-	firstSyncEntered := make(chan struct{}, 1)
-	secondSyncEntered := make(chan struct{}, 1)
-	releaseFirstSync := make(chan struct{})
-	var releaseOnce sync.Once
-	defer releaseOnce.Do(func() { close(releaseFirstSync) })
-	var remoteMu sync.Mutex
-	var remoteEnabled []string
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/model-policy" {
-			t.Errorf("unexpected upstream path: %s", r.URL.Path)
-			http.NotFound(w, r)
-			return
-		}
-		var payload struct {
-			Enabled []string `json:"enabled"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Errorf("decode model policy request: %v", err)
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
-		switch {
-		case sameStringSlice(payload.Enabled, []string{"gpt-5.5"}):
-			firstSyncEntered <- struct{}{}
-			<-releaseFirstSync
-			http.Error(w, "temporary main-site failure", http.StatusServiceUnavailable)
-		case sameStringSlice(payload.Enabled, []string{"gpt-image-2"}):
-			secondSyncEntered <- struct{}{}
-			remoteMu.Lock()
-			remoteEnabled = append([]string(nil), payload.Enabled...)
-			remoteMu.Unlock()
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
-				"agent_id": "agent-test", "enabled": payload.Enabled,
-			}))
-		default:
-			t.Errorf("unexpected model policy: %v", payload.Enabled)
-			http.Error(w, "unexpected policy", http.StatusBadRequest)
-		}
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
-	server.cfg.ProvisioningControlEnabled = true
-	server.main = NewMainClient(server.cfg)
-	server.setProvisioningState("active", time.Now().UTC())
-	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	update := func(models string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodPut, "http://agent.local/api/v1/agent/admin/model-policy", strings.NewReader(models))
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Origin", "http://agent.local")
-		request.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-		response := httptest.NewRecorder()
-		server.ServeHTTP(response, request)
-		return response
-	}
-
-	firstDone := make(chan *httptest.ResponseRecorder, 1)
-	go func() { firstDone <- update(`{"enabled":["gpt-5.5"]}`) }()
-	select {
-	case <-firstSyncEntered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("first model policy update did not reach Sub2API")
-	}
-
-	secondStarted := make(chan struct{})
-	secondDone := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		close(secondStarted)
-		secondDone <- update(`{"enabled":["gpt-image-2"]}`)
-	}()
-	<-secondStarted
-	select {
-	case <-secondSyncEntered:
-		t.Fatal("second model policy reached Sub2API before the first update and rollback completed")
-	case <-time.After(250 * time.Millisecond):
-	}
-
-	releaseOnce.Do(func() { close(releaseFirstSync) })
-	firstResponse := <-firstDone
-	secondResponse := <-secondDone
-	if firstResponse.Code != http.StatusBadGateway {
-		t.Fatalf("first update status=%d body=%s, want failed main-site confirmation", firstResponse.Code, firstResponse.Body.String())
-	}
-	if secondResponse.Code != http.StatusOK {
-		t.Fatalf("second update status=%d body=%s", secondResponse.Code, secondResponse.Body.String())
-	}
-	policy, err := server.store.AgentModelPolicy(server.cfg.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !policy.Customized || !sameStringSlice(policy.Enabled, []string{"gpt-image-2"}) {
-		t.Fatalf("local model policy does not match the latest confirmed update: %+v", policy)
-	}
-	remoteMu.Lock()
-	defer remoteMu.Unlock()
-	if !sameStringSlice(remoteEnabled, []string{"gpt-image-2"}) {
-		t.Fatalf("unexpected final Sub2API model policy: %v", remoteEnabled)
-	}
-}
-
 func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/owner" {
+		if r.URL.Path != "/v1/sub2api/balance" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
 		adminReads++
@@ -1270,7 +1147,7 @@ func TestRechargeWebhookRejectsAnotherInstancesMerchant(t *testing.T) {
 func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/owner" {
+		if r.URL.Path != "/v1/sub2api/balance" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
 		adminReads++
@@ -1342,7 +1219,7 @@ func TestAgentAPIKeyCanRelayWithoutCookieAndIsNotForwarded(t *testing.T) {
 				"access_token": "main-access", "refresh_token": "main-refresh", "expires_in": 3600,
 				"user": map[string]any{"id": 42, "email": "u@example.com", "role": "user"},
 			}))
-		case "/api/v1/agent-runtime/owner":
+		case "/v1/sub2api/balance":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": 10.0}))
 		case "/v1/chat/completions":
 			gotHeaders = r.Header.Clone()
@@ -1492,7 +1369,10 @@ func TestModelRelayRejectsInsufficientMappedUserBalanceBeforeUpstream(t *testing
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, server, "user_upstream")
+	if _, err := server.store.db.Exec(`UPDATE agent_config SET billing_mode='user_upstream' WHERE agent_id=?`, server.cfg.AgentID); err != nil {
+		t.Fatal(err)
+	}
 	server.main = NewMainClient(server.cfg)
 	_, key, err := server.store.CreateAPIKey(server.cfg.AgentID, "42", "insufficient balance")
 	if err != nil {
@@ -1517,7 +1397,10 @@ func TestDirectUserBillingDisablesLegacyRechargeAndAllocationEndpoints(t *testin
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.cfg.BillingMode = "user_upstream"
+	setTenantBillingModeForTest(t, server, "user_upstream")
+	if _, err := server.store.db.Exec(`UPDATE agent_config SET billing_mode='user_upstream' WHERE agent_id=?`, server.cfg.AgentID); err != nil {
+		t.Fatal(err)
+	}
 	server.cfg.PublicMainURL = "https://main.example.com"
 	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
 	if err != nil {
@@ -1540,7 +1423,6 @@ func TestDirectUserBillingDisablesLegacyRechargeAndAllocationEndpoints(t *testin
 	}{
 		{http.MethodPost, "/api/v1/agent/recharge/orders", `{"amount":"10.00"}`, "LOCAL_RECHARGE_DISABLED"},
 		{http.MethodPost, "/api/v1/agent/admin/wallet/sync", `{}`, "OWNER_WALLET_DISABLED"},
-		{http.MethodPost, "/api/v1/agent/admin/users/42/allocate", `{"amount":"10.00"}`, "LOCAL_ALLOCATION_DISABLED"},
 		{http.MethodGet, "/api/v1/agent/admin/payment-config", ``, "LOCAL_RECHARGE_DISABLED"},
 	}
 	for _, test := range tests {
@@ -1557,7 +1439,13 @@ func TestDirectUserBillingDisablesLegacyRechargeAndAllocationEndpoints(t *testin
 
 	settings := httptest.NewRecorder()
 	server.ServeHTTP(settings, httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil))
-	if settings.Code != http.StatusOK || !strings.Contains(settings.Body.String(), `"payment_enabled":false`) || !strings.Contains(settings.Body.String(), `"recharge_url":"https://main.example.com/purchase"`) {
+	if settings.Code != http.StatusOK ||
+		!strings.Contains(settings.Body.String(), `"payment_enabled":false`) ||
+		!strings.Contains(settings.Body.String(), `"recharge_url":"https://main.example.com/purchase"`) ||
+		!strings.Contains(settings.Body.String(), `"available_channels_enabled":false`) ||
+		!strings.Contains(settings.Body.String(), `"subscription_enabled":false`) ||
+		!strings.Contains(settings.Body.String(), `"model_plaza_enabled":false`) ||
+		!strings.Contains(settings.Body.String(), `"plugin_management_enabled":false`) {
 		t.Fatalf("direct billing public settings status=%d body=%s", settings.Code, settings.Body.String())
 	}
 }
@@ -1648,7 +1536,7 @@ func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 	if _, created, err := server.store.PrepareSettlement(server.cfg.AgentID, "42", "42", "pending-usage", "pending-usage", 100); err != nil || !created {
 		t.Fatalf("prepare pending usage: created=%v err=%v", created, err)
 	}
-	results, err := server.reconcileSettlements(t.Context(), "pending-usage")
+	results, err := server.reconcileTenantSettlements(t.Context(), server.cfg.AgentID, "pending-usage")
 	if err != nil || len(results) != 1 || results[0].Status != "confirmed" {
 		t.Fatalf("reconcile result=%+v err=%v", results, err)
 	}
@@ -1662,133 +1550,76 @@ func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 	}
 }
 
-func TestAgentUsersEndpointPaginatesAndRestrictsNonAdminToSelf(t *testing.T) {
+func TestForbiddenAgentManagementModulesAreNotExposed(t *testing.T) {
+	upstreamCalls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/sub2api/balance" {
-			t.Errorf("unexpected upstream request while hydrating mapped users: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		userID := r.Header.Get("X-Sub2API-On-Behalf-Of")
-		balance := 1.00
-		if userID == "44" {
-			balance = 4.40
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": balance})
+		upstreamCalls++
+		http.Error(w, "forbidden module reached upstream", http.StatusInternalServerError)
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
-	server.main = NewMainClient(server.cfg)
-	for _, id := range []string{"43", "44", "45"} {
-		if _, err := server.store.UpsertUser(server.cfg.AgentID, id, id+"@example.com", "User "+id); err != nil {
-			t.Fatal(err)
+	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/agent/users"},
+		{http.MethodGet, "/api/v1/agent/admin/groups"},
+		{http.MethodGet, "/api/v1/agent/admin/accounts"},
+		{http.MethodPatch, "/api/v1/agent/admin/users/43/status"},
+		{http.MethodPost, "/api/v1/agent/admin/users/43/allocate"},
+		{http.MethodGet, "/api/v1/agent/admin/agents"},
+		{http.MethodGet, "/api/v1/agent/admin/proxies"},
+		{http.MethodGet, "/api/v1/agent/admin/agent-provisioning"},
+		{http.MethodGet, "/api/v1/agent/admin/ops"},
+		{http.MethodGet, "/api/v1/agent/admin/promo-codes"},
+		{http.MethodGet, "/api/v1/agent/admin/redeem"},
+		{http.MethodGet, "/api/v1/agent/admin/redeem-codes"},
+		{http.MethodGet, "/api/v1/agent/admin/plugins"},
+		{http.MethodGet, "/api/v1/agent/admin/audit"},
+		{http.MethodGet, "/api/v1/agent/admin/audit-logs"},
+		{http.MethodGet, "/api/v1/agent/admin/audit-events"},
+		{http.MethodGet, "/api/v1/agent/admin/risk-control"},
+		{http.MethodGet, "/api/v1/agent/admin/prompt-audit"},
+		{http.MethodGet, "/api/v1/agent/admin/security-audit"},
+		{http.MethodGet, "/api/v1/agent/admin/upstream-audit"},
+		{http.MethodGet, "/api/v1/agent/admin/upstream-verification"},
+		{http.MethodGet, "/api/v1/agent/admin/channels"},
+		{http.MethodGet, "/api/v1/agent/admin/subscriptions"},
+		{http.MethodGet, "/api/v1/agent/admin/payment/plans"},
+		{http.MethodPut, "/api/v1/agent/admin/payment/plans/7"},
+		{http.MethodGet, "/api/v1/agent/admin/satellite-billing"},
+		{http.MethodGet, "/api/v1/agent/admin/content"},
+		{http.MethodGet, "/api/v1/agent/admin/content-pages"},
+		{http.MethodGet, "/api/v1/agent/content-pages"},
+		{http.MethodGet, "/api/v1/agent/content/legal/terms"},
+		{http.MethodGet, "/api/v1/agent/admin/backup"},
+		{http.MethodGet, "/api/v1/agent/admin/backups"},
+		{http.MethodGet, "/api/v1/agent/admin/model-policy"},
+		{http.MethodPut, "/api/v1/agent/admin/model-policy"},
+		{http.MethodGet, "/api/v1/agent/tasks"},
+	}
+	for _, test := range tests {
+		for _, authenticated := range []bool{false, true} {
+			req := httptest.NewRequest(test.method, test.path, nil)
+			if authenticated {
+				req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
+			}
+			rec := httptest.NewRecorder()
+			server.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "NOT_FOUND") {
+				t.Fatalf("%s %s authenticated=%t status=%d body=%s", test.method, test.path, authenticated, rec.Code, rec.Body.String())
+			}
 		}
 	}
-	adminSession, err := server.store.CreateSession("42", []byte(`{"id":"42","role":"admin"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	userSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	adminRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?page=2&page_size=2", nil)
-	adminRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	adminResponse := httptest.NewRecorder()
-	server.ServeHTTP(adminResponse, adminRequest)
-	if adminResponse.Code != http.StatusOK {
-		t.Fatalf("admin users page status=%d body=%s", adminResponse.Code, adminResponse.Body.String())
-	}
-	var adminPayload struct {
-		Data struct {
-			Items    []AgentUserView `json:"items"`
-			Total    int             `json:"total"`
-			Page     int             `json:"page"`
-			PageSize int             `json:"page_size"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(adminResponse.Body.Bytes(), &adminPayload); err != nil {
-		t.Fatal(err)
-	}
-	if adminPayload.Data.Total != 4 || adminPayload.Data.Page != 2 || adminPayload.Data.PageSize != 2 || len(adminPayload.Data.Items) != 2 || adminPayload.Data.Items[0].MainUserID != "43" || adminPayload.Data.Items[1].MainUserID != "42" {
-		t.Fatalf("unexpected admin user page: %+v", adminPayload.Data)
-	}
-	if adminPayload.Data.Items[0].BalanceCents != 100 || adminPayload.Data.Items[1].BalanceCents != 100 {
-		t.Fatalf("admin user page did not hydrate Sub2API balances: %+v", adminPayload.Data.Items)
-	}
-	adminRouteRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/admin/users?page=2&page_size=2", nil)
-	adminRouteRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	adminRouteResponse := httptest.NewRecorder()
-	server.ServeHTTP(adminRouteResponse, adminRouteRequest)
-	if adminRouteResponse.Code != http.StatusOK || !strings.Contains(adminRouteResponse.Body.String(), `"page":2`) || !strings.Contains(adminRouteResponse.Body.String(), `"total":4`) {
-		t.Fatalf("admin compatibility user page status=%d body=%s", adminRouteResponse.Code, adminRouteResponse.Body.String())
-	}
-	adminSearchRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?q=44", nil)
-	adminSearchRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	adminSearchResponse := httptest.NewRecorder()
-	server.ServeHTTP(adminSearchResponse, adminSearchRequest)
-	var searchPayload struct {
-		Data struct {
-			Items []AgentUserView `json:"items"`
-			Total int             `json:"total"`
-		} `json:"data"`
-	}
-	if adminSearchResponse.Code != http.StatusOK || json.Unmarshal(adminSearchResponse.Body.Bytes(), &searchPayload) != nil || searchPayload.Data.Total != 1 || len(searchPayload.Data.Items) != 1 || searchPayload.Data.Items[0].MainUserID != "44" {
-		t.Fatalf("admin user search failed: status=%d body=%s data=%+v", adminSearchResponse.Code, adminSearchResponse.Body.String(), searchPayload.Data)
-	}
-	if searchPayload.Data.Items[0].BalanceCents != 440 {
-		t.Fatalf("searched user did not receive the authoritative balance: %+v", searchPayload.Data.Items[0])
-	}
-	if _, err := server.store.SetUserStatus(server.cfg.AgentID, "44", "disabled"); err != nil {
-		t.Fatal(err)
-	}
-	statusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?status=disabled", nil)
-	statusRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	statusResponse := httptest.NewRecorder()
-	server.ServeHTTP(statusResponse, statusRequest)
-	if statusResponse.Code != http.StatusOK || !strings.Contains(statusResponse.Body.String(), `"total":1`) || !strings.Contains(statusResponse.Body.String(), `"main_user_id":"44"`) {
-		t.Fatalf("admin local-status filter failed: status=%d body=%s", statusResponse.Code, statusResponse.Body.String())
-	}
-	invalidStatusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?status=suspended", nil)
-	invalidStatusRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	invalidStatusResponse := httptest.NewRecorder()
-	server.ServeHTTP(invalidStatusResponse, invalidStatusRequest)
-	if invalidStatusResponse.Code != http.StatusBadRequest || !strings.Contains(invalidStatusResponse.Body.String(), "INVALID_STATUS") {
-		t.Fatalf("invalid local-status filter status=%d body=%s", invalidStatusResponse.Code, invalidStatusResponse.Body.String())
-	}
-
-	userRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?page=2&page_size=2&q=44", nil)
-	userRequest.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: userSession})
-	userResponse := httptest.NewRecorder()
-	server.ServeHTTP(userResponse, userRequest)
-	var userPayload struct {
-		Data struct {
-			Items []AgentUserView `json:"items"`
-			Total int             `json:"total"`
-			Page  int             `json:"page"`
-		} `json:"data"`
-	}
-	if userResponse.Code != http.StatusOK || json.Unmarshal(userResponse.Body.Bytes(), &userPayload) != nil || userPayload.Data.Total != 1 || userPayload.Data.Page != 1 || len(userPayload.Data.Items) != 1 || userPayload.Data.Items[0].MainUserID != "43" {
-		t.Fatalf("non-admin user list escaped self scope: status=%d body=%s data=%+v", userResponse.Code, userResponse.Body.String(), userPayload.Data)
-	}
-
-	invalidPage := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?page_size=201", nil)
-	invalidPage.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	invalidPageResponse := httptest.NewRecorder()
-	server.ServeHTTP(invalidPageResponse, invalidPage)
-	if invalidPageResponse.Code != http.StatusBadRequest || !strings.Contains(invalidPageResponse.Body.String(), "INVALID_PAGINATION") {
-		t.Fatalf("invalid user page size status=%d body=%s", invalidPageResponse.Code, invalidPageResponse.Body.String())
-	}
-	invalidSearch := httptest.NewRequest(http.MethodGet, "/api/v1/agent/users?q="+strings.Repeat("x", 513), nil)
-	invalidSearch.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: adminSession})
-	invalidSearchResponse := httptest.NewRecorder()
-	server.ServeHTTP(invalidSearchResponse, invalidSearch)
-	if invalidSearchResponse.Code != http.StatusBadRequest || !strings.Contains(invalidSearchResponse.Body.String(), "INVALID_SEARCH") {
-		t.Fatalf("invalid user search status=%d body=%s", invalidSearchResponse.Code, invalidSearchResponse.Body.String())
+	if upstreamCalls != 0 {
+		t.Fatalf("forbidden management modules contacted upstream %d times", upstreamCalls)
 	}
 }
-
 func TestAgentUsageEndpointPaginatesAndKeepsUserScope(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("usage history must come from AgentAPI's local settlement ledger, not a new upstream read: %s", r.URL.Path)
@@ -1894,114 +1725,11 @@ func TestAgentUsageEndpointPaginatesAndKeepsUserScope(t *testing.T) {
 	}
 }
 
-func TestAgentTaskHistoryEndpointRestoresTasksWithSessionUserScope(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("task history must use persisted AgentAPI task IDs without an upstream query: %s", r.URL.Path)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "other@example.com", "Other"); err != nil {
-		t.Fatal(err)
-	}
-	if err := server.store.CreditAgent(server.cfg.AgentID, 500, "seed-task-history", "seed", "test"); err != nil {
-		t.Fatal(err)
-	}
-	if err := server.store.Allocate(server.cfg.AgentID, "42", 200, "allocate-task-history", "order-task-history", "test"); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := server.store.PrepareSettlement(server.cfg.AgentID, "42", "42", "request-image-1", "request-image-1", 100); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.store.RecordVideoTask(server.cfg.AgentID, "42", "video-older", "request-video-older", "processing"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.store.RecordImageTask(server.cfg.AgentID, "42", "image-newer", "request-image-1", "processing"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.store.RecordVideoTask(server.cfg.AgentID, "43", "video-other-user", "request-other-user", "queued"); err != nil {
-		t.Fatal(err)
-	}
-	// Set distinct persisted timestamps so pagination order is deterministic.
-	if _, err := server.store.db.Exec(`UPDATE video_tasks SET updated_at=100 WHERE task_id='video-older'`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.store.db.Exec(`UPDATE image_tasks SET updated_at=200 WHERE task_id='image-newer'`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.store.db.Exec(`UPDATE video_tasks SET updated_at=300 WHERE task_id='video-other-user'`); err != nil {
-		t.Fatal(err)
-	}
-	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	userSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	readPage := func(cookie, path string) (int, *httptest.ResponseRecorder, []AgentTaskView, int) {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		if cookie != "" {
-			req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: cookie})
-		}
-		response := httptest.NewRecorder()
-		server.ServeHTTP(response, req)
-		var payload struct {
-			Data struct {
-				Items []AgentTaskView `json:"items"`
-				Total int             `json:"total"`
-			} `json:"data"`
-		}
-		if response.Code == http.StatusOK {
-			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
-				t.Fatalf("decode task history response: %v body=%s", err, response.Body.String())
-			}
-		}
-		return response.Code, response, payload.Data.Items, payload.Data.Total
-	}
-	status, ownerPage, ownerItems, ownerTotal := readPage(ownerSession, "/api/v1/agent/tasks?page=1&page_size=1")
-	if status != http.StatusOK || ownerTotal != 2 || len(ownerItems) != 1 || ownerItems[0].TaskID != "image-newer" || ownerItems[0].TaskType != "image" || ownerItems[0].SettlementStatus != "pending" || ownerItems[0].ReservedCents != 100 {
-		t.Fatalf("unexpected owner task history page: status=%d total=%d items=%+v body=%s", status, ownerTotal, ownerItems, ownerPage.Body.String())
-	}
-	if ownerPage.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("task history must not be cached: %q", ownerPage.Header().Get("Cache-Control"))
-	}
-	status, _, ownerItems, ownerTotal = readPage(ownerSession, "/api/v1/agent/tasks?page=2&page_size=1")
-	if status != http.StatusOK || ownerTotal != 2 || len(ownerItems) != 1 || ownerItems[0].TaskID != "video-older" {
-		t.Fatalf("unexpected second owner task history page: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
-	}
-	status, _, ownerItems, ownerTotal = readPage(ownerSession, "/api/v1/agent/tasks?task_type=image")
-	if status != http.StatusOK || ownerTotal != 1 || len(ownerItems) != 1 || ownerItems[0].TaskID != "image-newer" || ownerItems[0].TaskType != "image" {
-		t.Fatalf("unexpected image-only task history: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
-	}
-	status, _, ownerItems, ownerTotal = readPage(ownerSession, "/api/v1/agent/tasks?task_type=video")
-	if status != http.StatusOK || ownerTotal != 1 || len(ownerItems) != 1 || ownerItems[0].TaskID != "video-older" || ownerItems[0].TaskType != "video" {
-		t.Fatalf("unexpected video-only task history: status=%d total=%d items=%+v", status, ownerTotal, ownerItems)
-	}
-	status, _, userItems, userTotal := readPage(userSession, "/api/v1/agent/tasks")
-	if status != http.StatusOK || userTotal != 1 || len(userItems) != 1 || userItems[0].TaskID != "video-other-user" {
-		t.Fatalf("task history escaped the current user's mapping: status=%d total=%d items=%+v", status, userTotal, userItems)
-	}
-	status, _, _, _ = readPage("", "/api/v1/agent/tasks")
-	if status != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated task history status=%d", status)
-	}
-	status, response, _, _ := readPage(ownerSession, "/api/v1/agent/tasks?page_size=201")
-	if status != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_PAGINATION") {
-		t.Fatalf("invalid task page size status=%d body=%s", status, response.Body.String())
-	}
-	status, response, _, _ = readPage(ownerSession, "/api/v1/agent/tasks?task_type=audio")
-	if status != http.StatusBadRequest || !strings.Contains(response.Body.String(), "INVALID_FILTER") {
-		t.Fatalf("invalid task type status=%d body=%s", status, response.Body.String())
-	}
-}
-
 func TestStreamingModelRelayForwardsChunksAndSettlesAfterEOF(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
+		case "/v1/sub2api/balance":
 			adminReads++
 			balance := 10.0
 			if adminReads > 1 {
@@ -2468,7 +2196,7 @@ func TestStaleVideoTaskReconcilerWaitsForFailedTaskUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.store.clock = time.Now
-	server.reconcileStaleVideoTasks(context.Background())
+	server.reconcileStaleVideoTasksForTenant(context.Background(), server.cfg.AgentID)
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
 		t.Fatalf("stale failed video must await main usage: %+v err=%v", usage, err)
@@ -2513,7 +2241,7 @@ func TestStaleFailedVideoTaskSettlesKnownMainUsageInsteadOfRefunding(t *testing.
 		t.Fatal(err)
 	}
 	server.store.clock = time.Now
-	server.reconcileStaleVideoTasks(context.Background())
+	server.reconcileStaleVideoTasksForTenant(context.Background(), server.cfg.AgentID)
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "confirmed" || usage[0].UsageID != "704" || usage[0].ActualCents != 25 {
 		t.Fatalf("known main-site usage was not settled for failed video task: %+v err=%v", usage, err)
@@ -2552,7 +2280,7 @@ func TestStaleFailedVideoTaskStaysPendingWhenUsageLookupFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.store.clock = time.Now
-	server.reconcileStaleVideoTasks(context.Background())
+	server.reconcileStaleVideoTasksForTenant(context.Background(), server.cfg.AgentID)
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
 		t.Fatalf("failed usage lookup must keep failed video reservation pending: %+v err=%v", usage, err)
@@ -2592,7 +2320,7 @@ func TestStaleImageTaskReconcilerWaitsForFailedTaskUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.store.clock = time.Now
-	server.reconcileStaleImageTasks(context.Background())
+	server.reconcileStaleImageTasksForTenant(context.Background(), server.cfg.AgentID)
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "pending" {
 		t.Fatalf("stale failed image must await main usage: %+v err=%v", usage, err)
@@ -2637,7 +2365,7 @@ func TestStaleFailedImageTaskSettlesKnownMainUsageInsteadOfRefunding(t *testing.
 		t.Fatal(err)
 	}
 	server.store.clock = time.Now
-	server.reconcileStaleImageTasks(context.Background())
+	server.reconcileStaleImageTasksForTenant(context.Background(), server.cfg.AgentID)
 	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
 	if err != nil || len(usage) != 1 || usage[0].SettlementStatus != "confirmed" || usage[0].UsageID != "703" || usage[0].ActualCents != 25 {
 		t.Fatalf("known main-site usage was not settled for failed image task: %+v err=%v", usage, err)
@@ -2646,7 +2374,7 @@ func TestStaleFailedImageTaskSettlesKnownMainUsageInsteadOfRefunding(t *testing.
 
 func TestUncertainRelayStaysPendingInsteadOfRefunding(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/agent-runtime/owner" {
+		if r.URL.Path == "/v1/sub2api/balance" {
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 10.0}))
 			return
 		}
@@ -2689,7 +2417,7 @@ func TestDuplicateModelRequestIsNotForwardedOrChargedTwice(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/agent-runtime/owner":
+		case "/v1/sub2api/balance":
 			adminReads++
 			balance := 10.0
 			if adminReads > 1 {
@@ -2795,7 +2523,7 @@ func TestAgentAPIRejectsForeignCredentialedOriginAndMainKeyProxy(t *testing.T) {
 	for _, route := range []string{"/v1/admin/users", "/v1/private/completions"} {
 		probe := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, route, nil)
-		req.Header.Set("Authorization", "Bearer sk-agent-not-used")
+		req.Header.Set("Authorization", "Bearer sk-not-used")
 		server.ServeHTTP(probe, req)
 		if probe.Code != http.StatusForbidden || !strings.Contains(probe.Body.String(), "MODEL_ROUTE_FORBIDDEN") {
 			t.Fatalf("model route %s was not rejected: status=%d body=%s", route, probe.Code, probe.Body.String())
@@ -2803,32 +2531,10 @@ func TestAgentAPIRejectsForeignCredentialedOriginAndMainKeyProxy(t *testing.T) {
 	}
 	unknownAsync := httptest.NewRecorder()
 	unknownAsyncRequest := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async/extra", strings.NewReader(`{"model":"gpt-image-2"}`))
-	unknownAsyncRequest.Header.Set("Authorization", "Bearer sk-agent-not-used")
+	unknownAsyncRequest.Header.Set("Authorization", "Bearer sk-not-used")
 	server.ServeHTTP(unknownAsync, unknownAsyncRequest)
 	if unknownAsync.Code != http.StatusForbidden || !strings.Contains(unknownAsync.Body.String(), "MODEL_ROUTE_FORBIDDEN") {
 		t.Fatalf("unknown async image route was not rejected: status=%d body=%s", unknownAsync.Code, unknownAsync.Body.String())
-	}
-}
-
-func TestAgentAdminAllocationRejectsForeignOrigin(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("CSRF-rejected allocation must not call upstream: %s", r.URL.Path)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"u@example.com"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/admin/users/42/allocate", strings.NewReader(`{"amount":"1.00"}`))
-	req.Host = "agent.example.com"
-	req.Header.Set("Origin", "https://evil.example.com")
-	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	rec := httptest.NewRecorder()
-	server.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "CSRF_ORIGIN_REJECTED") {
-		t.Fatalf("foreign allocation origin status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -2951,303 +2657,6 @@ func TestAgentAdminPaymentConfigRetainsAndClearsEncryptedSecret(t *testing.T) {
 	}
 }
 
-func TestAgentAdminAllocationSynchronizesOwnerAndAllocatesUnderOneLock(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/owner" {
-			t.Errorf("unexpected owner lookup path: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "owner@example.com", "balance": 10.0}))
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	sessionID, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/admin/users/42/allocate", strings.NewReader(`{"amount_cents":100}`))
-	req.Host = "agent.example.com"
-	req.Header.Set("Origin", "https://agent.example.com")
-	req.Header.Set("Idempotency-Key", "admin-allocate-lock")
-	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
-	rec := httptest.NewRecorder()
-	server.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("allocation status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	user, err := server.store.User(server.cfg.AgentID, "42")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if user.BalanceCents != 100 {
-		t.Fatalf("allocation did not credit user: %+v", user)
-	}
-	agent, err := server.store.Agent(server.cfg.AgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if agent.WalletAvailable != 900 || agent.WalletAllocated != 100 {
-		t.Fatalf("unexpected synchronized wallet: %+v", agent)
-	}
-}
-
-func TestAgentAdminMappedUserStatusUsesScopedRuntimeAPIAndGatesModels(t *testing.T) {
-	var statusUpdates, modelRequests int
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/agent-runtime/users/43/status":
-			statusUpdates++
-			if r.Method != http.MethodPatch || r.Header.Get("X-AgentAPI-Runtime-Control") != testRuntimeControlCredential || r.Header.Get("x-api-key") != "" || r.Header.Get("Authorization") != "" {
-				t.Errorf("unexpected scoped runtime request: method=%s control=%q", r.Method, r.Header.Get("X-AgentAPI-Runtime-Control"))
-			}
-			var payload map[string]json.RawMessage
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Errorf("decode main user status update: %v", err)
-			}
-			if len(payload) != 1 || string(payload["status"]) == "" {
-				t.Errorf("status update included non-status fields: %s", mustJSON(payload))
-			}
-			var status string
-			_ = json.Unmarshal(payload["status"], &status)
-			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"agent_id": "agent-test", "user_id": 43, "status": status}))
-		case "/v1/models":
-			modelRequests++
-			_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": []any{}})
-		default:
-			t.Errorf("unexpected upstream path: %s", r.URL.Path)
-			http.NotFound(w, r)
-		}
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
-		t.Fatal(err)
-	}
-	userSession, err := server.store.CreateSession("43", []byte(`{"id":"43","email":"mapped@example.com"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42","email":"owner@example.com"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, agentKey, err := server.store.CreateAPIKey(server.cfg.AgentID, "43", "status test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	updateStatus := func(status string) *httptest.ResponseRecorder {
-		t.Helper()
-		req := httptest.NewRequest(http.MethodPatch, "/api/v1/agent/admin/users/43/status", strings.NewReader(`{"status":"`+status+`","balance":999999}`))
-		req.Host = "agent.example.com"
-		req.Header.Set("Origin", "https://agent.example.com")
-		req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
-		rec := httptest.NewRecorder()
-		server.ServeHTTP(rec, req)
-		return rec
-	}
-
-	disabled := updateStatus("disabled")
-	if disabled.Code != http.StatusOK || !strings.Contains(disabled.Body.String(), `"status":"disabled"`) {
-		t.Fatalf("disable status=%d body=%s", disabled.Code, disabled.Body.String())
-	}
-	user, err := server.store.User(server.cfg.AgentID, "43")
-	if err != nil || user.Status != "disabled" {
-		t.Fatalf("local Agent gate was not disabled: user=%+v err=%v", user, err)
-	}
-	modelReq := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	modelReq.Header.Set("Authorization", "Bearer "+agentKey)
-	modelResp := httptest.NewRecorder()
-	server.ServeHTTP(modelResp, modelReq)
-	if modelResp.Code != http.StatusForbidden || !strings.Contains(modelResp.Body.String(), "AGENT_USER_DISABLED") {
-		t.Fatalf("disabled user model access status=%d body=%s", modelResp.Code, modelResp.Body.String())
-	}
-	sessionModelReq := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	sessionModelReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: userSession})
-	sessionModelResp := httptest.NewRecorder()
-	server.ServeHTTP(sessionModelResp, sessionModelReq)
-	if sessionModelResp.Code != http.StatusUnauthorized {
-		t.Fatalf("disabled user's existing session remained usable: status=%d body=%s", sessionModelResp.Code, sessionModelResp.Body.String())
-	}
-
-	enabled := updateStatus("active")
-	if enabled.Code != http.StatusOK || !strings.Contains(enabled.Body.String(), `"status":"active"`) {
-		t.Fatalf("enable status=%d body=%s", enabled.Code, enabled.Body.String())
-	}
-	user, err = server.store.User(server.cfg.AgentID, "43")
-	if err != nil || user.Status != "active" {
-		t.Fatalf("local Agent gate was not re-enabled: user=%+v err=%v", user, err)
-	}
-	modelReq = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	modelReq.Header.Set("Authorization", "Bearer "+agentKey)
-	modelResp = httptest.NewRecorder()
-	server.ServeHTTP(modelResp, modelReq)
-	if modelResp.Code != http.StatusOK || strings.Contains(modelResp.Body.String(), testRuntimeControlCredential) {
-		t.Fatalf("enabled user model discovery leaked runtime credential: status=%d body=%s", modelResp.Code, modelResp.Body.String())
-	}
-	sessionModelReq = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	sessionModelReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: userSession})
-	sessionModelResp = httptest.NewRecorder()
-	server.ServeHTTP(sessionModelResp, sessionModelReq)
-	if sessionModelResp.Code != http.StatusOK {
-		t.Fatalf("enabled user's existing session did not recover: status=%d body=%s", sessionModelResp.Code, sessionModelResp.Body.String())
-	}
-	if statusUpdates != 2 || modelRequests != 0 {
-		t.Fatalf("status updates/model calls = %d/%d, want 2/0", statusUpdates, modelRequests)
-	}
-}
-
-func TestAgentAdminMappedUserStatusIsInstanceLocalWithoutLegacyRuntimeBridge(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("ordinary instance status update must not call Sub2API: %s %s", r.Method, r.URL.Path)
-		http.Error(w, "unexpected", http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.ProvisioningControlEnabled = false
-	server.main = NewMainClient(server.cfg)
-	server.cfg.RuntimeControlCredential = "agt_ctl_stale-value-must-not-activate-legacy-bridge"
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
-		t.Fatal(err)
-	}
-	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	memberSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, memberKey, err := server.store.CreateAPIKey(server.cfg.AgentID, "43", "existing-key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, status := range []string{"disabled", "active"} {
-		req := httptest.NewRequest(http.MethodPatch, "http://agent.local/api/v1/agent/admin/users/43/status", strings.NewReader(`{"status":"`+status+`"}`))
-		req.Header.Set("Origin", "http://agent.local")
-		req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
-		rec := httptest.NewRecorder()
-		server.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"`+status+`"`) {
-			t.Fatalf("local status %s returned %d %s", status, rec.Code, rec.Body.String())
-		}
-		// Existing cookies cannot bypass a newly disabled membership. Re-enable
-		// restores local access without changing the user's main-site account.
-		keysReq := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys", nil)
-		keysReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: memberSession})
-		keysResponse := httptest.NewRecorder()
-		server.ServeHTTP(keysResponse, keysReq)
-		want := http.StatusOK
-		if status == "disabled" {
-			want = http.StatusUnauthorized
-		}
-		if keysResponse.Code != want {
-			t.Fatalf("%s cookie access: %d %s", status, keysResponse.Code, keysResponse.Body.String())
-		}
-		if status == "disabled" {
-			for _, useCookie := range []bool{true, false} {
-				modelReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","messages":[]}`))
-				if useCookie {
-					modelReq.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: memberSession})
-				} else {
-					modelReq.Header.Set("Authorization", "Bearer "+memberKey)
-				}
-				modelResponse := httptest.NewRecorder()
-				server.ServeHTTP(modelResponse, modelReq)
-				wantCode, wantReason := http.StatusForbidden, "AGENT_USER_DISABLED"
-				if useCookie {
-					wantCode, wantReason = http.StatusUnauthorized, "UNAUTHORIZED"
-				}
-				if modelResponse.Code != wantCode || !strings.Contains(modelResponse.Body.String(), wantReason) {
-					t.Fatalf("disabled model access cookie=%v: %d %s", useCookie, modelResponse.Code, modelResponse.Body.String())
-				}
-			}
-		}
-	}
-}
-
-func TestAgentAdminMappedUserDisableRemainsLocallyBlockedWhenMainUpdateFails(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/agent-runtime/users/43/status" || r.Method != http.MethodPatch {
-			t.Errorf("unexpected main API call: %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]any{"code": 403, "message": "not allowed"})
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	server.cfg.AppCredential = "agt_model_test-model-relay-secret-0123456789abcdef"
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "mapped@example.com", "Mapped"); err != nil {
-		t.Fatal(err)
-	}
-	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agent/admin/users/43/status", strings.NewReader(`{"status":"disabled"}`))
-	req.Host = "agent.example.com"
-	req.Header.Set("Origin", "https://agent.example.com")
-	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: ownerSession})
-	rec := httptest.NewRecorder()
-	server.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "MAIN_USER_STATUS_UPDATE_FAILED") {
-		t.Fatalf("failed main update status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	user, err := server.store.User(server.cfg.AgentID, "43")
-	if err != nil || user.Status != "disabled" {
-		t.Fatalf("failed main update did not retain fail-closed local state: user=%+v err=%v", user, err)
-	}
-}
-
-func TestAgentAdminMappedUserStatusRejectsUnauthorizedTargetsAndRequests(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("invalid user status operation must not call Sub2API: %s %s", r.Method, r.URL.Path)
-		http.Error(w, "unexpected upstream call", http.StatusInternalServerError)
-	}))
-	defer upstream.Close()
-	server := testServer(t, upstream)
-	if _, err := server.store.UpsertUser(server.cfg.AgentID, "43", "member@example.com", "Member"); err != nil {
-		t.Fatal(err)
-	}
-	ownerSession, err := server.store.CreateSession("42", []byte(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-	memberSession, err := server.store.CreateSession("43", []byte(`{"id":"43"}`), "", "", time.Now().Add(sessionTTL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name, target, status, session, origin, forwardedHost, wantError string
-		wantCode                                                        int
-	}{
-		{name: "non-owner", target: "43", status: "disabled", session: memberSession, origin: "https://agent.example.com", wantCode: http.StatusForbidden, wantError: "AGENT_ADMIN_REQUIRED"},
-		{name: "cross-origin with forged forwarded host", target: "43", status: "disabled", session: ownerSession, origin: "https://attacker.example", forwardedHost: "attacker.example", wantCode: http.StatusForbidden, wantError: "CSRF_ORIGIN_REJECTED"},
-		{name: "owner-protected", target: "42", status: "disabled", session: ownerSession, origin: "https://agent.example.com", wantCode: http.StatusConflict, wantError: "OWNER_STATUS_PROTECTED"},
-		{name: "unmapped-user", target: "404", status: "disabled", session: ownerSession, origin: "https://agent.example.com", wantCode: http.StatusNotFound, wantError: "AGENT_USER_NOT_FOUND"},
-		{name: "unsupported-status", target: "43", status: "suspended", session: ownerSession, origin: "https://agent.example.com", wantCode: http.StatusBadRequest, wantError: "INVALID_USER_STATUS"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPatch, "/api/v1/agent/admin/users/"+test.target+"/status", strings.NewReader(`{"status":"`+test.status+`"}`))
-			req.Host = "agent.example.com"
-			req.Header.Set("Origin", test.origin)
-			if test.forwardedHost != "" {
-				req.Header.Set("X-Forwarded-Host", test.forwardedHost)
-				req.Header.Set("Forwarded", "for=203.0.113.10;host="+test.forwardedHost+";proto=https")
-			}
-			req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: test.session})
-			rec := httptest.NewRecorder()
-			server.ServeHTTP(rec, req)
-			if rec.Code != test.wantCode || !strings.Contains(rec.Body.String(), test.wantError) {
-				t.Fatalf("status update status=%d body=%s, want %d %s", rec.Code, rec.Body.String(), test.wantCode, test.wantError)
-			}
-		})
-	}
-}
-
 func TestAgentRejectsUnknownHostButKeepsHealthProbeAvailable(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("unknown host must be rejected before upstream access: %s", r.URL.Path)
@@ -3256,14 +2665,26 @@ func TestAgentRejectsUnknownHostButKeepsHealthProbeAvailable(t *testing.T) {
 	defer upstream.Close()
 	server := testServer(t, upstream)
 	server.cfg.AgentDomain = "agent.example.com"
-	unknown := httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
-	unknown.Host = "other.example.com"
-	unknown.Header.Set("X-Forwarded-Host", "agent.example.com")
-	unknown.Header.Set("Forwarded", "host=agent.example.com;proto=https")
-	unknownResponse := httptest.NewRecorder()
-	server.ServeHTTP(unknownResponse, unknown)
-	if unknownResponse.Code != http.StatusMisdirectedRequest || !strings.Contains(unknownResponse.Body.String(), "HOST_NOT_ALLOWED") {
-		t.Fatalf("unknown host status=%d body=%s", unknownResponse.Code, unknownResponse.Body.String())
+	for _, path := range []string{
+		"/",
+		"/api/auth/sso/callback?ticket=ignored",
+		"/api/v1/settings/public",
+		"/api/v1/payments/webhook",
+		"/api/v1/agent/context",
+		"/v1/usage",
+		"/assets/app.js",
+	} {
+		t.Run(path, func(t *testing.T) {
+			unknown := httptest.NewRequest(http.MethodGet, path, nil)
+			unknown.Host = "other.example.com"
+			unknown.Header.Set("X-Forwarded-Host", "agent.example.com")
+			unknown.Header.Set("Forwarded", "host=agent.example.com;proto=https")
+			unknownResponse := httptest.NewRecorder()
+			server.ServeHTTP(unknownResponse, unknown)
+			if unknownResponse.Code != http.StatusMisdirectedRequest || !strings.Contains(unknownResponse.Body.String(), "HOST_NOT_ALLOWED") {
+				t.Fatalf("unknown host path=%s status=%d body=%s", path, unknownResponse.Code, unknownResponse.Body.String())
+			}
+		})
 	}
 	valid := httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
 	valid.Host = "agent.example.com:443"
@@ -3278,6 +2699,47 @@ func TestAgentRejectsUnknownHostButKeepsHealthProbeAvailable(t *testing.T) {
 	server.ServeHTTP(healthResponse, health)
 	if healthResponse.Code != http.StatusOK {
 		t.Fatalf("health probe on internal host status=%d body=%s", healthResponse.Code, healthResponse.Body.String())
+	}
+	ready := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	ready.Host = "other.example.com"
+	readyResponse := httptest.NewRecorder()
+	server.ServeHTTP(readyResponse, ready)
+	if readyResponse.Code != http.StatusOK {
+		t.Fatalf("readiness probe on internal host status=%d body=%s", readyResponse.Code, readyResponse.Body.String())
+	}
+}
+
+func TestSharedRuntimeAllowsOnlyConfiguredOrPersistedHosts(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.AgentID = ""
+	server.cfg.AgentDomain = ""
+	server.cfg.SharedHosts = []string{"shared.example.com"}
+
+	custom := tenantTestConfig("custom-agent", "custom-owner", "Custom")
+	custom.AgentDomain = "custom.example.com"
+	if err := server.store.UpsertAgent(custom); err != nil {
+		t.Fatal(err)
+	}
+	for host, want := range map[string]bool{
+		"shared.example.com":         true,
+		"SHARED.EXAMPLE.COM:443":     true,
+		"custom.example.com":         true,
+		"unknown.example.com":        false,
+		"https://shared.example.com": false,
+	} {
+		if got := server.allowedHost(host); got != want {
+			t.Errorf("allowedHost(%q)=%v, want %v", host, got, want)
+		}
+	}
+
+	unknown := httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+	unknown.Host = "unknown.example.com"
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, unknown)
+	if response.Code != http.StatusMisdirectedRequest || !strings.Contains(response.Body.String(), "HOST_NOT_ALLOWED") {
+		t.Fatalf("unknown shared host status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

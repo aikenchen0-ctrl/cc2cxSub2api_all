@@ -85,8 +85,8 @@ const amountError = computed(() => {
   if (!limit) return '请选择支付方式。'
   const globalMin = checkout.value?.global_min || 0
   const globalMax = checkout.value?.global_max || 0
-  if (globalMin > 0 && value < globalMin) return `主站最低充值金额为 ${formatMoney(globalMin, currency.value)}`
-  if (globalMax > 0 && value > globalMax) return `主站最高充值金额为 ${formatMoney(globalMax, currency.value)}`
+  if (globalMin > 0 && value < globalMin) return `最低充值金额为 ${formatMoney(globalMin, currency.value)}`
+  if (globalMax > 0 && value > globalMax) return `最高充值金额为 ${formatMoney(globalMax, currency.value)}`
   if (limit.single_min > 0 && value < limit.single_min) return `单笔最低 ${formatMoney(limit.single_min, currency.value)}`
   if (limit.single_max > 0 && value > limit.single_max) return `单笔最高 ${formatMoney(limit.single_max, currency.value)}`
   if (limit.daily_limit > 0 && limit.daily_remaining >= 0 && value > limit.daily_remaining) return `今日该支付方式剩余额度为 ${formatMoney(limit.daily_remaining, currency.value)}`
@@ -294,7 +294,7 @@ async function submit(forceResume = false): Promise<void> {
       if (!popup) window.location.assign(payURL)
     }
   } catch (reason) {
-    error.value = errorMessage(reason, '创建主站支付订单失败，请稍后重试。')
+    error.value = errorMessage(reason, '创建支付订单失败，请稍后重试。')
   } finally {
     submitting.value = false
   }
@@ -368,7 +368,7 @@ async function resumeWechatPayment(): Promise<void> {
   const availableWechatMethods = methods.value.map(([type]) => type).filter(type => type.startsWith('wxpay'))
   const nextMethod = availableWechatMethods.includes(requestedMethod) ? requestedMethod : availableWechatMethods[0]
   if (!nextMethod) {
-    error.value = '主站当前没有可用的微信支付方式，请选择其他支付方式。'
+    error.value = '当前没有可用的微信支付方式，请选择其他支付方式。'
     return
   }
 
@@ -429,7 +429,7 @@ async function load(): Promise<void> {
     checkout.value = null
     selectedPlan.value = null
     showRenewalModal.value = false
-    error.value = errorMessage(reason, '加载主站支付配置失败，请稍后重试。')
+    error.value = errorMessage(reason, '加载支付配置失败，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -450,11 +450,11 @@ onBeforeUnmount(stopPolling)
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">{{ siteName }}</p>
         <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">购买与充值</h1>
-        <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-dark-400">页面沿用 Sub2API 主站的支付目录和订单流程。余额、套餐、支付订单与到账结果均由主站负责，本站只以当前登录用户身份安全中转。</p>
+        <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-dark-400">选择充值金额和支付方式，完成后余额会自动更新。</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
-          <p class="text-[11px] text-emerald-700/70 dark:text-emerald-300/70">主站可用余额</p>
+          <p class="text-[11px] text-emerald-700/70 dark:text-emerald-300/70">可用余额</p>
           <p class="text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ balance || '暂不可用' }}</p>
         </div>
         <button class="btn btn-secondary" type="button" :disabled="loading" aria-label="刷新支付配置" @click="load">
@@ -464,7 +464,7 @@ onBeforeUnmount(stopPolling)
     </header>
 
     <div v-if="loading" role="status" class="card flex min-h-80 items-center justify-center">
-      <div class="text-center"><span class="mx-auto block h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span><p class="mt-3 text-sm text-gray-500">正在读取主站支付配置…</p></div>
+      <div class="text-center"><span class="mx-auto block h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span><p class="mt-3 text-sm text-gray-500">正在读取支付配置…</p></div>
     </div>
 
     <template v-else>
@@ -472,7 +472,7 @@ onBeforeUnmount(stopPolling)
         <Icon name="exclamationCircle" size="sm" class="mt-0.5 shrink-0" /><span>{{ error }}</span>
       </div>
 
-      <section v-if="!checkout" class="card p-8 text-center text-sm text-gray-500">主站支付配置暂不可用。</section>
+      <section v-if="!checkout" class="card p-8 text-center text-sm text-gray-500">支付配置暂不可用。</section>
 
       <section v-else-if="payment" class="card overflow-hidden" data-testid="payment-status">
         <div class="border-b border-gray-100 px-6 py-5 dark:border-dark-700">
@@ -493,7 +493,7 @@ onBeforeUnmount(stopPolling)
               <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700"><p class="text-xs text-gray-400">应付金额</p><p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ formatMoney(payment.pay_amount, payment.currency || currency) }}</p></div>
               <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700"><p class="text-xs text-gray-400">订单号</p><p class="mt-1 break-all font-mono text-sm font-semibold text-gray-800 dark:text-dark-100">{{ payment.out_trade_no || payment.order_id }}</p></div>
             </div>
-            <div class="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">支付完成后页面会自动向主站确认订单。你也可以点击“我已完成支付”立即验单；到账结果只认主站订单状态。</div>
+            <div class="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">支付完成后页面会自动确认订单。你也可以点击“我已完成支付”立即验单；到账结果以订单状态为准。</div>
             <div class="flex flex-wrap gap-3">
               <button class="btn btn-primary" type="button" :disabled="verifying || !paymentPending" @click="verifyPayment(true)"><Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在确认…' : '我已完成支付' }}</button>
               <button class="btn btn-secondary" type="button" @click="resetPayment">返回重新选择</button>
@@ -522,7 +522,7 @@ onBeforeUnmount(stopPolling)
                 </AgentInput>
               </div>
               <p v-if="amountError" class="mt-2 text-sm text-red-600 dark:text-red-300">{{ amountError }}</p>
-              <p v-else class="mt-2 text-xs text-gray-400">充值倍率：{{ checkout.balance_recharge_multiplier || 1 }}×；最终余额由主站订单到账结果决定。</p>
+              <p v-else class="mt-2 text-xs text-gray-400">充值倍率：{{ checkout.balance_recharge_multiplier || 1 }}×；最终余额由订单到账结果决定。</p>
             </template>
 
             <template v-else-if="activeTab === 'subscription'">
@@ -544,7 +544,7 @@ onBeforeUnmount(stopPolling)
                   <Icon :name="methodIcon(type)" size="lg" class="shrink-0" /><span class="min-w-0"><span class="block truncate text-sm font-semibold">{{ methodLabel(type, item.display_name) }}</span><span v-if="item.fee_rate > 0" class="mt-1 block text-[11px] opacity-70">手续费 {{ item.fee_rate }}%</span></span>
                 </button>
               </div>
-              <p v-else class="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">主站当前没有可用支付方式。</p>
+              <p v-else class="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">当前没有可用支付方式。</p>
             </div>
           </section>
 
@@ -558,8 +558,8 @@ onBeforeUnmount(stopPolling)
                 <div v-if="feeAmount > 0" class="flex justify-between gap-3"><dt class="text-gray-500">手续费（{{ feeRate }}%）</dt><dd class="font-medium text-gray-900 dark:text-white">{{ formatMoney(feeAmount, currency) }}</dd></div>
                 <div class="border-t border-gray-100 pt-4 dark:border-dark-700"><div class="flex items-end justify-between"><dt class="font-medium text-gray-700 dark:text-dark-200">应付总额</dt><dd class="text-2xl font-bold text-primary-600 dark:text-primary-400">{{ formatMoney(totalAmount || 0, currency) }}</dd></div></div>
               </dl>
-              <button class="btn btn-primary mt-6 w-full py-3 text-base" type="button" :disabled="!canSubmit" @click="submit()"><span v-if="submitting" class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>{{ submitting ? '正在创建主站订单…' : '立即支付' }}</button>
-              <p class="mt-3 text-center text-xs leading-5 text-gray-400">点击后由主站创建并计费订单，代理站不会维护第二套支付账本。</p>
+              <button class="btn btn-primary mt-6 w-full py-3 text-base" type="button" :disabled="!canSubmit" @click="submit()"><span v-if="submitting" class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>{{ submitting ? '正在创建订单…' : '立即支付' }}</button>
+              <p class="mt-3 text-center text-xs leading-5 text-gray-400">点击后将安全创建并计费订单。</p>
             </section>
           </aside>
         </div>

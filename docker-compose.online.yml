@@ -159,6 +159,7 @@ services:
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      QR_ART_API_BASE_URL: ${QR_ART_API_BASE_URL:-https://open-qr.mewx.art}
     networks: [gateway]
 
   screen2code-backend:
@@ -284,6 +285,11 @@ services:
       AGENTAPI_ADDR: ":8080"
       AGENTAPI_WEB_DIR: /app/web
       AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
+      # 共享多租户模式必须覆盖旧部署 .env 中可能残留的单租户绑定。
+      AGENT_ID: ""
+      AGENT_DOMAIN: ""
+      AGENT_OWNER_MAIN_USER_ID: ""
+      AGENTAPI_SHARED_HOSTS: ${AGENTAPI_SHARED_HOSTS:-agentapi.cc2.cx}
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       AGENTAPI_SSO_AUDIENCE: agentapi
     volumes: ["agentapi-data:/app/data"]

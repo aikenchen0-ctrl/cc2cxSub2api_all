@@ -49,7 +49,7 @@ onMounted(load)
     <div class="card flex flex-wrap items-center justify-between gap-3 p-4">
       <div>
         <h2 class="font-semibold text-gray-900 dark:text-white">用量与费用分析</h2>
-        <p class="mt-1 text-xs text-gray-500">数据源：本站请求留存的 Sub2API 用量快照，不含主站或其他代理站请求；只读统计，不重新计费。</p>
+        <p class="mt-1 text-xs text-gray-500">数据源：本站请求留存的用量快照；只读统计，不重新计费。</p>
       </div>
       <div class="flex gap-3">
         <AgentSelect v-model="window" :options="windowOptions" class="w-40" aria-label="统计窗口" @change="load" />
@@ -67,7 +67,7 @@ onMounted(load)
       </div>
 
       <p v-if="data.status === 'partial'" class="card border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
-        {{ data.unobserved }} 条缺少主站明细，{{ data.missing_actual }} 条未报告实际费用，{{ data.pending }} 条待确认。费用仅为已报告部分，不代表完整总额。
+        {{ data.unobserved }} 条缺少用量明细，{{ data.missing_actual }} 条未报告实际费用，{{ data.pending }} 条待确认。费用仅为已报告部分，不代表完整总额。
       </p>
 
       <AgentUsageStatsCards :stats="data" />
@@ -79,7 +79,7 @@ onMounted(load)
 
       <div class="card p-4 text-sm text-gray-600 dark:text-gray-300">
         <p>模型路由一致性：{{ data.route_observed ? `${data.route_mismatch} 条不一致 / ${data.route_observed} 条已观测` : '未观测' }}</p>
-        <p class="mt-1 text-xs text-gray-500">图表的空时间桶表示该桶内没有本站请求；“无数据”表示主站事实尚未报告，二者含义不同。</p>
+        <p class="mt-1 text-xs text-gray-500">图表的空时间桶表示该桶内没有本站请求；“无数据”表示明细尚未同步，二者含义不同。</p>
       </div>
     </template>
   </section>

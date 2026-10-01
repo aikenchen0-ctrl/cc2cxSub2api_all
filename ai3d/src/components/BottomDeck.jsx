@@ -39,8 +39,8 @@ export function BottomDeck({
   const compareTarget = getCell(compareCell, customCells)
   const sketchMode = generationMode === 'hunyuan-sketch'
   const localMode = generationMode === 'local'
-  const primaryModes = generationModes.filter((mode) => ['hunyuan', 'hunyuan-sketch'].includes(mode.id))
-  const advancedModes = generationModes.filter((mode) => !['hunyuan', 'hunyuan-sketch', 'cinematic'].includes(mode.id))
+  const primaryModes = generationModes.filter((mode) => ['tripo', 'hunyuan', 'hunyuan-sketch'].includes(mode.id))
+  const advancedModes = generationModes.filter((mode) => !['tripo', 'hunyuan', 'hunyuan-sketch', 'cinematic'].includes(mode.id))
 
   function handleMicroscopeSelect(item) {
     setSelectedMicroscope(item.label)

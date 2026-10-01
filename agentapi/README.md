@@ -1,129 +1,140 @@
 # AgentAPI 代理站
 
-AgentAPI 是 Sub2API 的独立代理站入口。它提供代理站域名、品牌、用户归属、代理 API Key、模型控制台和站长管理界面；真实用户、余额、用量和模型计费始终由 Sub2API 负责。
+AgentAPI 是 Sub2API 的共享多租户代理站。所有代理站共用一套站点、代码、后端和部署；Sub2API 用户点击“一键开分站”后成为一个租户的站长，不同站长的数据以可信 `agent_id` 严格隔离。
 
-代理站管理端明确不提供主站全局资源模块：分组管理、账号管理、代理管理、兑换码管理、插件管理、安全审计（风险控制与提示词审计）和上游核验均已从前端路由、菜单、客户端 API、服务端 API 与新库初始化中移除。普通用户自己的 `/redeem` 兑换入口不属于“兑换码管理”，继续按主站权威兑换协议使用。
+> AI 或开发者修改本目录前，必须先读 [00-AI开发规范与目标架构.md](00-AI开发规范与目标架构.md)、`../docs/卫星应用接入公共层.md` 和 `../docs/卫星公开模型.md`。不得根据历史代码继续扩展“每站一个容器/数据库/端口”的旧方案。
 
-业务与安全基线见 [代理站规划.md](代理站规划.md)，公共层接入约束见 `../docs/卫星应用接入公共层.md`，公开模型名见 `../docs/卫星公开模型.md`。
+## 产品边界
 
-## 当前架构
+Sub2API 负责真实用户、余额、充值、订单、订阅、模型目录、上游调度、计费和用量。AgentAPI 只保留共享代理站所需的核心能力：登录/注册、用户仪表盘、用户自己的 Agent API Key、用量记录、充值与订单、推广返利、个人资料、站长基础仪表盘、本站公告、用量同步、套餐/订单管理以及品牌和基础系统设置。模型兼容接口 `/v1/*` 仍是核心服务能力，但站内不再提供模型浏览或模型操作工作台。
 
-- 用户在代理站注册时，AgentAPI 使用服务端 `SUB2API_ADMIN_API_KEY` 调用主站现有管理员创建用户接口（固定普通用户、零初始余额），成功后保存 `agent_id + main_user_id` 归属；登录仍由主站验证。该管理员密钥不进入浏览器，也不用于模型请求。未配置时关闭代理站注册。
+AgentAPI 明确不提供：模型广场、模型工作台、模型权限/模型策略管理、批量图片、代理站开通管理、运营监控、优惠码管理、订阅管理、渠道管理、代理站计费、内容页面管理、备份管理、分组管理、账号管理、代理管理、兑换码管理、插件管理、安全审计（风险控制与提示词审计）和上游核验。禁用模块已从菜单、路由页面、前端 API 客户端、非核心后端 Handler 和新库表结构删除；旧库启动迁移会删除对应退役表，遗留管理路径固定返回 `404`，站长不能代其他用户管理 Agent Key。模型网关只接受仓库定义的卫星公开模型目录；AgentAPI 不提供租户内容页或法律协议 API。
 
-主站负责所有实际计费和用量入库；代理站只跟踪请求并同步主站记录，不以余额差值重建账单。站长可在用户列表中管理本站下属用户的代理 API Key。部署权限、升级幂等键注意事项及剩余验收见 [主站事实与代理站管理边界](25-主站事实与代理站管理边界.md)。
-- 用户创建的 `sk-agent-*` Key 只在当前 AgentAPI 实例生效；数据库只保存哈希，完整 Key 仅在创建时返回一次。
-- 模型请求由 AgentAPI 校验用户归属、状态、模型白名单和主站余额后，按该用户的 `main_user_id` 转发到 Sub2API。
-- Sub2API 对该真实用户完成一次计费。AgentAPI 不维护可消费子余额，不从站长共享钱包扣款。
-- 代理站站长只是当前 `agent_id` 的管理员，只能管理本实例映射用户、品牌、模型策略、结算记录和本站操作日志；不能管理主站分组、账号池、代理池、插件、兑换码发行、安全策略或上游核验。
-- 所有表和查询均以 `agent_id` 为隔离边界；生产实例还会按 `AGENT_DOMAIN` 拒绝未知 Host。
-- Logo、Title、favicon 和页面品牌来自当前实例配置，不从请求参数选择其他代理站。
+## 目标架构
 
-`owner_upstream`、本地钱包、旧充值订单和逐站 runtime 凭据仅为旧实例迁移兼容。新实例默认并应保持 `AGENT_BILLING_MODE=user_upstream`；直结模式下本地充值、支付 webhook、额度同步和余额分配写接口均停用。
+```text
+Sub2API 已登录用户
+  → 点击“一键开分站”
+  → 主站幂等创建或返回 agent 租户
+  → 既有卫星 SSO 启动接口
+  → 共享 AgentAPI 建立 3 天 HttpOnly Session
+  → 每个请求解析可信 TenantContext
+  → 所有数据访问按 agent_id 隔离
+```
+
+- 开站是创建租户记录，不是部署新容器。
+- 站长是当前租户管理员，不是 Sub2API 管理员。
+- 浏览器不接触 SuperKey、主站 JWT、应用凭据或管理员 Key。
+- 模型请求按当前真实用户的 `main_user_id` 调用 Sub2API，不由站长代付。
+- 新签发的 `sk-*` 只在 AgentAPI 认证，数据库只保存哈希，完整 Key 仅创建时返回一次；历史 `sk-agent-*` 继续兼容，`sk-super-*` 永远不能作为本站 Key。
+- 自定义域名和品牌是租户配置，不代表独立运行实例。
+
+## 当前实现状态
+
+截至 2026-09-30，后端已经具备第一批共享多租户核心：同一数据库可保存多个站点，Session 和 Agent Key 固定所属租户，模型转发按凭证租户结算，公开品牌及登录入口可按数据库 Host 映射选择租户，并对跨租户 Session、伪造 query/header 和重复域名建立拒绝与测试。视频、图片任务和结算也已验证可在不同租户复用相同 `task_id` / `request_id`，读取及更新不会串站。主站“一键开分站”代码已改为按已登录用户幂等创建或返回逻辑租户及 owner 成员关系，再通过既有卫星 SSO 票据传递签名的 `agent_id + role + agent_name`；AgentAPI 严格校验这些字段、创建缺失租户并建立 3 天会话，已有租户的 owner 不允许被后续票据或重启改写。上述非核心模块的前端、客户端和专属服务端入口均已删除并建立 `404` 回归测试；AgentAPI 不再注册租户内容页或法律协议 API。
+
+当前共享运行时已经在本地完成一套真实部署与联调：Sub2API 的 `246/247` 迁移已执行并登记，旧 provisioning 表已删除；主站“一键开分站”到 AgentAPI SSO、同一用户重复开站幂等、两个站长获得不同 `agent_id`、共享容器数不变、个人 Key 和列表跨租户隔离、未知 Host 返回 `421` 均已实测通过。迁移另在临时 PostgreSQL 16 中覆盖历史 owner 收敛、已删除用户跳过、旧表/函数删除和失败回滚。AgentAPI 内部及主站的逐站 provision/runtime-control 代码、凭据和管理界面均已退休。
+
+尚未完成的是正式生产环境验收，而不是本地共享主链路：当前 AgentAPI Compose 仍是单副本 SQLite，生产还需要并发数据库、多副本 Session/队列、正式域名与 HTTPS Cookie、付费文本/流式/图片/视频计费核对、灰度数据核数、备份恢复和灾备演练。因此可以表述为“共享代理站核心代码、本地部署和双租户隔离已验证”，不能表述为“已经完成生产上线”。准确证据见 [26-部署验收记录.md](26-部署验收记录.md)，生产门槛见 [00-AI开发规范与目标架构.md](00-AI开发规范与目标架构.md) 第 14 节。
 
 ## 目录
 
-- `backend/`：Go 服务、SQLite 数据层、Sub2API 客户端、模型代理与测试。
+- `backend/`：Go 服务、数据层、Sub2API 客户端、模型代理与测试。
 - `frontend/`：Vue 3 用户界面、站长控制台与组件测试。
-- `Dockerfile`、`docker-compose.yml`：单实例容器部署。
-- `backend/cmd/agentapi-provision/`：生成独立实例部署包。
-- `backend/cmd/agentapi-provision-worker/`：消费主站开站任务并部署实例。
+- `Dockerfile`、`docker-compose.yml`：当前共享代码的单副本 SQLite 开发/迁移部署，不是最终多副本生产拓扑。
+- 逐站 `agentapi-provision*` 命令和 worker 已删除；新租户开通只在共享运行时中创建逻辑租户和 owner 关系。
+- `00-AI开发规范与目标架构.md`：最高优先级规范。
+- `25-主站事实与代理站管理边界.md`：主站权威数据和本站权限边界。
 
 ## 本地开发
 
-后端：
-
-```bash
-cd agentapi/backend
-cp .env.example .env
-# 编辑配置后，将变量导入当前进程环境再执行 go run .。
-# Go 程序不会自动加载 .env；推荐使用下述 Compose 启动方式。
-```
-
-前端：
-
-容器启动（先在 `backend/.env` 配置与主站一致的 `SUB2API_SSO_SECRET`，通过同一文件提供 Compose 变量与服务端环境，避免两份 Secret 不一致）：
+后端程序不会自动读取 `.env`。推荐使用 Compose，并确保 `backend/.env` 中的 `SUB2API_SSO_SECRET` 与主站一致：
 
 ```bash
 cd agentapi
 docker compose --env-file backend/.env up -d --build
 ```
 
-如果主站也在本机 Docker 中，使用附加网络配置，确保重建后仍可解析 `sub2api`，不依赖手动 `docker network connect`：
+`backend/.env` 是容器内服务端配置，并同时作为 Compose 插值来源；其中的 `SUB2API_SSO_SECRET` 必须与主站一致。不要把任何密钥放入 `frontend/.env`，也不要为不同站长复制 Compose 项目或修改端口：所有站长共用这一个服务，由签名 SSO 中的 `agent_id` 和服务端 Session 隔离。
+
+主站也在本机 Docker 时，可附加主站网络：
 
 ```bash
 docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.local.yml config --quiet
 docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.local.yml up -d --build
 ```
 
-该配置要求主站已有 `deploy_sub2api-network`（可通过 `SUB2API_DOCKER_NETWORK` 指定实际名称），不会创建或修改主站网络。远程主站不需要附加此文件。不要公开不带 `--quiet` 的 Compose 配置输出，其中可能包含服务端密钥。启动前检查 `AGENTAPI_PORT`，避免占用已有实例端口；保留原项目名及数据卷，禁止使用 `down -v` 清空数据。
+不要公开不带 `--quiet` 的 Compose 配置输出，不要使用 `down -v` 清空数据。该部署只用于当前实现的开发和迁移验证，不得复制为每个新租户的生产部署。
 
-前端开发：
+前端开发与构建：
 
 ```bash
 cd agentapi/frontend
 pnpm install
 pnpm dev
-```
-
-前端生产构建会输出到 `backend/web/`，由 Go 服务同源托管：
-
-```bash
-cd agentapi/frontend
 pnpm build
 ```
 
-## 生产配置
+生产构建输出到 `backend/web/`，由 Go 服务同源托管。
 
-至少配置：
+## 当前兼容配置
+
+以下是共享运行时及迁移兼容配置，迁移期间必须区分生产必需项与显式旧站兼容项：
 
 - `MAIN_API_URL`：Sub2API 主站 API Origin。
-- `LINK`：主站公开 Origin，用于充值跳转；不配置则禁用充值跳转，不回退内部 API 地址。
-- `SUB2API_ADMIN_API_KEY` 或 `_FILE`：主站普通用户创建权限，只有可信部署者可持有。兼容旧名称 `SUB2API_ADMIN_KEY`；新名称优先，显式配置的文件不可读时关闭注册，不回退旧密钥。
-- `MAIN_MODEL_URL`：Sub2API 模型网关 Origin；容器内地址可用 `SUB2API_RELAY_BASE_URL` 覆盖。
-- `SUB2API_APP_CREDENTIAL`：服务端公共卫星应用凭据，禁止进入前端环境。
-- `SUB2API_SSO_SECRET`：与 Sub2API 一致的公共层 SSO Secret。
-- `SESSION_SECRET`：AgentAPI HttpOnly Session 加密密钥。
-- `AGENT_ID`、`AGENT_DOMAIN`、`AGENT_OWNER_MAIN_USER_ID`：当前代理站实例身份与站长主站用户 ID。
+- `LINK`：主站公开 Origin，用于充值跳转。
+- `AGENTAPI_SHARED_HOSTS`：共享代理站公共入口的精确 Host 白名单，逗号分隔；不得填写协议、路径或通配符。数据库中已认领的租户自定义域名会单独放行。共享模式缺少该配置时服务拒绝启动。
+- `MAIN_MODEL_URL` / `SUB2API_RELAY_BASE_URL`：模型网关地址。
+- `SUB2API_APP_CREDENTIAL`：服务端卫星应用凭据。
+- `SUB2API_SSO_SECRET`：与 Sub2API 一致的 SSO Secret。
+- `SESSION_SECRET`：AgentAPI Session 密钥。
+- 共享运行时会在进程启动时强制校验上述三项：应用凭据不能为空，SSO Secret 与 Session Secret 均不得短于 32 个字符；缺失时直接退出，不能以“容器健康但核心业务全部 503”的半配置状态上线。
+- 本地 Compose 默认发布到 `18081`（主站为 `18080`）。若在 Shell 中覆盖 `AGENTAPI_PORT`，后续重建必须继续使用同一值；不要让它隐式回退到主站常用的 `8080`。
+- `SUB2API_ADMIN_API_KEY` 或 `_FILE`：当前注册普通主站用户的可信服务端凭据，不得用于模型调用或进入浏览器。
+- 共享生产默认不设置 `AGENT_ID`、`AGENT_DOMAIN`、`AGENT_OWNER_MAIN_USER_ID`，进程启动不会凭空创建租户；租户由主站签名 SSO 首次进入时创建，并由数据库中的 TenantContext、Session、Agent Key 和 Host 映射解析。
+- 共享入口必须设置 `AGENTAPI_SHARED_HOSTS`；反向代理必须保留真实公共 `Host`，不能依赖浏览器可伪造的 `X-Forwarded-Host`。未知 Host 在进入认证、公开设置或模型接口前返回 `421`。
+- 上述三个变量只保留给旧单租户数据迁移。只有显式设置 `AGENT_ID` 时，旧的不含 `agent_id` Cookie 才会被绑定到该兼容租户；共享生产会直接拒绝这种旧 Cookie，避免隐式串站。
+- 部署预检使用独立的 `AGENTAPI_PREFLIGHT_MAIN_USER_ID` 作为只读探测身份，不再把某个代理站站长当成整个共享进程的 owner。
 - `AGENT_BILLING_MODE=user_upstream`：用户主站直结模式。
 - `COOKIE_SECURE=true`：生产 HTTPS Cookie。
 
-同机多实例应使用不同数据库、端口、域名、`AGENT_ID` 和站长用户 ID，并由反向代理保留真实 Host。不要把 Sub2API 管理凭据、应用凭据、主站 JWT 或用户主站 API Key 写入浏览器配置、URL、日志或 AgentAPI 数据库。
+## 充值与计费
 
-## 充值
+AgentAPI 不创建可消费本地余额。充值入口只使用公开 `LINK` 跳转 Sub2API；未配置公开地址时禁用，不得暴露 Docker 内部地址。充值后重新读取用户的主站真实余额。
 
-AgentAPI 不创建本地支付订单。充值页读取公开设置中的 `recharge_url`，仅允许 HTTP(S) 地址，并跳转到 Sub2API 主站充值。充值完成后，代理站重新读取该用户的真实主站余额。
+主站负责实际计费和用量入库。AgentAPI 只保存明确标记来源和完整性的只读副本；未取得主站明细时显示待确认或不可用，不得使用余额差值、预留值或标准价估算冒充真实费用。
 
 ## 验证
 
-### 部署前只读预检
-
-使用本次版本的二进制，在已安全注入部署环境变量的服务端执行：
+部署前只读预检：
 
 ```bash
-./agentapi --preflight
-# 开发环境可在 backend 目录执行：go run . --preflight
+cd agentapi/backend
+go run . --preflight
 ```
 
-Go 不自动读取 `.env`。不要把密钥放在命令行参数中。已部署本次版本的容器可执行 `docker compose --env-file backend/.env exec -T agentapi /app/agentapi --preflight`；检查的是容器当前环境，修改文件后不会自动更新已有容器环境。
-
-预检在打开数据库、初始化站点和启动 HTTP 服务之前退出。仅 GET 查询配置的站长主站资料及其卫星余额，不注册用户、不创建 Key、不调用模型。输出 JSON 检查状态和 HTTP 状态码，不输出地址、用户资料、余额、响应正文或密钥；全部通过退出 0，否则退出 1，网络检查总超时 20 秒。
-
-`admin_user_read` 和 `satellite_balance_read` 独立检查，前者失败不会跳过后者。401/403 表示相应认证或授权检查失败；`configuration_missing_or_invalid` 表示缺少有效配置；`transport_error` 需排查网络、TLS 或超时。`sso_secret` 仅检查本地长度，不证明与主站一致；管理员 GET 成功也不证明注册 POST 权限、模型可调用、真实计费或跨站隔离通过。预检不是完整上线验收。
-
-### Windows 本地运行配置快照
-
-若部署时使用了内存中的 Compose override，旧 `backend/.env` 不一定代表正在运行的配置，不能直接据此重建。可在仓库根目录执行：
+部署后只读验收（正式环境默认强制 HTTPS）：
 
 ```powershell
-./agentapi/scripts/RuntimeConfig.ps1 -Action Save
-./agentapi/scripts/RuntimeConfig.ps1 -Action Check
+.\scripts\VerifyDeployment.ps1 `
+  -AgentBaseUrl 'https://agent.example.com' `
+  -ExpectedHost 'agent.example.com'
 ```
 
-`Save` 将当前容器业务环境、镜像标识、端口和数据卷名称保存到 `.local/agentapi-runtime/config.dpapi`，使用当前 Windows 用户的 DPAPI 加密；不会覆盖已有快照，需要新副本时指定新的 `-SnapshotPath`。快照不得提交或分享，且不能当作跨机器恢复备份。
+该脚本检查首页、`/healthz`、`/readyz`、未知 Host=`421`、21 条永久删除路径=`404`，并扫描入口 HTML 与 JavaScript 产物，确认没有服务端密钥赋值或 SuperKey 值。仅在本地 HTTP 联调时可显式增加 `-AllowHttp`；正式验收不得使用该参数。可选的 `-SessionCookieFile` 与 `-AgentKeyFile` 只从本地文件读取现有会话 Cookie 和个人 `sk-*`，不会在输出中打印文件内容，也不会创建用户、Key、订单、模型请求或计费记录。`-Json` 可供流水线读取结构化结果。
 
-`Check` 在内存中解密，核对运行环境及镜像/数据卷，再用保存的值渲染 Compose 并比对环境和数据卷；不打印配置内容、不启动或重建容器。它不验证管理员凭据是否有效，也不是自动回滚工具。后续重建必须显式使用经过核对的运行配置，不能假定本脚本已经更新旧 `.env`。数据库仍需单独备份。
+该脚本是无副作用的边界核验，不替代正式浏览器登录、两个租户并发隔离、真实付费文本/图片/视频、支付回调、多副本或恢复演练。
 
-### 自动化测试命令
+运行中 SQLite 的一致性备份（无管理页面，不会暂停服务）：
+
+```bash
+docker exec agentapi-agentapi-1 /app/agentapi --backup /app/data/backups/agentapi-20260930.db
+docker cp agentapi-agentapi-1:/app/data/backups/agentapi-20260930.db ../.local/agentapi-backups/agentapi-20260930.db
+```
+
+`--backup` 使用 SQLite `VACUUM INTO`，会纳入已提交 WAL 并在成功前执行 `integrity_check`；目标文件必须不存在，命令不会覆盖旧备份。复制到数据卷之外并加密保存后，才算完成灾备备份。该命令是部署运维能力，不恢复已经删除的“备份管理”菜单或站长权限。
+
+自动化测试：
 
 ```bash
 cd agentapi/backend
@@ -135,11 +146,13 @@ pnpm test:run
 pnpm build
 ```
 
-当前回归测试覆盖注册映射、用户直结身份、余额不足前置拒绝、用量归属、API Key 一次性显示与撤销、用户停用后 Session/Key 失效、未知 Host 拒绝、品牌持久化、管理员权限、跨用户数据范围、充值跳转安全和异步图片/视频任务结算。
+测试与本地联调已经证明共享开站主链路、双租户隔离和迁移行为；它们仍不能替代正式域名浏览器流程、真实付费模型请求、多副本与灾备等生产验收。最终验收按 [00-AI开发规范与目标架构.md](00-AI开发规范与目标架构.md) 第 14 节执行。
 
-## 公共层约束
+## 文档导航
 
-- 从 Sub2API 左侧菜单进入时沿用现有 `GET /api/v1/auth/integrations/:slug/start`。
-- 浏览器只持有 AgentAPI HttpOnly Session，不接触任何主站管理凭据。
-- 服务端调用公共卫星接口时使用既有应用凭据与代理请求头，不另发明 SSO 或 Key 传递协议。
-- 模型入口只公开 `docs/卫星公开模型.md` 中允许的模型名，并可由当前代理站站长进一步收窄 allowlist。
+- [00-AI开发规范与目标架构.md](00-AI开发规范与目标架构.md)：必读规范和目标架构。
+- [代理站规划.md](代理站规划.md)：共享多租户迁移计划。
+- [25-主站事实与代理站管理边界.md](25-主站事实与代理站管理边界.md)：主站事实和权限边界。
+- [24-成本控制台参考与用量分析.md](24-成本控制台参考与用量分析.md)：用量统计专题。
+- [26-部署验收记录.md](26-部署验收记录.md)：当前本地共享部署验收与历史联调证据。
+- [27-主站前端迁移计划.md](27-主站前端迁移计划.md)：历史前端迁移流水账，不是当前产品清单。

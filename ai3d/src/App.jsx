@@ -732,22 +732,44 @@ function App() {
   }
 
   async function processImageUpload(file, requestedMode = activeGenerationMode, prompt = '') {
-
     setToast('Uploading image for 3D generation')
-    let customCell = null
     const resolvedMode = requestedMode === 'local' ? 'hunyuan' : requestedMode
+    let customCell = createCustomCell(file.name, '', {
+      provider: resolvedMode === HUNYUAN_SKETCH_MODE ? 'hunyuan' : resolvedMode,
+      requestedProvider: resolvedMode,
+      type: resolvedMode === 'cinematic' ? 'JS Depth preview asset' : undefined,
+      status: 'uploading',
+      message: isSketchGenerationMode(resolvedMode)
+        ? '正在准备草图并创建混元任务。'
+        : resolvedMode === 'cinematic'
+        ? 'Building browser-side JS depth relief.'
+        : 'Preparing image for 3D generation.',
+    })
+
+    // Put the task in React state before image processing, vision analysis, or
+    // the provider request. The queue should acknowledge the user's click
+    // immediately instead of appearing only after persistence is reloaded.
+    setCustomCells((current) => {
+      const next = [customCell, ...current.filter((cell) => cell.id !== customCell.id)].slice(0, 8)
+      persistCustomCells(next)
+      return next
+    })
+    setSelectedCell(customCell.id)
+    setSelectedOrganelle(getDefaultOrganelle(customCell.id, [customCell, ...customCells]))
+    setCompareCell(customCell.template)
+    setActivePanel('Library')
+
     try {
       if (requestedMode === 'local') setToast('Local GLB mode needs a model file; using Hunyuan')
       const { displayUrl, generationUrl } = await prepareImageForUpload(file)
       const thumbnailUrl = await createImageThumbnailDataUrl(displayUrl)
       setToast('Analyzing source image')
       const assetInsight = await analyzeUploadedAsset(generationUrl, file.name)
-      customCell = applyAssetInsightToCell(createCustomCell(file.name, displayUrl, {
-        provider: resolvedMode === HUNYUAN_SKETCH_MODE ? 'hunyuan' : resolvedMode,
-        requestedProvider: resolvedMode,
+      customCell = applyAssetInsightToCell({
+        ...customCell,
+        imageUrl: displayUrl,
         thumbnailUrl: thumbnailUrl || displayUrl,
-        type: resolvedMode === 'cinematic' ? 'JS Depth preview asset' : undefined,
-      }), assetInsight)
+      }, assetInsight)
       customCell.generation = {
         ...customCell.generation,
         provider: resolvedMode === HUNYUAN_SKETCH_MODE ? 'hunyuan' : resolvedMode,
@@ -756,15 +778,8 @@ function App() {
         progress: 0,
         message: isSketchGenerationMode(resolvedMode) ? '正在用混元草图模式生成，请不要刷新。' : resolvedMode === 'cinematic' ? 'Building browser-side JS depth relief.' : 'Sending image to backend.',
       }
-      const nextCustomCells = [customCell, ...customCells].slice(0, 8)
-      persistCustomCells(nextCustomCells)
-
-      setCustomCells(nextCustomCells)
+      updateCustomCell(customCell.id, () => customCell)
       setUploadedImage({ name: file.name, url: displayUrl })
-      setSelectedCell(customCell.id)
-      setSelectedOrganelle(getDefaultOrganelle(customCell.id, nextCustomCells))
-      setCompareCell(customCell.template)
-      setActivePanel('Library')
       await generateCustomCellModel(customCell, generationUrl, file.name, resolvedMode, prompt)
     } catch (error) {
       console.error(error)

@@ -23,12 +23,10 @@ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionS
 	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
 }
 
-// ProvideAPIKeyAuthMiddleware wires AgentAPI model credential lookup into the
-// normal gateway authentication path. The three-argument constructor remains
-// available for tests and isolated middleware users that do not expose the
-// AgentAPI satellite.
-func ProvideAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config, agentProvisioning *service.AgentProvisioningService) APIKeyAuthMiddleware {
-	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg, agentProvisioning))
+// ProvideAPIKeyAuthMiddleware wires the normal API-key and shared satellite
+// authentication path into the gateway.
+func ProvideAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
+	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
 }
 
 // apiKeyAuthWithSubscription API Key认证中间件（支持订阅验证）
@@ -40,7 +38,7 @@ func ProvideAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscript
 // /v1/usage、/v1/sub2api/billing、/v1/sub2api/balance 端点与异步生图任务查询只需鉴权，不需要计费执行。
 // usage 允许过期/配额耗尽的 Key 查询自身用量，billing 和 balance 用于读取自身账户信息，
 // 异步生图查询允许已耗尽额度的 Key 拉取自身任务结果。
-func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config, runtimeServices ...*service.AgentProvisioningService) gin.HandlerFunc {
+func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 		if rejectInvalidAuthAbuse(c, apiKeyService) {
@@ -108,11 +106,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			return
 		}
 
-		var runtimeService agentRuntimeModelAuthenticator
-		if len(runtimeServices) > 0 && runtimeServices[0] != nil {
-			runtimeService = runtimeServices[0]
-		}
-		apiKey, satelliteHandled := loadSatelliteUserKey(c, apiKeyService, apiKeyString, runtimeService)
+		apiKey, satelliteHandled := loadSatelliteUserKey(c, apiKeyService, apiKeyString)
 		if satelliteHandled && apiKey == nil {
 			return
 		}

@@ -58,6 +58,9 @@ $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try { $state = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) | ConvertFrom-Json }
 finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
 if ($state.version -ne 1) { throw 'Unsupported snapshot version.' }
+if ($state.port -ne '18081') {
+    throw 'Runtime snapshot uses a legacy AgentAPI port; review the shared deployment before recreation.'
+}
 $container = Read-AgentContainer
 $current = @{}
 foreach ($entry in $container.Config.Env) { $pair = $entry.Split('=', 2); $current[$pair[0]] = $pair[1] }

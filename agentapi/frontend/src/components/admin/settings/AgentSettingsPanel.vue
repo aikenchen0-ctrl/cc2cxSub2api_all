@@ -9,6 +9,7 @@ const props = defineProps<{
   siteLogo: string
   docUrl: string
   contactInfo: string
+  apiBaseUrl: string
   siteSubtitle: string
   compactHomeEnabled: boolean
   homeContent: string
@@ -22,6 +23,7 @@ const emit = defineEmits<{
   'update:siteLogo': [value: string]
   'update:docUrl': [value: string]
   'update:contactInfo': [value: string]
+  'update:apiBaseUrl': [value: string]
   'update:siteSubtitle': [value: string]
   'update:compactHomeEnabled': [value: boolean]
   'update:homeContent': [value: string]
@@ -35,6 +37,7 @@ const siteName = computed({ get: () => props.siteName, set: value => emit('updat
 const siteLogo = computed({ get: () => props.siteLogo, set: value => emit('update:siteLogo', value) })
 const docUrl = computed({ get: () => props.docUrl, set: value => emit('update:docUrl', value) })
 const contactInfo = computed({ get: () => props.contactInfo, set: value => emit('update:contactInfo', value) })
+const apiBaseUrl = computed({ get: () => props.apiBaseUrl, set: value => emit('update:apiBaseUrl', value) })
 const siteSubtitle = computed({ get: () => props.siteSubtitle, set: value => emit('update:siteSubtitle', value) })
 const compactHomeEnabled = computed({ get: () => props.compactHomeEnabled, set: value => emit('update:compactHomeEnabled', value) })
 const homeContent = computed({ get: () => props.homeContent, set: value => emit('update:homeContent', value) })
@@ -45,7 +48,7 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
 </script>
 
 <template>
-  <section class="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-label="代理站系统设置">
+  <section class="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-label="站点系统设置">
     <nav class="h-fit rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-dark-700 dark:bg-dark-800" aria-label="设置分类">
       <button
         type="button"
@@ -67,16 +70,16 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
       <div class="card overflow-hidden">
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">品牌信息</h2>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">自定义本代理站的名称和 Logo。修改只保存在当前代理站租户内。</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">自定义本站的名称和 Logo。修改只应用于当前站点。</p>
         </div>
 
         <div class="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <form class="space-y-5" @submit.prevent="emit('save')">
             <div class="grid gap-5 md:grid-cols-2">
               <div>
-                <label for="agent-name" class="input-label">代理站名称</label>
+                <label for="agent-name" class="input-label">站点名称</label>
                 <AgentInput id="agent-name" v-model="agentName" class="mt-2" maxlength="100" type="text" placeholder="用于站长后台识别" />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">用于代理站管理页面和审计记录，不会修改主站名称。</p>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">用于站点管理页面和本站记录。</p>
               </div>
               <div>
                 <label for="site-name" class="input-label">站点名称</label>
@@ -94,13 +97,19 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
             <div>
               <label for="doc-url" class="input-label">文档网址</label>
               <AgentInput id="doc-url" v-model="docUrl" class="mt-2 font-mono text-sm" maxlength="2048" type="url" placeholder="https://docs.example.com" />
-              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">留空时不显示文档入口；保存后仅应用于当前代理站首页和顶部栏。</p>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">留空时不显示文档入口；保存后仅应用于本站首页和顶部栏。</p>
             </div>
 
             <div>
               <label for="contact-info" class="input-label">客服联系方式</label>
               <AgentInput id="contact-info" v-model="contactInfo" class="mt-2" maxlength="300" type="text" placeholder="例如：support@example.com 或企业微信号" />
-              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">留空时不显示；保存后仅作为当前代理站用户菜单中的纯文本展示。</p>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">留空时不显示；保存后仅作为本站用户菜单中的纯文本展示。</p>
+            </div>
+
+            <div>
+              <label for="api-base-url" class="input-label">API 调用地址</label>
+              <AgentInput id="api-base-url" v-model="apiBaseUrl" class="mt-2 font-mono text-sm" maxlength="2048" type="url" placeholder="https://api.example.com/v1" />
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">用户在 OpenAI 兼容客户端中填写的 Base URL。该地址会显示在 API 密钥面板并支持一键复制。</p>
             </div>
 
             <div class="space-y-5 border-t border-gray-100 pt-5 dark:border-dark-700">
@@ -122,7 +131,7 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
             </div>
 
             <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-5 dark:border-dark-700">
-              <p class="text-xs text-gray-500 dark:text-dark-400">计费身份、代理站域名和主站上游地址由系统配置，不能在此更改。</p>
+              <p class="text-xs text-gray-500 dark:text-dark-400">这里配置向用户展示的本站 API 调用地址。</p>
               <button class="btn btn-primary" type="button" :disabled="saving" @click="emit('save')">
                 <Icon :name="saving ? 'refresh' : 'check'" size="sm" :class="['mr-2', saving ? 'animate-spin' : '']" />
                 {{ saving ? '正在保存…' : '保存品牌信息' }}
@@ -138,13 +147,13 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
                 <div v-else class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600 font-semibold text-white">{{ previewInitial }}</div>
                 <div class="min-w-0">
                   <p class="truncate font-semibold text-gray-900 dark:text-white">{{ previewName }}</p>
-                  <p class="truncate text-xs text-gray-500 dark:text-dark-400">{{ domain || '代理站域名待配置' }}</p>
+                  <p class="truncate text-xs text-gray-500 dark:text-dark-400">{{ domain || '站点域名待配置' }}</p>
                 </div>
               </div>
               <div class="mt-4 h-2 rounded-full bg-gray-100 dark:bg-dark-600"><div class="h-2 w-2/3 rounded-full bg-primary-500"></div></div>
               <div class="mt-3 grid grid-cols-3 gap-2"><span v-for="index in 3" :key="index" class="h-12 rounded-lg bg-gray-100 dark:bg-dark-700"></span></div>
             </div>
-            <p class="mt-3 text-xs leading-5 text-gray-500 dark:text-dark-400">预览只展示品牌外观。主页、菜单栏与内容面板继续复用 Sub2API 的界面结构。</p>
+            <p class="mt-3 text-xs leading-5 text-gray-500 dark:text-dark-400">预览用于确认品牌外观，保存后会应用到本站页面。</p>
           </aside>
         </div>
       </div>
@@ -154,7 +163,7 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
       <div class="card overflow-hidden">
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">数据与权限边界</h2>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">代理站复用主站能力，但代理站管理员只能管理当前租户的数据。</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">站点管理员只能管理当前站点的数据与展示配置。</p>
         </div>
         <div class="grid gap-4 p-6 md:grid-cols-2">
           <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
@@ -166,11 +175,11 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
             </ul>
           </div>
           <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
-            <div class="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-200"><Icon name="lock" size="sm" />主站保持隔离</div>
+            <div class="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-200"><Icon name="lock" size="sm" />安全边界</div>
             <ul class="mt-3 space-y-2 text-sm text-amber-800/90 dark:text-amber-200/90">
-              <li>不能修改主站全局设置或其他代理站配置</li>
-              <li>不能读取主站管理员 Key、JWT 或内部凭证</li>
-              <li>用户余额与实际计费记录始终以主站为准</li>
+              <li>不能修改其他站点的配置</li>
+              <li>不能读取平台级密钥、令牌或内部凭证</li>
+              <li>用户余额与实际计费记录由系统统一核算</li>
             </ul>
           </div>
         </div>

@@ -20,17 +20,20 @@ import (
 )
 
 type juSSOTicket struct {
-	Issuer             string `json:"iss,omitempty"`
-	Audience           string `json:"aud,omitempty"`
-	Subject            string `json:"sub"`
-	Email              string `json:"email,omitempty"`
-	Username           string `json:"username,omitempty"`
-	DisplayName        string `json:"displayName,omitempty"`
-	AvatarURL          string `json:"avatarUrl,omitempty"`
-	IssuedAt           int64  `json:"iat"`
-	ExpiresAt          int64  `json:"exp"`
-	Nonce     string `json:"jti"`
-	Next      string `json:"next,omitempty"`
+	Issuer      string `json:"iss,omitempty"`
+	Audience    string `json:"aud,omitempty"`
+	Subject     string `json:"sub"`
+	Email       string `json:"email,omitempty"`
+	Username    string `json:"username,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	AvatarURL   string `json:"avatarUrl,omitempty"`
+	AgentID     string `json:"agent_id,omitempty"`
+	AgentRole   string `json:"agent_role,omitempty"`
+	AgentName   string `json:"agent_name,omitempty"`
+	IssuedAt    int64  `json:"iat"`
+	ExpiresAt   int64  `json:"exp"`
+	Nonce       string `json:"jti"`
+	Next        string `json:"next,omitempty"`
 }
 
 func signJuTicket(payload juSSOTicket, secret string) (string, error) {

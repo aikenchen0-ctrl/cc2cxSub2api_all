@@ -13,14 +13,12 @@ WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agentapi . \
-    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agentapi-provision ./cmd/agentapi-provision
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agentapi .
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && addgroup -S agentapi && adduser -S -G agentapi agentapi
 WORKDIR /app
 COPY --from=backend /out/agentapi /app/agentapi
-COPY --from=backend /out/agentapi-provision /app/agentapi-provision
 COPY --from=frontend /src/backend/web /app/web
 RUN mkdir -p /app/data && chown -R agentapi:agentapi /app
 USER agentapi

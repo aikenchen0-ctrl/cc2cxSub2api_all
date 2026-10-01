@@ -40,19 +40,6 @@ describe('AgentAPI route guards', () => {
     expect(router.currentRoute.value.meta.requiresAuth).toBe(false)
   })
 
-  it('keeps the copied model plaza public while model execution remains protected', async () => {
-    vi.spyOn(agentAPI.auth, 'me').mockRejectedValue({ status: 401, message: 'not signed in' })
-
-    await router.push('/model-plaza')
-
-    expect(router.currentRoute.value.path).toBe('/model-plaza')
-    expect(router.currentRoute.value.meta.requiresAuth).toBe(false)
-
-    await router.push('/console?model=gpt-5.5')
-    expect(router.currentRoute.value.path).toBe('/login')
-    expect(router.currentRoute.value.query.redirect).toBe('/console?model=gpt-5.5')
-  })
-
   it('keeps the copied WeChat payment callback public without exposing the purchase page', async () => {
     vi.spyOn(agentAPI.auth, 'me').mockRejectedValue({ status: 401, message: 'not signed in' })
 
@@ -119,24 +106,16 @@ describe('AgentAPI route guards', () => {
     expect(router.currentRoute.value.path).toBe('/admin/dashboard')
   })
 
-  it('keeps the copied batch image page behind the Agent session', async () => {
-    vi.spyOn(agentAPI.auth, 'me').mockRejectedValue({ status: 401, message: 'not signed in' })
-
-    await router.push('/batch-image')
-
-    expect(router.currentRoute.value.path).toBe('/login')
-    expect(router.currentRoute.value.query.redirect).toBe('/batch-image')
-  })
-
-  it.each(['dashboard', 'agent-provisioning', 'ops', 'users', 'promo-codes', 'orders', 'orders/dashboard', 'orders/plans', 'subscriptions', 'channels', 'channels/pricing', 'satellite-billing', 'usage', 'audit-logs', 'announcements', 'content', 'backup', 'settings'])('rejects ordinary users at new admin route %s', async (section) => {
+  it.each(['users', 'usage', 'announcements', 'settings'])('rejects ordinary users at retained admin route %s', async (section) => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'user-1', agent_admin: false })
+    await router.push('/home')
     await router.push(`/admin/${section}`)
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
   it('does not register main-site-only administrator modules', () => {
     const paths = router.getRoutes().map(route => route.path)
-    for (const path of ['/admin/groups', '/admin/accounts', '/admin/plugins', '/admin/proxies', '/admin/redeem', '/admin/risk-control', '/admin/prompt-audit', '/admin/upstream-audit']) {
+    for (const path of ['/model-plaza', '/models', '/console', '/batch-image', '/admin/groups', '/admin/accounts', '/admin/orders', '/admin/orders/dashboard', '/admin/affiliates/invites', '/admin/agent-provisioning', '/admin/ops', '/admin/proxies', '/admin/promo-codes', '/admin/plugins', '/admin/audit', '/admin/audit-logs', '/admin/redeem', '/admin/risk-control', '/admin/prompt-audit', '/admin/upstream-audit', '/admin/subscriptions', '/admin/orders/plans', '/admin/channels', '/admin/channels/pricing', '/admin/satellite-billing', '/admin/content', '/admin/backup', '/affiliate', '/profile']) {
       expect(paths).not.toContain(path)
     }
   })
@@ -159,24 +138,21 @@ describe('AgentAPI route guards', () => {
     expect(router.currentRoute.value.path).toBe('/admin/dashboard')
   })
 
-  it('redirects the legacy audit path to the main-site audit route', async () => {
+  it('leaves the removed audit module at the not-found page', async () => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'owner-1', agent_admin: true })
     await router.push('/admin/audit')
-    expect(router.currentRoute.value.path).toBe('/admin/audit-logs')
+    expect(router.currentRoute.value.name).toBe('NotFound')
   })
 
-  it('redirects the legacy model policy path to the copied main-site channel route', async () => {
+  it.each(['/model-plaza', '/models', '/console', '/batch-image', '/admin/models', '/admin/ops', '/admin/subscriptions', '/admin/channels', '/admin/channels/pricing', '/admin/satellite-billing', '/admin/content', '/admin/backup'])('leaves removed route %s at the not-found page', async (path) => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'owner-1', agent_admin: true })
-    await router.push('/admin/models')
-    expect(router.currentRoute.value.path).toBe('/admin/channels')
+    await router.push(path)
+    expect(router.currentRoute.value.name).toBe('NotFound')
   })
 
-  it.each([
-    ['/models', '/model-plaza'],
-    ['/recharge', '/purchase'],
-  ])('keeps old user route %s as a redirect to the main-site path', async (legacy, canonical) => {
+  it('keeps the recharge compatibility redirect', async () => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'user-1', agent_admin: false })
-    await router.push(legacy)
-    expect(router.currentRoute.value.path).toBe(canonical)
+    await router.push('/recharge')
+    expect(router.currentRoute.value.path).toBe('/purchase')
   })
 })

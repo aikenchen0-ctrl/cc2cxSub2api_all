@@ -27,7 +27,7 @@ const recommendation = computed(() => recommendDownload())
         <p class="text-sm font-medium uppercase tracking-[0.18em] text-primary-600 dark:text-primary-400">CCSwitch</p>
         <h1 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">客户端下载</h1>
         <p class="mt-4 text-base leading-7 text-gray-600 dark:text-dark-300">
-          下载 CCSwitch 桌面客户端，在本地管理模型服务连接。下载文件来自主站公开发布仓库，代理站不会修改安装包或在浏览器中注入密钥。
+          下载 CCSwitch 桌面客户端，在本地管理模型服务连接。安装包来自官方发布渠道，本站不会修改安装包或在浏览器中注入密钥。
         </p>
       </div>
 

@@ -28,7 +28,7 @@ describe('AgentOrdersView', () => {
     ;[...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.includes('已完成'))!.click()
     await flushPromises()
     expect(agentAPI.orders.list).toHaveBeenLastCalledWith(1, 20, 'COMPLETED')
-    expect(wrapper.text()).toContain('代理站不创建第二套计费事实')
+    expect(wrapper.text()).toContain('查看当前账户的订单、余额与退款状态')
   })
   it('submits refund through the mapped order API then reloads', async () => {
     const wrapper = mount(AgentOrdersView, { attachTo: document.body, global: { stubs: { DataTable: { props: ['data'], template: '<div><slot name="cell-actions" v-for="row in data" :row="row" /></div>' }, AgentPagination: true, Icon: true } } })

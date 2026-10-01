@@ -4,7 +4,7 @@ import AgentKeyUsageView from './AgentKeyUsageView.vue'
 
 const result = {
   mode: 'unrestricted', isValid: true, planName: '主站计费', balance: 12.34, remaining: 12.34,
-  key: { name: '开发 Key', prefix: 'sk-agent-example' }, status_detail: 'measured',
+  key: { name: '开发 Key', prefix: 'sk-example' }, status_detail: 'measured',
   usage: {
     today: { requests: 1, input_tokens: 100, output_tokens: 20, total_tokens: 120, cache_creation_tokens: 0, cache_read_tokens: 0, actual_cost: 0.01 },
     total: { requests: 2, input_tokens: 200, output_tokens: 40, total_tokens: 240, cache_creation_tokens: 0, cache_read_tokens: 0, actual_cost: 0.02 }, rpm: 0, tpm: 0,
@@ -23,17 +23,17 @@ describe('AgentKeyUsageView', () => {
   it('queries the same-origin usage route with the AgentAPI key and renders main-style details', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const wrapper = render()
-    await wrapper.get('input[placeholder="sk-agent-..."]').setValue('sk-agent-secret-value')
+    await wrapper.get('input[placeholder="sk-..."]').setValue('sk-secret-value')
     await wrapper.get('button.bg-primary-600').trigger('click')
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, options] = fetchMock.mock.calls[0]
     expect(String(url)).toContain('/v1/usage?')
-    expect((options?.headers as Record<string, string>).Authorization).toBe('Bearer sk-agent-secret-value')
-    expect(wrapper.text()).toContain('主站钱包余额')
+    expect((options?.headers as Record<string, string>).Authorization).toBe('Bearer sk-secret-value')
+    expect(wrapper.text()).toContain('账户余额')
     expect(wrapper.text()).toContain('$12.3400')
     expect(wrapper.text()).toContain('gpt-5.5')
-    expect(wrapper.text()).not.toContain('sk-agent-secret-value')
+    expect(wrapper.text()).not.toContain('sk-secret-value')
 
     const customRange = wrapper.findAll('button').find(button => button.text() === '自定义')
     expect(customRange).toBeDefined()
@@ -53,10 +53,10 @@ describe('AgentKeyUsageView', () => {
   it('keeps failed responses out of the result area', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'AgentAPI API key is invalid or revoked' }), { status: 401 }))
     const wrapper = render()
-    await wrapper.get('input[placeholder="sk-agent-..."]').setValue('sk-agent-bad')
+    await wrapper.get('input[placeholder="sk-..."]').setValue('sk-bad')
     await wrapper.get('button.bg-primary-600').trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('invalid or revoked')
-    expect(wrapper.text()).not.toContain('主站钱包余额')
+    expect(wrapper.text()).not.toContain('账户余额')
   })
 })

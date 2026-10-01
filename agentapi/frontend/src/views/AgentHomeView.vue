@@ -18,7 +18,7 @@ const customHomeURL = computed(() => {
 const customHomeHTML = computed(() => homeContent.value.startsWith('<') ? homeContent.value : '')
 const hasHomeContent = computed(() => Boolean(customHomeURL.value || customHomeHTML.value))
 const labels: Record<string, string> = {
- 'home.docs': '文档', 'nav.modelPlaza': '模型广场',
+ 'home.docs': '文档',
  'home.viewDocs': '查看文档', 'downloads.nav': '客户端下载', 'home.goToDashboard': '进入控制台',
  'home.switchToLight': '切换浅色模式', 'home.switchToDark': '切换深色模式',
  'home.dashboard': '控制台', 'home.login': '登录',
@@ -67,14 +67,6 @@ const currentYear = new Date().getFullYear()
           >
             <Icon name="book" size="md" />
           </a>
-          <router-link
-            to="/model-plaza"
-            class="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
-            :title="t('nav.modelPlaza')"
-          >
-            <Icon name="grid" size="md" />
-            <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
-          </router-link>
           <button
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-dark-400 dark:hover:bg-dark-800"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
@@ -135,7 +127,6 @@ const currentYear = new Date().getFullYear()
         <router-link to="/downloads">客户端下载</router-link>
         <router-link to="/key-usage">Key 用量</router-link>
         <router-link v-if="!isAuthenticated" to="/register">注册账号</router-link>
-        <router-link to="/model-plaza">{{ t('nav.modelPlaza') }}</router-link>
         <button
           type="button"
           class="lz-theme-toggle"

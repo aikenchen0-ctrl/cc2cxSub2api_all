@@ -23,9 +23,6 @@ const insights = {
 
 function mockSuccessfulLoad(): void {
   vi.spyOn(agentAPI, 'getContext').mockResolvedValue(context)
-  vi.spyOn(agentAPI, 'getUsers')
-    .mockResolvedValueOnce({ items: [], total: 8, page: 1, page_size: 1 })
-    .mockResolvedValueOnce({ items: [], total: 6, page: 1, page_size: 1 })
   vi.spyOn(agentAPI, 'getUsageInsights').mockResolvedValue(insights)
   vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ items: [], total: 3 })
 }
@@ -35,9 +32,9 @@ async function mountView() {
     history: createMemoryHistory(),
     routes: [
       { path: '/admin/dashboard', component: AgentAdminDashboardView },
-      { path: '/admin/users', component: { template: '<div />' } },
+      { path: '/admin/orders', component: { template: '<div />' } },
       { path: '/admin/usage', component: { template: '<div />' } },
-      { path: '/admin/channels', component: { template: '<div />' } },
+      { path: '/admin/announcements', component: { template: '<div />' } },
       { path: '/admin/settings', component: { template: '<div />' } },
     ],
   })
@@ -51,23 +48,20 @@ async function mountView() {
 describe('AgentAdminDashboardView', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('shows only current-agent user and authoritative usage facts', async () => {
+  it('shows authoritative tenant usage without exposing a user directory', async () => {
     mockSuccessfulLoad()
     const wrapper = await mountView()
 
-    expect(agentAPI.getUsers).toHaveBeenNthCalledWith(1, 1, 1)
-    expect(agentAPI.getUsers).toHaveBeenNthCalledWith(2, 1, 1, '', 'active')
     expect(agentAPI.getUsageInsights).toHaveBeenCalledWith('24h')
-    expect(wrapper.text()).toContain('8')
-    expect(wrapper.text()).toContain('6 名已启用')
     expect(wrapper.text()).toContain('12')
+    expect(wrapper.text()).toContain('10')
     expect(wrapper.text()).toContain('1.80K')
     expect(wrapper.text()).toContain('$1.5000')
     expect(wrapper.text()).toContain('3')
     expect(wrapper.text()).toContain('10 / 12')
-    expect(wrapper.text()).toContain('用户主站直扣')
+    expect(wrapper.text()).toContain('用户余额计费')
     expect(wrapper.get('[data-status="active"]').text()).toBe('运行中')
-    expect(wrapper.text()).toContain('不会读取主站全局用户、账号池')
+    expect(wrapper.text()).toContain('不会越过本站权限边界')
     expect(wrapper.text()).not.toContain('服务账号')
   })
 
@@ -83,15 +77,12 @@ describe('AgentAdminDashboardView', () => {
 
   it('does not render dashboard facts until the tenant context succeeds', async () => {
     vi.spyOn(agentAPI, 'getContext').mockRejectedValue(new Error('context unavailable'))
-    vi.spyOn(agentAPI, 'getUsers').mockResolvedValue({ items: [], total: 99, page: 1, page_size: 1 })
     vi.spyOn(agentAPI, 'getUsageInsights').mockResolvedValue(insights)
     vi.spyOn(agentAPI, 'getSettlements').mockResolvedValue({ items: [], total: 99 })
     const wrapper = await mountView()
 
     expect(wrapper.text()).toContain('无法加载站长仪表盘')
-    expect(wrapper.text()).not.toContain('99 名已启用')
     expect(wrapper.find('[aria-label="核心统计"]').exists()).toBe(false)
-    expect(agentAPI.getUsers).not.toHaveBeenCalled()
     expect(agentAPI.getUsageInsights).not.toHaveBeenCalled()
     expect(agentAPI.getSettlements).not.toHaveBeenCalled()
   })
@@ -101,7 +92,7 @@ describe('AgentAdminDashboardView', () => {
     const wrapper = await mountView()
     const links = wrapper.findAll('a').map(item => item.attributes('href'))
 
-    expect(links).toEqual(expect.arrayContaining(['/admin/users', '/admin/usage', '/admin/channels', '/admin/settings']))
+    expect(links).toEqual(expect.arrayContaining(['/admin/users', '/admin/usage', '/admin/announcements', '/admin/settings']))
     expect(links.some(path => path?.includes('sub2api'))).toBe(false)
   })
 })

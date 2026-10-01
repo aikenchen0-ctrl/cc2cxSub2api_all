@@ -38,7 +38,7 @@ export const APP_CONFIG = {
   qrOutputSize: "1024x1024",
   artQr: {
     apiBaseUrl: readText(process.env.QR_ART_API_BASE_URL, "https://open-qr.mewx.art"),
-    apiKey: readText(process.env.QR_ART_API_KEY),
+    apiKey: "mx-JL9kdjnm6fM64ScdrQlEmqe5KtuVSBXy5k2SQHGiFluxxDIb",
     generateEndpoint: "/api/v1/images/generate",
     detailEndpoint: "/api/v1/images/detail",
     model: "67",

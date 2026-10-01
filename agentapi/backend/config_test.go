@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestSecretEnvPrefersFileBackedSecret(t *testing.T) {
@@ -51,86 +50,18 @@ func TestDecodeOptionalJSONHandlesChunkedJSON(t *testing.T) {
 	}
 }
 
-func TestProvisioningControlIsExplicitlyEnabled(t *testing.T) {
-	t.Setenv("SESSION_SECRET", strings.Repeat("s", 32))
-	t.Setenv("SESSION_SECRET_FILE", "")
-	t.Setenv("AGENT_INITIAL_BALANCE", "")
-	t.Setenv("AGENT_BILLING_MODE", "owner_upstream")
-	t.Setenv("AGENT_PAYMENT_ENABLED", "false")
-	t.Setenv("AGENT_PROVISIONING_CONTROL_STALE_AFTER", "")
-	t.Setenv("AGENT_RUNTIME_CONTROL_CREDENTIAL", "agt_ctl_test-runtime-control-secret-0123456789abcdef")
-	t.Setenv("AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE", "")
-	t.Setenv("SUB2API_APP_CREDENTIAL", "agt_model_test-model-relay-secret-0123456789abcdef")
-	t.Setenv("SUB2API_APP_CREDENTIAL_FILE", "")
-	t.Setenv("AGENT_DOMAIN", "")
-	t.Setenv("SUB2API_SATELLITE", "agentapi")
-	t.Setenv("AGENTAPI_SSO_AUDIENCE", "agentapi")
-
-	for _, test := range []struct {
-		name              string
-		agentID           string
-		domain            string
-		override          string
-		want              bool
-		wantErrorContains string
-	}{
-		{name: "managed id is zero schema by default", agentID: "agt_0123456789abcdef0123456789abcdef", want: false},
-		{name: "local id", agentID: "agent-local", want: false},
-		{name: "explicit enable", agentID: "agent-local", domain: "agent.example.com", override: "true", want: true},
-		{name: "explicit enable requires host binding", agentID: "agent-local", override: "true", wantErrorContains: "AGENT_DOMAIN is required"},
-		{name: "explicit enable rejects malformed host binding", agentID: "agent-local", domain: "agent.example.com/path", override: "true", wantErrorContains: "valid DNS hostname"},
-		{name: "managed id may explicitly disable control", agentID: "agt_0123456789abcdef0123456789abcdef", override: "false", want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("AGENT_ID", test.agentID)
-			t.Setenv("AGENT_DOMAIN", test.domain)
-			t.Setenv("AGENT_PROVISIONING_CONTROL_ENABLED", test.override)
-			cfg, err := LoadConfig()
-			if test.wantErrorContains != "" {
-				if err == nil || !strings.Contains(err.Error(), test.wantErrorContains) {
-					t.Fatalf("provisioning config error = %v, want %q", err, test.wantErrorContains)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if cfg.ProvisioningControlEnabled != test.want || cfg.ProvisioningControlStaleAfter != 90*time.Second {
-				t.Fatalf("provisioning control config = %v / %s, want %v / 90s", cfg.ProvisioningControlEnabled, cfg.ProvisioningControlStaleAfter, test.want)
-			}
-		})
-	}
-}
-
-func TestDirectBillingRejectsOwnerScopedRuntimeControl(t *testing.T) {
-	t.Setenv("SESSION_SECRET", strings.Repeat("s", 32))
-	t.Setenv("SESSION_SECRET_FILE", "")
-	t.Setenv("SUB2API_SATELLITE", "agentapi")
-	t.Setenv("AGENTAPI_SSO_AUDIENCE", "agentapi")
-	t.Setenv("AGENT_MAX_REQUEST_COST", "1")
-	t.Setenv("AGENT_BILLING_MODE", "user_upstream")
-	t.Setenv("AGENT_PROVISIONING_CONTROL_ENABLED", "true")
-	_, err := LoadConfig()
-	if err == nil || !strings.Contains(err.Error(), "AGENT_PROVISIONING_CONTROL_ENABLED must be false for user_upstream") {
-		t.Fatalf("mixed billing/control configuration must fail closed, got %v", err)
-	}
-}
-
 func TestLoadConfigSeparatesControlAndModelRelayBases(t *testing.T) {
 	for name, value := range map[string]string{
-		"AGENT_ID":                              "agent-local",
-		"AGENT_PROVISIONING_CONTROL_ENABLED":    "false",
-		"AGENT_RUNTIME_CONTROL_CREDENTIAL":      "",
-		"AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE": "",
-		"SUB2API_APP_CREDENTIAL":                "",
-		"SUB2API_APP_CREDENTIAL_FILE":           "",
-		"SESSION_SECRET":                        strings.Repeat("s", 32),
-		"SESSION_SECRET_FILE":                   "",
-		"AGENT_BILLING_MODE":                    "owner_upstream",
-		"AGENT_INITIAL_BALANCE":                 "",
-		"AGENT_PAYMENT_ENABLED":                 "false",
-		"AGENT_PAYMENT_WEBHOOK_SECRET":          "",
-		"AGENT_PAYMENT_WEBHOOK_SECRET_FILE":     "",
+		"AGENT_ID":                          "agent-local",
+		"SUB2API_APP_CREDENTIAL":            "",
+		"SUB2API_APP_CREDENTIAL_FILE":       "",
+		"SESSION_SECRET":                    strings.Repeat("s", 32),
+		"SESSION_SECRET_FILE":               "",
+		"AGENT_BILLING_MODE":                "owner_upstream",
+		"AGENT_INITIAL_BALANCE":             "",
+		"AGENT_PAYMENT_ENABLED":             "false",
+		"AGENT_PAYMENT_WEBHOOK_SECRET":      "",
+		"AGENT_PAYMENT_WEBHOOK_SECRET_FILE": "",
 	} {
 		t.Setenv(name, value)
 	}
@@ -216,21 +147,18 @@ func TestLoadConfigSeparatesControlAndModelRelayBases(t *testing.T) {
 
 func TestLoadConfigAllowsStoredPaymentConfigWithoutBootstrapSecret(t *testing.T) {
 	for name, value := range map[string]string{
-		"AGENT_ID":                              "agent-local",
-		"AGENT_PROVISIONING_CONTROL_ENABLED":    "false",
-		"AGENT_RUNTIME_CONTROL_CREDENTIAL":      "",
-		"AGENT_RUNTIME_CONTROL_CREDENTIAL_FILE": "",
-		"SUB2API_APP_CREDENTIAL":                "shared-satellite-credential",
-		"SUB2API_APP_CREDENTIAL_FILE":           "",
-		"SUB2API_SATELLITE":                     "agentapi",
-		"AGENTAPI_SSO_AUDIENCE":                 "agentapi",
-		"SESSION_SECRET":                        strings.Repeat("s", 32),
-		"SESSION_SECRET_FILE":                   "",
-		"AGENT_BILLING_MODE":                    "owner_upstream",
-		"AGENT_INITIAL_BALANCE":                 "",
-		"AGENT_PAYMENT_ENABLED":                 "true",
-		"AGENT_PAYMENT_WEBHOOK_SECRET":          "",
-		"AGENT_PAYMENT_WEBHOOK_SECRET_FILE":     "",
+		"AGENT_ID":                          "agent-local",
+		"SUB2API_APP_CREDENTIAL":            "shared-satellite-credential",
+		"SUB2API_APP_CREDENTIAL_FILE":       "",
+		"SUB2API_SATELLITE":                 "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":             "agentapi",
+		"SESSION_SECRET":                    strings.Repeat("s", 32),
+		"SESSION_SECRET_FILE":               "",
+		"AGENT_BILLING_MODE":                "owner_upstream",
+		"AGENT_INITIAL_BALANCE":             "",
+		"AGENT_PAYMENT_ENABLED":             "true",
+		"AGENT_PAYMENT_WEBHOOK_SECRET":      "",
+		"AGENT_PAYMENT_WEBHOOK_SECRET_FILE": "",
 	} {
 		t.Setenv(name, value)
 	}
@@ -241,5 +169,129 @@ func TestLoadConfigAllowsStoredPaymentConfigWithoutBootstrapSecret(t *testing.T)
 	}
 	if !cfg.PaymentEnabled || cfg.PaymentWebhookSecret != "" {
 		t.Fatalf("unexpected payment bootstrap config: enabled=%v secret=%q", cfg.PaymentEnabled, cfg.PaymentWebhookSecret)
+	}
+}
+
+func TestLoadConfigDoesNotInventSharedTenant(t *testing.T) {
+	for name, value := range map[string]string{
+		"AGENT_ID":                     "",
+		"AGENT_DOMAIN":                 "",
+		"AGENT_OWNER_MAIN_USER_ID":     "",
+		"AGENTAPI_SHARED_HOSTS":        "Shared.Example.Test:443, shared.example.test, tenant-entry.example.test",
+		"SUB2API_SATELLITE":            "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":        "agentapi",
+		"SESSION_SECRET":               strings.Repeat("s", 32),
+		"SUB2API_SSO_SECRET":           strings.Repeat("o", 32),
+		"SUB2API_APP_CREDENTIAL":       "shared-satellite-credential",
+		"AGENT_INITIAL_BALANCE":        "",
+		"AGENT_PAYMENT_ENABLED":        "false",
+		"AGENT_PAYMENT_WEBHOOK_SECRET": "",
+	} {
+		t.Setenv(name, value)
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AgentID != "" {
+		t.Fatalf("shared runtime invented process tenant %q", cfg.AgentID)
+	}
+	if len(cfg.SharedHosts) != 2 || cfg.SharedHosts[0] != "shared.example.test" || cfg.SharedHosts[1] != "tenant-entry.example.test" {
+		t.Fatalf("shared hosts were not normalized and deduplicated: %#v", cfg.SharedHosts)
+	}
+}
+
+func TestLoadConfigRequiresValidSharedRuntimeHosts(t *testing.T) {
+	for name, value := range map[string]string{
+		"AGENT_ID":                     "",
+		"AGENT_DOMAIN":                 "",
+		"AGENT_OWNER_MAIN_USER_ID":     "",
+		"SUB2API_SATELLITE":            "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":        "agentapi",
+		"SESSION_SECRET":               strings.Repeat("s", 32),
+		"SUB2API_SSO_SECRET":           strings.Repeat("o", 32),
+		"SUB2API_APP_CREDENTIAL":       "shared-satellite-credential",
+		"AGENT_INITIAL_BALANCE":        "",
+		"AGENT_PAYMENT_ENABLED":        "false",
+		"AGENT_PAYMENT_WEBHOOK_SECRET": "",
+	} {
+		t.Setenv(name, value)
+	}
+	t.Run("missing", func(t *testing.T) {
+		t.Setenv("AGENTAPI_SHARED_HOSTS", "")
+		if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "AGENTAPI_SHARED_HOSTS is required") {
+			t.Fatalf("missing shared hosts error=%v, want rejection", err)
+		}
+	})
+	t.Run("URL is rejected", func(t *testing.T) {
+		t.Setenv("AGENTAPI_SHARED_HOSTS", "https://agent.example.test")
+		if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "invalid host") {
+			t.Fatalf("URL shared host error=%v, want rejection", err)
+		}
+	})
+	t.Run("wildcard is rejected", func(t *testing.T) {
+		t.Setenv("AGENTAPI_SHARED_HOSTS", "*.example.test")
+		if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "invalid host") {
+			t.Fatalf("wildcard shared host error=%v, want rejection", err)
+		}
+	})
+}
+
+func TestLoadConfigRejectsIncompleteSharedRuntimeSecrets(t *testing.T) {
+	base := map[string]string{
+		"AGENT_ID":                     "",
+		"AGENT_DOMAIN":                 "",
+		"AGENT_OWNER_MAIN_USER_ID":     "",
+		"AGENTAPI_SHARED_HOSTS":        "agent.example.test",
+		"SUB2API_SATELLITE":            "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":        "agentapi",
+		"AGENT_INITIAL_BALANCE":        "",
+		"AGENT_PAYMENT_ENABLED":        "false",
+		"AGENT_PAYMENT_WEBHOOK_SECRET": "",
+		"SESSION_SECRET_FILE":          "",
+		"SUB2API_SSO_SECRET_FILE":      "",
+		"SUB2API_APP_CREDENTIAL_FILE":  "",
+	}
+	for name, value := range base {
+		t.Setenv(name, value)
+	}
+
+	tests := []struct {
+		name    string
+		app     string
+		sso     string
+		session string
+		want    string
+	}{
+		{name: "missing app credential", sso: strings.Repeat("o", 32), session: strings.Repeat("s", 32), want: "SUB2API_APP_CREDENTIAL is required"},
+		{name: "weak SSO secret", app: "app-credential", sso: "short", session: strings.Repeat("s", 32), want: "SUB2API_SSO_SECRET must contain at least 32"},
+		{name: "weak session secret", app: "app-credential", sso: strings.Repeat("o", 32), session: "short", want: "SESSION_SECRET must contain at least 32"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SUB2API_APP_CREDENTIAL", tc.app)
+			t.Setenv("SUB2API_SSO_SECRET", tc.sso)
+			t.Setenv("SESSION_SECRET", tc.session)
+			if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("LoadConfig error=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsPartialCompatibilityTenant(t *testing.T) {
+	for name, value := range map[string]string{
+		"AGENT_ID":                 "",
+		"AGENT_DOMAIN":             "agent.example.test",
+		"AGENT_OWNER_MAIN_USER_ID": "",
+		"SUB2API_SATELLITE":        "agentapi",
+		"AGENTAPI_SSO_AUDIENCE":    "agentapi",
+		"SESSION_SECRET":           strings.Repeat("s", 32),
+		"AGENT_INITIAL_BALANCE":    "",
+	} {
+		t.Setenv(name, value)
+	}
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "require an explicit AGENT_ID") {
+		t.Fatalf("partial compatibility tenant error=%v, want rejection", err)
 	}
 }
