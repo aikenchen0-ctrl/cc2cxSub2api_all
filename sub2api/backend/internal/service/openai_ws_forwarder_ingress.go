@@ -1188,7 +1188,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			// HTTP 200 内的失败事件仍须在前导提交前分类；工具结构一旦
 			// 可见就禁止切换，不能要求客户端消除重复副作用。
-			if !wroteDownstream && (eventType == "error" || eventType == "response.failed") {
+			if !wroteDownstream && account.ShouldFailoverImmediately(http.StatusBadGateway) &&
+				(eventType == "error" || eventType == "response.failed") {
 				if failure := openAICompatStreamError(upstreamMessage, eventType); failure != nil && failure.retry {
 					if ctx.Err() != nil {
 						return nil, ctx.Err()
