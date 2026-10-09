@@ -37,6 +37,11 @@ func (h *OpenAIGatewayHandler) deriveOpenAIForwardAttemptBody(
 	if !state.passthroughSeen {
 		return canonicalBody
 	}
+	// 普通推理密文可由明确的自包含输入替代；远端响应、压缩历史或
+	// 不完整工具链不可通过删除私有状态重建，保留原文供上游判定。
+	if !service.AnalyzeOpenAIContinuationSafety(canonicalBody).CanStripEncryptedReasoning {
+		return canonicalBody
+	}
 
 	sanitized, changed, err := service.SanitizeOpenAICrossModeFailoverReasoning(canonicalBody)
 	if err != nil {

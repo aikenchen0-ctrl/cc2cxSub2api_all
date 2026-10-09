@@ -75,9 +75,9 @@ func collectOpenAIEncryptedContentDigestsRaw(payload []byte) []string {
 }
 
 // stripOpenAIInvalidEncryptedContentItems 剥离 input 中摘要命中 invalid 的密文
-// 项，剥离语义与 trimOpenAIEncryptedReasoningItems 对齐：reasoning 仅剥
-// encrypted_content（连带 content:null 清理与空骨架删除），compaction/
-// compaction_summary 整项删除。返回被改写的项数。
+// 项；仅允许剥离普通 reasoning 的 encrypted_content，连带清理
+// content:null 与空骨架。压缩历史即使摘要命中也必须保留。
+// 返回被改写的项数。
 func stripOpenAIInvalidEncryptedContentItems(reqBody map[string]any, invalid map[string]struct{}) int {
 	if len(reqBody) == 0 || len(invalid) == 0 {
 		return 0
@@ -90,6 +90,9 @@ func stripOpenAIInvalidEncryptedContentItems(reqBody map[string]any, invalid map
 	stripItem := func(item any) (next any, changed bool, keep bool) {
 		inputItem, ok := item.(map[string]any)
 		if !ok {
+			return item, false, true
+		}
+		if inputItem["type"] != "reasoning" {
 			return item, false, true
 		}
 		encrypted, ok := inputItem["encrypted_content"].(string)
@@ -208,6 +211,11 @@ func stripOpenAIInvalidEncryptedContentFromReplayItems(items []json.RawMessage, 
 			next = append(next, item)
 			continue
 		}
+		// 历史回放也不得通过旧摘要删除 compaction 等不透明状态。
+		if decoded["type"] != "reasoning" {
+			next = append(next, item)
+			continue
+		}
 		encrypted, ok := decoded["encrypted_content"].(string)
 		if !ok || encrypted == "" {
 			next = append(next, item)
@@ -307,6 +315,10 @@ func (s *OpenAIGatewayService) markOpenAIWSInvalidEncryptedContentLineageFromPay
 	accountID int64,
 	turn int,
 ) {
+	// 压缩历史或不可重建的密文不能登记为可删除项，避免下轮静默丢失上下文。
+	if !AnalyzeOpenAIContinuationSafety(payload).CanRecoverRejectedEncryptedReasoning() {
+		return
+	}
 	digests := collectOpenAIEncryptedContentDigestsRaw(payload)
 	if len(digests) == 0 {
 		return
@@ -329,6 +341,9 @@ func (s *OpenAIGatewayService) stripSessionInvalidEncryptedContentLogged(
 	accountID int64,
 	turn int,
 ) ([]byte, int) {
+	if !AnalyzeOpenAIContinuationSafety(payload).CanRecoverRejectedEncryptedReasoning() {
+		return payload, 0
+	}
 	strippedPayload, strippedCount, stripErr := stripOpenAIInvalidEncryptedContentRaw(payload, invalid)
 	if stripErr != nil {
 		logOpenAIWSModeInfo(

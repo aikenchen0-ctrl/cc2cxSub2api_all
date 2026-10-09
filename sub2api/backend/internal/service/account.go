@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"reflect"
 	"sort"
@@ -1103,6 +1104,25 @@ func (a *Account) IsPoolMode() bool {
 		}
 	}
 	return false
+}
+
+// ShouldFailoverImmediately 只对显式启用的 OpenAI API Key 账号快速换号。
+// 客户端参数错误不在此列；OAuth 刷新、配额等待及其他供应商保留原有策略。
+func (a *Account) ShouldFailoverImmediately(statusCode int) bool {
+	if a == nil || a.Platform != PlatformOpenAI || a.Type != AccountTypeAPIKey {
+		return false
+	}
+	enabled, _ := a.Credentials["fast_failover"].(bool)
+	if !enabled {
+		return false
+	}
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden,
+		http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusRequestTimeout, http.StatusTooManyRequests:
+		return true
+	default:
+		return statusCode >= http.StatusInternalServerError && statusCode <= 599
+	}
 }
 
 const (

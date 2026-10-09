@@ -35,7 +35,7 @@ func TestPrepareOpenAIWSHTTPBridgeBodyStripsWSFields(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(body, "type").Exists())
 	require.False(t, gjson.GetBytes(body, "generate").Exists())
-	require.False(t, gjson.GetBytes(body, "previous_response_id").Exists())
+	require.Equal(t, "resp_prev", gjson.GetBytes(body, "previous_response_id").String(), "未验证完整历史前必须保留远端响应锚点")
 	require.Equal(t, "gpt-5", gjson.GetBytes(body, "model").String())
 	require.True(t, gjson.GetBytes(body, "stream").Bool())
 	require.Equal(t, "hi", gjson.GetBytes(body, "input").String())

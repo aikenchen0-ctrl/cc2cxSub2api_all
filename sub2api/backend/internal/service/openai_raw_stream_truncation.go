@@ -48,7 +48,8 @@ func (t *openAIRawStreamTerminalState) ObserveDataLine(payload string) {
 		t.sawDone = true
 		return
 	}
-	if usage := gjson.Get(payload, "usage"); usage.Exists() && usage.IsObject() {
+	// 某些上游每块都带累计用量，只有无 choices 的独立用量尾包可证明结束。
+	if usage := gjson.Get(payload, "usage"); usage.Exists() && usage.IsObject() && len(gjson.Get(payload, "choices").Array()) == 0 {
 		t.sawUsage = true
 	}
 	if t.sawFinishReason {

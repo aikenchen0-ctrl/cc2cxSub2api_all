@@ -294,16 +294,28 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	pendingLines := make([]string, 0, 8)
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var terminal openAIRawStreamTerminalState
+	var streamError error
+	var eventType string
+	pendingBytes := 0
 
 	writeLine := func(line string) {
 		if clientDisconnected {
 			return
 		}
 		if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+			pendingBytes += len(line) + 1
+			if pendingBytes > openAIStreamPreambleMaxBytes {
+				streamError = openAIStreamPreambleLimitError()
+				return
+			}
 			pendingLines = append(pendingLines, line)
 			return
 		}
 		if !clientOutputStarted {
+			if err := commitOpenAICompatFirstOutput(resp); err != nil {
+				streamError = err
+				return
+			}
 			writeStreamHeaders()
 			for _, pending := range pendingLines {
 				if _, werr := c.Writer.WriteString(pending + "\n"); werr != nil {
@@ -329,8 +341,32 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		refusalDetector.ObserveSSELine(line)
+		if name, ok := extractOpenAISSEEventLine(line); ok {
+			eventType = name
+		}
 		if payload, ok := extractOpenAISSEDataLine(line); ok {
+			if strings.TrimSpace(payload) != "[DONE]" {
+				if err := validateOpenAIChatResponse([]byte(payload), true); err != nil {
+					streamError = err
+					break
+				}
+			}
+			if failure := openAICompatStreamError([]byte(payload), eventType); failure != nil {
+				if !clientOutputStarted && !clientDisconnected && failure.retry {
+					return nil, s.compatStreamReadFailure(c, account, resp, upstreamModel, failure)
+				}
+				failure.message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", failure.payload, failure.message)
+				streamError = failure
+				// 非重试错误不携带失败账号的前导，保留原始错误事件。
+				if !clientOutputStarted {
+					pendingLines = pendingLines[:0]
+					if eventType != "" {
+						pendingLines = append(pendingLines, "event: "+eventType)
+					}
+				}
+				refusalDetector.sawError = true
+			}
+			refusalDetector.ObservePayload([]byte(payload))
 			trimmedPayload := strings.TrimSpace(payload)
 			terminal.ObserveDataLine(trimmedPayload)
 			if trimmedPayload != "[DONE]" {
@@ -339,17 +375,41 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
 				}
-				if firstTokenMs == nil && !usageOnlyChunk {
+				if firstTokenMs == nil && !usageOnlyChunk && refusalDetector.ShouldReleaseClientOutput() && streamError == nil {
 					elapsed := int(time.Since(startTime).Milliseconds())
 					firstTokenMs = &elapsed
 				}
+			}
+		} else if trimmed := strings.TrimSpace(line); gjson.Valid(trimmed) {
+			// 部分兼容上游忽略 stream 并返回 JSON，保留正常响应但先识别错误。
+			if failure := openAICompatStreamError([]byte(trimmed), ""); failure != nil {
+				if !clientOutputStarted && failure.retry {
+					return nil, s.compatStreamReadFailure(c, account, resp, upstreamModel, failure)
+				}
+				streamError = failure
+				pendingLines = nil
+				refusalDetector.sawError = true
+			} else {
+				if err := validateOpenAIChatResponse([]byte(trimmed), false); err != nil {
+					streamError = err
+					break
+				}
+				refusalDetector.sawContent = true
 			}
 		}
 		line = applyOllamaCloudRawChatCompletionsSSELine(account, line)
 		line = stripEmptyChatToolCallIdentityFromSSELine(line)
 
 		writeLine(line)
+		if streamError != nil {
+			if clientOutputStarted {
+				writeLine("")
+				c.Writer.Flush()
+			}
+			break
+		}
 		if line == "" {
+			eventType = ""
 			if !clientDisconnected && clientOutputStarted {
 				c.Writer.Flush()
 			}
@@ -378,6 +438,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			FirstTokenMs:                  firstTokenMs,
 		}
 	}
+	if streamError != nil {
+		return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, streamError)
+	}
 
 	scanErr := scanner.Err()
 	if scanErr != nil && !errors.Is(scanErr, context.Canceled) && !errors.Is(scanErr, context.DeadlineExceeded) {
@@ -391,7 +454,10 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	// 沿用既有语义：按已收到的用量正常收尾计费，不判为上游故障。
 	clientAborted := clientDisconnected ||
 		errors.Is(scanErr, context.Canceled) ||
-		errors.Is(scanErr, context.DeadlineExceeded)
+		(c.Request != nil && c.Request.Context().Err() != nil)
+	if c.Request != nil && c.Request.Context().Err() != nil && !terminal.Terminated() {
+		return resultWithUsage(), c.Request.Context().Err()
+	}
 
 	// 上游在任何终止信号之前结束：连接被 reset（scanErr != nil）或干净 EOF。
 	// 两者都不能再记成功——此前统一返回 nil error，把上游截断伪装成
@@ -424,6 +490,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			return nil, newOpenAISilentRefusalFailoverError(c, account, requestID)
 		}
 		if len(pendingLines) > 0 {
+			if err := commitOpenAICompatFirstOutput(resp); err != nil {
+				return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, err)
+			}
 			writeStreamHeaders()
 			for _, pending := range pendingLines {
 				if _, werr := c.Writer.WriteString(pending + "\n"); werr != nil {
@@ -497,10 +566,15 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
-		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
-			writeChatCompletionsError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
-		}
-		return nil, fmt.Errorf("read upstream body: %w", err)
+		return nil, s.compatStreamReadFailure(c, account, resp, upstreamModel, fmt.Errorf("read upstream body: %w", err))
+	}
+	if failure := openAICompatStreamError(respBody, ""); failure != nil {
+		err := s.compatStreamReadFailure(c, account, resp, upstreamModel, failure)
+		writeCCStreamNonRetryableFailure(c, err, writeChatCompletionsError)
+		return nil, err
+	}
+	if err := validateOpenAIChatResponse(respBody, false); err != nil {
+		return nil, s.compatStreamReadFailure(c, account, resp, upstreamModel, err)
 	}
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {

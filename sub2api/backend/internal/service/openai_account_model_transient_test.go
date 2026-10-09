@@ -22,6 +22,61 @@ func TestOpenAIModelTransient_FirstFailureDoesNotCreateLongBlock(t *testing.T) {
 	assert.False(t, state.isBlocked(35, "gpt-5.5", now))
 }
 
+func TestOpenAIModelTransient_ExplicitCooldownIsNotShortened(t *testing.T) {
+	state := newOpenAIAccountModelTransientState(16)
+	now := time.Now()
+	until := now.Add(time.Hour)
+	state.recordCooldown(35, "gpt-6.1-sol", now, until)
+	state.recordCooldown(35, "gpt-6.1-sol", now, now.Add(time.Second))
+	state.recordSuccess(35, "gpt-6.1-sol")
+	state.recordFailure(35, "gpt-6.1-sol", now.Add(31*time.Minute))
+	require.True(t, state.isBlocked(35, "gpt-6.1-sol", now.Add(45*time.Minute)))
+	require.False(t, state.isBlocked(35, "gpt-6-astra", now))
+	require.False(t, state.isBlocked(35, "gpt-6.1-sol", until.Add(time.Second)))
+}
+
+func TestOpenAIModelTransient_ConcurrentCooldownKeepsMaximumDeadline(t *testing.T) {
+	state := newOpenAIAccountModelTransientState(16)
+	now := time.Now()
+	var workers sync.WaitGroup
+	for i := range 500 {
+		workers.Add(1)
+		go func(delay int) {
+			defer workers.Done()
+			state.recordCooldown(35, "gpt-6.1-sol", now, now.Add(time.Duration(delay+1)*time.Second))
+			state.recordSuccess(35, "gpt-6.1-sol")
+		}(i)
+	}
+	workers.Wait()
+	require.Equal(t, 1, state.size())
+	require.True(t, state.isBlocked(35, "gpt-6.1-sol", now.Add(499*time.Second)))
+	require.False(t, state.isBlocked(35, "gpt-6.1-sol", now.Add(501*time.Second)))
+}
+
+func TestOpenAIModelTransient_CooldownPersistenceRoundsAndBacksOff(t *testing.T) {
+	state := newOpenAIAccountModelTransientState(16)
+	now := time.Now().Truncate(time.Second)
+	until := now.Add(5*time.Second + time.Millisecond)
+	state.recordCooldown(35, "gpt-6.1-sol", now, until)
+	persistUntil, claimed := state.claimCooldownPersistence(35, "gpt-6.1-sol", now)
+	require.True(t, claimed)
+	require.Equal(t, now.Add(6*time.Second), persistUntil)
+	_, claimed = state.claimCooldownPersistence(35, "gpt-6.1-sol", now)
+	require.False(t, claimed)
+	_, claimed = state.finishCooldownPersistence(35, "gpt-6.1-sol", persistUntil, now, false)
+	require.False(t, claimed)
+	_, claimed = state.claimCooldownPersistence(35, "gpt-6.1-sol", now.Add(time.Millisecond))
+	require.False(t, claimed)
+	persistUntil, claimed = state.claimCooldownPersistence(35, "gpt-6.1-sol", now.Add(openAIModelCooldownPersistBackoff))
+	require.True(t, claimed)
+	_, claimed = state.finishCooldownPersistence(35, "gpt-6.1-sol", persistUntil, now, true)
+	require.False(t, claimed)
+	state.recordCooldown(35, "gpt-6.1-sol", now, until.Add(time.Millisecond))
+	_, claimed = state.claimCooldownPersistence(35, "gpt-6.1-sol", now)
+	require.False(t, claimed, "同一秒内的更晚到达不应产生重复写入")
+	require.True(t, state.isBlocked(35, "gpt-6.1-sol", until))
+}
+
 func TestOpenAIModelTransient_SecondFailureCreatesShortModelBlock(t *testing.T) {
 	state := newOpenAIAccountModelTransientState(128)
 	now := time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)

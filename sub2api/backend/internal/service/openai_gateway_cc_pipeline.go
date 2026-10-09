@@ -183,6 +183,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	grokCacheIdentity string,
 ) (*http.Response, error) {
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	upstreamCtx = s.withOpenAICompatFirstOutputBudget(upstreamCtx, account, body, stream)
 	upstreamReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, targetURL, bytes.NewReader(body))
 	releaseUpstreamCtx()
 	if err != nil {
@@ -258,27 +259,44 @@ type ccStreamScanState struct {
 func (s *OpenAIGatewayService) scanCCStream(
 	c *gin.Context,
 	resp *http.Response,
+	account *Account,
+	upstreamModel string,
 	logPrefix string,
 	requestID string,
 	startTime time.Time,
 	emit func(*apicompat.ChatCompletionsChunk),
 ) ccStreamScanState {
 	var st ccStreamScanState
+	var terminal openAIRawStreamTerminalState
+	var parser openAICompatSSEFrameParser
+	pending := make([]apicompat.ChatCompletionsChunk, 0, 4)
+	pendingBytes := 0
+	started := false
+	flushPending := func() {
+		for i := range pending {
+			emit(&pending[i])
+		}
+		pending = nil
+	}
 
-	scanner := s.newUpstreamSSEScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		payload, ok := extractOpenAISSEDataLine(line)
-		if !ok {
-			continue
-		}
-		payload = strings.TrimSpace(payload)
+	processFrame := func(frame openAICompatSSEFrame) bool {
+		payload := strings.TrimSpace(frame.Data)
 		if payload == "" {
-			continue
+			return false
 		}
+		terminal.ObserveDataLine(payload)
 		if payload == "[DONE]" {
 			st.SawDone = true
-			break
+			return true
+		}
+		if failure := openAICompatStreamError([]byte(payload), frame.EventType); failure != nil {
+			failure.message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", failure.payload, failure.message)
+			st.Err = failure
+			return true
+		}
+		if err := validateOpenAIChatResponse([]byte(payload), true); err != nil {
+			st.Err = err
+			return true
 		}
 		// 观察上游 CC chunk 回显的 model / service_tier（计费以回显为准）。
 		// CC chunk 无 type 字段，按 untyped payload 观察（上游约束：只有终止
@@ -297,16 +315,49 @@ func (s *OpenAIGatewayService) scanCCStream(
 				zap.Error(err),
 				zap.String("request_id", requestID),
 			)
-			continue
+			st.Err = fmt.Errorf("invalid upstream chat stream chunk: %w", err)
+			return true
 		}
-		if st.FirstTokenMs == nil && !isOpenAIChatUsageOnlyStreamChunk(payload) && chatChunkStartsResponsesOutput(&chunk) {
+		startsOutput := chatChunkStartsResponsesOutput(&chunk)
+		if st.FirstTokenMs == nil && startsOutput {
 			ms := int(time.Since(startTime).Milliseconds())
 			st.FirstTokenMs = &ms
 		}
+		if !started && !startsOutput {
+			pendingBytes += len(payload)
+			if pendingBytes > openAIStreamPreambleMaxBytes {
+				st.Err = openAIStreamPreambleLimitError()
+				return true
+			}
+			pending = append(pending, chunk)
+			return false
+		}
+		if !started {
+			if err := commitOpenAICompatFirstOutput(resp); err != nil {
+				st.Err = err
+				return true
+			}
+			started = true
+			flushPending()
+		}
 		emit(&chunk)
+		return false
 	}
 
-	if err := scanner.Err(); err != nil {
+	scanner := s.newUpstreamSSEScanner(resp.Body)
+	stopped := false
+	for scanner.Scan() {
+		if frame, ok := parser.AddLine(scanner.Text()); ok && processFrame(frame) {
+			stopped = true
+			break
+		}
+	}
+	if !stopped && scanner.Err() == nil {
+		if frame, ok := parser.Finish(); ok {
+			processFrame(frame)
+		}
+	}
+	if err := scanner.Err(); err != nil && st.Err == nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.L().Warn(logPrefix+": stream read error",
 				zap.Error(err),
@@ -314,6 +365,18 @@ func (s *OpenAIGatewayService) scanCCStream(
 			)
 		}
 		st.Err = err
+	}
+	// 干净 EOF 同样可能是上游截断，不能由转换器补成 completed/message_stop。
+	if st.Err == nil && !terminal.Terminated() {
+		st.Err = ErrOpenAIUpstreamStreamTruncated
+	}
+	if st.Err == nil && !started {
+		st.Err = commitOpenAICompatFirstOutput(resp)
+	}
+	if st.Err != nil {
+		st.Err = s.compatStreamReadFailure(c, account, resp, upstreamModel, st.Err)
+	} else {
+		flushPending()
 	}
 	return st
 }
@@ -330,20 +393,26 @@ func logCCStreamMissingDoneSentinel(logPrefix, requestID string) {
 func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	c *gin.Context,
 	resp *http.Response,
+	account *Account,
+	upstreamModel string,
 	writeError compatErrorWriter,
 ) (*apicompat.ChatCompletionsResponse, OpenAIUsage, error) {
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
-		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
-			writeError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
-		}
-		return nil, OpenAIUsage{}, fmt.Errorf("read upstream body: %w", err)
+		return nil, OpenAIUsage{}, s.compatStreamReadFailure(c, account, resp, upstreamModel, fmt.Errorf("read upstream body: %w", err))
+	}
+	if failure := openAICompatStreamError(respBody, ""); failure != nil {
+		err := s.compatStreamReadFailure(c, account, resp, upstreamModel, failure)
+		writeCCStreamNonRetryableFailure(c, err, writeError)
+		return nil, OpenAIUsage{}, err
+	}
+	if err := validateOpenAIChatResponse(respBody, false); err != nil {
+		return nil, OpenAIUsage{}, s.compatStreamReadFailure(c, account, resp, upstreamModel, err)
 	}
 
 	var ccResp apicompat.ChatCompletionsResponse
 	if err := json.Unmarshal(respBody, &ccResp); err != nil {
-		writeError(c, http.StatusBadGateway, "api_error", "Failed to parse upstream response")
-		return nil, OpenAIUsage{}, fmt.Errorf("parse chat completions response: %w", err)
+		return nil, OpenAIUsage{}, s.compatStreamReadFailure(c, account, resp, upstreamModel, fmt.Errorf("parse chat completions response: %w", err))
 	}
 	// 观察上游 CC JSON 回显的 model / service_tier（计费以回显为准）。
 	// CC JSON 无 type 字段，按 untyped payload 观察（上游约束）。

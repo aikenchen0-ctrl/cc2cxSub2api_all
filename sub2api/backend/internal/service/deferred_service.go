@@ -14,6 +14,7 @@ type DeferredService struct {
 	interval    time.Duration
 
 	lastUsedUpdates sync.Map
+	cooldownQueue   openAICooldownPersistenceQueue
 }
 
 // NewDeferredService creates a new DeferredService instance
@@ -33,7 +34,10 @@ func (s *DeferredService) Start() {
 
 // Stop stops the deferred service
 func (s *DeferredService) Stop() {
-	s.timingWheel.Cancel("deferred:last_used")
+	s.cooldownQueue.stop(openAIAccountStateUpdateTimeout)
+	if s.timingWheel != nil {
+		s.timingWheel.Cancel("deferred:last_used")
+	}
 	s.flushLastUsed()
 	log.Printf("[DeferredService] Service stopped")
 }

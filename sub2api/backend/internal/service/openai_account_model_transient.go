@@ -24,6 +24,7 @@ const (
 	openAIModelTransientLongCooldown  = 45 * time.Second
 	openAIModelTransientDefaultMax    = 4096
 	openAIModelTransientMaxModelBytes = 512
+	openAIModelCooldownPersistBackoff = time.Second
 )
 
 type openAIAccountModelKey struct {
@@ -32,10 +33,14 @@ type openAIAccountModelKey struct {
 }
 
 type openAIAccountModelTransientEntry struct {
-	failureStreak int
-	lastFailure   time.Time
-	blockUntil    time.Time
-	lastTouched   time.Time
+	failureStreak           int
+	lastFailure             time.Time
+	blockUntil              time.Time
+	cooldownFloor           time.Time
+	lastTouched             time.Time
+	cooldownPersistedUntil  time.Time
+	cooldownPersistingUntil time.Time
+	cooldownPersistRetryAt  time.Time
 }
 
 type openAIAccountModelTransientDecision struct {
@@ -120,6 +125,9 @@ func (s *openAIAccountModelTransientState) recordFailure(accountID int64, model 
 	} else {
 		entry.blockUntil = time.Time{}
 	}
+	if entry.cooldownFloor.After(entry.blockUntil) {
+		entry.blockUntil = entry.cooldownFloor
+	}
 	s.entries[key] = entry
 	return openAIAccountModelTransientDecision{
 		FailureStreak: entry.failureStreak,
@@ -128,12 +136,100 @@ func (s *openAIAccountModelTransientState) recordFailure(accountID int64, model 
 	}
 }
 
+// recordCooldown 复用现有模型状态保存显式限流期限，不影响同账号其他模型。
+// 后到的较短期限和早先在途请求的成功均不得提前解除 Retry-After。
+func (s *openAIAccountModelTransientState) recordCooldown(accountID int64, model string, now, until time.Time) {
+	key, ok := openAIAccountModelTransientKey(accountID, model)
+	if s == nil || !ok || !until.After(now) {
+		return
+	}
+	// 向上归一到秒，避免毫秒级到达差异触发重复写入，也不缩短上游期限。
+	if rounded := until.Truncate(time.Second); rounded.Before(until) {
+		until = rounded.Add(time.Second)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.entries == nil {
+		s.entries = make(map[openAIAccountModelKey]openAIAccountModelTransientEntry)
+	}
+	if s.maxEntries <= 0 {
+		s.maxEntries = openAIModelTransientDefaultMax
+	}
+	entry, exists := s.entries[key]
+	if !exists {
+		s.evictOldestLocked()
+	}
+	entry.lastFailure, entry.lastTouched = now, now
+	if until.After(entry.cooldownFloor) {
+		entry.cooldownFloor = until
+	}
+	if entry.cooldownFloor.After(entry.blockUntil) {
+		entry.blockUntil = entry.cooldownFloor
+	}
+	s.entries[key] = entry
+}
+
+// claimCooldownPersistence 每个账号模型只允许一个写入者；其余请求不等待数据库。
+func (s *openAIAccountModelTransientState) claimCooldownPersistence(accountID int64, model string, now time.Time) (time.Time, bool) {
+	key, ok := openAIAccountModelTransientKey(accountID, model)
+	if s == nil || !ok {
+		return time.Time{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, exists := s.entries[key]
+	if !exists || !entry.cooldownPersistingUntil.IsZero() || now.Before(entry.cooldownPersistRetryAt) ||
+		!entry.cooldownFloor.After(now) || !entry.cooldownFloor.After(entry.cooldownPersistedUntil) {
+		return time.Time{}, false
+	}
+	entry.cooldownPersistingUntil = entry.cooldownFloor
+	s.entries[key] = entry
+	return entry.cooldownPersistingUntil, true
+}
+
+// finishCooldownPersistence 合并写入期间的延长期限，失败时短暂退避以抑制重试风暴。
+// 数据库操作始终在锁外进行，不同账号模型之间没有共享事务或等待链。
+func (s *openAIAccountModelTransientState) finishCooldownPersistence(accountID int64, model string, until, now time.Time, succeeded bool) (time.Time, bool) {
+	key, ok := openAIAccountModelTransientKey(accountID, model)
+	if s == nil || !ok {
+		return time.Time{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, exists := s.entries[key]
+	if !exists || !entry.cooldownPersistingUntil.Equal(until) {
+		return time.Time{}, false
+	}
+	entry.cooldownPersistingUntil = time.Time{}
+	if !succeeded {
+		entry.cooldownPersistRetryAt = now.Add(openAIModelCooldownPersistBackoff)
+		s.entries[key] = entry
+		return time.Time{}, false
+	}
+	if until.After(entry.cooldownPersistedUntil) {
+		entry.cooldownPersistedUntil = until
+	}
+	entry.cooldownPersistRetryAt = time.Time{}
+	if entry.cooldownFloor.After(now) && entry.cooldownFloor.After(entry.cooldownPersistedUntil) {
+		entry.cooldownPersistingUntil = entry.cooldownFloor
+	}
+	s.entries[key] = entry
+	return entry.cooldownPersistingUntil, !entry.cooldownPersistingUntil.IsZero()
+}
+
 func (s *openAIAccountModelTransientState) recordSuccess(accountID int64, model string) {
 	key, ok := openAIAccountModelTransientKey(accountID, model)
 	if s == nil || !ok {
 		return
 	}
 	s.mu.Lock()
+	if entry, exists := s.entries[key]; exists && time.Now().Before(entry.cooldownFloor) {
+		entry.failureStreak = 0
+		entry.blockUntil = entry.cooldownFloor
+		s.entries[key] = entry
+		s.mu.Unlock()
+		return
+	}
 	delete(s.entries, key)
 	s.mu.Unlock()
 }
@@ -153,7 +249,7 @@ func (s *openAIAccountModelTransientState) isBlocked(accountID int64, model stri
 	if !exists {
 		return false
 	}
-	if !entry.lastFailure.IsZero() && now.Sub(entry.lastFailure) > openAIModelTransientStreakTTL {
+	if !entry.lastFailure.IsZero() && now.Sub(entry.lastFailure) > openAIModelTransientStreakTTL && !now.Before(entry.cooldownFloor) {
 		delete(s.entries, key)
 		return false
 	}

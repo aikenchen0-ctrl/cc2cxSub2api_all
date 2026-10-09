@@ -367,6 +367,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 
 	// 6. Build upstream request
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	upstreamCtx = s.withOpenAICompatFirstOutputBudget(upstreamCtx, account, responsesBody, clientStream)
 	cancelUpstream := func() {}
 	if clientStream {
 		upstreamCtx, cancelUpstream = context.WithCancel(upstreamCtx)
@@ -713,6 +714,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingSSE := make([]string, 0, 4)
+	pendingBytes := 0
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var streamFailoverErr *UpstreamFailoverError
 	var streamNonFailoverErr error
@@ -888,10 +890,19 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 					continue
 				}
 				if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+					pendingBytes += len(sse)
+					if pendingBytes > openAIStreamPreambleMaxBytes {
+						streamNonFailoverErr = s.compatStreamReadFailure(c, account, resp, upstreamModel, openAIStreamPreambleLimitError())
+						return true
+					}
 					pendingSSE = append(pendingSSE, sse)
 					continue
 				}
 				if !clientOutputStarted {
+					if err := commitOpenAICompatFirstOutput(resp); err != nil {
+						streamNonFailoverErr = s.compatStreamReadFailure(c, account, resp, upstreamModel, err)
+						return true
+					}
 					writeStreamHeaders()
 					for _, pending := range pendingSSE {
 						if _, err := fmt.Fprint(c.Writer, pending); err != nil {
@@ -932,6 +943,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if !clientDisconnected && !clientOutputStarted {
+			if err := commitOpenAICompatFirstOutput(resp); err != nil {
+				return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, err)
+			}
 		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 && !clientDisconnected {
 			for _, chunk := range finalChunks {
@@ -1016,7 +1032,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 	}
 	missingTerminalErr := func() (*OpenAIForwardResult, error) {
-		return resultWithUsage(), fmt.Errorf("stream usage incomplete: missing terminal event")
+		return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, fmt.Errorf("stream usage incomplete: missing terminal event"))
 	}
 	processFrame := func(frame openAICompatSSEFrame) bool {
 		payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
@@ -1050,10 +1066,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if err := scanner.Err(); err != nil {
 			handleScanErr(err)
-			if clientDisconnected || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if clientDisconnected || errors.Is(err, context.Canceled) || c.Request.Context().Err() != nil {
 				return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 			}
-			return resultWithUsage(), newOpenAIUpstreamStreamReadError(err)
+			return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, newOpenAIUpstreamStreamReadError(err))
 		}
 		if frame, ok := parser.Finish(); ok {
 			if strings.TrimSpace(frame.Data) == "[DONE]" {
@@ -1125,10 +1141,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			}
 			if ev.err != nil {
 				handleScanErr(ev.err)
-				if clientDisconnected || errors.Is(ev.err, context.Canceled) || errors.Is(ev.err, context.DeadlineExceeded) {
+				if clientDisconnected || errors.Is(ev.err, context.Canceled) || c.Request.Context().Err() != nil {
 					return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ev.err)
 				}
-				return resultWithUsage(), newOpenAIUpstreamStreamReadError(ev.err)
+				return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, newOpenAIUpstreamStreamReadError(ev.err))
 			}
 			lastDataAt = time.Now()
 			line := ev.line
@@ -1156,13 +1172,13 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				zap.String("model", originalModel),
 				zap.Duration("interval", streamInterval),
 			)
-			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
+			return resultWithUsage(), s.compatStreamReadFailure(c, account, resp, upstreamModel, fmt.Errorf("stream data interval timeout"))
 
 		case <-keepaliveCh:
 			if clientDisconnected {
 				continue
 			}
-			if refusalDetector.Enabled() && !clientOutputStarted {
+			if !clientOutputStarted {
 				continue
 			}
 			if time.Since(lastDataAt) < keepaliveInterval {

@@ -114,6 +114,10 @@ func effectiveSameAccountRetryLimit(failoverErr *service.UpstreamFailoverError, 
 	if account == nil {
 		return 0
 	}
+	// 账号级快速切换仅覆盖明确的上游故障；不改变 OAuth 的显式重试窗口。
+	if failoverErr != nil && account.ShouldFailoverImmediately(failoverErr.StatusCode) {
+		return 0
+	}
 	limit := account.GetPoolModeRetryCount()
 	if limit > 0 && failoverErr != nil && failoverErr.SameAccountRetryMax > 0 && failoverErr.SameAccountRetryMax < limit {
 		return failoverErr.SameAccountRetryMax

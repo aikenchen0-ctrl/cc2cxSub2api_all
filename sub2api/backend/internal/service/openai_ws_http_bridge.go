@@ -251,7 +251,8 @@ func prepareOpenAIWSHTTPBridgeBody(account *Account, payload []byte) ([]byte, er
 	}
 	delete(body, "type")
 	delete(body, "generate")
-	delete(body, "previous_response_id")
+	// 只有入口层已重建完整历史才会删除远端锚点；外来续链必须原样
+	// 交给 HTTP 上游验证，不能在协议转换时静默丢失会话。
 	deleteOpenAIResponsesNoneReasoningEffortFromObject(account, body)
 	body["stream"] = true
 	return json.Marshal(body)

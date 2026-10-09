@@ -33,3 +33,15 @@ func TestOpenAIWSNextAttemptMessageKeepsInitialMessageForFirstTurnFailover(t *te
 	require.True(t, ok)
 	require.Equal(t, firstMessage, next)
 }
+
+func TestOpenAIWSNextAttemptMessageRejectsUnreconstructableCurrentTurn(t *testing.T) {
+	for _, retry := range []string{
+		`{"type":"response.create","previous_response_id":"resp_old","input":"delta"}`,
+		`{"type":"response.create","input":[{"type":"compaction","encrypted_content":"opaque"},{"role":"user","content":"delta"}]}`,
+		`{"type":"response.create","input":[{"type":"item_reference","id":"call_old"},{"type":"function_call_output","call_id":"call_old","output":"done"}]}`,
+	} {
+		next, ok := openAIWSNextAttemptMessage([]byte(`{"type":"response.create","input":"first"}`), []byte(retry), true)
+		require.False(t, ok)
+		require.Nil(t, next)
+	}
+}

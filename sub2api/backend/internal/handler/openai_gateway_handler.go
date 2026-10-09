@@ -2415,8 +2415,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "previous_response_id must be a response.id (resp_*), not a message id")
 		return
 	}
-	firstMessageToolCoverage := service.AnalyzeToolCallOutputContextCoverageBytes(firstMessage)
-	previousResponseCanMove := !firstMessageToolCoverage.HasFunctionCallOutput || firstMessageToolCoverage.ContextCoversAllCallIDs
+	continuationSafety := service.AnalyzeOpenAIContinuationSafety(firstMessage)
+	previousResponseCanMove := continuationSafety.CanReplayAcrossAccounts
 	reqLog = reqLog.With(
 		zap.Bool("ws_ingress", true),
 		zap.String("session_initial_model", reqModel),
@@ -3003,13 +3003,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		wsFirstMessage := wsAttemptMessage
-		// 切组/会话失配防护：previous_response_id 未在当前分组命中粘连账号（StickyPreviousHit=false），
-		// 说明该会话链不属于本次调度到的账号，原样转发会触发上游会话链鉴权失败（“鉴权失败，请检查 API Key”）。
-		// 故剥离首包里的 previous_response_id，改用首包内 input 重建上下文；带 function_call_output 的
-		// 工具续链无法重建，保持原样。仅作用于首轮首包，后续 turn 的续链由 WS 转发层既有逻辑处理。
-		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
-			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
-			reqLog.Debug("openai.websocket_previous_response_id_stripped_cross_group",
+		// 首帧可能仅携带当前增量，不能因为没有工具输出就删除远端历史。
+		// 同供应商的备用密钥可能共享状态，仍原样转发，由上游验证访问权。
+		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit {
+			reqLog.Debug("openai.websocket_previous_response_id_preserved_cross_account",
 				zap.Int64("account_id", account.ID),
 				zap.String("schedule_layer", scheduleDecision.Layer),
 			)
@@ -3043,7 +3040,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				wsAttemptMessage = nextAttemptMessage
 				if retryCurrentTurn {
-					previousResponseID = ""
+					continuationSafety = service.AnalyzeOpenAIContinuationSafety(wsAttemptMessage)
+					previousResponseID = continuationSafety.PreviousResponseID
+					previousResponseCanMove = continuationSafety.CanReplayAcrossAccounts
 					reqLog.Warn("openai.websocket_current_turn_failover_retry",
 						zap.Int64("account_id", account.ID),
 						zap.Int("upstream_status", failoverErr.StatusCode),
@@ -3779,7 +3778,7 @@ func openAIWSNextAttemptMessage(current, retryPayload []byte, retryCurrentTurn b
 	if !retryCurrentTurn {
 		return append([]byte(nil), current...), true
 	}
-	if len(retryPayload) == 0 {
+	if len(retryPayload) == 0 || !service.AnalyzeOpenAIContinuationSafety(retryPayload).CanReplayAcrossAccounts {
 		return nil, false
 	}
 	return append([]byte(nil), retryPayload...), true

@@ -59,7 +59,7 @@ func TestStripOpenAIInvalidEncryptedContentItems(t *testing.T) {
 		require.Equal(t, "fresh-cipher", second["encrypted_content"], "新密文不得误删")
 	})
 
-	t.Run("compaction_removed_entirely", func(t *testing.T) {
+	t.Run("compaction_is_preserved", func(t *testing.T) {
 		t.Parallel()
 		reqBody := map[string]any{
 			"input": []any{
@@ -68,13 +68,14 @@ func TestStripOpenAIInvalidEncryptedContentItems(t *testing.T) {
 			},
 		}
 		stripped := stripOpenAIInvalidEncryptedContentItems(reqBody, invalid)
-		require.Equal(t, 1, stripped)
+		require.Zero(t, stripped)
 		input, ok := reqBody["input"].([]any)
 		require.True(t, ok)
-		require.Len(t, input, 1)
+		require.Len(t, input, 2)
 		survivor, ok := input[0].(map[string]any)
 		require.True(t, ok)
-		require.Equal(t, "input_text", survivor["type"])
+		require.Equal(t, "compaction", survivor["type"])
+		require.Equal(t, "stale-cipher", survivor["encrypted_content"])
 	})
 
 	t.Run("no_hit_no_change", func(t *testing.T) {
@@ -103,8 +104,8 @@ func TestStripOpenAIInvalidEncryptedContentFromReplayItems(t *testing.T) {
 		items := []json.RawMessage{original, clean, compaction}
 
 		next, stripped := stripOpenAIInvalidEncryptedContentFromReplayItems(items, invalid)
-		require.Equal(t, 2, stripped)
-		require.Len(t, next, 2, "compaction 命中项应整项删除")
+		require.Equal(t, 1, stripped)
+		require.Len(t, next, 3, "压缩历史即使摘要命中也必须保留")
 		var rewritten map[string]any
 		require.NoError(t, json.Unmarshal(next[0], &rewritten))
 		require.Equal(t, "rs_1", rewritten["id"])
@@ -112,6 +113,7 @@ func TestStripOpenAIInvalidEncryptedContentFromReplayItems(t *testing.T) {
 		require.False(t, hasEncrypted)
 		// 未命中项正文共享；原命中项正文不被修改（整体替换语义）。
 		require.Same(t, &clean[0], &next[1][0])
+		require.Same(t, &compaction[0], &next[2][0])
 		require.Contains(t, string(original), "stale-cipher")
 	})
 
@@ -213,4 +215,23 @@ func TestOpenAIWSStateStoreInvalidEncryptedContentLineage(t *testing.T) {
 		digests := store.GetSessionInvalidEncryptedContentDigests(1, "session-c")
 		require.Len(t, digests, openAIWSInvalidEncryptedDigestsPerSession)
 	})
+}
+
+func TestStripSessionInvalidEncryptedContentPreservesUnreconstructableHistory(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	invalid := map[string]struct{}{openAIEncryptedContentDigest("stale-cipher"): {}}
+	for _, body := range []string{
+		`{"input":[{"type":"compaction","encrypted_content":"stale-cipher"},{"role":"user","content":"continue"}]}`,
+		`{"input":[{"type":"reasoning","encrypted_content":"stale-cipher"}]}`,
+		`{"input":[{"type":"reasoning","encrypted_content":"stale-cipher"},{"type":"item_reference","id":"item_old"},{"role":"user","content":"continue"}]}`,
+	} {
+		payload := []byte(body)
+		actual, count := svc.stripSessionInvalidEncryptedContentLogged(payload, invalid, "test", 1, 1)
+		require.Zero(t, count)
+		require.Equal(t, payload, actual)
+	}
+	payload := []byte(`{"input":[{"type":"reasoning","encrypted_content":"stale-cipher"},{"role":"user","content":"hello"}]}`)
+	actual, count := svc.stripSessionInvalidEncryptedContentLogged(payload, invalid, "test", 1, 1)
+	require.Equal(t, 1, count)
+	require.NotContains(t, string(actual), "stale-cipher")
 }

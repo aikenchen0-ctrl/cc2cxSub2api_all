@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -1144,6 +1145,9 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			stickyAccountID = accountID
 		}
 	}
+	// 快速切换密钥满载时先复用下方同组资格检查和抢槽流程。
+	// 仅暂存原等待计划；全部候选均无空闲槽位后才恢复排队。
+	var fastStickyWait *AccountSelectionResult
 	if s.concurrencyService == nil || !cfg.LoadBatchEnabled {
 		account, stickyHit, err := s.selectAccountForModelWithExclusionsStickyHit(ctx, groupID, platform, sessionHash, requestedModel, excludedIDs, requireCompact, stickyAccountID, requiredCapability, preferLowUpstreamRate)
 		if err != nil {
@@ -1163,16 +1167,25 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					Timeout:        cfg.StickySessionWaitTimeout,
 					MaxWaiting:     cfg.StickySessionMaxWaiting,
 				})
-				return markStickySessionHit(selection, stickyHit), selectErr
+				if selectErr != nil || !account.ShouldFailoverImmediately(http.StatusBadGateway) || err != nil || result == nil || result.Acquired {
+					return markStickySessionHit(selection, stickyHit), selectErr
+				}
+				fastStickyWait = markStickySessionHit(selection, stickyHit)
 			}
 		}
-		selection, selectErr := s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-			AccountID:      account.ID,
-			MaxConcurrency: account.Concurrency,
-			Timeout:        cfg.FallbackWaitTimeout,
-			MaxWaiting:     cfg.FallbackMaxWaiting,
-		})
-		return markStickySessionHit(selection, stickyHit), selectErr
+		if fastStickyWait == nil {
+			selection, selectErr := s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
+				AccountID:      account.ID,
+				MaxConcurrency: account.Concurrency,
+				Timeout:        cfg.FallbackWaitTimeout,
+				MaxWaiting:     cfg.FallbackMaxWaiting,
+			})
+			if selectErr != nil || stickyAccountID != account.ID || s.concurrencyService == nil ||
+				!account.ShouldFailoverImmediately(http.StatusBadGateway) || err != nil || result == nil || result.Acquired {
+				return markStickySessionHit(selection, stickyHit), selectErr
+			}
+			fastStickyWait = markStickySessionHit(selection, stickyHit)
+		}
 	}
 
 	accounts, err := s.listSchedulableAccounts(ctx, groupID, platform)
@@ -1196,8 +1209,8 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 	// one-request capacity spillover in Layer 2. Keep that spillover temporary:
 	// rewriting the durable binding here would make a short burst migrate the
 	// whole conversation to a cache-cold account.
-	stickySpillover := false
-	if sessionHash != "" {
+	stickySpillover := fastStickyWait != nil
+	if sessionHash != "" && fastStickyWait == nil {
 		accountID := stickyAccountID
 		if accountID > 0 && !isExcluded(accountID) {
 			account, err := s.getSchedulableAccount(ctx, accountID)
@@ -1237,7 +1250,10 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 								Timeout:        cfg.StickySessionWaitTimeout,
 								MaxWaiting:     cfg.StickySessionMaxWaiting,
 							})
-							return markStickySessionHit(selection, true), selectErr
+							if selectErr != nil || !account.ShouldFailoverImmediately(http.StatusBadGateway) || err != nil || result == nil || result.Acquired {
+								return markStickySessionHit(selection, true), selectErr
+							}
+							fastStickyWait = markStickySessionHit(selection, true)
 						}
 						stickySpillover = true
 					}
@@ -1400,8 +1416,11 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		return nil, true, nil
 	}
 
-	loadMap, err := s.concurrencyService.GetAccountsLoadBatch(ctx, accountLoads)
-	if err != nil {
+	var loadMap map[int64]*AccountLoadInfo
+	if cfg.LoadBatchEnabled {
+		loadMap, err = s.concurrencyService.GetAccountsLoadBatch(ctx, accountLoads)
+	}
+	if !cfg.LoadBatchEnabled || err != nil {
 		ordered := append([]*Account(nil), candidates...)
 		sortAccountsByPriorityAndLastUsed(ordered, false)
 		if rateOrder.enabled {
@@ -1441,7 +1460,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			return nil, selectErr
 		} else if selection != nil {
 			return selection, nil
-		} else if attempted {
+		} else if attempted || fastStickyWait != nil {
 			if freshLoadMap, loadErr := s.concurrencyService.GetAccountsLoadBatchFresh(ctx, accountLoads); loadErr == nil {
 				if selection, _, selectErr := tryAcquireFromLoadMap(freshLoadMap); selectErr != nil {
 					return nil, selectErr
@@ -1449,6 +1468,17 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					return selection, nil
 				}
 			}
+		}
+	}
+
+	if fastStickyWait != nil {
+		fresh := s.resolveFreshSchedulableOpenAIAccount(ctx, fastStickyWait.Account, platform, requestedModel, false, requiredCapability)
+		fresh = s.recheckSelectedOpenAIAccountFromDB(ctx, fresh, groupID, platform, requestedModel, requireCompact, requiredCapability)
+		if fresh != nil && s.openAIAccountMatchesSchedulingGroupForContext(ctx, fresh, groupID) &&
+			(!needsUpstreamCheck || !s.isUpstreamModelRestrictedByChannel(ctx, *groupID, fresh, requestedModel, requireCompact)) {
+			fastStickyWait.Account = fresh
+			fastStickyWait.WaitPlan.MaxConcurrency = fresh.Concurrency
+			return fastStickyWait, nil
 		}
 	}
 

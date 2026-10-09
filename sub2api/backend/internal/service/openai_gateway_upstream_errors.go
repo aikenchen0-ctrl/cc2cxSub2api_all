@@ -291,6 +291,10 @@ func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(account *Acc
 	if s != nil && s.accountRepo != nil && account != nil && account.IsOpenAICompatible() && statusCode == http.StatusNotFound {
 		return true
 	}
+	// 仅为显式启用快速切换的 API 密钥开放 408，保留其他账号原有策略。
+	if statusCode == http.StatusRequestTimeout && account.ShouldFailoverImmediately(statusCode) {
+		return true
+	}
 	if s.shouldFailoverUpstreamError(statusCode) {
 		return true
 	}
@@ -408,6 +412,11 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
 	if oauth429Retry {
 		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
 		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(responseHeaders, failoverErr.SameAccountRetryDeadline)
+	}
+	// 在分类入口消除旧的同号重试标志，使所有协议共用快速切换策略，
+	// 同时避免健康熔断器因该标志漏计已失败的 API Key 账号。
+	if account.ShouldFailoverImmediately(statusCode) {
+		failoverErr.RetryableOnSameAccount = false
 	}
 	return failoverErr
 }

@@ -144,3 +144,19 @@ func TestDeriveOpenAIForwardAttemptBody_SanitizationSticksAcrossBedrockRetries(t
 	require.Equal(t, 0, reasoningItemCount(t, nextAccount), "later Bedrock account must remain sanitized")
 	require.JSONEq(t, kiroReasoningCanonicalBody, string(canonical), "canonical forwardBody must never be mutated")
 }
+
+func TestDeriveOpenAIForwardAttemptBodyPreservesUnreconstructableHistory(t *testing.T) {
+	for _, body := range []string{
+		`{"previous_response_id":"resp_old","input":[{"type":"reasoning","encrypted_content":"r"},{"role":"user","content":"continue"}]}`,
+		`{"input":[{"type":"compaction","encrypted_content":"c"},{"type":"reasoning","encrypted_content":"r"},{"role":"user","content":"continue"}]}`,
+		`{"input":[{"type":"reasoning","encrypted_content":"r"}]}`,
+	} {
+		h := &OpenAIGatewayHandler{}
+		state := &openAIPassthroughFailoverState{}
+		canonical := []byte(body)
+		h.deriveOpenAIForwardAttemptBody(nil, canonical, newOpenAIPassthroughAccount(1, true), state)
+		got := h.deriveOpenAIForwardAttemptBody(nil, canonical, newOpenAIPassthroughAccount(2, false), state)
+		require.Equal(t, body, string(got))
+		require.Equal(t, body, string(canonical))
+	}
+}

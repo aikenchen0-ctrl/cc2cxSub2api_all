@@ -165,6 +165,9 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		s.rateLimitService.HandleOpenAICodexSparkRateLimit(stateCtx, account, canonicalModel[0], statusCode, headers, responseBody) {
 		return false
 	}
+	if statusCode == http.StatusTooManyRequests && account.ShouldFailoverImmediately(statusCode) {
+		return s.cooldownOpenAIAPIKeyRateLimit(stateCtx, account, headers, firstRequestedModel(canonicalModel))
+	}
 	if statusCode == http.StatusTooManyRequests {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)
 	}
@@ -180,7 +183,7 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	// Pool-mode retryable upstream errors are already bounded by the request-local
 	// same-account retry budget. Recording the generic account+model transient
 	// cooldown here would block the next approved retry before that budget is used.
-	poolModeRetryable := account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode)
+	poolModeRetryable := account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode) && !account.ShouldFailoverImmediately(statusCode)
 	if !shouldDisable && account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey &&
 		shouldCooldownOpenAITransientUpstreamError(statusCode, responseBody) && !poolModeRetryable {
 		model := ""
@@ -199,6 +202,39 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		}
 	}
 	return shouldDisable
+}
+
+// cooldownOpenAIAPIKeyRateLimit 将快速切换账号的 429 保留为模型级短冷却。
+// 先更新现有内存状态，再非阻塞提交限流持久化；数据库异常不撤销本进程保护。
+func (s *OpenAIGatewayService) cooldownOpenAIAPIKeyRateLimit(ctx context.Context, account *Account, headers http.Header, canonicalModel string) bool {
+	now := time.Now()
+	cooldown := time.Duration(defaultRateLimit429CooldownSeconds) * time.Second
+	if s.rateLimitService != nil {
+		if configured, enabled := s.rateLimitService.get429FallbackCooldown(ctx, account); enabled && configured > 0 {
+			cooldown = configured
+		}
+	}
+	until := now.Add(cooldown)
+	if retryAt := parseRetryAfterResetTime(headers, now); retryAt != nil && retryAt.After(until) {
+		until = *retryAt
+	}
+	model := openAIAccountModelTransientModel(canonicalModel)
+	if model == "" {
+		// 无模型信息时只能保护整个密钥，避免使用空模型键污染模型缓存。
+		s.BlockAccountScheduling(account, until, "apikey_429")
+		state := s.getOpenAIAccountModelTransientState()
+		state.recordCooldown(account.ID, openAIAccountCooldownStateKey, now, until)
+		if s.rateLimitService != nil && s.rateLimitService.accountRepo != nil {
+			s.enqueueOpenAICooldownPersistence(state, account.ID, openAIAccountCooldownStateKey, now)
+		}
+		return true
+	}
+	state := s.getOpenAIAccountModelTransientState()
+	state.recordCooldown(account.ID, model, now, until)
+	if s.rateLimitService != nil && s.rateLimitService.accountRepo != nil {
+		s.enqueueOpenAICooldownPersistence(state, account.ID, model, now)
+	}
+	return true
 }
 
 func shouldCooldownOpenAITransientUpstreamError(statusCode int, responseBody []byte) bool {

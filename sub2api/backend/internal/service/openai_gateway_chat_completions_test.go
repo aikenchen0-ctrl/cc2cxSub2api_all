@@ -1077,7 +1077,10 @@ func TestForwardAsChatCompletions_DoneSentinelWithoutTerminalReturnsError(t *tes
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.1")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing terminal event")
+	var failover *UpstreamFailoverError
+	require.ErrorAs(t, err, &failover)
+	require.Contains(t, string(failover.ResponseBody), "missing terminal event")
+	require.False(t, c.Writer.Written())
 	require.NotNil(t, result)
 	require.Zero(t, result.Usage.InputTokens)
 	require.Zero(t, result.Usage.OutputTokens)

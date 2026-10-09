@@ -777,15 +777,17 @@ func buildOpenAIWSCurrentTurnRetryPayload(
 	if err != nil {
 		return nil, false, err
 	}
-	retryPayload = RemovePreviousResponseIDFromBody(retryPayload)
+	retryPayload, _, err = dropPreviousResponseIDFromRawPayload(retryPayload)
+	if err != nil {
+		return nil, false, err
+	}
 	if model := strings.TrimSpace(originalModel); model != "" {
 		retryPayload, err = sjson.SetBytes(retryPayload, "model", model)
 		if err != nil {
 			return nil, false, err
 		}
 	}
-	coverage := AnalyzeToolCallOutputContextCoverageBytes(retryPayload)
-	if coverage.HasFunctionCallOutput && !coverage.ContextCoversAllCallIDs {
+	if !AnalyzeOpenAIContinuationSafety(retryPayload).CanReplayAcrossAccounts {
 		return nil, false, nil
 	}
 	return retryPayload, true, nil

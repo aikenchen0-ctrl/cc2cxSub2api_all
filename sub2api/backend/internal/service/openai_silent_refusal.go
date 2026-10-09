@@ -20,7 +20,8 @@ const (
 )
 
 type openAIChatSilentRefusalDetector struct {
-	enabled         bool
+	enabled         bool // 空完成判定仍只适用于原有的大请求范围。
+	bufferOutput    bool // 所有请求均先缓冲前导，避免过早关闭切换窗口。
 	sawContent      bool
 	sawToolCall     bool
 	sawFunctionCall bool
@@ -33,7 +34,8 @@ type openAIChatSilentRefusalDetector struct {
 
 func newOpenAIChatSilentRefusalDetector(requestBodyLen int) *openAIChatSilentRefusalDetector {
 	return &openAIChatSilentRefusalDetector{
-		enabled: requestBodyLen >= openAISilentRefusalMinRequestBodyBytes,
+		enabled:      requestBodyLen >= openAISilentRefusalMinRequestBodyBytes,
+		bufferOutput: true,
 	}
 }
 
@@ -42,7 +44,7 @@ func (d *openAIChatSilentRefusalDetector) Enabled() bool {
 }
 
 func (d *openAIChatSilentRefusalDetector) ObserveSSELine(line string) {
-	if d == nil || !d.enabled {
+	if d == nil || !d.bufferOutput {
 		return
 	}
 	if eventType, ok := extractOpenAISSEEventLine(line); ok {
@@ -55,7 +57,7 @@ func (d *openAIChatSilentRefusalDetector) ObserveSSELine(line string) {
 }
 
 func (d *openAIChatSilentRefusalDetector) ObservePayload(payload []byte) {
-	if d == nil || !d.enabled {
+	if d == nil || !d.bufferOutput {
 		return
 	}
 	payload = bytes.TrimSpace(payload)
@@ -84,7 +86,7 @@ func (d *openAIChatSilentRefusalDetector) ObservePayload(payload []byte) {
 }
 
 func (d *openAIChatSilentRefusalDetector) ObserveChatChunk(chunk apicompat.ChatCompletionsChunk) {
-	if d == nil || !d.enabled {
+	if d == nil || !d.bufferOutput {
 		return
 	}
 	if chunk.Usage != nil {
@@ -98,7 +100,7 @@ func (d *openAIChatSilentRefusalDetector) ObserveChatChunk(chunk apicompat.ChatC
 		if delta.Content != nil && *delta.Content != "" {
 			d.sawContent = true
 		}
-		if delta.ReasoningContent != nil {
+		if delta.ReasoningContent != nil && *delta.ReasoningContent != "" {
 			d.sawReasoning = true
 		}
 		if len(delta.ToolCalls) > 0 {
@@ -108,10 +110,11 @@ func (d *openAIChatSilentRefusalDetector) ObserveChatChunk(chunk apicompat.ChatC
 }
 
 func (d *openAIChatSilentRefusalDetector) ShouldReleaseClientOutput() bool {
-	if d == nil || !d.enabled {
+	if d == nil || !d.bufferOutput {
 		return true
 	}
-	if d.sawContent || d.sawToolCall || d.sawFunctionCall || d.sawUsage || d.sawError || d.sawReasoning {
+	// 用量与空推理仅是元数据，不能提前提交客户端响应；错误先由调用方分类。
+	if d.sawContent || d.sawToolCall || d.sawFunctionCall || d.sawError || d.sawReasoning {
 		return true
 	}
 	return d.sawFinish && d.finishReason != "" && d.finishReason != "stop"
@@ -138,9 +141,6 @@ func (d *openAIChatSilentRefusalDetector) observeEventType(eventType string) {
 	}
 	if eventType == "error" || eventType == "response.failed" {
 		d.sawError = true
-	}
-	if strings.Contains(eventType, "reasoning") || strings.Contains(eventType, "reasoning_summary") {
-		d.sawReasoning = true
 	}
 }
 
@@ -175,9 +175,9 @@ func (d *openAIChatSilentRefusalDetector) observeChatChoicesPayload(payload []by
 		if delta.Get("function_call").Exists() {
 			d.sawFunctionCall = true
 		}
-		if delta.Get("reasoning").Exists() ||
-			delta.Get("reasoning_content").Exists() ||
-			delta.Get("reasoning_summary").Exists() {
+		if delta.Get("reasoning").String() != "" ||
+			delta.Get("reasoning_content").String() != "" ||
+			delta.Get("reasoning_summary").String() != "" {
 			d.sawReasoning = true
 		}
 	}
@@ -194,12 +194,12 @@ func (d *openAIChatSilentRefusalDetector) observeResponsesPayload(payload []byte
 		case "function_call":
 			d.sawToolCall = true
 		case "reasoning":
-			d.sawReasoning = true
+			d.sawReasoning = d.sawReasoning || openAIStreamAddedEventStartsClientOutput(payload, eventType)
 		}
 	case "response.function_call_arguments.delta":
 		d.sawToolCall = true
 	case "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done":
-		d.sawReasoning = true
+		d.sawReasoning = d.sawReasoning || gjson.GetBytes(payload, "delta").String() != "" || gjson.GetBytes(payload, "text").String() != ""
 	case "response.completed", "response.done":
 		d.observeFinishReason("stop")
 	case "response.incomplete":

@@ -220,7 +220,8 @@ func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValid
 type ToolCallOutputContextCoverage struct {
 	HasFunctionCallOutput bool
 	// ContextCoversAllCallIDs 表示每个工具输出的 call_id 都能在 input 内找到
-	// 同 call_id 的工具调用上下文项或同 id 的 item_reference，且不存在缺失 call_id 的输出。
+	// 同 call_id 的工具调用正文，且不存在缺失 call_id 的输出。
+	// item_reference 只有远端标识，不能在另一供应商重建调用上下文。
 	// 任一输出无法由 input 自身重建时为 false，此时剥离 previous_response_id 会导致
 	// 上游以 "No tool call found for function call output" 拒绝请求。
 	ContextCoversAllCallIDs bool
@@ -268,15 +269,6 @@ func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContex
 				contextIDs = make(map[string]struct{})
 			}
 			contextIDs[callID] = struct{}{}
-		case itemType == "item_reference":
-			idValue := strings.TrimSpace(item.Get("id").String())
-			if idValue == "" {
-				return
-			}
-			if contextIDs == nil {
-				contextIDs = make(map[string]struct{})
-			}
-			contextIDs[idValue] = struct{}{}
 		}
 	}
 	if input.IsArray() {

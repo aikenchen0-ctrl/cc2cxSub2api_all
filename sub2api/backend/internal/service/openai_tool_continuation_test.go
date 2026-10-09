@@ -224,13 +224,13 @@ func TestAnalyzeToolCallOutputContextCoverageBytes(t *testing.T) {
 			coversAllIDs: true,
 		},
 		{
-			name: "all_outputs_covered_by_item_reference",
+			name: "item_reference_does_not_rebuild_context",
 			body: map[string]any{"input": []any{
 				map[string]any{"type": "function_call_output", "call_id": "call_a"},
 				map[string]any{"type": "item_reference", "id": "call_a"},
 			}},
 			hasOutput:    true,
-			coversAllIDs: true,
+			coversAllIDs: false,
 		},
 		{
 			// 关键回归用例：input 内存在某一个上下文项，但另一个输出的 call_id
@@ -264,7 +264,7 @@ func TestAnalyzeToolCallOutputContextCoverageBytes(t *testing.T) {
 			coversAllIDs: false,
 		},
 		{
-			name: "mixed_context_and_reference_cover_all",
+			name: "mixed_context_and_reference_cannot_rebuild_all",
 			body: map[string]any{"input": []any{
 				map[string]any{"type": "function_call", "call_id": "call_a"},
 				map[string]any{"type": "function_call_output", "call_id": "call_a"},
@@ -272,7 +272,7 @@ func TestAnalyzeToolCallOutputContextCoverageBytes(t *testing.T) {
 				map[string]any{"type": "item_reference", "id": "call_b"},
 			}},
 			hasOutput:    true,
-			coversAllIDs: true,
+			coversAllIDs: false,
 		},
 		{
 			name: "all_codex_output_types_covered",

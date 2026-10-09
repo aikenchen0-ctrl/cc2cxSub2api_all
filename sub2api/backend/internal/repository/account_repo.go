@@ -2349,6 +2349,8 @@ func (r *accountRepository) SetModelRateLimit(ctx context.Context, id int64, sco
 		return err
 	}
 
+	// 快速切换的并发 429 必须在数据库行锁内取最大期限，防止跨进程晚写覆盖长冷却。
+	// 其他原因保持原有覆盖语义；仅更新当前账号，不引入跨账号事务。
 	client := clientFromContext(ctx, r.client)
 	result, err := client.ExecContext(
 		ctx,
@@ -2356,7 +2358,13 @@ func (r *accountRepository) SetModelRateLimit(ctx context.Context, id int64, sco
 			extra = jsonb_set(
 				jsonb_set(COALESCE(extra, '{}'::jsonb), '{model_rate_limits}'::text[], COALESCE(extra->'model_rate_limits', '{}'::jsonb), true),
 				ARRAY['model_rate_limits', $1]::text[],
-				$2::jsonb,
+				CASE
+					WHEN $2::jsonb->>'reason' = 'openai_apikey_429'
+						AND NULLIF(extra #>> ARRAY['model_rate_limits', $1, 'rate_limit_reset_at'], '')::timestamptz
+							> ($2::jsonb->>'rate_limit_reset_at')::timestamptz
+					THEN extra #> ARRAY['model_rate_limits', $1]
+					ELSE $2::jsonb
+				END,
 				true
 			),
 			updated_at = NOW()

@@ -114,6 +114,32 @@ func TestEffectiveSameAccountRetryLimitHonorsErrorCapAndDisabledAccount(t *testi
 	require.Equal(t, 0, effectiveSameAccountRetryLimit(&service.UpstreamFailoverError{SameAccountRetryMax: 1}, account))
 }
 
+func TestFastFailoverRetryBudgetPreservesOAuthWindow(t *testing.T) {
+	account := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"pool_mode": true, "pool_mode_retry_count": float64(5), "fast_failover": true,
+		},
+	}
+	for _, status := range []int{401, 402, 403, 404, 405, 408, 429, 500, 502, 503, 504, 529} {
+		failure := &service.UpstreamFailoverError{StatusCode: status, RetryableOnSameAccount: true}
+		require.Zero(t, effectiveSameAccountRetryLimit(failure, account), "status=%d", status)
+		require.False(t, sameAccountRetryAllowed(failure, 0, effectiveSameAccountRetryLimit(failure, account)))
+	}
+
+	// 同样的凭据开关不得改变 OAuth 的显式等待与截止时间。
+	account.Type = service.AccountTypeOAuth
+	failure := &service.UpstreamFailoverError{
+		StatusCode:               http.StatusTooManyRequests,
+		RetryableOnSameAccount:   true,
+		SameAccountRetryDelay:    time.Second,
+		SameAccountRetryDeadline: time.Now().Add(time.Minute),
+	}
+	require.True(t, sameAccountRetryAllowed(failure, 10, effectiveSameAccountRetryLimit(failure, account)))
+	require.Equal(t, time.Second, sameAccountRetryDelayFor(failure, 10))
+}
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
