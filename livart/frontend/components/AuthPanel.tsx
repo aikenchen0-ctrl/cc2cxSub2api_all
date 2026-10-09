@@ -3,6 +3,7 @@ import { Loader2, LogIn, UserPlus } from 'lucide-react';
 import { AuthSession, login, register } from '../services/auth';
 import LivartLogo from './LivartLogo';
 import ProjectLinks from './ProjectLinks';
+import FailureNotice from './FailureNotice';
 
 interface AuthPanelProps {
   onAuthenticated: (session: AuthSession) => void;
@@ -88,7 +89,7 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthenticated }) => {
 
           {error && (
             <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-500">
-              {error}
+              <FailureNotice error={error} context={mode === 'login' ? '登录' : '注册'} />
             </div>
           )}
 

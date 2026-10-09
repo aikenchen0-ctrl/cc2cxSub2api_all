@@ -1,4 +1,5 @@
 import { authHeaders, getStoredAuthSession } from './auth';
+import { createApiError } from './errorMessages';
 
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const IMAGE_JOB_STATUS_URL = '/api/image-jobs';
@@ -244,7 +245,7 @@ export const getImageJob = async (jobId: string): Promise<ImageJobStatus> => {
       const detail = apiMessage ? `后端返回：${apiMessage}` : '后端暂时不可用或正在重启';
       throw new Error(`图片任务查询失败：${detail}。如果任务是在后端重启前创建的，请重新生成。`);
     }
-    throw new Error(extractApiErrorMessage(data) || `图片任务查询失败：${response.status}`);
+    throw createApiError(data, response.status, '图片任务暂时无法查询');
   }
   return data;
 };

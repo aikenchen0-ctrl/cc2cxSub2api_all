@@ -83,8 +83,7 @@ class TestCreatePrompt:
     MOCK_SYSTEM_PROMPT: str = "Mock HTML Tailwind system prompt"
     TEST_STACK: Stack = "html_tailwind"
     ENABLED_IMAGE_POLICY: str = (
-        "Image generation is enabled for this request. Use generate_images for "
-        "missing assets when needed."
+        "本次请求已启用图片生成。需要补充缺少的素材时使用 generate_images。"
     )
 
     @staticmethod
@@ -127,7 +126,7 @@ class TestCreatePrompt:
         text = text_part.get("text")
         assert isinstance(text, str)
 
-        assert "## Design system" in text
+        assert "## 设计规范" in text
         assert "Reuse .mockup-frame" in text
 
     @pytest.mark.asyncio
@@ -153,9 +152,7 @@ class TestCreatePrompt:
         assert isinstance(user_text, str)
 
         upscale_instruction = (
-            "If an extracted or supplied asset is visibly low-resolution or pixelated "
-            "and must render larger, upscale it with edit_images—not CSS stretching or "
-            "generate_images."
+            "使用 edit_images 提升分辨率，不要靠 CSS 拉伸或 generate_images 重绘。"
         )
         removed_instruction = 'Pass its source first, set aspect_ratio: "match_input_image"'
         assert upscale_instruction in system_text
@@ -221,7 +218,7 @@ class TestCreatePrompt:
                             },
                             {
                                 "type": "text",
-                                "text": "<CONTAINS:Generate code for a web page that looks exactly like the provided screenshot(s).>",
+                                "text": "<CONTAINS:请生成与所提供截图外观一致的网页代码。>",
                             },
                         ],
                     },
@@ -266,7 +263,7 @@ class TestCreatePrompt:
         assert isinstance(text_part, dict)
         user_text = text_part.get("text")
         assert isinstance(user_text, str)
-        assert "Image generation is disabled for this request. Do not call generate_images." in user_text
+        assert "本次请求已关闭图片生成，不要调用 generate_images。" in user_text
 
 
     @pytest.mark.asyncio
@@ -311,7 +308,7 @@ class TestCreatePrompt:
                     {
                         "role": "user",
                         "content": (
-                            f"Selected stack: {self.TEST_STACK}.\n\n"
+                            f"所选技术栈：{self.TEST_STACK}。\n\n"
                             f"{self.ENABLED_IMAGE_POLICY}\n\n"
                             "Make the background blue"
                         ),
@@ -350,8 +347,8 @@ class TestCreatePrompt:
 
         first_user_content = messages[2].get("content")
         assert isinstance(first_user_content, str)
-        assert "Selected stack: html_tailwind." in first_user_content
-        assert "Image generation is disabled for this request. Do not call generate_images." in first_user_content
+        assert "所选技术栈：html_tailwind。" in first_user_content
+        assert "本次请求已关闭图片生成，不要调用 generate_images。" in first_user_content
         assert "Make the background blue" in first_user_content
 
     @pytest.mark.asyncio
@@ -388,7 +385,7 @@ class TestCreatePrompt:
                     },
                     {
                         "role": "user",
-                        "content": f"<CONTAINS:Generate UI for {text_description}>"
+                        "content": f"<CONTAINS:请根据以下要求生成界面：{text_description}>"
                     }
                 ],
             }
@@ -442,7 +439,7 @@ class TestCreatePrompt:
                     {
                         "role": "user",
                         "content": (
-                            f"Selected stack: {self.TEST_STACK}.\n\n"
+                            f"所选技术栈：{self.TEST_STACK}。\n\n"
                             f"{self.ENABLED_IMAGE_POLICY}\n\n"
                             "Add a sidebar"
                         ),
@@ -473,12 +470,12 @@ class TestCreatePrompt:
         the agent runner path.
         """
         # Setup test data
-        video_data_url: str = "data:video/mp4;base64,test_video_data"
+        video_data_url: str = "data:image/jpeg;base64,test_frame_data"
         params: Dict[str, Any] = {
             "prompt": {
                 "text": "",
-                "images": [],
-                "videos": [video_data_url],
+                "videos": [],
+                "images": [video_data_url],
             },
             "generationType": "create"
         }
@@ -496,7 +493,7 @@ class TestCreatePrompt:
             "messages": [
                 {
                     "role": "system",
-                    "content": "<CONTAINS:You are a coding agent that's an expert at building front-ends.>",
+                    "content": "<CONTAINS:你是擅长构建前端界面的代码智能体。>",
                 },
                 {
                     "role": "user",
@@ -507,7 +504,7 @@ class TestCreatePrompt:
                         },
                         {
                             "type": "text",
-                            "text": "<CONTAINS:Analyze this video and generate the code.>",
+                            "text": "<CONTAINS:请分析这些录屏帧并生成代码。>",
                         },
                     ],
                 },
@@ -525,7 +522,7 @@ class TestCreatePrompt:
             "generationType": "create",
         }
 
-        with pytest.raises(ValueError, match="Unsupported input mode: audio"):
+        with pytest.raises(ValueError, match="不支持的输入模式： audio"):
             await build_prompt_messages(
                 stack=self.TEST_STACK,
                 input_mode=cast(Any, "audio"),
@@ -587,7 +584,7 @@ class TestCreatePrompt:
                             {
                                 "type": "text",
                                 "text": (
-                                    f"Selected stack: {self.TEST_STACK}.\n\n"
+                                    f"所选技术栈：{self.TEST_STACK}。\n\n"
                                     f"{self.ENABLED_IMAGE_POLICY}\n\n"
                                     "Add a button"
                                 ),
@@ -665,7 +662,7 @@ class TestCreatePrompt:
                             {
                                 "type": "text",
                                 "text": (
-                                    f"Selected stack: {self.TEST_STACK}.\n\n"
+                                    f"所选技术栈：{self.TEST_STACK}。\n\n"
                                     f"{self.ENABLED_IMAGE_POLICY}\n\n"
                                     "Style like these examples"
                                 ),
@@ -724,7 +721,7 @@ class TestCreatePrompt:
                     {
                         "role": "user",
                         "content": (
-                            f"Selected stack: {self.TEST_STACK}.\n\n"
+                            f"所选技术栈：{self.TEST_STACK}。\n\n"
                             f"{self.ENABLED_IMAGE_POLICY}\n\n"
                             "Make it blue"
                         ),
@@ -803,7 +800,7 @@ class TestCreatePrompt:
             assert isinstance(text_part, dict)
             synthesized_text = text_part.get("text", "")
             assert isinstance(synthesized_text, str)
-            assert f"Selected stack: {self.TEST_STACK}." in synthesized_text
+            assert f"所选技术栈：{self.TEST_STACK}。" in synthesized_text
             assert "<html>Original imported code</html>" in synthesized_text
             assert "<change_request>" in synthesized_text
             assert "Make the header blue" in synthesized_text
@@ -822,7 +819,7 @@ class TestCreatePrompt:
     @pytest.mark.asyncio
     async def test_update_history_requires_user_message(self) -> None:
         with pytest.raises(
-            ValueError, match="Update history must include at least one user message"
+            ValueError, match="更新历史必须包含至少一条用户消息"
         ):
             await build_prompt_messages(
                 stack=self.TEST_STACK,

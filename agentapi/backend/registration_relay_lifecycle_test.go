@@ -27,6 +27,8 @@ func TestRegisteredUserKeyBillingAndRevocationLifecycle(t *testing.T) {
 			}
 		}
 		switch r.URL.Path {
+		case "/api/v1/admin/users/42":
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 100, "frozen_balance": 0}))
 		case "/api/v1/admin/users":
 			if created || r.Header.Get("x-api-key") != "test-main-admin-key" {
 				t.Error("duplicate or unauthorized creation")
@@ -38,6 +40,10 @@ func TestRegisteredUserKeyBillingAndRevocationLifecycle(t *testing.T) {
 				t.Error("login preceded main creation")
 			}
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"access_token": "private-main-token", "user": map[string]any{"id": 43, "role": "user", "email": "lifecycle@example.com"}}))
+		case "/api/v1/admin/groups/all":
+			_ = json.NewEncoder(w).Encode(envelope([]any{map[string]any{"id": 7, "name": "默认分组", "platform": "openai", "status": "active"}}))
+		case "/v1/sub2api/api-keys":
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 9, "group_id": 7, "status": "active"}))
 		case "/v1/sub2api/balance":
 			_ = json.NewEncoder(w).Encode(map[string]any{"balance": 10})
 		case "/v1/chat/completions":
@@ -94,7 +100,7 @@ func TestRegisteredUserKeyBillingAndRevocationLifecycle(t *testing.T) {
 	if strings.Contains(signup.Body.String(), "private-main-token") {
 		t.Fatal("main credential exposed")
 	}
-	keyResponse := request("POST", "/api/v1/api-keys", `{"name":"lifecycle"}`, cookie, "")
+	keyResponse := request("POST", "/api/v1/api-keys", `{"name":"lifecycle","group_id":7}`, cookie, "")
 	if keyResponse.Code != 201 {
 		t.Fatalf("create key: %d %s", keyResponse.Code, keyResponse.Body.String())
 	}

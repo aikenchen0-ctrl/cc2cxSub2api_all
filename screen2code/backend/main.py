@@ -57,7 +57,7 @@ async def sub2api_user_balance(request: Request):
     credential = os.environ.get("SUB2API_APP_CREDENTIAL", "").strip()
     base_url = (SUB2API_RELAY_BASE_URL or "").rstrip("/")
     if not credential or not base_url or not identity.subject.strip():
-        return JSONResponse(status_code=503, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+        return JSONResponse(status_code=503, content={"error": "暂时无法读取账户余额，请稍后重试"}, headers={"Cache-Control": "no-store"})
     headers = {
         "Authorization": f"Bearer {credential}",
         "X-Sub2API-On-Behalf-Of": identity.subject.strip(),
@@ -68,12 +68,12 @@ async def sub2api_user_balance(request: Request):
             upstream = await client.get(f"{base_url}/sub2api/balance", headers=headers)
         if upstream.status_code != 200:
             status = upstream.status_code if upstream.status_code in {401, 503} else 502
-            return JSONResponse(status_code=status, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+            return JSONResponse(status_code=status, content={"error": "暂时无法读取账户余额，请稍后重试"}, headers={"Cache-Control": "no-store"})
         balance = float(upstream.json().get("balance"))
         if not math.isfinite(balance):
             raise ValueError("balance is not finite")
     except (httpx.HTTPError, ValueError, TypeError, AttributeError):
-        return JSONResponse(status_code=502, content={"error": "Sub2API balance is unavailable"}, headers={"Cache-Control": "no-store"})
+        return JSONResponse(status_code=502, content={"error": "暂时无法读取账户余额，请稍后重试"}, headers={"Cache-Control": "no-store"})
     return JSONResponse(content={"balance": balance, "recharge_url": _sub2api_purchase_url()}, headers={"Cache-Control": "no-store"})
 
 
@@ -95,7 +95,7 @@ async def require_hosted_session(request: Request, call_next):
             if get_identity(request) is None:
                 return JSONResponse(
                     status_code=401,
-                    content={"error": {"code": "AUTH_REQUIRED", "message": "Authentication required"}},
+                    content={"error": {"code": "AUTH_REQUIRED", "message": "请先登录，再从主站菜单进入本应用"}},
                     headers={"Cache-Control": "no-store"} if balance_path else None,
                 )
     response = await call_next(request)

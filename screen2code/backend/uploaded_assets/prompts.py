@@ -9,7 +9,7 @@ def _build_asset_id_block(images: list[str], asset_base_url: str) -> str:
     for index, image in enumerate(images, start=1):
         asset = persist_data_url_as_temporary_asset(image, asset_base_url)
         if asset:
-            asset_lines.append(f"- Image {index}: asset_id `{asset.asset_id}`")
+            asset_lines.append(f"- 图片 {index}：asset_id `{asset.asset_id}`")
 
     if not asset_lines:
         return ""
@@ -17,24 +17,15 @@ def _build_asset_id_block(images: list[str], asset_base_url: str) -> str:
     joined_asset_lines = "\n".join(asset_lines)
     return f"""
 
-## Uploaded image asset IDs
+## 已上传图片素材 ID
 
-The uploaded images in this turn are available to the save_assets tool by
-opaque asset IDs:
+本轮上传的图片可通过以下不透明素材 ID 供 save_assets 工具使用：
 
 {joined_asset_lines}
 
-Some uploaded images may be reference screenshots, while others may be assets
-such as logos, product photos, icons, backgrounds, or illustrations. Decide
-which uploaded images should be used as assets in the generated code.
+部分上传图片可能是参考截图，其他图片可能是徽标、产品照片、图标、背景或插画等素材。请判断哪些上传图片应作为生成代码中的素材。
 
-If you decide one or more uploaded images should be used as assets, call
-save_assets with their asset IDs in the asset_ids list before writing or editing
-code, then use the returned permanent public_url values in the code. Do not
-embed asset IDs, temporary paths, or temporary URLs in the final code. Do not use
-screenshots or reference UI images as page assets unless the user clearly
-intends that. If you decide to use some uploaded images as assets, in your final message
-make sure to mention that concisely.
+如果决定使用一张或多张上传图片作为素材，请在写入或编辑代码前将素材 ID 放入 asset_ids 列表调用 save_assets，再在代码中使用返回的永久 public_url。最终代码不得嵌入素材 ID、临时路径或临时 URL。除非用户明确要求，不要把截图或参考界面图当作页面素材。如果使用了上传素材，请在最终消息中简要说明。
 """
 
 

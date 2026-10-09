@@ -48,18 +48,18 @@ async def get_eval_input_files():
         return sorted(files, key=lambda x: x.name)
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error reading input files: {str(e)}"
+            status_code=500, detail=f"读取输入文件失败： {str(e)}"
         )
 
 
 @router.get("/evals", response_model=list[Eval])
 async def get_evals(folder: str):
     if not folder:
-        raise HTTPException(status_code=400, detail="Folder path is required")
+        raise HTTPException(status_code=400, detail="文件夹路径不能为空")
 
     folder_path = Path(folder)
     if not folder_path.exists():
-        raise HTTPException(status_code=404, detail=f"Folder not found: {folder}")
+        raise HTTPException(status_code=404, detail=f"未找到文件夹： {folder}")
 
     try:
         evals: list[Eval] = []
@@ -101,7 +101,7 @@ async def get_evals(folder: str):
         return evals
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing evals: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"处理评测失败： {str(e)}")
 
 
 class RunEvalsRequest(BaseModel):
@@ -126,11 +126,11 @@ def _resolve_set_run(
         raise HTTPException(status_code=400, detail=str(e))
     except eval_sets.EvalSetNotFoundError:
         raise HTTPException(
-            status_code=404, detail=f"Eval set not found: {request.set_name}"
+            status_code=404, detail=f"未找到评测集： {request.set_name}"
         )
     if set_info.image_count == 0:
         raise HTTPException(
-            status_code=400, detail=f"Eval set {request.set_name!r} has no images"
+            status_code=400, detail=f"评测集 {request.set_name!r} 没有图片"
         )
     try:
         session = eval_sessions.resolve_session_for_run(request.set_name)
@@ -138,9 +138,7 @@ def _resolve_set_run(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Active session {e.active_session.name!r} is pinned to set "
-                f"{e.active_session.eval_set!r}. Start a new session for set "
-                f"{request.set_name!r} first (POST /eval-sessions)."
+                f"当前会话 {e.active_session.name!r} 已绑定评测集 {e.active_session.eval_set!r}。请先为评测集 {request.set_name!r} 创建新会话（POST /eval-sessions）。"
             ),
         )
     skip_per_model: Dict[str, set[str]] = {}
@@ -181,15 +179,14 @@ def _load_openai_input_compare_payload(raw_json: str, side: str) -> object:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Invalid {side} JSON: {error.msg} "
-                f"(line {error.lineno}, column {error.colno})"
+                f"{'左侧' if side == 'left' else '右侧'} JSON 格式无效（第 {error.lineno} 行，第 {error.colno} 列）"
             ),
         )
 
     try:
         compare_openai_inputs(payload, payload)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=f"Invalid {side} payload: {error}")
+        raise HTTPException(status_code=400, detail=f"{'左侧' if side == 'left' else '右侧'}输入数据无效，请检查请求结构。")
 
     return payload
 
@@ -264,7 +261,7 @@ def _count_eval_files(selected_files: List[str], set_name: Optional[str] = None)
 async def run_evals_stream(request: RunEvalsRequest):
     """Run evaluations and stream progress events as newline-delimited JSON."""
     if not request.models:
-        raise HTTPException(status_code=400, detail="At least one model is required")
+        raise HTTPException(status_code=400, detail="请至少选择一个模型")
 
     eval_set, session, skip_per_model = _resolve_set_run(request)
 
@@ -410,12 +407,12 @@ async def get_best_of_n_evals(request: Request):
         i += 1
 
     if not folders:
-        return {"error": "No folders provided"}
+        return {"error": "未提供文件夹"}
 
     # Validate folders exist
     for folder in folders:
         if not os.path.exists(folder):
-            return {"error": f"Folder does not exist: {folder}"}
+            return {"error": f"文件夹不存在： {folder}"}
 
     evals: list[Eval] = []
     folder_names = [os.path.basename(folder) for folder in folders]
@@ -503,5 +500,5 @@ async def get_output_folders():
         return sorted(folders, key=lambda x: x.modified_time, reverse=True)
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error reading output folders: {str(e)}"
+            status_code=500, detail=f"读取输出文件夹失败： {str(e)}"
         )

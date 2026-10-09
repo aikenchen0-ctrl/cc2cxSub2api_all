@@ -29,15 +29,21 @@ interface SidebarSection {
 
 const personal: SidebarItem[] = [
   { path: '/dashboard', label: '仪表盘', icon: 'chart' },
+  { path: '/balance', label: '余额', icon: 'creditCard' },
   { path: '/keys', label: 'API 密钥', icon: 'key' },
   { path: '/usage', label: '使用记录', icon: 'clock' },
   { path: '/purchase', label: '充值', icon: 'creditCard' },
   { path: '/orders', label: '订单记录', icon: 'dollar' },
+  { path: '/affiliate', label: '推广返利', icon: 'gift' },
+  { path: '/redeem', label: '兑换', icon: 'gift' },
+  { path: '/profile', label: '个人资料', icon: 'user' },
 ]
 
 const management: SidebarItem[] = [
   { path: '/admin/dashboard', label: '仪表盘', icon: 'chart' },
   { path: '/admin/users', label: '用户管理', icon: 'users' },
+  { path: '/admin/payments', label: '支付统计', icon: 'chart' },
+  { path: '/admin/orders', label: '本站订单', icon: 'creditCard' },
   { path: '/admin/usage', label: '用量同步', icon: 'clock' },
   { path: '/admin/announcements', label: '公告管理', icon: 'bell' },
   { path: '/admin/settings', label: '系统设置', icon: 'cog' },
@@ -75,6 +81,7 @@ function tourName(path: string): string | undefined {
     '/dashboard': 'sidebar-dashboard',
     '/keys': 'sidebar-api-keys',
     '/usage': 'sidebar-usage',
+    '/profile': 'sidebar-profile',
     '/admin/dashboard': 'sidebar-admin-dashboard',
   }
   return names[path]

@@ -981,11 +981,13 @@ func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, 
 	return svc
 }
 
-// ProvidePaymentOrderExpiryService creates and starts PaymentOrderExpiryService.
-func ProvidePaymentOrderExpiryService(paymentSvc *PaymentService, lockCache LeaderLockCache, db *sql.DB) *PaymentOrderExpiryService {
+// ProvidePaymentOrderExpiryService starts the background worker when enabled.
+func ProvidePaymentOrderExpiryService(paymentSvc *PaymentService, lockCache LeaderLockCache, db *sql.DB, cfg *config.Config) *PaymentOrderExpiryService {
 	svc := NewPaymentOrderExpiryService(paymentSvc, 60*time.Second)
 	svc.SetLeaderLock(lockCache, db)
-	svc.Start()
+	if cfg == nil || cfg.Payment.OrderExpiryEnabled {
+		svc.Start()
+	}
 	return svc
 }
 

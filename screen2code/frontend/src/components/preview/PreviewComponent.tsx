@@ -309,7 +309,7 @@ function PreviewComponent({
         <iframe
           id={`preview-${device}`}
           ref={iframeRef}
-          title="Preview"
+          title="预览"
           className={classNames(
             {
               "border-0": true,

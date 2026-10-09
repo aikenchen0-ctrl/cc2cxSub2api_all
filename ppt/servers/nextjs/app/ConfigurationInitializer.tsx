@@ -103,8 +103,11 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
               "请先选择并配置文本服务商，再打开其他页面。",
               { id: "provider-setup-required" }
             );
-            router.replace('/');
           }
+          // The bootstrap below owns the setup redirect. Revalidating an
+          // already-open route must not send managed SSO users back to `/`:
+          // Home immediately routes them to `/upload`, which otherwise loops
+          // forever when the shared runtime configuration is incomplete.
           return;
         }
 

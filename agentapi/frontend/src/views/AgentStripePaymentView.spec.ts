@@ -90,4 +90,11 @@ describe('AgentStripePaymentView', () => {
     expect(stripeMocks.loadStripe).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('uses the selected merchant instance public key from the order', async () => {
+    writeAgentPaymentRecovery(window.localStorage, createAgentPaymentRecovery({ ...result, stripe_publishable_key: 'pk_selected_merchant' }, 'balance', 'stripe'))
+    const { wrapper } = await mountView()
+    expect(stripeMocks.loadStripe).toHaveBeenCalledWith('pk_selected_merchant')
+    wrapper.unmount()
+  })
 })

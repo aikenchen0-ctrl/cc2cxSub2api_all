@@ -144,10 +144,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleSSOCallback(w, r, requestID)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/auth/"):
 		s.handleAuth(w, r, requestID)
+	case strings.HasPrefix(r.URL.Path, "/branding/logos/"):
+		s.handleBrandLogoFile(w, r, requestID)
 	case r.URL.Path == "/api/v1/settings/public":
 		s.handlePublicSettings(w, r, requestID)
 	case r.URL.Path == "/api/v1/public/models":
 		s.handlePublicModels(w, r, requestID)
+	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/billing/webhook/"):
+		s.handleStationBillingWebhook(w, r, requestID)
 	case r.URL.Path == "/api/v1/payments/webhook":
 		// Payment providers call this endpoint without an AgentAPI cookie. Keep
 		// it before the generic /api/v1 branch and authenticate it with the
@@ -171,6 +175,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentBalanceNotify(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/wallet":
 		s.handleAgentWallet(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/balance" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/balance/"):
+		s.handleAgentBalance(w, r, requestID)
 	case isForbiddenAgentManagementPath(r.URL.Path):
 		s.writeError(w, http.StatusNotFound, requestID, "NOT_FOUND", "endpoint not found")
 	case r.URL.Path == "/api/v1/agent/usage/insights":
@@ -179,8 +185,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentUsage(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/affiliate" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/affiliate/"):
 		s.handleAgentAffiliate(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/redeem" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/redeem/"):
+		s.handleAgentRedeem(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/orders" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/orders/"):
 		s.handleAgentOrders(w, r, requestID)
+	case r.URL.Path == "/api/v1/agent/billing/orders" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/billing/orders/"):
+		s.handleStationBillingUser(w, r, requestID)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/agent/payment/"):
 		s.handleAgentPayment(w, r, requestID)
 	case r.URL.Path == "/api/v1/agent/recharge/orders":
@@ -358,7 +368,7 @@ func (s *Server) reconcileStaleVideoTasksForTenant(ctx context.Context, agentID 
 			slog.Warn("video task reconciliation lease unavailable", "agent_id", agentID, "main_user_id", billingUserID, "error", leaseErr)
 			continue
 		}
-		status, _, body, relayErr := s.main.RelayModelMethod(leaseCtx, http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
+		status, _, body, relayErr := s.main.RelayModelMethod(withRelayGroup(leaseCtx, task.GroupID), http.MethodGet, "/v1/videos/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
 		if relayErr == nil && status >= 200 && status < 300 {
 			_, upstreamStatus := videoTaskIdentity(body)
@@ -421,7 +431,7 @@ func (s *Server) reconcileStaleImageTasksForTenant(ctx context.Context, agentID 
 			slog.Warn("image task reconciliation lease unavailable", "agent_id", agentID, "main_user_id", billingUserID, "error", leaseErr)
 			continue
 		}
-		status, _, body, relayErr := s.main.RelayModelMethod(leaseCtx, http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
+		status, _, body, relayErr := s.main.RelayModelMethod(withRelayGroup(leaseCtx, task.GroupID), http.MethodGet, "/v1/images/tasks/"+url.PathEscape(task.TaskID), nil, nil, s.relayBillingIdentity(task.MainUserID), task.RequestID)
 		shouldReconcile := false
 		if relayErr == nil && status >= 200 && status < 300 {
 			_, imageStatus := imageTaskIdentity(body)
@@ -1518,9 +1528,11 @@ func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requ
 	publicAgent := redactAgentFinancials(agent)
 	result := map[string]any{"agent": publicAgent, "authenticated": false, "is_agent_admin": false}
 	if session, user, ok := s.loadSession(r); ok {
-		if mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID); balanceErr == nil {
-			user.BalanceCents = mainUser.Balance
-			user.FrozenBalanceCents = mainUser.FrozenBalance
+		// The user who clicked one-click open is this session. Read that same
+		// main-site user with the administrator key; do not substitute another ID.
+		if balance, frozen, ok := s.lookupDisplayBalance(r.Context(), session.MainUserID); ok {
+			user.BalanceCents = balance
+			user.FrozenBalanceCents = frozen
 		} else {
 			result["balance_error"] = "Sub2API user balance is temporarily unavailable"
 		}
@@ -1720,12 +1732,13 @@ func (s *Server) handleAgentWallet(w http.ResponseWriter, r *http.Request, reque
 	if !s.isAgentAdmin(session) {
 		agent = redactAgentFinancials(agent)
 	}
-	mainUser, balanceErr := s.main.AdminGetUser(r.Context(), session.MainUserID)
-	if balanceErr != nil {
-		s.writeMainError(w, requestID, balanceErr)
+	balance, frozen, ok := s.lookupDisplayBalance(r.Context(), session.MainUserID)
+	if !ok {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_BALANCE_UNAVAILABLE", "main balance lookup is temporarily unavailable")
 		return
 	}
-	user.BalanceCents = mainUser.Balance
+	user.BalanceCents = balance
+	user.FrozenBalanceCents = frozen
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"agent": agent, "user": user, "main_user_id": session.MainUserID})
 }
 
@@ -1998,26 +2011,31 @@ func (s *Server) handlePaymentWebhook(w http.ResponseWriter, r *http.Request, re
 	allocated := order.Status == "allocated"
 	allocationPending := order.Status == "paid_pending_allocation"
 	if allocationPending {
-		if allocatedOrder, allocateErr := s.syncAndAllocateRechargeOrderForTenant(r.Context(), agent.ID, requestID+":payment-sync", order.OrderNo); allocateErr != nil {
-			if errors.Is(allocateErr, errInsufficientBalance) {
-				s.writeData(w, http.StatusAccepted, requestID, map[string]any{"order": order, "allocated": false, "allocation_pending": true, "retryable": true})
-				return
-			}
-			// The event is durable. Returning 202 tells a provider that the
-			// payload was accepted while the operator/reconciler can retry the
-			// allocation after the main site is reachable.
+		if err := s.creditStationUserRecharge(r.Context(), agent, order); err != nil {
 			s.writeData(w, http.StatusAccepted, requestID, map[string]any{"order": order, "allocated": false, "allocation_pending": true, "retryable": true})
 			return
-		} else {
-			order = allocatedOrder
-			allocated = order.Status == "allocated"
 		}
+		if refreshed, refreshErr := s.store.RechargeOrder(agent.ID, order.OrderNo); refreshErr == nil {
+			order = refreshed
+		}
+		allocated = order.Status == "allocated"
 	}
 	status := http.StatusOK
 	if allocationPending && !allocated {
 		status = http.StatusAccepted
 	}
 	s.writeData(w, status, requestID, map[string]any{"order": order, "allocated": allocated, "allocation_pending": !allocated && order.Status == "paid_pending_allocation", "duplicate": !result.Created})
+}
+
+func (s *Server) creditStationUserRecharge(ctx context.Context, agent AgentView, order RechargeOrder) error {
+	if err := s.store.CreditUserRecharge(agent.ID, order.MainUserID, order.AmountCents, order.OrderNo); err != nil {
+		return err
+	}
+	amount := float64(order.AmountCents) / 100
+	if err := s.main.AdminAddUserBalance(ctx, order.MainUserID, amount, "agentapi station recharge "+order.OrderNo); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) paymentAdminOrders(w http.ResponseWriter, r *http.Request, requestID, agentID string) {
@@ -2347,13 +2365,31 @@ func (s *Server) paymentAdminConfig(w http.ResponseWriter, r *http.Request, requ
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAYMENT_CONFIG", err.Error())
 			return
 		}
+		agent, agentErr := s.store.Agent(agentID)
+		if agentErr != nil {
+			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load tenant configuration")
+			return
+		}
+		ownerID := s.tenantOwnerMainUserID(agent)
+		if payload.Enabled && ownerID == "" {
+			s.writeError(w, http.StatusServiceUnavailable, requestID, "MAIN_OWNER_MISSING", "station owner is not configured")
+			return
+		}
 		updated, err := s.store.UpdatePaymentConfig(agentID, config, replaceSecret)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "PAYMENT_CONFIG_UPDATE_FAILED", "failed to save payment configuration")
 			return
 		}
 		updated.WebhookSecret = ""
-		s.recordTenantAudit(agentID, "agent_admin", actorID, "payment_config.update", "agent", agentID, requestID, "success", "")
+		mode := "user_upstream"
+		if updated.Enabled {
+			mode = "owner_upstream"
+		}
+		if err := s.store.SetBillingMode(agentID, mode, ownerID); err != nil {
+			s.writeError(w, http.StatusInternalServerError, requestID, "BILLING_MODE_UPDATE_FAILED", "failed to apply station billing mode")
+			return
+		}
+		s.recordTenantAudit(agentID, "agent_admin", actorID, "payment_config.update", "agent", agentID, requestID, "success", mode)
 		s.writeData(w, http.StatusOK, requestID, updated)
 	default:
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported payment configuration operation")
@@ -2393,12 +2429,24 @@ func (s *Server) handleAgentAdmin(w http.ResponseWriter, r *http.Request, reques
 		s.handleAgentAdminUsers(w, r, requestID, tenant)
 		return
 	}
+	if r.URL.Path == "/api/v1/agent/admin/payments" {
+		s.handleAgentPaymentStats(w, r, requestID, tenant)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/billing" || strings.HasPrefix(r.URL.Path, "/api/v1/agent/admin/billing/") {
+		s.handleStationBillingAdmin(w, r, requestID, tenant)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/member-facts" {
+		s.handleAgentMemberFacts(w, r, requestID, tenant)
+		return
+	}
 	if r.URL.Path == "/api/v1/agent/admin/payment-config" {
-		if s.tenantBillingMode(tenantAgent) == "user_upstream" {
-			s.writeError(w, http.StatusGone, requestID, "LOCAL_RECHARGE_DISABLED", "local payment configuration is disabled for direct user billing")
-			return
-		}
 		s.paymentAdminConfig(w, r, requestID, tenant.AgentID, session.MainUserID)
+		return
+	}
+	if r.URL.Path == "/api/v1/agent/admin/branding/logo" {
+		s.handleBrandLogoUpload(w, r, requestID, tenant)
 		return
 	}
 	if r.URL.Path == "/api/v1/agent/admin/branding" {
@@ -2608,13 +2656,24 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 		return
 	}
 
+	if r.URL.Path == "/api/v1/api-keys/groups" && r.Method == http.MethodGet {
+		groups, err := s.main.AdminListKeyGroups(r.Context())
+		if err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		s.writeData(w, http.StatusOK, requestID, map[string]any{"items": groups, "total": len(groups)})
+		return
+	}
+
 	if r.URL.Path == "/api/v1/api-keys" && r.Method == http.MethodPost {
 		if !sameOrigin(r) {
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
 			return
 		}
 		var payload struct {
-			Name string `json:"name"`
+			Name    string `json:"name"`
+			GroupID int64  `json:"group_id"`
 		}
 		if err := decodeJSON(r, &payload, maxJSONBody); err != nil {
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_REQUEST", err.Error())
@@ -2628,7 +2687,31 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_NAME", "key name must be at most 100 characters")
 			return
 		}
-		view, raw, err := s.store.CreateAPIKey(tenant.AgentID, keyUserID, name)
+		if payload.GroupID <= 0 {
+			s.writeError(w, http.StatusBadRequest, requestID, "GROUP_REQUIRED", "select a group before creating a key")
+			return
+		}
+		groups, err := s.main.AdminListKeyGroups(r.Context())
+		if err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		var selected *AgentKeyGroup
+		for i := range groups {
+			if groups[i].ID == payload.GroupID {
+				selected = &groups[i]
+				break
+			}
+		}
+		if selected == nil {
+			s.writeError(w, http.StatusBadRequest, requestID, "GROUP_NOT_AVAILABLE", "selected group is not available")
+			return
+		}
+		if err := s.main.CreateUserGroupKey(r.Context(), keyUserID, name, selected.ID); err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		view, raw, err := s.store.CreateAPIKeyInGroup(tenant.AgentID, keyUserID, name, selected.Name, selected.ID)
 		if err != nil {
 			s.writeError(w, http.StatusInternalServerError, requestID, "API_KEY_CREATE_FAILED", "failed to create AgentAPI key")
 			return
@@ -2654,16 +2737,16 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request, requestID
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_KEY_ID", "key id is invalid")
 			return
 		}
-		if err := s.store.RevokeAPIKey(tenant.AgentID, keyUserID, id); err != nil {
+		if err := s.store.DeleteAPIKey(tenant.AgentID, keyUserID, id); err != nil {
 			if errors.Is(err, errNotFound) {
 				s.writeError(w, http.StatusNotFound, requestID, "API_KEY_NOT_FOUND", "AgentAPI key not found")
 				return
 			}
-			s.writeError(w, http.StatusInternalServerError, requestID, "API_KEY_REVOKE_FAILED", "failed to revoke AgentAPI key")
+			s.writeError(w, http.StatusInternalServerError, requestID, "API_KEY_DELETE_FAILED", "failed to delete AgentAPI key")
 			return
 		}
-		s.recordTenantAudit(tenant.AgentID, actorType, session.MainUserID, "api_key.revoke", "agent_api_key", strconv.FormatInt(id, 10), requestID, "success", "key_user_id="+keyUserID)
-		s.writeData(w, http.StatusOK, requestID, map[string]any{"id": id, "status": "revoked"})
+		s.recordTenantAudit(tenant.AgentID, actorType, session.MainUserID, "api_key.delete", "agent_api_key", strconv.FormatInt(id, 10), requestID, "success", "key_user_id="+keyUserID)
+		s.writeData(w, http.StatusOK, requestID, map[string]any{"id": id, "status": "deleted"})
 		return
 	}
 
@@ -2687,6 +2770,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	if !ok {
 		return
 	}
+	r = r.WithContext(withRelayGroup(r.Context(), principal.GroupID))
 	agentID := principal.Tenant.AgentID
 	agent, err := s.store.Agent(agentID)
 	if err != nil || agent.Status != "active" {
@@ -2710,7 +2794,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.handleVideoPoll(w, r, requestID, principal)
 			return
 		}
-		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, s.relayBillingIdentity(principal.ProxyMainUserID), requestID)
+		status, headers, data, err := s.main.RelayModelMethod(r.Context(), r.Method, r.URL.Path, r.URL.Query(), nil, principal.ProxyMainUserID, requestID)
 		if err != nil {
 			s.writeMainError(w, requestID, err)
 			return
@@ -2742,13 +2826,33 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	}
 	chargeID := requestIDFrom(r, nil)
 	legacyChargeID := chargeID
-	billingUserID := strings.TrimSpace(principal.ProxyMainUserID)
+	proxyUserID := strings.TrimSpace(principal.ProxyMainUserID)
+	billingUserID := proxyUserID
+	payerID := ""
+	commission := 0.0
+	if s.stationBillingEnabled(agentID) {
+		payerID = s.tenantOwnerMainUserID(agent)
+		if payerID != "" && payerID != proxyUserID {
+			billingUserID = payerID
+		}
+		commission = 0
+		localCents, walletErr := s.store.UserWalletCents(agentID, proxyUserID)
+		if walletErr != nil {
+			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load station balance")
+			return
+		}
+		if localCents <= 0 {
+			s.writeError(w, http.StatusPaymentRequired, requestID, "LOCAL_BALANCE_INSUFFICIENT", "station balance is insufficient; recharge on this site first")
+			return
+		}
+	}
+	r = r.WithContext(withRelayPayer(r.Context(), payerID, commission))
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if key == "" {
 		key = strings.TrimSpace(r.Header.Get("X-Request-ID"))
 	}
 	if key != "" && billingMode == "user_upstream" {
-		identity, _ := json.Marshal([]string{agentID, billingUserID, key})
+		identity, _ := json.Marshal([]string{agentID, proxyUserID, key})
 		digest := sha256.Sum256(identity)
 		chargeID = "agent-" + hex.EncodeToString(digest[:])
 	}
@@ -2784,7 +2888,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	// by task mappings or by the main site's usage logs.
 	if chargeID != legacyChargeID {
 		legacy, lookupErr := s.store.Settlement(agentID, legacyChargeID)
-		if lookupErr == nil && legacy.ProxyMainUserID == billingUserID {
+		if lookupErr == nil && legacy.ProxyMainUserID == proxyUserID {
 			s.writeSettlementReplay(w, requestID, legacy)
 			return
 		}
@@ -2797,7 +2901,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	// must never send the same model operation to the main site a second time,
 	// even if the first process died after the upstream call.
 	if existing, lookupErr := s.store.Settlement(agentID, chargeID); lookupErr == nil {
-		if existing.ProxyMainUserID != billingUserID {
+		if existing.ProxyMainUserID != proxyUserID {
 			s.writeError(w, 409, requestID, "IDEMPOTENCY_CONFLICT", "request identifier belongs to another user")
 			return
 		}
@@ -2808,7 +2912,13 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	model := requestModelName(r.Header.Get("Content-Type"), body)
-	mainBalance, balanceErr := s.main.AdminGetUser(r.Context(), billingUserID)
+	var mainBalance MainUserResult
+	var balanceErr error
+	if payerID != "" && payerID != proxyUserID {
+		mainBalance, balanceErr = s.main.AdminReadUserBalance(r.Context(), payerID)
+	} else {
+		mainBalance, balanceErr = s.main.AdminGetUser(r.Context(), proxyUserID)
+	}
 	if balanceErr != nil {
 		s.writeError(w, http.StatusServiceUnavailable, requestID, "BILLING_BALANCE_UNAVAILABLE", "main user balance could not be read")
 		return
@@ -2818,7 +2928,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	before := mainBalance.Balance
-	settlement, created, err := s.store.PrepareDirectSettlement(agentID, billingUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
+	settlement, created, err := s.store.PrepareDirectSettlement(agentID, proxyUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
 	if err != nil {
 		if errors.Is(err, errIdempotencyConflict) {
 			s.writeError(w, http.StatusConflict, requestID, "IDEMPOTENCY_CONFLICT", "request id is already associated with a different settlement")
@@ -2839,11 +2949,11 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	}
 
 	if modelRequestWantsStream(r.Header.Get("Accept"), r.Header.Get("Content-Type"), body) {
-		s.relayStreamingModel(w, r, requestID, agentID, billingMode, billingUserID, chargeID, before, body, r.Header.Get("Content-Type"))
+		s.relayStreamingModel(w, r, requestID, agentID, billingMode, proxyUserID, chargeID, before, body, r.Header.Get("Content-Type"))
 		return
 	}
 
-	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), s.relayBillingIdentity(principal.ProxyMainUserID), chargeID)
+	status, headers, responseBody, relayErr := s.main.RelayModelMethodWithContentType(r.Context(), r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Get("Content-Type"), proxyUserID, chargeID)
 	if relayErr != nil {
 		// A transport failure does not tell us whether Sub2API received and
 		// charged the request. Keep the reservation and reconcile it later.
@@ -2882,6 +2992,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.writeJSON(w, http.StatusServiceUnavailable, apiResponse{Code: http.StatusServiceUnavailable, Message: "video task was created but local tracking failed", Reason: "VIDEO_TASK_TRACKING_FAILED", RequestID: requestID, Data: map[string]string{"task_id": taskID}})
 			return
 		}
+		_ = s.store.SetVideoTaskGroup(agentID, taskID, principal.GroupID)
 	}
 	if r.URL.Path == "/v1/images/generations/async" || r.URL.Path == "/v1/images/edits/async" {
 		taskID, taskStatus := imageTaskIdentity(responseBody)
@@ -2895,11 +3006,12 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			s.writeJSON(w, http.StatusServiceUnavailable, apiResponse{Code: http.StatusServiceUnavailable, Message: "image task was accepted but local tracking failed", Reason: "IMAGE_TASK_TRACKING_FAILED", RequestID: requestID, Data: map[string]string{"task_id": taskID}})
 			return
 		}
+		_ = s.store.SetImageTaskGroup(agentID, taskID, principal.GroupID)
 	}
 	// The main usage log is the authoritative source for a request charge. A
 	// balance delta is only a compatibility fallback for older Sub2API builds
 	// that do not expose the per-Agent runtime usage endpoint; it must never override a usage row.
-	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), billingUserID, chargeID); available {
+	if usage, available, usageErr := s.mainUsageForRequest(r.Context(), proxyUserID, chargeID); available {
 		if usageErr != nil {
 			_ = s.store.FinalizeSettlement(agentID, chargeID, chargeID, "pending", 0, usageErr.Error())
 			copyResponse(w, status, headers, responseBody)
@@ -2920,6 +3032,9 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			slog.Error("main request succeeded; local usage sync failed", "request_id", chargeID, "error", err)
 			copyResponse(w, status, headers, responseBody)
 			return
+		}
+		if err := s.store.DebitUserUsage(agentID, proxyUserID, actual, chargeID); err != nil {
+			slog.Error("recorded main usage but local user balance was not debited", "request_id", chargeID, "error", err)
 		}
 		copyResponse(w, status, headers, responseBody)
 		return
@@ -3395,6 +3510,7 @@ type modelPrincipal struct {
 	APIKeyID        int64
 	APIKeyName      string
 	APIKeyPrefix    string
+	GroupID         int64
 }
 
 // requireModelPrincipal accepts either the browser session or an AgentAPI
@@ -3442,7 +3558,7 @@ func (s *Server) requireModelPrincipal(w http.ResponseWriter, r *http.Request, r
 		return modelPrincipal{}, false
 	}
 	tenant := TenantContext{AgentID: resolved.AgentID, MainUserID: resolved.MainUserID, Role: tenantRoleMember, Source: tenantSourceAPIKey}
-	return modelPrincipal{Tenant: tenant, ProxyMainUserID: resolved.MainUserID, User: user, APIKeyID: resolved.ID, APIKeyName: resolved.Name, APIKeyPrefix: resolved.Prefix}, true
+	return modelPrincipal{Tenant: tenant, ProxyMainUserID: resolved.MainUserID, User: user, APIKeyID: resolved.ID, APIKeyName: resolved.Name, APIKeyPrefix: resolved.Prefix, GroupID: resolved.GroupID}, true
 }
 
 func (s *Server) readMainBalance(ctx context.Context, mainUserID string) (int64, bool) {
@@ -3522,11 +3638,14 @@ func (s *Server) acquireUserOperationLease(parent context.Context, mainUserID st
 	if mainUserID == "" {
 		return nil, nil, fmt.Errorf("main user id is required for operation lease")
 	}
+	return s.acquireOperationLease(parent, "settlement:user:"+mainUserID)
+}
+
+func (s *Server) acquireOperationLease(parent context.Context, lockKey string) (context.Context, func(), error) {
 	tokenBytes := make([]byte, 16)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return nil, nil, fmt.Errorf("create operation lease token: %w", err)
 	}
-	lockKey := "settlement:user:" + mainUserID
 	ownerToken := hex.EncodeToString(tokenBytes)
 	leaseCtx, cancelLease := context.WithCancel(parent)
 	if err := s.store.AcquireOperationLease(leaseCtx, lockKey, ownerToken, userOperationLeaseDuration); err != nil {
@@ -3550,7 +3669,7 @@ func (s *Server) acquireUserOperationLease(parent context.Context, mainUserID st
 				owned, err := s.store.RenewOperationLease(renewCtx, lockKey, ownerToken, userOperationLeaseDuration)
 				cancelRenew()
 				if err != nil || !owned {
-					slog.Error("shared user operation lease lost", "main_user_id", mainUserID, "error", err)
+					slog.Error("shared operation lease lost", "lock_key", lockKey, "error", err)
 					cancelLease()
 					return
 				}
@@ -3563,7 +3682,7 @@ func (s *Server) acquireUserOperationLease(parent context.Context, mainUserID st
 			close(done)
 			releaseCtx, cancelRelease := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := s.store.ReleaseOperationLease(releaseCtx, lockKey, ownerToken); err != nil {
-				slog.Error("release shared user operation lease failed", "main_user_id", mainUserID, "error", err)
+				slog.Error("release shared operation lease failed", "lock_key", lockKey, "error", err)
 			}
 			cancelRelease()
 			cancelLease()
@@ -3725,6 +3844,7 @@ func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 	}
 	file := filepath.Join(s.webDir, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
 	if info, err := os.Stat(file); err == nil && !info.IsDir() {
+		setWebCache(w, file)
 		http.ServeFile(w, r, file)
 		return
 	}
@@ -3733,7 +3853,14 @@ func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, requestID(r), "WEB_NOT_BUILT", "frontend is not built")
 		return
 	}
+	setWebCache(w, index)
 	http.ServeFile(w, r, index)
+}
+
+func setWebCache(w http.ResponseWriter, file string) {
+	if strings.EqualFold(filepath.Base(file), "index.html") {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 }
 
 func copyResponse(w http.ResponseWriter, status int, headers http.Header, body []byte) {

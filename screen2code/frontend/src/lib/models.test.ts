@@ -7,6 +7,7 @@ import {
 const FLASH_MIN = CodeGenerationModel.GEMINI_3_FLASH_PREVIEW_MINIMAL;
 const PRO_HIGH = CodeGenerationModel.GEMINI_3_1_PRO_PREVIEW_HIGH;
 const GPT_HIGH = CodeGenerationModel.GPT_5_5_HIGH;
+const GPT_6_ASTRA_HIGH = CodeGenerationModel.GPT_6_ASTRA_HIGH;
 const PRO_LOW = CodeGenerationModel.GEMINI_3_1_PRO_PREVIEW_LOW;
 
 describe("Gemini 3.6 Flash", () => {
@@ -18,7 +19,7 @@ describe("Gemini 3.6 Flash", () => {
   ])("exposes the %s variant", (model, level) => {
     expect(model).toBe(`gemini-3.6-flash (${level} thinking)`);
     expect(CODE_GENERATION_MODEL_DESCRIPTIONS[model].name).toBe(
-      `Gemini 3.6 Flash (${level})`
+      `Gemini 3.6 Flash (${{ minimal: "极低推理", low: "低推理", medium: "中推理", high: "高推理" }[level]})`
     );
   });
 });
@@ -26,9 +27,11 @@ describe("Gemini 3.6 Flash", () => {
 describe("getVariantLabel", () => {
   test("image/create: Flash-minimal -> Fast; Pro-high & GPT-5.5 high -> Max", () => {
     const ctx = { inputMode: "image" as const, generationType: "create" as const };
-    expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "Fast", tone: "fast" });
-    expect(getVariantLabel(PRO_HIGH, ctx)).toEqual({ text: "Max", tone: "max" });
-    expect(getVariantLabel(GPT_HIGH, ctx)).toEqual({ text: "Max", tone: "max" });
+    expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "快速", tone: "fast" });
+    expect(getVariantLabel(PRO_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(GPT_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(GPT_6_ASTRA_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(CodeGenerationModel.GPT_6_ASTRA_LOW, ctx)).toBeNull();
     // Flash-high stays unlabelled.
     expect(
       getVariantLabel(CodeGenerationModel.GEMINI_3_FLASH_PREVIEW_HIGH, ctx)
@@ -37,8 +40,9 @@ describe("getVariantLabel", () => {
 
   test("text/create: Flash-minimal -> Fast, GPT-5.5 high -> Max; Pro-low unlabelled", () => {
     const ctx = { inputMode: "text" as const, generationType: "create" as const };
-    expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "Fast", tone: "fast" });
-    expect(getVariantLabel(GPT_HIGH, ctx)).toEqual({ text: "Max", tone: "max" });
+    expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "快速", tone: "fast" });
+    expect(getVariantLabel(GPT_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(GPT_6_ASTRA_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
     expect(getVariantLabel(PRO_LOW, ctx)).toBeNull();
   });
 
@@ -47,6 +51,7 @@ describe("getVariantLabel", () => {
     expect(getVariantLabel(FLASH_MIN, ctx)).toBeNull();
     expect(getVariantLabel(PRO_HIGH, ctx)).toBeNull();
     expect(getVariantLabel(GPT_HIGH, ctx)).toBeNull();
+    expect(getVariantLabel(GPT_6_ASTRA_HIGH, ctx)).toBeNull();
   });
 
   test("text/update: no labels", () => {
@@ -57,8 +62,8 @@ describe("getVariantLabel", () => {
   test("video/create and video/update: Fast and Max", () => {
     for (const generationType of ["create", "update"] as const) {
       const ctx = { inputMode: "video" as const, generationType };
-      expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "Fast", tone: "fast" });
-      expect(getVariantLabel(PRO_HIGH, ctx)).toEqual({ text: "Max", tone: "max" });
+      expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "快速", tone: "fast" });
+      expect(getVariantLabel(PRO_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
     }
   });
 

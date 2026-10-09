@@ -69,6 +69,242 @@ export interface AgentNotifyEmailEntry {
   verified: boolean
 }
 
+export interface AgentAffiliateDetail {
+  aff_code: string
+  aff_count: number
+  aff_quota: number
+  aff_frozen_quota: number
+  aff_history_quota: number
+  effective_rebate_rate_percent: number
+  invitees: Array<{ email: string; username: string; total_rebate: number; created_at?: string }>
+}
+
+export interface AgentAffiliateTransfer {
+  transferred_quota: number
+  balance: number
+}
+
+export interface AgentAffiliatePage<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface AgentAffiliateInvite {
+  email: string
+  username: string
+  aff_code: string
+  total_rebate: number
+  created_at?: string
+}
+
+export interface AgentAffiliateRebate {
+  out_trade_no: string
+  email: string
+  username: string
+  order_amount: number
+  pay_amount: number
+  rebate_amount: number
+  payment_type: string
+  order_status: string
+  created_at?: string
+}
+
+export interface AgentAffiliateTransferRecord {
+  amount: number
+  balance_after?: number
+  available_quota_after?: number
+  created_at?: string
+}
+
+export interface AgentRedeemResult {
+  type: string
+  value: number
+  status: string
+}
+
+export interface AgentRedeemHistoryItem extends AgentRedeemResult {
+  used_at?: string
+  created_at?: string
+}
+
+export interface AgentBalanceSnapshot {
+  main_user_id: string
+  balance_cents: number
+  frozen_balance_cents: number
+  source: string
+}
+
+export interface AgentBalanceHistoryItem {
+  type: string
+  value: number
+  status: string
+  created_at?: string
+  used_at?: string
+}
+
+export interface AgentBalanceHistoryPage {
+  items: AgentBalanceHistoryItem[]
+  total: number
+  page: number
+  page_size: number
+  total_recharged: number
+}
+
+export interface AgentMainUsageItem {
+  request_id: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  total_cost: number
+  actual_cost: number
+  created_at?: string
+}
+
+export interface AgentMemberFacts {
+  main_user_id: string
+  balance_cents: number
+  frozen_balance_cents: number
+  balance_available: boolean
+  history_available: boolean
+  usage_available: boolean
+  history?: AgentBalanceHistoryPage
+  usage?: { items: AgentMainUsageItem[]; total: number; page: number; page_size: number }
+}
+
+export interface StationBillingSettings {
+  enabled: boolean
+  min_amount: number
+  max_amount: number
+  daily_limit: number
+  order_timeout_minutes: number
+  max_pending_orders: number
+  enabled_payment_types: string[]
+  balance_disabled: boolean
+  balance_recharge_multiplier: number
+  subscription_usd_to_cny_rate: number
+  recharge_fee_rate: number
+  load_balance_strategy: string
+  product_name_prefix: string
+  product_name_suffix: string
+  help_image_url: string
+  help_text: string
+  cancel_rate_limit_enabled: boolean
+  cancel_rate_limit_max: number
+  cancel_rate_limit_window: number
+  cancel_rate_limit_unit: string
+  cancel_rate_limit_window_mode: string
+  alipay_force_qrcode: boolean
+  alipay_mobile_precreate_deep_link: boolean
+  payment_visible_method_alipay_source: string
+  payment_visible_method_wxpay_source: string
+  payment_visible_method_alipay_enabled: boolean
+  payment_visible_method_wxpay_enabled: boolean
+}
+
+export interface StationPaymentProvider {
+  id?: number
+  provider_key: string
+  name: string
+  config?: Record<string, string>
+  config_configured?: Record<string, boolean>
+  supported_types: string[]
+  enabled: boolean
+  payment_mode: string
+  sort_order: number
+  limits: string
+  refund_enabled: boolean
+  allow_user_refund: boolean
+  webhook_path?: string
+}
+
+export interface StationPaymentPlan {
+  id?: number
+  name: string
+  description: string
+  price: number
+  original_price?: number
+  currency: string
+  validity_days: number
+  validity_unit: string
+  features: string[]
+  product_name: string
+  for_sale: boolean
+  sort_order: number
+}
+
+export interface StationBillingDashboard {
+  orders_total: number
+  sampled: number
+  partial: boolean
+  completed_count: number
+  pending_count: number
+  refunded_count: number
+  amount_available: boolean
+  completed_pay_amount?: number
+  currency?: string
+}
+
+export interface AgentPaymentConfig {
+  enabled: boolean
+  provider: string
+  currency: string
+  merchant_id?: string
+  webhook_secret_configured: boolean
+  min_amount_cents: number
+  max_amount_cents: number
+  order_ttl_seconds: number
+  checkout_url_template?: string
+}
+
+export interface AgentPaymentConfigInput {
+  enabled: boolean
+  provider: string
+  currency: string
+  merchant_id: string
+  webhook_secret?: string
+  min_amount_cents: number
+  max_amount_cents: number
+  order_ttl_seconds: number
+  checkout_url_template: string
+}
+
+export interface AgentStationOrder {
+  order_no: string
+  amount_cents: number
+  currency: string
+  status: string
+  payment_url?: string
+}
+
+export interface AgentStationRecharge {
+  enabled: boolean
+  currency: string
+  min_amount_cents: number
+  max_amount_cents: number
+  items: AgentStationOrder[]
+  recharge_url?: string
+}
+
+export interface AgentPaymentStats {
+  source: string
+  members_total: number
+  members_sampled: number
+  orders_sampled: number
+  orders_reported: number
+  completed_count: number
+  pending_count: number
+  refunded_count: number
+  refund_requested_count: number
+  completed_pay_amount?: number
+  currency?: string
+  amount_available: boolean
+  partial: boolean
+  lookup_failures: number
+}
+
 export interface AgentBalanceNotifySettings {
   feature_enabled: boolean
   system_default_threshold: number
@@ -339,6 +575,7 @@ export interface AgentPaymentOrderRequest {
 }
 
 export interface AgentPaymentCreateResult {
+  stripe_publishable_key?: string
   order_id: number
   amount: number
   pay_amount: number
@@ -368,88 +605,6 @@ export interface AgentPaymentCreateResult {
   }
   jsapi?: Record<string, string>
   jsapi_payload?: Record<string, string>
-}
-
-export interface AgentAffiliateInvitee {
-  email: string
-  username: string
-  created_at?: string
-  total_rebate: number
-}
-
-export interface AgentAffiliateDetail {
-  aff_code: string
-  aff_count: number
-  aff_quota: number
-  aff_frozen_quota: number
-  aff_history_quota: number
-  effective_rebate_rate_percent: number
-  invitees: AgentAffiliateInvitee[]
-}
-
-export interface AgentAffiliateTransfer {
-  transferred_quota: number
-  balance: number
-}
-
-export interface AgentAffiliateInviteRecord {
-  inviter_id: number
-  inviter_email: string
-  inviter_username: string
-  invitee_id: number
-  invitee_email: string
-  invitee_username: string
-  aff_code: string
-  total_rebate: number
-  created_at: string
-}
-
-export interface AgentAffiliateRebateRecord {
-  order_id: number
-  out_trade_no: string
-  inviter_id: number
-  inviter_email: string
-  inviter_username: string
-  invitee_id: number
-  invitee_email: string
-  invitee_username: string
-  order_amount: number
-  pay_amount: number
-  rebate_amount: number
-  payment_type: string
-  order_status: string
-  created_at: string
-}
-
-export interface AgentAffiliateTransferRecord {
-  ledger_id: number
-  user_id: number
-  user_email: string
-  username: string
-  amount: number
-  balance_after?: number
-  available_quota_after?: number
-  frozen_quota_after?: number
-  history_quota_after?: number
-  snapshot_available: boolean
-  created_at: string
-}
-
-export interface AgentAffiliateRecordPage<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-  pages: number
-}
-
-export interface AgentAffiliateRecordFilters {
-  search?: string
-  start_at?: string
-  end_at?: string
-  sort_by?: string
-  sort_order?: 'asc' | 'desc'
-  main_user_id?: string
 }
 
 export interface AgentUsageView {
@@ -543,11 +698,22 @@ export function isAuthoritativeAgentUsageSource(source?: string): boolean {
     || source === 'sub2api_admin_usage'
 }
 
+export interface AgentKeyGroup {
+  id: number
+  name: string
+  platform: string
+  description?: string
+  status: string
+  rate_multiplier: number
+}
+
 export interface AgentAPIKeyView {
   id: number
   name: string
   prefix: string
   key?: string
+  group_id?: number
+  group_name?: string
   status: string
   created_at: string
   last_used_at?: string
@@ -727,6 +893,22 @@ export const agentAPI = {
     (await agentClient.get<{ items: AgentUsageView[]; total: number; page: number; page_size: number }>('/agent/usage', {
       params: { ...filters, page, page_size: pageSize },
     })).data,
+  affiliate: {
+    get: async () => (await agentClient.get<AgentAffiliateDetail>('/agent/affiliate')).data,
+    transfer: async () => (await agentClient.post<AgentAffiliateTransfer>('/agent/affiliate/transfer', {})).data,
+    bind: async (affCode: string) => (await agentClient.post<{ bound: boolean }>('/agent/affiliate/bind', { aff_code: affCode })).data,
+    invites: async (page = 1, pageSize = 20) =>
+      (await agentClient.get<AgentAffiliatePage<AgentAffiliateInvite>>('/agent/affiliate/invites', { params: { page, page_size: pageSize } })).data,
+    rebates: async (page = 1, pageSize = 20) =>
+      (await agentClient.get<AgentAffiliatePage<AgentAffiliateRebate>>('/agent/affiliate/rebates', { params: { page, page_size: pageSize } })).data,
+    transfers: async (page = 1, pageSize = 20) =>
+      (await agentClient.get<AgentAffiliatePage<AgentAffiliateTransferRecord>>('/agent/affiliate/transfers', { params: { page, page_size: pageSize } })).data,
+  },
+  redeem: {
+    submit: async (code: string) => (await agentClient.post<AgentRedeemResult>('/agent/redeem', { code })).data,
+    history: async () => (await agentClient.get<{ items: AgentRedeemHistoryItem[]; total: number }>('/agent/redeem/history')).data,
+  },
+  paymentStats: async () => (await agentClient.get<AgentPaymentStats>('/agent/admin/payments')).data,
   orders: {
     list: async (page = 1, pageSize = 20, status = '') =>
       (await agentClient.get<AgentOrderPage>('/agent/orders', {
@@ -739,10 +921,19 @@ export const agentAPI = {
     refundEligibleProviders: async () =>
       (await agentClient.get<{ provider_instance_ids: string[] }>('/agent/orders/refund-eligible-providers')).data,
   },
+  balance: {
+    get: async () => (await agentClient.get<AgentBalanceSnapshot>('/agent/balance')).data,
+    history: async (page = 1, pageSize = 20) =>
+      (await agentClient.get<AgentBalanceHistoryPage>('/agent/balance/history', { params: { page, page_size: pageSize } })).data,
+  },
   adminUsers: {
     list: async (page = 1, pageSize = 20, search = '', status = '') =>
       (await agentClient.get<AgentUserPage>('/agent/admin/users', {
         params: { page, page_size: pageSize, ...(search ? { search } : {}), ...(status ? { status } : {}) },
+      })).data,
+    facts: async (mainUserID: string, page = 1, pageSize = 20) =>
+      (await agentClient.get<AgentMemberFacts>('/agent/admin/member-facts', {
+        params: { main_user_id: mainUserID, page, page_size: pageSize },
       })).data,
   },
   payment: {
@@ -755,8 +946,47 @@ export const agentAPI = {
   },
   getAdminWallet: async () => (await agentClient.get<AgentView>('/agent/admin/wallet')).data,
   getBranding: async () => (await agentClient.get<AgentBranding>('/agent/admin/branding')).data,
+  billing: {
+    refundEligibleProviders: async () => (await agentClient.get<{ provider_instance_ids: string[] }>('/agent/billing/orders/refund-eligible-providers')).data,
+    settings: async () => (await agentClient.get<StationBillingSettings>('/agent/admin/billing/config')).data,
+    saveSettings: async (payload: StationBillingSettings) => (await agentClient.put<StationBillingSettings>('/agent/admin/billing/config', payload)).data,
+    providers: async () => (await agentClient.get<{ items: StationPaymentProvider[] }>('/agent/admin/billing/providers')).data,
+    createProvider: async (payload: StationPaymentProvider) => (await agentClient.post<StationPaymentProvider>('/agent/admin/billing/providers', payload)).data,
+    updateProvider: async (id: number, payload: Partial<StationPaymentProvider>) => (await agentClient.put<StationPaymentProvider>(`/agent/admin/billing/providers/${id}`, payload)).data,
+    deleteProvider: async (id: number) => (await agentClient.delete<{ message: string }>(`/agent/admin/billing/providers/${id}`)).data,
+    plans: async () => (await agentClient.get<{ items: StationPaymentPlan[] }>('/agent/admin/billing/plans')).data,
+    createPlan: async (payload: StationPaymentPlan) => (await agentClient.post<StationPaymentPlan>('/agent/admin/billing/plans', payload)).data,
+    updatePlan: async (id: number, payload: StationPaymentPlan) => (await agentClient.put<StationPaymentPlan>(`/agent/admin/billing/plans/${id}`, payload)).data,
+    deletePlan: async (id: number) => (await agentClient.delete<{ message: string }>(`/agent/admin/billing/plans/${id}`)).data,
+    orders: async (page = 1, pageSize = 20, status = '') => (await agentClient.get<AgentOrderPage>('/agent/admin/billing/orders', { params: { page, page_size: pageSize, ...(status ? { status } : {}) } })).data,
+    dashboard: async () => (await agentClient.get<StationBillingDashboard>('/agent/admin/billing/dashboard')).data,
+    cancelOrder: async (id: number) => (await agentClient.post<{ message: string }>(`/agent/admin/billing/orders/${id}/cancel`, {})).data,
+    refundOrder: async (id: number) => (await agentClient.post<{ message: string; status: string }>(`/agent/admin/billing/orders/${id}/refund`, {})).data,
+    myOrders: async (page = 1, pageSize = 20, status = '') => (await agentClient.get<AgentOrderPage>('/agent/billing/orders', { params: { page, page_size: pageSize, ...(status ? { status } : {}) } })).data,
+    cancelMyOrder: async (id: number) => (await agentClient.post<{ message: string }>(`/agent/billing/orders/${id}/cancel`, {})).data,
+    requestMyRefund: async (id: number, reason: string) => (await agentClient.post<{ message: string }>(`/agent/billing/orders/${id}/refund-request`, { reason })).data,
+  },
+  paymentConfig: async () => (await agentClient.get<AgentPaymentConfig>('/agent/admin/payment-config')).data,
+  updatePaymentConfig: async (payload: AgentPaymentConfigInput) =>
+    (await agentClient.put<AgentPaymentConfig>('/agent/admin/payment-config', payload)).data,
+  stationRecharge: {
+    get: async () => (await agentClient.get<AgentStationRecharge>('/agent/recharge/orders')).data,
+    create: async (amount: string) => (await agentClient.post<{ order: AgentStationOrder; enabled: boolean; message: string }>('/agent/recharge/orders', { amount })).data,
+  },
   updateBranding: async (payload: Partial<AgentBranding>) =>
     (await agentClient.put<AgentBranding>('/agent/admin/branding', payload)).data,
+  uploadLogo: async (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    return (await agentClient.post<AgentBranding>('/agent/admin/branding/logo', body, {
+      transformRequest: [(data, headers) => {
+        if (headers && typeof (headers as { delete?: (name: string) => void }).delete === 'function') {
+          (headers as { delete: (name: string) => void }).delete('Content-Type')
+        }
+        return data
+      }],
+    })).data
+  },
   adminAnnouncements: {
     list: async () => (await agentClient.get<{ items: AgentAnnouncement[]; total: number }>('/agent/admin/announcements')).data,
     create: async (payload: AgentAnnouncementInput) => (await agentClient.post<AgentAnnouncement>('/agent/admin/announcements', payload)).data,
@@ -768,7 +998,8 @@ export const agentAPI = {
     (await agentClient.post<{ items: SettlementView[]; total: number }>('/agent/admin/settlements/reconcile', requestId ? { request_id: requestId } : {})).data,
   keys: {
     list: async () => (await agentClient.get<{ items: AgentAPIKeyView[]; total: number; api_base_url?: string }>('/api-keys')).data,
-    create: async (name: string) => (await agentClient.post<{ item: AgentAPIKeyView; key: string }>('/api-keys', { name })).data,
+    groups: async () => (await agentClient.get<{ items: AgentKeyGroup[]; total: number }>('/api-keys/groups')).data,
+    create: async (name: string, groupId: number) => (await agentClient.post<{ item: AgentAPIKeyView; key: string }>('/api-keys', { name, group_id: groupId })).data,
     revoke: async (id: number) => (await agentClient.delete<{ id: number; status: string }>(`/api-keys/${id}`)).data,
   },
 }

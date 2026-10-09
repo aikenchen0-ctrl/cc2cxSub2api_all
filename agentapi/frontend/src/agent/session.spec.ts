@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentAPI, type AgentUser, type AuthenticatedResponse } from './api'
 import { useAgentSession } from './session'
+import { AGENT_PAYMENT_RECOVERY_KEY } from './paymentFlow'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -15,6 +16,20 @@ function authenticated(id: string): AuthenticatedResponse {
 }
 
 describe('AgentAPI session', () => {
+  it('discards payment recovery when switching station or user', async () => {
+    const auth = vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: '42', agent_id: 'station-a' })
+    const session = useAgentSession()
+    await session.checkAuth()
+    window.localStorage.setItem(AGENT_PAYMENT_RECOVERY_KEY, 'station-a-order')
+    await session.checkAuth()
+    expect(window.localStorage.getItem(AGENT_PAYMENT_RECOVERY_KEY)).toBe('station-a-order')
+    auth.mockResolvedValue({ id: '42', agent_id: 'station-b' })
+    await session.checkAuth()
+    expect(window.localStorage.getItem(AGENT_PAYMENT_RECOVERY_KEY)).toBeNull()
+    window.localStorage.setItem(AGENT_PAYMENT_RECOVERY_KEY, 'station-b-order')
+    session.clear()
+    expect(window.localStorage.getItem(AGENT_PAYMENT_RECOVERY_KEY)).toBeNull()
+  })
   beforeEach(() => {
     setActivePinia(createPinia())
   })

@@ -1,6 +1,7 @@
 param([int]$TimeoutSeconds = 180)
 $ErrorActionPreference = 'Stop'
 
+# Read docs/部署清单.md first. Start the 13 business entry points; Cost Console is reference-only.
 # Start the existing deployment without replacing its databases or credentials.
 $dependencies = @(
     'sub2api-postgres', 'sub2api-redis', 'ju-sso-redis-1',
@@ -10,12 +11,12 @@ $applications = @(
     'sub2api', 'aicut', 'aiexcel', 'ai3d', 'aihuoke-backend',
     'aihuoke-frontend', 'canvas-app', 'ju-backend-1', 'ju-web-1',
     'livart-livart-1', 'ppt-production-1', 'qrcode',
-    'screen2code-backend-1', 'screen2code-frontend-1', 'yibiao'
+    'screen2code-backend-1', 'screen2code-frontend-1', 'yibiao', 'agentapi-agentapi-1'
 )
 $ports = [ordered]@{
     sub2api=18080; aicut=5199; aiexcel=4173; ai3d=5174; aihuoke=3001
     canvas=3522; ju=3000; livart=8080; ppt=8341; qrcode=5221
-    screen2code=5173; yibiao=8081
+    screen2code=5173; yibiao=8081; agentapi=18081
 }
 docker info --format '{{.ServerVersion}}' 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -62,4 +63,4 @@ $failed = @($containers | Where-Object {
     ($_.State.Health -and $_.State.Health.Status -ne 'healthy')
 })
 if ($failed.Count) { throw "Containers need attention: $($failed.Name -join ', ')" }
-Write-Host 'Sub2API and all 11 satellites are running. HTTP checks do not perform AI generation.'
+Write-Host 'Sub2API, all 11 satellites, and the AgentAPI proxy station are running. Cost Console is reference-only and excluded. HTTP checks do not perform AI generation.'

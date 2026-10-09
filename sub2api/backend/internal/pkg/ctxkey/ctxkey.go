@@ -68,6 +68,12 @@ const (
 
 	// SatelliteApp identifies a verified server-side satellite relay request.
 	SatelliteApp Key = "ctx_satellite_app"
+	// SatellitePayer is the station owner whose balance is actually deducted.
+	// Usage stays on the on-behalf-of user.
+	SatellitePayer Key = "ctx_satellite_payer"
+	// SatelliteCommissionRate is the fraction of actual cost retained as the
+	// main-site cut. The payer is charged the remainder.
+	SatelliteCommissionRate Key = "ctx_satellite_commission_rate"
 
 	// IsMaxTokensOneHaikuRequest 标识当前请求是否为 max_tokens=1 + haiku 模型的探测请求
 	// 用于 ClaudeCodeOnly 验证绕过（绕过 system prompt 检查，但仍需验证 User-Agent）

@@ -335,6 +335,49 @@ func (h *APIKeyHandler) Delete(c *gin.Context) {
 	response.Success(c, gin.H{"message": "API key deleted successfully"})
 }
 
+type satelliteCreateAPIKeyRequest struct {
+	Name    string `json:"name"`
+	GroupID int64  `json:"group_id"`
+}
+
+// SatelliteCreate creates an API key for the authenticated on-behalf-of user
+// in the selected group. The caller cannot choose another user or supply a
+// custom key.
+// POST /v1/sub2api/api-keys
+func (h *APIKeyHandler) SatelliteCreate(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	var req satelliteCreateAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || len(req.Name) > 100 || req.GroupID <= 0 {
+		response.BadRequest(c, "name and group_id are required")
+		return
+	}
+	created, err := h.apiKeyService.Create(c.Request.Context(), apiKey.User.ID, service.CreateAPIKeyRequest{
+		Name:    req.Name,
+		GroupID: &req.GroupID,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	groupID := req.GroupID
+	response.Success(c, gin.H{
+		"id":       created.ID,
+		"name":     created.Name,
+		"group_id": groupID,
+		"status":   created.Status,
+	})
+}
+
 // GetAvailableGroups 获取用户可以绑定的分组列表
 // GET /api/v1/groups/available
 func (h *APIKeyHandler) GetAvailableGroups(c *gin.Context) {

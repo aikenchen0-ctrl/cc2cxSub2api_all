@@ -87,14 +87,14 @@ function DesignSystemsManager({
     try {
       setIsSaving(true);
       const created = await createDesignSystem({
-        name: `Design system ${designSystems.length + 1}`,
+        name: `设计规范${designSystems.length + 1}`,
         content: NEW_DESIGN_SYSTEM_CONTENT,
       });
       setEditingId(created.id);
-      toast.success("Design system created.");
+      toast.success("已创建设计规范。");
     } catch (error) {
-      console.error("Failed to create design system", error);
-      toast.error("Could not create design system.");
+      console.error("创建设计规范失败", error);
+      toast.error("创建设计规范失败，请重试。");
     } finally {
       setIsSaving(false);
     }
@@ -107,7 +107,7 @@ function DesignSystemsManager({
 
     const name = draftName.trim();
     if (!name) {
-      toast.error("Design system name is required.");
+      toast.error("请输入设计规范名称。");
       return;
     }
 
@@ -117,10 +117,10 @@ function DesignSystemsManager({
         name,
         content: draftContent,
       });
-      toast.success("Design system saved.");
+      toast.success("已保存设计规范。");
     } catch (error) {
-      console.error("Failed to save design system", error);
-      toast.error("Could not save design system.");
+      console.error("保存设计规范失败", error);
+      toast.error("保存设计规范失败，请重试。");
     } finally {
       setIsSaving(false);
     }
@@ -133,7 +133,7 @@ function DesignSystemsManager({
 
     if (
       !window.confirm(
-        `Delete "${editingDesignSystem.name}"? This cannot be undone.`
+        `删除「${editingDesignSystem.name}」？此操作无法撤销。`
       )
     ) {
       return;
@@ -149,10 +149,10 @@ function DesignSystemsManager({
         (item) => item.id !== editingDesignSystem.id
       );
       setEditingId(next?.id ?? null);
-      toast.success("Design system deleted.");
+      toast.success("已删除设计规范。");
     } catch (error) {
-      console.error("Failed to delete design system", error);
-      toast.error("Could not delete design system.");
+      console.error("删除设计规范失败", error);
+      toast.error("删除设计规范失败，请重试。");
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +170,7 @@ function DesignSystemsManager({
             className="flex-1"
             data-testid="manage-design-system-select"
           >
-            <SelectValue placeholder="No design systems yet" />
+            <SelectValue placeholder="暂无设计规范" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -179,7 +179,8 @@ function DesignSystemsManager({
                   {designSystem.name}
                   {selectedDesignSystemId === designSystem.id && (
                     <span className="ml-2 text-xs text-violet-600 dark:text-violet-400">
-                      Default
+
+                      默认
                     </span>
                   )}
                 </SelectItem>
@@ -193,7 +194,8 @@ function DesignSystemsManager({
           onClick={handleCreate}
           disabled={isSaving}
         >
-          + New
+
+          + 新建
         </Button>
       </div>
 
@@ -204,19 +206,21 @@ function DesignSystemsManager({
               htmlFor="design-system-name"
               className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-zinc-300"
             >
-              Name
+
+              名称
             </label>
             <div className="flex items-center gap-2">
               <Input
                 id="design-system-name"
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
-                placeholder="e.g. Marketing site"
+                placeholder="例如：品牌官网"
                 data-testid="design-system-name"
               />
               {isDefault && (
                 <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                  Default
+
+                  默认
                 </span>
               )}
             </div>
@@ -227,13 +231,14 @@ function DesignSystemsManager({
               htmlFor="design-system-content"
               className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-zinc-300"
             >
-              Instructions
+
+              要求
             </label>
             <Textarea
               id="design-system-content"
               value={draftContent}
               onChange={(event) => setDraftContent(event.target.value)}
-              placeholder="Fill in details about colors, fonts, components, and layout preferences..."
+              placeholder="填写配色、字体、组件与布局要求…"
               className="min-h-[240px] font-mono text-xs"
               data-testid="design-system-content"
             />
@@ -248,7 +253,8 @@ function DesignSystemsManager({
               disabled={isSaving}
               className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
             >
-              Delete
+
+              删除
             </Button>
             <div className="flex items-center gap-2">
               <Button
@@ -262,7 +268,7 @@ function DesignSystemsManager({
                 }
                 disabled={isSaving}
               >
-                {isDefault ? "Remove as default" : "Set as default"}
+                {isDefault ? "取消默认" : "设为默认"}
               </Button>
               <Button
                 type="button"
@@ -270,15 +276,17 @@ function DesignSystemsManager({
                 onClick={handleSave}
                 disabled={isSaving || !isDirty}
               >
-                {isDirty ? "Save changes" : "Saved"}
+                {isDirty ? "保存修改" : "已保存"}
               </Button>
             </div>
           </div>
         </div>
       ) : (
         <div className="rounded-md border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500 dark:border-zinc-700 dark:text-zinc-400">
-          No design systems yet. Click <span className="font-medium">+ New</span>{" "}
-          to create one.
+
+          暂无设计规范，点击 <span className="font-medium">+ 新建</span>{" "}
+
+          即可创建。
         </div>
       )}
     </div>

@@ -8,7 +8,7 @@ Sub2API 门户的“无限画布”入口统一使用 `GET /api/v1/auth/integrat
 
 在服务端设置 `SUB2API_RELAY_BASE_URL` 和 `SUB2API_APP_CREDENTIAL`。地址只能是 HTTP(S) 根地址或 `/v1`，不能使用 `/api/v1`。`SUB2API_APP_CREDENTIAL` 仅用于卫星服务端调用 Sub2API，用户身份通过 `X-Sub2API-On-Behalf-Of` 传递；不得用 SuperKey 或共享 API Key 代替。
 
-- SUB2API_RELAY_MODELS：文本模型，默认 gpt-5.5。
+- SUB2API_RELAY_MODELS：文本模型，默认 gpt-6-astra。
 - SUB2API_RELAY_IMAGE_MODELS：管理员验证过的图片模型，默认不启用。
 - SUB2API_RELAY_VIDEO_MODELS：管理员验证过的视频模型，默认不启用。
 - 模型列表使用英文逗号分隔，填写网关公开模型 ID，不填写内部上游模型名。

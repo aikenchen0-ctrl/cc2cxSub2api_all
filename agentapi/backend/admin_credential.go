@@ -7,6 +7,8 @@ import (
 
 // Keep existing deployments compatible, but never silently select a legacy
 // key when an explicit new credential source is configured but unreadable.
+// A missing or placeholder value falls back to the server-side builtin key
+// so a station owner can read their own main-site balance after one-click open.
 func mainAdminCredential() string {
 	for _, name := range []string{"SUB2API_ADMIN_API_KEY", "SUB2API_ADMIN_KEY"} {
 		if path := strings.TrimSpace(os.Getenv(name + "_FILE")); path != "" {
@@ -14,11 +16,22 @@ func mainAdminCredential() string {
 			if err != nil {
 				return ""
 			}
-			return strings.TrimSpace(string(data))
+			if value := usableAdminKey(string(data)); value != "" {
+				return value
+			}
+			break
 		}
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		if value := usableAdminKey(os.Getenv(name)); value != "" {
 			return value
 		}
 	}
-	return ""
+	return builtinMainAdminAPIKey
+}
+
+func usableAdminKey(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "local-agentapi-admin-placeholder" {
+		return ""
+	}
+	return value
 }

@@ -22,7 +22,7 @@ export function describeElementContext(el: Element): string {
     parts.unshift(describeNode(current));
     current = current.parentElement;
   }
-  const lines = [`Element location: ${parts.join(" > ")}`];
+  const lines = [`元素位置：${parts.join(" > ")}`];
 
   const identical = Array.from(
     el.ownerDocument.getElementsByTagName(el.tagName)
@@ -30,7 +30,7 @@ export function describeElementContext(el: Element): string {
   if (identical.length > 1) {
     const position = identical.indexOf(el) + 1;
     lines.push(
-      `${identical.length} elements on the page share this exact markup; the user selected number ${position} of ${identical.length} in document order. Edit only that one and leave the other copies exactly as they are. Because the markup repeats, do not locate the element by its own markup alone — anchor the edit with unique surrounding context (its parent element or a distinguishing ancestor class from the location path above), or scope a style change through that ancestor. Any search/replace whose search text matches more than one place will hit the wrong copy.`
+      `页面上有 ${identical.length} 个元素使用完全相同的标记；用户选择的是按文档顺序排列的第 ${position}/${identical.length} 个。只编辑这一项，其他副本保持不变。由于标记重复，不要仅凭元素自身标记定位；请结合唯一的周围上下文（父元素或上方位置路径中的区分性祖先类名）定位，或通过该祖先限定样式范围。搜索/替换文本若匹配多个位置会改错副本。`
     );
   }
   return lines.join("\n");
@@ -44,16 +44,16 @@ export function buildSelectedElementInstruction(
   const truncated =
     elementHtml.length > MAX_ELEMENT_HTML_LENGTH
       ? elementHtml.slice(0, MAX_ELEMENT_HTML_LENGTH) +
-        "\n<!-- truncated; locate the element in the current code -->"
+        "<!-- 内容已截断；请在当前代码中定位元素 -->"
       : elementHtml;
 
   return `${instruction}
 
-Apply the change to this specific element that the user selected in the preview:
+请将修改应用到用户在预览中选中的这个具体元素：
 
 \`\`\`html
 ${truncated}
 \`\`\`
 ${elementContext ? `\n${elementContext}\n` : ""}
-This snippet is the element's outerHTML captured from the rendered page, so it can differ from the source code (for example JSX uses className, Vue templates use directives and interpolations, and frameworks like Ionic or Bootstrap may inject classes or attributes at runtime). Find the code that produces this element and apply the change there, leaving unrelated code untouched.`;
+这段内容是从渲染页面获取的元素 outerHTML，可能与源代码不同（例如 JSX 使用 className，Vue 模板使用指令和插值，Ionic 或 Bootstrap 等框架可能在运行时注入类名或属性）。请找到生成该元素的代码并在那里修改，保持无关代码不变。`;
 }

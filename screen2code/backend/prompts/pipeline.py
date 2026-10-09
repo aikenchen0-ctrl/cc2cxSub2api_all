@@ -3,6 +3,7 @@ from prompts.create import build_create_prompt_from_input
 from prompts.plan import derive_prompt_construction_plan
 from prompts.prompt_types import PromptHistoryMessage, Stack, UserTurnInput
 from prompts.message_builder import Prompt
+from video.frames import normalize_video_inputs
 from prompts.update import (
     build_update_prompt_from_file_snapshot,
     build_update_prompt_from_history,
@@ -19,6 +20,7 @@ async def build_prompt_messages(
     image_generation_enabled: bool = True,
     design_system: str | None = None,
 ) -> Prompt:
+    prompt, history = await normalize_video_inputs(prompt, history)
     plan = derive_prompt_construction_plan(
         stack=stack,
         input_mode=input_mode,

@@ -51,23 +51,23 @@ describe("describeElementContext", () => {
     const { proBtn } = buildPricingPage();
     const context = describeElementContext(asElement(proBtn));
     expect(context).toContain(
-      "Element location: body > div.pricing-grid > div.pricing-card.featured > a.btn"
+      "元素位置：body > div.pricing-grid > div.pricing-card.featured > a.btn"
     );
   });
 
   it("notes the position among identical elements", () => {
     const { proBtn } = buildPricingPage();
     const context = describeElementContext(asElement(proBtn));
-    expect(context).toContain("3 elements on the page share this exact markup");
-    expect(context).toContain("number 2 of 3");
+    expect(context).toContain("页面上有 3 个元素使用完全相同的标记");
+    expect(context).toContain("第 2/3 个");
   });
 
   it("omits the duplicate note when the markup is unique", () => {
     const heading = fakeElement("h1", "title", "<h1 class=\"title\">Hi</h1>");
     heading.ownerDocument = { getElementsByTagName: () => [heading] };
     const context = describeElementContext(asElement(heading));
-    expect(context).toContain("Element location: h1.title");
-    expect(context).not.toContain("share this exact markup");
+    expect(context).toContain("元素位置：h1.title");
+    expect(context).not.toContain("使用完全相同的标记");
   });
 });
 
@@ -79,7 +79,7 @@ describe("buildSelectedElementInstruction", () => {
     );
     expect(result).toContain("Make the button red");
     expect(result).toContain('<button class="btn">Buy</button>');
-    expect(result).toContain("selected in the preview");
+    expect(result).toContain("在预览中选中");
   });
 
   it("mentions that the snippet is rendered DOM, not source", () => {
@@ -87,13 +87,13 @@ describe("buildSelectedElementInstruction", () => {
       "Center it",
       "<div>x</div>"
     );
-    expect(result).toContain("outerHTML captured from the rendered page");
+    expect(result).toContain("从渲染页面获取的元素 outerHTML");
   });
 
   it("truncates very large element html", () => {
     const hugeHtml = `<div>${"a".repeat(20000)}</div>`;
     const result = buildSelectedElementInstruction("Shrink it", hugeHtml);
-    expect(result).toContain("truncated");
+    expect(result).toContain("内容已截断");
     expect(result.length).toBeLessThan(hugeHtml.length);
   });
 
@@ -102,16 +102,16 @@ describe("buildSelectedElementInstruction", () => {
       "Bold it",
       "<span>hello</span>"
     );
-    expect(result).not.toContain("truncated");
+    expect(result).not.toContain("内容已截断");
   });
 
   it("includes the element context when provided", () => {
     const result = buildSelectedElementInstruction(
       "Make it red",
       '<a class="btn">Go</a>',
-      "Element location: body > div.card > a.btn"
+      "元素位置：body > div.card > a.btn"
     );
-    expect(result).toContain("Element location: body > div.card > a.btn");
+    expect(result).toContain("元素位置：body > div.card > a.btn");
   });
 
   it("omits the context block when not provided", () => {

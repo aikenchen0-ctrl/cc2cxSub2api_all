@@ -74,7 +74,7 @@ function RunEvalsPage() {
   const [completedTasks, setCompletedTasks] = useState(0);
   const [totalTasks, setTotalTasks] = useState(0);
   const [currentModel, setCurrentModel] = useState<string>("");
-  const [statusMessage, setStatusMessage] = useState<string>("Idle");
+  const [statusMessage, setStatusMessage] = useState<string>("等待开始");
   const [lastProcessedFile, setLastProcessedFile] = useState<string>("");
   const [failedTasks, setFailedTasks] = useState(0);
   const [failedTaskDetails, setFailedTaskDetails] = useState<FailedTask[]>([]);
@@ -100,7 +100,7 @@ function RunEvalsPage() {
           setSelectedSet((current) => current || data[0].name);
         }
       } catch (error) {
-        console.error("Error fetching eval sets", error);
+        console.error("获取评测集失败", error);
       }
     };
     fetchEvalSets();
@@ -111,7 +111,7 @@ function RunEvalsPage() {
       const response = await fetch(`${HTTP_BACKEND_URL}/eval-sessions/active`);
       setActiveSession(await response.json());
     } catch (error) {
-      console.error("Error fetching active session", error);
+      console.error("获取当前评测会话失败", error);
     }
   }, []);
 
@@ -126,7 +126,7 @@ function RunEvalsPage() {
         const response = await fetch(
           `${HTTP_BACKEND_URL}/eval-sets/${encodeURIComponent(selectedSet)}`
         );
-        if (!response.ok) throw new Error("Request failed");
+        if (!response.ok) throw new Error("请求失败");
         const data = await response.json();
         const items: EvalSetImage[] =
           data.kind === "text"
@@ -135,7 +135,7 @@ function RunEvalsPage() {
         setSetImages(items);
         setSelectedSetFiles(items.map((item) => item.filename));
       } catch (error) {
-        console.error("Error fetching set images", error);
+        console.error("获取评测集图片失败", error);
         setSetImages([]);
         setSelectedSetFiles([]);
       }
@@ -207,7 +207,7 @@ function RunEvalsPage() {
       setCompletedTasks(0);
       setTotalTasks(0);
       setCurrentModel("");
-      setStatusMessage("Preparing evaluation run...");
+      setStatusMessage("正在准备评测…");
       setLastProcessedFile("");
       setFailedTasks(0);
       setFailedTaskDetails([]);
@@ -239,11 +239,11 @@ function RunEvalsPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to run evals");
+        throw new Error("运行评测失败");
       }
 
       if (!response.body) {
-        throw new Error("No progress stream available");
+        throw new Error("没有可用的进度数据流");
       }
 
       const reader = response.body.getReader();
@@ -273,14 +273,14 @@ function RunEvalsPage() {
             setSkippedExistingTasks(event.total_skipped_existing ?? 0);
             setStatusMessage(
               event.diff_mode
-                ? `Starting diff run (${event.total_skipped_existing ?? 0} existing outputs skipped)...`
-                : "Starting evaluation run..."
+                ? `正在开始增量评测（${event.total_skipped_existing ?? 0}个已有结果将跳过）…`
+                : "正在开始评测…"
             );
             updateRunningTitle(0, eventTotalTasks);
           } else if (event.type === "model_start") {
             if (event.model) setCurrentModel(event.model);
             setStatusMessage(
-              `Running model ${event.model_index ?? 1}/${event.total_models ?? selectedModels.length}: ${event.model ?? "Unknown"}${
+              `正在评测模型${event.model_index ?? 1}/${event.total_models ?? selectedModels.length}: ${event.model ?? "未知"}${
                 diffMode && (event.model_skipped_existing ?? 0) > 0
                   ? ` (${event.model_skipped_existing} skipped)`
                   : ""
@@ -298,14 +298,14 @@ function RunEvalsPage() {
                 {
                   model: event.model ?? "unknown",
                   inputFile: event.input_file ?? "unknown",
-                  error: event.error ?? "Unknown error",
+                  error: event.error ?? "未知错误",
                 },
               ]);
             }
             setStatusMessage(
               event.success === false
-                ? `Failed: ${event.input_file ?? "unknown file"}`
-                : `Processed: ${event.input_file ?? "unknown file"}`
+                ? `Failed: ${event.input_file ?? "未知文件"}`
+                : `Processed: ${event.input_file ?? "未知文件"}`
             );
             updateRunningTitle(globalCompleted, globalTotal);
           } else if (event.type === "complete") {
@@ -313,11 +313,11 @@ function RunEvalsPage() {
             const finalTotal = event.total_tasks ?? totalTasks;
             setCompletedTasks(finalCompleted);
             setTotalTasks(finalTotal);
-            setStatusMessage("Evaluation run complete");
-            console.log("Generated files:", event.output_files ?? []);
+            setStatusMessage("评测完成");
+            console.log("生成文件：", event.output_files ?? []);
             updateRunningTitle(finalCompleted, finalTotal);
           } else if (event.type === "error") {
-            throw new Error(event.message ?? "Eval run failed");
+            throw new Error(event.message ?? "评测失败");
           }
         }
       }
@@ -325,9 +325,9 @@ function RunEvalsPage() {
       document.title = "✓ AI一键复刻网站评测完成";
       flashFaviconOnComplete();
     } catch (error) {
-      console.error("Error running evals:", error);
+      console.error("运行评测失败：", error);
       document.title = "❌ AI一键复刻网站评测失败";
-      setStatusMessage("Evaluation run failed");
+      setStatusMessage("评测失败");
       flashFaviconOnComplete();
       setTimeout(() => {
         document.title = "AI一键复刻网站";
@@ -356,7 +356,7 @@ function RunEvalsPage() {
 
   // Format model list for display in the summary
   const formatModelList = () => {
-    if (selectedModels.length === 0) return "None";
+    if (selectedModels.length === 0) return "无";
     if (selectedModels.length === 1) return selectedModels[0];
     if (selectedModels.length <= 2) return selectedModels.join(", ");
     return `${selectedModels.slice(0, 2).join(", ")} +${selectedModels.length - 2} more`;
@@ -380,10 +380,10 @@ function RunEvalsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eval_set: selectedSet }),
       });
-      if (!response.ok) throw new Error("Request failed");
+      if (!response.ok) throw new Error("请求失败");
       await refreshActiveSession();
     } catch (error) {
-      console.error("Error starting session", error);
+      console.error("启动评测会话失败", error);
     }
   };
   const failedFilesForRerun = Array.from(
@@ -398,64 +398,65 @@ function RunEvalsPage() {
   return (
     <div>
       <EvalNavigation />
-      
+
       <div className="container mx-auto px-4 py-6">
         {/* Unified Header with Configuration Summary */}
         <div className="mb-6 bg-white rounded-lg border border-gray-200 shadow-sm p-4 max-w-5xl mx-auto">
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap justify-between items-center">
-              <h1 className="text-2xl font-bold">Run Evaluations</h1>
-              
+              <h1 className="text-2xl font-bold">运行评测</h1>
+
               <Button
                 onClick={() => void runEvals()}
                 disabled={isRunning || !canRunEvals}
                 className={`min-w-[120px] ${isRunning ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"}`}
               >
-                {isRunning ? "Running..." : "Run Evals"}
+                {isRunning ? "正在运行…" : "运行评测"}
               </Button>
             </div>
 
             {diffMode && (
               <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                Diff mode enabled: only input files missing outputs in today's model folders will run. Existing outputs are skipped and never overwritten.
+
+                增量模式已启用：仅生成今日模型目录中缺少的结果，已有结果将跳过且不会覆盖。
               </div>
             )}
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-gray-100 pt-3">
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-gray-700">Models</span>
+                <span className="text-sm font-medium text-gray-700">模型</span>
                 <span className="text-sm text-gray-600 font-mono">{formatModelList()}</span>
               </div>
-              
+
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-gray-700">Stack</span>
+                <span className="text-sm font-medium text-gray-700">技术栈</span>
                 <span className="text-sm text-gray-600 font-mono">{selectedStack}</span>
               </div>
-              
+
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-gray-700">Input Files</span>
-                <span className="text-sm text-gray-600">{selectedFiles.length} selected</span>
+                <span className="text-sm font-medium text-gray-700">输入文件</span>
+                <span className="text-sm text-gray-600">{selectedFiles.length}  已选择</span>
               </div>
             </div>
-            
-            <div 
+
+            <div
               className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer mt-1 hover:bg-gray-50 inline-block rounded px-2 py-1"
               onClick={() => setShowPaths(!showPaths)}
             >
               {showPaths ? <BsChevronDown size={12} /> : <BsChevronRight size={12} />}
-              <span className="font-medium">Paths</span>
+              <span className="font-medium">路径</span>
             </div>
-            
+
             {showPaths && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-md">
                 <div>
-                  <span className="font-medium">Input path:</span>
+                  <span className="font-medium">输入路径：</span>
                   <code className="ml-2 bg-gray-100 px-2 py-0.5 rounded">
                     backend/evals_data/inputs
                   </code>
                 </div>
                 <div>
-                  <span className="font-medium">Output path:</span>
+                  <span className="font-medium">输出路径：</span>
                   <code className="ml-2 bg-gray-100 px-2 py-0.5 rounded">
                     backend/evals_data/results
                   </code>
@@ -468,26 +469,30 @@ function RunEvalsPage() {
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="font-medium text-gray-700">{statusMessage}</span>
                   <span className="text-gray-600">
-                    {completedTasks} / {totalTasks || "?"} tasks
+                    {completedTasks} / {totalTasks || "?"}  个任务
                   </span>
                 </div>
                 <Progress value={progressPercent} className="h-2 mb-2" />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
                   <span>
-                    Current model:{" "}
+
+                    当前模型：{" "}
                     <span className="font-mono">{currentModel || "-"}</span>
                   </span>
                   <span>
-                    Failures: <span className="font-medium">{failedTasks}</span>
+
+                    失败数： <span className="font-medium">{failedTasks}</span>
                   </span>
                   <span className="truncate" title={lastProcessedFile}>
-                    Last file:{" "}
+
+                    最近文件：{" "}
                     <span className="font-mono">{lastProcessedFile || "-"}</span>
                   </span>
                 </div>
                 {diffMode && (
                   <div className="mt-2 text-xs text-emerald-700">
-                    Existing outputs skipped:{" "}
+
+                    已跳过的结果：{" "}
                     <span className="font-medium">{skippedExistingTasks}</span>
                   </div>
                 )}
@@ -495,7 +500,8 @@ function RunEvalsPage() {
                   <div className="mt-3 border-t border-gray-100 pt-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-red-700">
-                        Failures ({failedTaskDetails.length})
+
+                        失败（{failedTaskDetails.length})
                       </span>
                       <Button
                         variant="outline"
@@ -504,7 +510,8 @@ function RunEvalsPage() {
                         onClick={() => void runEvals(failedFilesForRerun)}
                         className="h-7 px-2 text-xs"
                       >
-                        Re-run failures
+
+                        重试失败任务
                       </Button>
                     </div>
                     <div className="max-h-40 overflow-y-auto rounded-md border border-red-100 bg-red-50/40">
@@ -515,10 +522,12 @@ function RunEvalsPage() {
                               {task.inputFile}
                             </div>
                             <div className="text-red-700">
-                              Model: <span className="font-mono">{task.model}</span>
+
+                              模型： <span className="font-mono">{task.model}</span>
                             </div>
                             <div className="text-red-700 break-words">
-                              Error: {task.error}
+
+                              错误： {task.error}
                             </div>
                           </li>
                         ))}
@@ -536,7 +545,7 @@ function RunEvalsPage() {
           {/* Model Selection Section */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
             <div className="border-b border-gray-200 px-4 py-3 bg-gray-50 rounded-t-lg">
-              <h2 className="font-medium">Select Models</h2>
+              <h2 className="font-medium">选择模型</h2>
             </div>
             <div className="p-3">
               <div className="border rounded-md max-h-[300px] overflow-y-auto">
@@ -563,7 +572,8 @@ function RunEvalsPage() {
               </div>
               <div className="flex justify-between mt-2 text-xs">
                 <p className="text-gray-500">
-                  Selected: {selectedModels.length} / {models.length}
+
+                  已选择： {selectedModels.length} / {models.length}
                 </p>
                 <div className="space-x-2">
                   {selectedModels.length < models.length && (
@@ -573,7 +583,8 @@ function RunEvalsPage() {
                       onClick={handleSelectAll}
                       className="text-xs h-6 px-2 text-gray-500 hover:text-gray-700"
                     >
-                      Select all
+
+                      全选
                     </Button>
                   )}
                   {selectedModels.length > 0 && (
@@ -583,7 +594,8 @@ function RunEvalsPage() {
                       onClick={() => setSelectedModels([])}
                       className="text-xs h-6 px-2 text-gray-500 hover:text-gray-700"
                     >
-                      Clear
+
+                      清空
                     </Button>
                   )}
                 </div>
@@ -594,7 +606,7 @@ function RunEvalsPage() {
           {/* Stack Selection Section */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
             <div className="border-b border-gray-200 px-4 py-3 bg-gray-50 rounded-t-lg">
-              <h2 className="font-medium">Select Stack</h2>
+              <h2 className="font-medium">选择技术栈</h2>
             </div>
             <div className="p-3">
               <select
@@ -615,7 +627,7 @@ function RunEvalsPage() {
                   onChange={(e) => setDiffMode(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span>Diff mode (only run missing outputs, no overwrite)</span>
+                <span>增量模式（仅生成缺少的结果，不覆盖）</span>
               </label>
             </div>
           </div>
@@ -623,12 +635,12 @@ function RunEvalsPage() {
           {/* Input Files Section */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm lg:col-span-1 md:col-span-2">
             <div className="border-b border-gray-200 px-4 py-3 bg-gray-50 rounded-t-lg flex items-center justify-between">
-              <h2 className="font-medium">Select Input Files</h2>
+              <h2 className="font-medium">选择输入文件</h2>
               <div className="flex rounded-md border border-gray-300 overflow-hidden text-xs">
                 {(
                   [
-                    ["legacy", "Legacy inputs"],
-                    ["set", "Eval set"],
+                    ["legacy", "旧输入目录"],
+                    ["set", "评测集"],
                   ] as const
                 ).map(([source, label]) => (
                   <button
@@ -656,33 +668,36 @@ function RunEvalsPage() {
                     className="w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     {evalSets.length === 0 && (
-                      <option value="">No eval sets found</option>
+                      <option value="">暂无评测集</option>
                     )}
                     {evalSets.map((set) => (
                       <option key={set.name} value={set.name}>
-                        {set.display_name} ({set.image_count} images)
+                        {set.display_name} ({set.image_count}  张图片）
                       </option>
                     ))}
                   </select>
 
                   {sessionSetMismatch && activeSession && (
                     <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Active session "{activeSession.name}" is pinned to set "
+
+                      当前会话「{activeSession.name}」绑定评测集「
                       {activeSession.eval_set}".{" "}
                       <button
                         onClick={() => void startSessionForSelectedSet()}
                         className="font-medium underline hover:text-amber-900"
                       >
-                        Start a new session for "{selectedSet}"
+
+                        请为评测集「{selectedSet}"
                       </button>{" "}
-                      before running.
+
+                      创建新会话后再运行。
                     </div>
                   )}
                   {!sessionSetMismatch && inputSource === "set" && (
                     <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
                       {activeSession
-                        ? `Runs will attach to session "${activeSession.name}" (set "${activeSession.eval_set}").`
-                        : "No active session — one will be created automatically."}
+                        ? `任务将归入会话「${activeSession.name}」（评测集「${activeSession.eval_set}").`
+                        : "没有当前会话，将自动创建。"}
                     </div>
                   )}
 
@@ -725,7 +740,8 @@ function RunEvalsPage() {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Selected: {selectedSetFiles.length} / {setImages.length}
+
+                    已选择： {selectedSetFiles.length} / {setImages.length}
                   </p>
                 </div>
               )}

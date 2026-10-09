@@ -188,6 +188,10 @@ onMounted(() => void load())
             <span class="rounded-lg bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-900/30"><Icon name="dollar" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">用户管理</span><span class="block text-xs text-gray-500">查看本站登记用户</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
           </RouterLink>
+          <RouterLink to="/admin/payments" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-green-50 dark:bg-dark-800/50 dark:hover:bg-green-900/20">
+            <span class="rounded-lg bg-green-100 p-2 text-green-600 dark:bg-green-900/30"><Icon name="dollar" size="md" /></span>
+            <span class="min-w-0 flex-1"><span class="block text-sm font-medium">支付统计</span><span class="block text-xs text-gray-500">本站成员订单抽样</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
+          </RouterLink>
           <RouterLink to="/admin/usage" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-blue-50 dark:bg-dark-800/50 dark:hover:bg-blue-900/20">
             <span class="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/30"><Icon name="chartBar" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">用量同步</span><span class="block text-xs text-gray-500">用量与结算核对</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />

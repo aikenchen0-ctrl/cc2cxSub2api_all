@@ -41,22 +41,22 @@ function extractTagName(html: string): string {
 
 function summarizeLatestChange(commit: Commit | null): string | null {
   if (!commit) return null;
-  if (commit.type === "code_create") return "Imported existing code.";
+  if (commit.type === "code_create") return "已导入现有代码。";
 
   const text = commit.inputs.text.trim();
   if (text.length > 0) return text;
 
   if (commit.type === "ai_create") {
-    return "Create";
+    return "创建";
   }
 
   if (commit.inputs.images.length > 1) {
-    return `Updated with ${commit.inputs.images.length} reference images.`;
+    return `使用以下参考图更新：${commit.inputs.images.length}张参考图。`;
   }
   if (commit.inputs.images.length === 1) {
-    return "Updated with one reference image.";
+    return "使用一张参考图更新。";
   }
-  return "Updated code.";
+  return "已更新代码。";
 }
 
 function getSelectedElementTag(commit: Commit | null): string | null {
@@ -127,7 +127,7 @@ function Sidebar({
       try {
         if (updateImages.length >= MAX_UPDATE_IMAGES) {
           toast.error(
-            `You’ve reached the limit of ${MAX_UPDATE_IMAGES} reference images. Remove one to add another.`
+            `已达到数量上限：${MAX_UPDATE_IMAGES}张参考图，请先移除一张再添加。`
           );
           return;
         }
@@ -136,9 +136,9 @@ function Sidebar({
         let filesToAdd = files;
         if (filesToAdd.length > remainingSlots) {
           toast.error(
-            `Only ${remainingSlots} more image${
+            `本次最多添加${remainingSlots}张图片${
               remainingSlots === 1 ? "" : "s"
-            } will be added to stay within the ${MAX_UPDATE_IMAGES}-image limit.`
+            }，总数不能超过${MAX_UPDATE_IMAGES}张图片。`
           );
           filesToAdd = filesToAdd.slice(0, remainingSlots);
         }
@@ -147,7 +147,7 @@ function Sidebar({
         const newImages = await Promise.all(newImagePromises);
         setUpdateImages([...updateImages, ...newImages]);
       } catch (error) {
-        console.error("Error reading files:", error);
+        console.error("读取文件失败：", error);
       }
     },
     [updateImages, setUpdateImages]
@@ -303,7 +303,8 @@ function Sidebar({
               <LuHistory className="w-4 h-4 shrink-0 text-violet-600 dark:text-violet-400" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-violet-900 dark:text-violet-200 truncate">
-                  Viewing v{currentVersionNumber} of {totalVersions}
+
+                  正在查看版本{currentVersionNumber}  / {totalVersions}
                 </p>
               </div>
             </div>
@@ -312,13 +313,15 @@ function Sidebar({
                 onClick={onOpenVersions}
                 className="rounded-lg border border-violet-400 dark:border-violet-600 px-3 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
               >
-                All versions
+
+                全部版本
               </button>
               <button
                 onClick={() => latestCommitHash && setHead(latestCommitHash)}
                 className="rounded-lg bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400 px-3 py-1.5 text-xs font-semibold text-white dark:text-violet-950 transition-colors"
               >
-                Back to latest
+
+                返回最新版本
               </button>
             </div>
           </div>
@@ -345,7 +348,8 @@ function Sidebar({
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <LuMousePointerClick className="w-3 h-3 text-violet-500 dark:text-violet-400" />
                   <span className="text-[11px] text-violet-600 dark:text-violet-300">
-                    Selected: <code className="font-mono text-[10px] bg-violet-200/60 dark:bg-violet-800/50 px-1 py-0.5 rounded">&lt;{selectedElementTag}&gt;</code>
+
+                    已选择： <code className="font-mono text-[10px] bg-violet-200/60 dark:bg-violet-800/50 px-1 py-0.5 rounded">&lt;{selectedElementTag}&gt;</code>
                   </span>
                 </div>
               )}
@@ -370,7 +374,7 @@ function Sidebar({
                     >
                       <img
                         src={image}
-                        alt={`Reference ${index + 1}`}
+                        alt={`参考图${index + 1}`}
                         className="h-24 w-24 object-contain"
                         loading="lazy"
                       />
@@ -399,10 +403,11 @@ function Sidebar({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                 <WorkingPulse />
-                <span>Working...</span>
+                <span>正在处理…</span>
               </div>
               <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-                Time so far {elapsedSeconds ? `${elapsedSeconds}s` : "--"}
+
+                已用时 {elapsedSeconds ? `${elapsedSeconds}s` : "--"}
               </div>
             </div>
           </div>
@@ -415,7 +420,8 @@ function Sidebar({
           !isSelectedVariantError &&
           isSlowModel(selectedVariant?.model) && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-            Slow, high quality model. May take 5-10 mins on some images/videos.
+
+            高质量模型处理部分图片或视频可能需要 5–10 分钟。
           </div>
         )}
 
@@ -442,7 +448,8 @@ function Sidebar({
               className="regenerate-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <LuRefreshCw className="w-3.5 h-3.5" />
-              Retry
+
+              重试
             </button>
           </div>
         )}
@@ -454,7 +461,8 @@ function Sidebar({
               onClick={cancelCodeGeneration}
               className="w-full dark:text-white dark:bg-gray-700"
             >
-              Cancel All Generations
+
+              取消全部生成
             </Button>
           </div>
         )}
@@ -464,7 +472,8 @@ function Sidebar({
           <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-3 mb-2">
             <div className="text-red-800 dark:text-red-200 text-sm">
               <div className="font-medium mb-1">
-                This option failed to generate because
+
+                此方案生成失败，原因如下
               </div>
               {selectedVariantErrorMessage && (
                 <div className="mb-2">
@@ -478,15 +487,15 @@ function Sidebar({
                       onClick={() => setIsErrorExpanded(!isErrorExpanded)}
                       className="text-red-600 dark:text-red-400 text-xs underline mt-1 hover:text-red-800 dark:hover:text-red-300"
                     >
-                      {isErrorExpanded ? "Show less" : "Show more"}
+                      {isErrorExpanded ? "收起" : "展开"}
                     </button>
                   )}
                 </div>
               )}
               <div>
                 {canRegenerate
-                  ? "Click Retry to run this version's request again."
-                  : "Switch to another option above to make updates."}
+                  ? "点击“重试”可重新执行当前版本的请求。"
+                  : "切换到上方其他方案后可继续修改。"}
               </div>
             </div>
           </div>
@@ -512,7 +521,8 @@ function Sidebar({
               <div className="mb-2 flex items-center gap-2 rounded-xl border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 px-3 py-2">
                 <LuHistory className="w-3.5 h-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
                 <span className="text-xs text-violet-800 dark:text-violet-200">
-                  You're editing <span className="font-semibold">v{currentVersionNumber}</span> — updates will create a new version branching from it.
+
+                  正在编辑 <span className="font-semibold">v{currentVersionNumber}</span>  — 修改将在此版本基础上创建新版本。
                 </span>
               </div>
             )}
@@ -525,13 +535,14 @@ function Sidebar({
                     <div className="flex items-center gap-2 min-w-0">
                       <LuMousePointerClick className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                       <span className="text-sm text-violet-700 dark:text-violet-300 truncate">
-                        Selected: <code className="font-mono text-xs bg-violet-100 dark:bg-violet-800/50 px-1.5 py-0.5 rounded">&lt;{selectedElement.tagName.toLowerCase()}&gt;</code>
+
+                        已选择： <code className="font-mono text-xs bg-violet-100 dark:bg-violet-800/50 px-1.5 py-0.5 rounded">&lt;{selectedElement.tagName.toLowerCase()}&gt;</code>
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedElement(null)}
                       className="shrink-0 ml-3 p-0.5 text-violet-400 hover:text-violet-700 dark:hover:text-violet-200 transition-colors"
-                      title="Clear selection"
+                      title="清除选择"
                     >
                       <LuX className="w-3.5 h-3.5" />
                     </button>
@@ -540,13 +551,14 @@ function Sidebar({
                   <div className="flex items-center justify-between rounded-xl border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 px-3 py-2">
                     <div className="flex items-center gap-2">
                       <LuMousePointerClick className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 shrink-0" />
-                      <span className="text-sm font-medium text-violet-700 dark:text-violet-300">Click an element to edit it</span>
+                      <span className="text-sm font-medium text-violet-700 dark:text-violet-300">点击预览中的元素进行修改</span>
                     </div>
                     <button
                       onClick={toggleInSelectAndEditMode}
                       className="shrink-0 ml-3 text-sm text-violet-500 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200 transition-colors"
                     >
-                      Exit
+
+                      退出
                     </button>
                   </div>
                 )}
@@ -561,8 +573,8 @@ function Sidebar({
                 ref={textareaRef}
                 placeholder={
                   inSelectAndEditMode && selectedElement
-                    ? `Describe changes for the selected <${selectedElement.tagName.toLowerCase()}> element...`
-                    : "Tell the AI what to change..."
+                    ? `描述希望对所选 <${selectedElement.tagName.toLowerCase()}> 元素进行的修改…`
+                    : "告诉 AI 需要修改什么…"
                 }
                 onChange={(e) => {
                   setUpdateInstruction(e.target.value);
@@ -593,7 +605,7 @@ function Sidebar({
                         ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
                         : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                     }`}
-                    title={inSelectAndEditMode ? "Exit selection mode" : "Select an element in the preview to target your edit"}
+                    title={inSelectAndEditMode ? "退出选择模式" : "在预览中选择需要修改的元素"}
                   >
                     <LuMousePointerClick className="w-[18px] h-[18px]" />
                   </button>
@@ -607,7 +619,7 @@ function Sidebar({
                       ? "bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400"
                       : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-zinc-700 dark:text-zinc-500"
                   }`}
-                  title="Send"
+                  title="发送"
                 >
                   <LuArrowUp className="w-[18px] h-[18px]" strokeWidth={2.5} />
                 </button>
@@ -615,7 +627,7 @@ function Sidebar({
 
               {isDragging && (
                 <div className="absolute inset-0 bg-blue-50/90 dark:bg-gray-800/90 border-2 border-dashed border-blue-400 dark:border-blue-600 rounded-xl flex items-center justify-center pointer-events-none z-10">
-                  <p className="text-blue-600 dark:text-blue-400 font-medium">Drop images here</p>
+                  <p className="text-blue-600 dark:text-blue-400 font-medium">将图片拖到这里</p>
                 </div>
               )}
             </div>

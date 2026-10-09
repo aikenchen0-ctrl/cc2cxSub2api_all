@@ -46,6 +46,18 @@ func (s *Server) handleAgentAdminUsers(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load users")
 		return
 	}
+	for i := range items {
+		balance, frozen, ok := s.lookupDisplayBalance(r.Context(), items[i].MainUserID)
+		if !ok {
+			items[i].BalanceCents = 0
+			items[i].FrozenBalanceCents = 0
+			items[i].BalanceError = "unavailable"
+			continue
+		}
+		items[i].BalanceCents = balance
+		items[i].FrozenBalanceCents = frozen
+		items[i].BalanceError = ""
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	s.writeData(w, http.StatusOK, requestID, map[string]any{
 		"items": items, "total": total, "page": page, "page_size": pageSize,

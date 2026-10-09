@@ -68,6 +68,7 @@ func RegisterGatewayRoutes(
 		gateway.GET("/sub2api/orders/refund-eligible-providers", h.Payment.GetRefundEligibleProviders)
 		gateway.POST("/sub2api/orders/:id/cancel", h.Payment.SatelliteCancelOrder)
 		gateway.POST("/sub2api/orders/:id/refund-request", h.Payment.SatelliteRequestRefund)
+		gateway.POST("/sub2api/api-keys", h.APIKey.SatelliteCreate)
 		gateway.POST("/sub2api/redeem", h.Redeem.SatelliteRedeem)
 		gateway.GET("/sub2api/redeem/history", h.Redeem.SatelliteGetHistory)
 		gateway.POST("/sub2api/auth-identities/bind/start", h.Auth.SatelliteStartOAuthBinding)

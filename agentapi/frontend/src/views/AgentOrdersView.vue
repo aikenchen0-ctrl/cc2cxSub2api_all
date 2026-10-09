@@ -11,6 +11,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const router = useRouter()
+const props = withDefaults(defineProps<{ admin?: boolean }>(), { admin: false })
 const orders = ref<AgentOrder[]>([])
 const eligibleProviders = ref(new Set<string>())
 const loading = ref(false)
@@ -34,10 +35,12 @@ const columns = [
 const statusOptions = [
   { value: '', label: '全部状态' }, { value: 'PENDING', label: '待支付' }, { value: 'COMPLETED', label: '已完成' },
   { value: 'FAILED', label: '失败' }, { value: 'REFUND_REQUESTED', label: '退款申请中' }, { value: 'REFUNDED', label: '已退款' },
+  { value: 'REFUNDING', label: '退款处理中' }, { value: 'REFUND_PENDING', label: '退款待确认' }, { value: 'REFUND_FAILED', label: '退款失败' },
 ]
 const statusLabel: Record<string, string> = {
   PENDING: '待支付', COMPLETED: '已完成', FAILED: '失败',
   REFUND_REQUESTED: '退款申请中', REFUNDED: '已退款', CANCELLED: '已取消',
+  REFUNDING: '退款处理中', REFUND_PENDING: '退款待确认', REFUND_FAILED: '退款失败',
 }
 const hasOrders = computed(() => total.value > 0)
 
@@ -47,31 +50,45 @@ function money(value: number, currency = 'USD') {
 }
 function date(value: string) { return value ? new Date(value).toLocaleString('zh-CN') : '—' }
 function canRefund(order: AgentOrder) {
-  return order.status === 'COMPLETED' && !!order.provider_instance_id && eligibleProviders.value.has(order.provider_instance_id)
+  if (props.admin && ['REFUNDING', 'REFUND_PENDING'].includes(order.status)) return true
+  return (order.status === 'COMPLETED' || (props.admin && order.status === 'REFUND_REQUESTED')) && !!order.provider_instance_id && eligibleProviders.value.has(order.provider_instance_id)
 }
 async function load() {
   loading.value = true; error.value = ''
   try {
-    const result = await agentAPI.orders.list(page.value, pageSize.value, status.value)
+    const result = await (props.admin ? agentAPI.billing.orders : agentAPI.billing.myOrders)(page.value, pageSize.value, status.value)
     orders.value = result.items || []; total.value = result.total || 0
   } catch (cause) { error.value = cause instanceof Error ? cause.message : '订单加载失败' }
   finally { loading.value = false }
 }
 async function loadEligibility() {
-  try { eligibleProviders.value = new Set((await agentAPI.orders.refundEligibleProviders()).provider_instance_ids || []) }
+  try {
+    eligibleProviders.value = props.admin
+      ? new Set((await agentAPI.billing.providers()).items.filter(provider => provider.refund_enabled).map(provider => String(provider.id)))
+      : new Set((await agentAPI.billing.refundEligibleProviders()).provider_instance_ids || [])
+  }
   catch { eligibleProviders.value = new Set() }
 }
 async function confirmCancel() {
   if (!cancelTarget.value) return
   actionLoading.value = true; error.value = ''
-  try { await agentAPI.orders.cancel(cancelTarget.value.id); success.value = '订单已取消'; cancelTarget.value = null; await load() }
+  try { await (props.admin ? agentAPI.billing.cancelOrder : agentAPI.billing.cancelMyOrder)(cancelTarget.value.id); success.value = '订单已取消'; cancelTarget.value = null; await load() }
   catch (cause) { error.value = cause instanceof Error ? cause.message : '取消订单失败' }
   finally { actionLoading.value = false }
 }
 async function confirmRefund() {
-  if (!refundTarget.value || refundReason.value.trim().length < 2) return
+  if (!refundTarget.value || (!props.admin && refundReason.value.trim().length < 2)) return
   actionLoading.value = true; error.value = ''
-  try { await agentAPI.orders.requestRefund(refundTarget.value.id, refundReason.value.trim()); success.value = '退款申请已提交'; refundTarget.value = null; refundReason.value = ''; await load() }
+  try {
+    if (props.admin) {
+      const result = await agentAPI.billing.refundOrder(refundTarget.value.id)
+      success.value = result.status === 'REFUNDED' ? '渠道已确认退款完成' : result.status === 'REFUND_FAILED' ? '渠道退款失败，已恢复钱包额度' : '退款结果待渠道确认，可稍后再次查询；请勿在渠道后台重复发起退款。'
+    } else {
+      await agentAPI.billing.requestMyRefund(refundTarget.value.id, refundReason.value.trim())
+      success.value = '退款申请已提交'
+    }
+    refundTarget.value = null; refundReason.value = ''; await load()
+  }
   catch (cause) { error.value = cause instanceof Error ? cause.message : '退款申请失败' }
   finally { actionLoading.value = false }
 }
@@ -86,7 +103,7 @@ onMounted(() => { void load(); void loadEligibility() })
 <template>
   <main class="space-y-4">
     <header class="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div><p class="text-sm font-medium text-primary-600 dark:text-primary-300">MY ORDERS</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">订单记录</h1><p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">查看当前账户的订单、余额与退款状态。</p></div>
+      <div><p class="text-sm font-medium text-primary-600 dark:text-primary-300">{{ admin ? 'STATION ORDERS' : 'MY ORDERS' }}</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{{ admin ? '本站订单' : '订单记录' }}</h1><p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">{{ admin ? '管理本站收款订单，取消未付款订单并处理退款。' : '查看当前账户的订单、余额与退款状态。' }}</p></div>
       <button class="btn btn-primary" type="button" @click="router.push('/purchase')">充值 / 购买</button>
     </header>
     <div class="card flex flex-wrap items-center gap-3 p-4">
@@ -105,12 +122,12 @@ onMounted(() => { void load(); void loadEligibility() })
         <template #cell-order_type="{ value }">{{ value === 'subscription' ? '订阅' : '余额充值' }}</template>
         <template #cell-status="{ value }"><AgentStatusBadge :status="value" :label="statusLabel[value] || value" /></template>
         <template #cell-created_at="{ value }"><span class="text-xs text-gray-500">{{ date(value) }}</span></template>
-        <template #cell-actions="{ row }"><div class="flex flex-wrap gap-2"><button v-if="row.status === 'PENDING'" class="text-xs font-medium text-amber-600" @click="cancelTarget = row">取消</button><button v-if="canRefund(row)" class="text-xs font-medium text-purple-600" @click="openRefund(row)">申请退款</button><span v-if="row.status !== 'PENDING' && !canRefund(row)" class="text-xs text-gray-400">—</span></div></template>
+        <template #cell-actions="{ row }"><div class="flex flex-wrap gap-2"><button v-if="row.status === 'PENDING'" class="text-xs font-medium text-amber-600" @click="cancelTarget = row">取消</button><button v-if="canRefund(row)" class="text-xs font-medium text-purple-600" @click="openRefund(row)">{{ admin ? (['REFUNDING', 'REFUND_PENDING'].includes(row.status) ? '查询退款' : '执行退款') : '申请退款' }}</button><span v-if="row.status !== 'PENDING' && !canRefund(row)" class="text-xs text-gray-400">—</span></div></template>
       </DataTable>
       <AgentPagination v-if="hasOrders" :total="total" :page="page" :page-size="pageSize" item-label="笔订单" @update:page="changePage" @update:page-size="changePageSize" />
     </div>
   </main>
 
   <BaseDialog :show="cancelTarget !== null" title="取消订单" width="narrow" @close="cancelTarget = null"><p class="text-sm text-gray-600 dark:text-gray-300">确定取消订单 #{{ cancelTarget?.id }} 吗？</p><template #footer><button class="btn btn-secondary" @click="cancelTarget = null">返回</button><button class="btn btn-danger" :disabled="actionLoading" data-testid="confirm-cancel" @click="confirmCancel">确认取消</button></template></BaseDialog>
-  <BaseDialog :show="refundTarget !== null" title="申请退款" @close="refundTarget = null"><div class="space-y-3"><p class="text-sm text-gray-500">订单 #{{ refundTarget?.id }} · {{ refundTarget ? money(refundTarget.amount) : '' }}</p><label class="block text-sm font-medium" for="refund-reason">退款原因</label><AgentTextArea id="refund-reason" v-model="refundReason" class="min-h-24" maxlength="500" placeholder="请填写退款原因（2–500 字）" /></div><template #footer><button class="btn btn-secondary" @click="refundTarget = null">返回</button><button class="btn btn-primary" :disabled="actionLoading || refundReason.trim().length < 2" data-testid="confirm-refund" @click="confirmRefund">提交申请</button></template></BaseDialog>
+  <BaseDialog :show="refundTarget !== null" :title="admin ? '订单退款' : '申请退款'" @close="refundTarget = null"><div class="space-y-3"><p class="text-sm text-gray-500">订单 #{{ refundTarget?.id }} · {{ refundTarget ? money(refundTarget.pay_amount, refundTarget.currency) : '' }}</p><p v-if="admin" class="text-sm text-amber-700">确认后将向收款渠道申请全额退款，并扣回该订单的到账额度。处理中的订单仅查询渠道结果。</p><label v-else class="block text-sm font-medium" for="refund-reason">退款原因</label><AgentTextArea v-if="!admin" id="refund-reason" v-model="refundReason" class="min-h-24" maxlength="500" placeholder="请填写退款原因（2–500 字）" /></div><template #footer><button class="btn btn-secondary" @click="refundTarget = null">返回</button><button class="btn btn-primary" :disabled="actionLoading || (!admin && refundReason.trim().length < 2)" data-testid="confirm-refund" @click="confirmRefund">提交申请</button></template></BaseDialog>
 </template>

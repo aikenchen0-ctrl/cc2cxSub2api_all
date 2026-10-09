@@ -97,7 +97,7 @@ def _decode_part(value: str) -> bytes:
 def verify_ticket(raw: str, expected_audience: str = "screen2code") -> dict[str, Any]:
     secret = os.environ.get("SUB2API_SSO_SECRET", "").strip()
     if len(secret) < 32:
-        raise HTTPException(status_code=503, detail="SSO is not configured")
+        raise HTTPException(status_code=503, detail="单点登录尚未配置，请联系管理员")
     try:
         encoded, signature = raw.split(".", 1)
         expected = hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).digest()
@@ -105,30 +105,30 @@ def verify_ticket(raw: str, expected_audience: str = "screen2code") -> dict[str,
             raise ValueError("bad signature")
         payload = json.loads(_decode_part(encoded))
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError, TypeError, binascii.Error) as exc:
-        raise HTTPException(status_code=400, detail="Invalid SSO ticket") from exc
+        raise HTTPException(status_code=400, detail="单点登录票据无效，请从主站菜单重新进入") from exc
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Invalid SSO payload")
+        raise HTTPException(status_code=400, detail="单点登录票据数据无效")
     # SuperKey/relay-key material is never part of the satellite SSO
     # assertion.  Reject legacy tickets that still try to carry `rk` instead
     # of silently accepting an obsolete credential transport.
     if "rk" in payload:
-        raise HTTPException(status_code=400, detail="Invalid SSO payload")
+        raise HTTPException(status_code=400, detail="单点登录票据数据无效")
     now = int(time.time())
     if payload.get("iss") != "sub2api" or payload.get("aud") != expected_audience:
-        raise HTTPException(status_code=400, detail="Invalid SSO audience")
+        raise HTTPException(status_code=400, detail="单点登录目标应用不匹配")
     if not isinstance(payload.get("sub"), str) or not payload["sub"]:
-        raise HTTPException(status_code=400, detail="Invalid SSO subject")
+        raise HTTPException(status_code=400, detail="单点登录用户身份无效")
     if not isinstance(payload.get("jti"), str) or not payload["jti"]:
-        raise HTTPException(status_code=400, detail="Invalid SSO nonce")
+        raise HTTPException(status_code=400, detail="单点登录票据标识无效")
     try:
         issued_at = int(payload.get("iat", now))
         expires_at = int(payload.get("exp", 0))
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Invalid SSO timestamps") from exc
+        raise HTTPException(status_code=400, detail="单点登录票据时间无效") from exc
     if expires_at < now - TICKET_TTL_SKEW_SECONDS:
-        raise HTTPException(status_code=400, detail="SSO ticket expired")
+        raise HTTPException(status_code=400, detail="单点登录票据已过期，请从主站菜单重新进入")
     if issued_at > now + TICKET_TTL_SKEW_SECONDS or expires_at < issued_at:
-        raise HTTPException(status_code=400, detail="Invalid SSO issue time")
+        raise HTTPException(status_code=400, detail="单点登录票据签发时间无效")
     return payload
 
 
@@ -151,7 +151,7 @@ def consume_ticket(payload: dict[str, Any]) -> Identity:
             )
         except sqlite3.IntegrityError as exc:
             conn.rollback()
-            raise HTTPException(status_code=400, detail="SSO ticket already used") from exc
+            raise HTTPException(status_code=400, detail="单点登录票据已使用，请从主站菜单重新进入") from exc
         row = conn.execute(
             "SELECT * FROM identities WHERE issuer = ? AND subject = ?",
             (payload["iss"], payload["sub"]),
@@ -217,7 +217,7 @@ def get_identity(request: Any) -> Identity | None:
 def require_identity(request: Request) -> Identity:
     identity = get_identity(request)
     if identity is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=401, detail="请先登录，再从主站菜单进入本应用")
     return identity
 
 
@@ -255,11 +255,11 @@ def origin_is_allowed(request: Any) -> bool:
 
 def require_csrf(request: Request) -> None:
     if not origin_is_allowed(request):
-        raise HTTPException(status_code=403, detail="Invalid request origin")
+        raise HTTPException(status_code=403, detail="请求来源无效")
     csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
     csrf_header = request.headers.get("x-csrf-token", "")
     if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
-        raise HTTPException(status_code=403, detail="CSRF validation failed")
+        raise HTTPException(status_code=403, detail="请求安全校验失败，请刷新后重试")
 
 
 def revoke_sessions_for_subject(subject: str) -> bool:

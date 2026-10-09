@@ -1,12 +1,30 @@
 package com.artisanlab.ai;
 
+import com.artisanlab.common.ApiException;
+import com.artisanlab.common.GlobalExceptionHandler;
+import com.artisanlab.userconfig.UserApiConfigDtos;
 import org.junit.jupiter.api.Test;
+import org.mockito.Answers;
+import org.mockito.MockedStatic;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.ResourceAccessException;
+import reactor.core.publisher.Flux;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 class SpringAiTextServiceTest {
     @Test
@@ -101,6 +119,86 @@ class SpringAiTextServiceTest {
 
         assertThatThrownBy(() -> SpringAiTextService.extractText(completion))
                 .hasMessageContaining("未能从 Spring AI 响应中获取文本");
+    }
+
+    @Test
+    void explainsNotFoundAsUpstreamEndpointOrModelAvailabilityProblem() {
+        String message = SpringAiTextService.upstreamErrorMessage(
+                "{\"error\":{\"message\":\"Upstream error: 404\"}}",
+                404
+        );
+
+        assertThat(message)
+                .contains("Spring AI 上游错误")
+                .contains("上游接口或模型不存在")
+                .contains("Sub2API 上游账号")
+                .contains("Responses/Chat Completions");
+    }
+
+    @Test
+    void blockedStreamTimeoutReturnsHttp504AndCancelsUpstreamSubscription() {
+        AtomicBoolean cancelled = new AtomicBoolean();
+        Flux<OpenAiApi.ChatCompletionChunk> stream = Flux.<OpenAiApi.ChatCompletionChunk>never()
+                .doOnCancel(() -> cancelled.set(true));
+
+        ApiException exception = callWithStream(stream);
+
+        assertTimeoutResponse(exception);
+        assertThat(cancelled).isTrue();
+    }
+
+    @Test
+    void wrappedTimeoutWithoutMessageReturnsHttp504() {
+        RuntimeException timeout = new RuntimeException(new TimeoutException());
+
+        assertTimeoutResponse(callWithStream(Flux.error(timeout)));
+    }
+
+    @Test
+    void socketReadTimeoutReturnsHttp504() {
+        ResourceAccessException timeout = new ResourceAccessException(
+                "I/O error while reading upstream response", new SocketTimeoutException());
+
+        assertTimeoutResponse(callWithStream(Flux.error(timeout)));
+    }
+
+    @Test
+    void connectionFailureKeepsHttp502Classification() {
+        ResourceAccessException connectionFailure = new ResourceAccessException(
+                "I/O error while connecting to upstream", new ConnectException("Connection refused"));
+
+        ApiException exception = callWithStream(Flux.error(connectionFailure));
+
+        assertThat(exception.status()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(exception.code()).isEqualTo("SPRING_AI_RESOURCE_ACCESS_FAILED");
+        assertThat(new GlobalExceptionHandler().handleApiException(exception).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_GATEWAY);
+    }
+
+    private static ApiException callWithStream(Flux<OpenAiApi.ChatCompletionChunk> stream) {
+        OpenAiApi api = mock(OpenAiApi.class);
+        OpenAiApi.Builder builder = mock(OpenAiApi.Builder.class, Answers.RETURNS_SELF);
+        when(builder.build()).thenReturn(api);
+        when(api.chatCompletionStream(any(OpenAiApi.ChatCompletionRequest.class))).thenReturn(stream);
+        UserApiConfigDtos.ResolvedConfig config = new UserApiConfigDtos.ResolvedConfig(
+                "http://relay.test/v1", "123", "gpt-image-2", "gpt-5.5", "", "", false);
+
+        try (MockedStatic<OpenAiApi> openAiApi = mockStatic(OpenAiApi.class)) {
+            openAiApi.when(OpenAiApi::builder).thenReturn(builder);
+            return catchThrowableOfType(() -> new SpringAiTextService().completeText(
+                    config, "system", "user", Duration.ofMillis(1), "timeout-regression"), ApiException.class);
+        }
+    }
+
+    private static void assertTimeoutResponse(ApiException exception) {
+        assertThat(exception).isNotNull();
+        assertThat(exception.status()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        assertThat(exception.code()).isEqualTo("SPRING_AI_TIMEOUT");
+        var response = new GlobalExceptionHandler().handleApiException(exception);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().success()).isFalse();
+        assertThat(response.getBody().error().code()).isEqualTo("SPRING_AI_TIMEOUT");
     }
 
     private static OpenAiApi.ChatCompletionChunk chunk(String content) {

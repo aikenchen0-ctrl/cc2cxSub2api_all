@@ -16,6 +16,9 @@ import {
   AGENT_PAYMENT_RECOVERY_KEY,
   readAgentPaymentRecovery,
   writeAgentPaymentRecovery,
+  paymentFee,
+  paymentCurrencyDigits,
+  shouldOpenPaymentWindow,
 } from '@/agent/paymentFlow'
 import {
   classifyWechatPaymentResult,
@@ -69,7 +72,7 @@ const currentBaseAmount = computed(() => activeTab.value === 'subscription'
   ? subscriptionPaymentAmount(selectedPlan.value)
   : parsedAmount.value)
 const feeAmount = computed(() => currentBaseAmount.value > 0
-  ? Math.ceil(currentBaseAmount.value * feeRate.value) / 100
+  ? paymentFee(currentBaseAmount.value, feeRate.value, currency.value)
   : 0)
 const totalAmount = computed(() => currentBaseAmount.value + feeAmount.value)
 const hasBalance = computed(() => Boolean(checkout.value && !checkout.value.balance_disabled))
@@ -87,9 +90,10 @@ const amountError = computed(() => {
   const globalMax = checkout.value?.global_max || 0
   if (globalMin > 0 && value < globalMin) return `最低充值金额为 ${formatMoney(globalMin, currency.value)}`
   if (globalMax > 0 && value > globalMax) return `最高充值金额为 ${formatMoney(globalMax, currency.value)}`
-  if (limit.single_min > 0 && value < limit.single_min) return `单笔最低 ${formatMoney(limit.single_min, currency.value)}`
-  if (limit.single_max > 0 && value > limit.single_max) return `单笔最高 ${formatMoney(limit.single_max, currency.value)}`
-  if (limit.daily_limit > 0 && limit.daily_remaining >= 0 && value > limit.daily_remaining) return `今日该支付方式剩余额度为 ${formatMoney(limit.daily_remaining, currency.value)}`
+  if (Number(value.toFixed(paymentCurrencyDigits(currency.value))) !== value) return `该币种最多支持 ${paymentCurrencyDigits(currency.value)} 位小数。`
+  if (limit.single_min > 0 && totalAmount.value < limit.single_min) return `单笔最低 ${formatMoney(limit.single_min, currency.value)}`
+  if (limit.single_max > 0 && totalAmount.value > limit.single_max) return `单笔最高 ${formatMoney(limit.single_max, currency.value)}`
+  if (limit.daily_limit > 0 && limit.daily_remaining >= 0 && totalAmount.value > limit.daily_remaining) return `今日该支付方式剩余额度为 ${formatMoney(limit.daily_remaining, currency.value)}`
   return ''
 })
 
@@ -279,6 +283,19 @@ async function submit(forceResume = false): Promise<void> {
       return
     }
     if (result.qr_code || result.pay_url) {
+      const isMobile = /Android|iPhone|iPad|Mobile/i.test(window.navigator.userAgent)
+      const forceQR = checkout.value?.alipay_force_qrcode === true
+      const mobilePrecreate = checkout.value?.alipay_mobile_precreate_deep_link === true
+      const payURL = safeExternalURL(result.pay_url)
+      if (forceQR && !mobilePrecreate && selectedMethod.value.startsWith('alipay') && !result.qr_code && payURL) {
+        result.qr_code = payURL
+        saveRecovery(result)
+      }
+      if (payURL && shouldOpenPaymentWindow(result, isMobile, forceQR, mobilePrecreate)) {
+        const popup = window.open(payURL, 'agentapiPayment', 'width=520,height=720')
+        if (popup) popup.opener = null
+        else window.location.assign(payURL)
+      }
       await router.push({
         path: '/payment/qrcode',
         query: { order_id: String(result.order_id), out_trade_no: result.out_trade_no || undefined },
@@ -411,12 +428,10 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const [checkoutInfo, agentContext] = await Promise.all([
-      agentAPI.payment.checkoutInfo(),
-      agentAPI.getContext(),
-    ])
-    checkout.value = checkoutInfo
+    const agentContext = await agentAPI.getContext()
     context.value = agentContext
+    const checkoutInfo = await agentAPI.payment.checkoutInfo()
+    checkout.value = checkoutInfo
     const firstMethod = Object.entries(checkoutInfo.methods)
       .filter(([, item]) => item.available !== false)
       .sort(([left], [right]) => methodOrder(left) - methodOrder(right))[0]?.[0]
@@ -450,7 +465,7 @@ onBeforeUnmount(stopPolling)
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">{{ siteName }}</p>
         <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">购买与充值</h1>
-        <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-dark-400">选择充值金额和支付方式，完成后余额会自动更新。</p>
+        <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-dark-400">付款进入本站站长配置的渠道。支付确认后，额度记入你在本站的账户。</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
@@ -462,7 +477,6 @@ onBeforeUnmount(stopPolling)
         </button>
       </div>
     </header>
-
     <div v-if="loading" role="status" class="card flex min-h-80 items-center justify-center">
       <div class="text-center"><span class="mx-auto block h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span><p class="mt-3 text-sm text-gray-500">正在读取支付配置…</p></div>
     </div>

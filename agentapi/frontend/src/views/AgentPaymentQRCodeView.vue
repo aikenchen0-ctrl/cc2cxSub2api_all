@@ -12,6 +12,7 @@ import {
   type AgentPaymentRecoverySnapshot,
 } from '@/agent/paymentFlow'
 import Icon from '@/components/icons/Icon.vue'
+import { createAlipayDeepLinkLauncher, type AlipayDeepLinkLauncher, type AlipayDeepLinkState } from '@/components/payment/alipayDeepLink'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,6 +26,9 @@ const terminal = ref(false)
 const error = ref('')
 let pollTimer: number | null = null
 let countdownTimer: number | null = null
+let alipayLauncher: AlipayDeepLinkLauncher | null = null
+const alipayLaunchState = ref<AlipayDeepLinkState>('idle')
+const canLaunchAlipay = computed(() => snapshot.value?.alipayMobilePrecreateDeepLink === true && snapshot.value.paymentType.startsWith('alipay') && !!snapshot.value.qrCode && /Android|iPhone|iPad|Mobile/i.test(window.navigator.userAgent))
 
 const payURL = computed(() => safePaymentURL(snapshot.value?.payURL))
 const paymentLabel = computed(() => {
@@ -40,6 +44,8 @@ const countdown = computed(() => {
 })
 
 function cleanup(): void {
+  alipayLauncher?.dispose()
+  alipayLauncher = null
   if (pollTimer !== null) window.clearInterval(pollTimer)
   if (countdownTimer !== null) window.clearInterval(countdownTimer)
   pollTimer = null
@@ -128,6 +134,13 @@ onMounted(async () => {
   loading.value = false
   await renderQR()
   startTimers()
+  if (canLaunchAlipay.value && !terminal.value) {
+    alipayLauncher = createAlipayDeepLinkLauncher({
+      qrCode: snapshot.value.qrCode, document, lifecycleTarget: window, userAgent: navigator.userAgent,
+      assignLocation: url => window.location.assign(url), onStateChange: state => { alipayLaunchState.value = state },
+    })
+    alipayLauncher.launch()
+  }
 })
 
 onBeforeUnmount(cleanup)
@@ -136,7 +149,7 @@ onBeforeUnmount(cleanup)
 <template>
   <main class="mx-auto max-w-lg space-y-5 py-4">
     <header class="text-center">
-      <p class="text-sm font-semibold text-primary-600 dark:text-primary-400">MAIN-SITE PAYMENT</p>
+      <p class="text-sm font-semibold text-primary-600 dark:text-primary-400">安全支付</p>
       <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">完成 {{ paymentLabel }}</h1>
       <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">支付状态由支付服务确认，页面会自动更新当前订单。</p>
     </header>
@@ -157,6 +170,8 @@ onBeforeUnmount(cleanup)
         <p class="mt-5 text-sm text-gray-500 dark:text-dark-400">{{ snapshot.qrCode ? `请使用${paymentLabel}扫码` : '请在支付窗口完成付款' }}</p>
         <p class="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-white">{{ countdown }}</p>
         <p class="mt-2 break-all font-mono text-xs text-gray-400">{{ snapshot.outTradeNo }}</p>
+        <button v-if="canLaunchAlipay && !terminal" class="btn btn-primary mt-5 w-full" type="button" @click="alipayLauncher?.launch()">打开支付宝付款</button>
+        <p v-if="alipayLaunchState === 'fallback'" class="mt-3 text-sm text-gray-500">未能唤起支付宝，可长按保存二维码，或在系统浏览器打开后重试。</p>
         <a v-if="payURL && !terminal" class="btn btn-primary mt-5 w-full" :href="payURL" target="_blank" rel="noopener noreferrer">打开支付窗口</a>
         <button class="btn btn-primary mt-3 w-full" type="button" :disabled="verifying || terminal" @click="verify(true)">
           <Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在确认…' : '我已完成支付' }}

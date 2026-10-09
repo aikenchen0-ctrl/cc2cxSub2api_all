@@ -5,9 +5,9 @@ describe('agent route presentation', () => {
   it('covers every primary user and tenant-admin panel route with a specific description', () => {
     const expected = [
       '/dashboard',
-      '/keys', '/usage', '/purchase', '/orders',
+      '/keys', '/usage', '/purchase', '/orders', '/affiliate', '/redeem', '/profile', '/balance',
       '/admin/dashboard',
-      '/admin/users', '/admin/usage',
+      '/admin/users', '/admin/payments', '/admin/usage',
       '/admin/announcements', '/admin/settings',
     ]
 

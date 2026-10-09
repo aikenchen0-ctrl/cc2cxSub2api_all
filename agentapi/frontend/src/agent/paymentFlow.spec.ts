@@ -4,6 +4,8 @@ import {
   createAgentPaymentRecovery,
   readAgentPaymentRecovery,
   safePaymentURL,
+  paymentFee,
+  shouldOpenPaymentWindow,
 } from './paymentFlow'
 
 const result: AgentPaymentCreateResult = {
@@ -15,6 +17,7 @@ const result: AgentPaymentCreateResult = {
   payment_type: 'stripe',
   out_trade_no: 'PAY-000077',
   client_secret: 'pi_secret_browser',
+  stripe_publishable_key: 'pk_selected_instance',
   intent_id: 'int_77',
   currency: 'CNY',
   country_code: 'CN',
@@ -23,6 +26,19 @@ const result: AgentPaymentCreateResult = {
 }
 
 describe('agent payment recovery', () => {
+  it('applies the configured currency precision to fees', () => {
+    expect(paymentFee(100, 2.5, 'JPY')).toBe(3)
+    expect(paymentFee(71.5, 2.5, 'CNY')).toBe(1.79)
+    expect(paymentFee(50, 2, 'USD')).toBe(1)
+  })
+
+  it('honors popup, QR and mobile precreate precedence', () => {
+    const payment = { ...result, payment_type: 'alipay', pay_url: 'https://pay.example', qr_code: 'https://qr.example', payment_mode: 'popup' }
+    expect(shouldOpenPaymentWindow(payment, false, false, false)).toBe(true)
+    expect(shouldOpenPaymentWindow(payment, true, true, false)).toBe(false)
+    expect(shouldOpenPaymentWindow(payment, true, true, true)).toBe(false)
+    expect(shouldOpenPaymentWindow({ ...payment, payment_type: 'wxpay' }, true, true, false)).toBe(true)
+  })
   it('round-trips the main-site payment handoff without user or admin selectors', () => {
     const snapshot = createAgentPaymentRecovery(result, 'balance', 'stripe', Date.parse('2026-09-29T14:00:00Z'), 9)
     const restored = readAgentPaymentRecovery(JSON.stringify(snapshot), {
@@ -35,6 +51,7 @@ describe('agent payment recovery', () => {
       orderId: 77,
       outTradeNo: 'PAY-000077',
       clientSecret: 'pi_secret_browser',
+      stripePublishableKey: 'pk_selected_instance',
       intentId: 'int_77',
       orderType: 'balance',
       planId: 9,

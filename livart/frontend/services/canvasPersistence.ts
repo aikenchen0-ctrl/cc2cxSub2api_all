@@ -1,5 +1,6 @@
 import { CanvasItem, ChatMessage } from '../types';
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 
 export interface CanvasPersistenceState {
   items: CanvasItem[];
@@ -93,7 +94,7 @@ const getAssetVariantUrl = (assetId: string | undefined, variant: 'content' | 'p
 const unwrapApiResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `后端请求失败：${response.status}`);
+    throw createApiError(payload, response.status, '项目服务没有完成请求');
   }
   if (payload.data === undefined) {
     throw new Error('后端响应为空');

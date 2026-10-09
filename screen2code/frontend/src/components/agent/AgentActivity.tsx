@@ -77,7 +77,7 @@ function ExpandablePrompt({ prompt }: { prompt: string }) {
             aria-expanded={isExpanded}
             className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
-            {isExpanded ? "Less" : "More"}
+            {isExpanded ? "收起" : "展开"}
           </button>
         </div>
       )}
@@ -191,37 +191,37 @@ function getEventIcon(type: AgentEventType, toolName?: string) {
 
 function getEventTitle(event: AgentEvent): string {
   if (event.type === "thinking") {
-    if (event.status === "running") return "Thinking";
+    if (event.status === "running") return "正在思考";
     const duration = formatDuration(event.startedAt, event.endedAt);
-    return duration ? `Thought for ${duration}` : "Thought";
+    return duration ? `思考用时${duration}` : "已思考";
   }
   if (event.type === "assistant") {
-    return "Assistant response";
+    return "AI 回复";
   }
   if (event.type === "tool") {
     if (event.toolName === "create_file") {
-      return event.status === "running" ? "Creating file" : "Created file";
+      return event.status === "running" ? "正在创建文件" : "已创建文件";
     }
     if (event.toolName === "edit_file") {
-      return event.status === "running" ? "Editing file" : "Edited file";
+      return event.status === "running" ? "正在编辑文件" : "已编辑文件";
     }
     if (event.toolName === "generate_images") {
       const input = event.input as any;
       const output = event.output as any;
       const count = output?.images?.length || input?.count || 0;
       if (event.status === "running") {
-        return count ? `Generating ${count} image${count !== 1 ? "s" : ""}` : "Generating images";
+        return count ? `正在生成${count} image${count !== 1 ? "s" : ""}` : "正在生成图片";
       }
-      return count ? `Generated ${count} image${count !== 1 ? "s" : ""}` : "Generated images";
+      return count ? `已生成${count} image${count !== 1 ? "s" : ""}` : "已生成图片";
     }
     if (event.toolName === "remove_backgrounds") {
       const rbInput = event.input as any;
       const rbOutput = event.output as any;
       const rbCount = rbOutput?.images?.length || rbInput?.image_urls?.length || 0;
       if (event.status === "running") {
-        return rbCount > 1 ? `Removing ${rbCount} backgrounds` : "Removing background";
+        return rbCount > 1 ? `正在移除${rbCount} backgrounds` : "正在移除背景";
       }
-      return rbCount > 1 ? `Removed ${rbCount} backgrounds` : "Background removed";
+      return rbCount > 1 ? `已移除${rbCount} backgrounds` : "已移除背景";
     }
     if (event.toolName === "edit_images") {
       const editInput = event.input as { edits?: unknown[] } | null;
@@ -230,26 +230,26 @@ function getEventTitle(event: AgentEvent): string {
         editOutput?.images?.length || editInput?.edits?.length || 0;
       if (event.status === "running") {
         return editCount
-          ? `Editing ${editCount} image${editCount !== 1 ? "s" : ""}`
-          : "Editing images";
+          ? `正在编辑${editCount} image${editCount !== 1 ? "s" : ""}`
+          : "正在编辑图片";
       }
       return editCount
-        ? `Edited ${editCount} image${editCount !== 1 ? "s" : ""}`
-        : "Edited images";
+        ? `已编辑${editCount} image${editCount !== 1 ? "s" : ""}`
+        : "已编辑图片";
     }
     if (event.toolName === "retrieve_option") {
       return event.status === "running"
-        ? "Retrieving option"
-        : "Retrieved option";
+        ? "正在读取方案"
+        : "已读取方案";
     }
     if (event.toolName === "save_assets") {
       const saveInput = event.input as any;
       const saveOutput = event.output as any;
       const saveCount = saveOutput?.images?.length || saveInput?.asset_ids?.length || 0;
       if (event.status === "running") {
-        return saveCount > 1 ? `Saving ${saveCount} assets` : "Saving asset";
+        return saveCount > 1 ? `正在保存${saveCount} assets` : "正在保存素材";
       }
-      return saveCount > 1 ? `Saved ${saveCount} assets` : "Saved asset";
+      return saveCount > 1 ? `已保存${saveCount} assets` : "已保存素材";
     }
     if (event.toolName === "extract_assets") {
       const extractInputDescriptions = getArrayField(event.input, "asset_descriptions");
@@ -261,8 +261,8 @@ function getEventTitle(event: AgentEvent): string {
         extractOutputAssets?.length || extractInputDescriptions?.length || 0;
       if (event.status === "running") {
         return extractCount > 1
-          ? `Extracting ${extractCount} assets`
-          : "Extracting asset";
+          ? `正在提取${extractCount} assets`
+          : "正在提取素材";
       }
       if (
         extractOutputAssets &&
@@ -270,21 +270,21 @@ function getEventTitle(event: AgentEvent): string {
         successfulCount < requestedCount
       ) {
         return successfulCount > 0
-          ? `Extracted ${successfulCount} of ${requestedCount} assets`
-          : "Could not extract assets";
+          ? `已提取${successfulCount}/${requestedCount} assets`
+          : "素材提取失败";
       }
       return extractCount > 1
-        ? `Extracted ${extractCount} assets`
-        : "Extracted asset";
+        ? `已提取${extractCount} assets`
+        : "已提取素材";
     }
     if (event.toolName === "screenshot_preview") {
       return event.status === "running"
-        ? "Screenshotting preview"
-        : "Screenshotted preview";
+        ? "正在截取预览画面"
+        : "已截取预览画面";
     }
-    return event.status === "running" ? "Running tool" : "Tool completed";
+    return event.status === "running" ? "正在调用工具" : "工具执行完成";
   }
-  return "Activity";
+  return "执行过程";
 }
 
 
@@ -333,14 +333,15 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
     <div className="text-sm text-gray-700 dark:text-gray-200">
       {hasError && (
         <div className="rounded-md border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/30 p-3">
-          <div className="text-xs uppercase tracking-wide text-red-500">Error</div>
+          <div className="text-xs uppercase tracking-wide text-red-500">错误</div>
           <div className="mt-1 text-sm text-red-700 dark:text-red-200">
             {output?.error}
           </div>
           {event.input && (
             <div className="mt-2">
               <div className="text-xs uppercase tracking-wide text-red-400">
-                Input
+
+                输入
               </div>
               {renderJson(event.input)}
             </div>
@@ -359,17 +360,18 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
               className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60 p-3"
             >
               <div className="text-xs uppercase tracking-wide text-gray-400">
-                Edit {index + 1}
+
+                编辑 {index + 1}
               </div>
               <div className="mt-2 grid gap-2">
                 <div>
-                  <div className="text-xs text-gray-500">Old</div>
+                  <div className="text-xs text-gray-500">原内容</div>
                   <div className="mt-1 rounded bg-red-50 dark:bg-red-900/30 p-2 text-xs font-mono text-red-700 dark:text-red-200 break-all">
                     {edit.old_text}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500">New</div>
+                  <div className="text-xs text-gray-500">新内容</div>
                   <div className="mt-1 rounded bg-emerald-50 dark:bg-emerald-900/30 p-2 text-xs font-mono text-emerald-700 dark:text-emerald-200 break-all">
                     {edit.new_text}
                   </div>
@@ -377,7 +379,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
               </div>
               {edit.replaced !== undefined && (
                 <div className="mt-2 text-xs text-gray-500">
-                  Replaced {edit.replaced} time{edit.replaced === 1 ? "" : "s"}
+
+                  已替换 {edit.replaced}  次{edit.replaced === 1 ? "" : "s"}
                 </div>
               )}
             </div>
@@ -406,13 +409,14 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                     {item.url ? (
                       <img
                         src={item.url}
-                        alt={item.prompt || `Generated image ${index + 1}`}
+                        alt={item.prompt || `生成的图片${index + 1}`}
                         className="w-full rounded object-cover"
                         loading="lazy"
                       />
                     ) : (
                       <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                        Failed
+
+                        失败
                       </div>
                     )}
                   </div>
@@ -435,7 +439,7 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                 <div key={index} className="py-2">
                   <img
                     src={url}
-                    alt={`Original image ${index + 1}`}
+                    alt={`原始图片${index + 1}`}
                     className="w-full rounded object-cover"
                     loading="lazy"
                   />
@@ -449,16 +453,16 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
               {output.images.map((item: any, index: number) => (
                 <div key={`${item.image_url}-${index}`} className="flex gap-2 py-2">
                   <div className="w-1/2">
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Before</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">修改前</div>
                     <img
                       src={item.image_url}
-                      alt={`Original image ${index + 1}`}
+                      alt={`原始图片${index + 1}`}
                       className="w-full rounded object-cover"
                       loading="lazy"
                     />
                   </div>
                   <div className="w-1/2">
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">After</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">修改后</div>
                     {item.result_url ? (
                       <div className="relative">
                         <div
@@ -472,14 +476,15 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                         />
                         <img
                           src={item.result_url}
-                          alt="Background removed"
+                          alt="已移除背景"
                           className="relative w-full rounded"
                           loading="lazy"
                         />
                       </div>
                     ) : (
                       <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                        Failed
+
+                        失败
                       </div>
                     )}
                   </div>
@@ -506,12 +511,13 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                   const aspectRatio =
                     typeof item?.aspect_ratio === "string"
                       ? item.aspect_ratio
-                      : "match input";
+                      : "与原图一致";
                   return (
                     <div key={`${prompt || "edit"}-${index}`} className="py-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
-                          Edit {index + 1}
+
+                          编辑 {index + 1}
                         </div>
                         <div className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
                           {aspectRatio}
@@ -527,15 +533,15 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                           <div key={`${url}-${imageIndex}`}>
                             <div className="mb-1 text-[10px] text-gray-500 dark:text-gray-400">
                               {imageIndex === 0
-                                ? "Main image"
-                                : `Reference ${imageIndex}`}
+                                ? "主图"
+                                : `参考图${imageIndex}`}
                             </div>
                             <img
                               src={url}
                               alt={
                                 imageIndex === 0
-                                  ? `Main image for edit ${index + 1}`
-                                  : `Reference ${imageIndex} for edit ${index + 1}`
+                                  ? `用于编辑的主图${index + 1}`
+                                  : `参考图${imageIndex}用于编辑${index + 1}`
                               }
                               className="aspect-square w-full rounded object-cover bg-gray-50 dark:bg-gray-800"
                               loading="lazy"
@@ -562,11 +568,12 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                   <div key={`${prompt || "edit"}-${index}`} className="space-y-3 py-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
-                        Edit {index + 1}
+
+                        编辑 {index + 1}
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                          {item?.aspect_ratio || "match input"}
+                          {item?.aspect_ratio || "与原图一致"}
                         </span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] ${
@@ -575,7 +582,7 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                               : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300"
                           }`}
                         >
-                          {succeeded ? "Complete" : "Failed"}
+                          {succeeded ? "完成" : "失败"}
                         </span>
                       </div>
                     </div>
@@ -583,35 +590,39 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <div className="mb-1 text-xs text-gray-500 dark:text-gray-400">
-                          Before
+
+                          修改前
                         </div>
                         {imageUrls[0] ? (
                           <img
                             src={imageUrls[0]}
-                            alt={`Main image for edit ${index + 1}`}
+                            alt={`用于编辑的主图${index + 1}`}
                             className="aspect-square w-full rounded object-contain bg-gray-50 dark:bg-gray-800"
                             loading="lazy"
                           />
                         ) : (
                           <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                            Missing
+
+                            缺失
                           </div>
                         )}
                       </div>
                       <div>
                         <div className="mb-1 text-xs text-gray-500 dark:text-gray-400">
-                          After
+
+                          修改后
                         </div>
                         {succeeded ? (
                           <img
                             src={item.result_url}
-                            alt={`Edited image ${index + 1}`}
+                            alt={`编辑后的图片${index + 1}`}
                             className="aspect-square w-full rounded object-contain bg-gray-50 dark:bg-gray-800"
                             loading="lazy"
                           />
                         ) : (
                           <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                            Failed
+
+                            失败
                           </div>
                         )}
                       </div>
@@ -619,7 +630,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                     {imageUrls.length > 1 && (
                       <div>
                         <div className="mb-1 text-xs text-gray-500 dark:text-gray-400">
-                          Reference images
+
+                          参考图片
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           {imageUrls
@@ -628,7 +640,7 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                               <img
                                 key={`${url}-${referenceIndex}`}
                                 src={url}
-                                alt={`Reference ${referenceIndex + 1} for edit ${index + 1}`}
+                                alt={`参考图${referenceIndex + 1}用于编辑${index + 1}`}
                                 className="aspect-square w-full rounded object-cover bg-gray-50 dark:bg-gray-800"
                                 loading="lazy"
                               />
@@ -644,7 +656,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                     {succeeded && (
                       <div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Result URL
+
+                          结果地址
                         </div>
                         <div className="mt-1 break-all rounded bg-gray-50 p-2 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                           {item.result_url}
@@ -666,7 +679,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
               {input.asset_ids.map((assetId: string, index: number) => (
                 <div key={`${assetId}-${index}`} className="py-2">
                   <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    Asset ID
+
+                    素材编号
                   </div>
                   <div className="break-all rounded bg-gray-50 p-2 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                     {assetId}
@@ -681,24 +695,27 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                 <div key={`${item.asset_id}-${index}`} className="flex gap-3 py-2">
                   <div className="w-1/2">
                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Saved asset
+
+                      已保存素材
                     </div>
                     {item.public_url ? (
                       <img
                         src={item.public_url}
-                        alt={`Saved uploaded asset ${index + 1}`}
+                        alt={`已保存上传素材${index + 1}`}
                         className="w-full rounded object-cover"
                         loading="lazy"
                       />
                     ) : (
                       <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                        Failed
+
+                        失败
                       </div>
                     )}
                   </div>
                   <div className="w-1/2 self-center">
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      Permanent URL
+
+                      永久地址
                     </div>
                     <div className="mt-1 break-all rounded bg-gray-50 p-2 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                       {item.public_url}
@@ -722,7 +739,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                   {input.asset_descriptions.map((description: string, index: number) => (
                     <div key={`${description}-${index}`} className="py-2">
                       <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        Asset {index + 1}
+
+                        素材 {index + 1}
                       </div>
                       <div className="text-xs text-gray-600 dark:text-gray-300">
                         {description}
@@ -741,7 +759,7 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                   const description =
                     typeof assetRecord.description === "string"
                       ? assetRecord.description
-                      : `Asset ${index + 1}`;
+                      : `素材${index + 1}`;
                   const publicUrl =
                     typeof assetRecord.public_url === "string"
                       ? assetRecord.public_url
@@ -753,7 +771,7 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                       : null);
                   const boxText = Array.isArray(assetRecord.box_2d)
                     ? assetRecord.box_2d.join(", ")
-                    : "No box";
+                    : "无选区";
                   const statusLabel =
                     typeof assetRecord.status === "string"
                       ? assetRecord.status
@@ -764,7 +782,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                     <div key={`${description}-${index}`} className="flex gap-3 py-2">
                       <div className="w-1/2 shrink-0">
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                          Extracted crop
+
+                          提取的图片
                         </div>
                         {previewUrl ? (
                           <img
@@ -775,14 +794,16 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                           />
                         ) : (
                           <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                            Missing
+
+                            缺失
                           </div>
                         )}
                       </div>
                       <div className="w-1/2 self-center space-y-2">
                         <div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">
-                            Requested asset
+
+                            请求的素材
                           </div>
                           <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
                             {description}
@@ -791,7 +812,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                         {publicUrl && (
                           <div>
                             <div className="text-xs text-gray-500 dark:text-gray-400">
-                              Public URL
+
+                              公开地址
                             </div>
                             <div className="mt-1 break-all rounded bg-gray-50 p-2 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                               {publicUrl}
@@ -800,14 +822,15 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                         )}
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
-                            <div className="text-gray-500 dark:text-gray-400">Status</div>
+                            <div className="text-gray-500 dark:text-gray-400">状态</div>
                             <div className="mt-1 font-mono text-gray-600 dark:text-gray-300">
                               {statusLabel}
                             </div>
                           </div>
                           <div>
                             <div className="text-gray-500 dark:text-gray-400">
-                              Source image
+
+                              原始图片
                             </div>
                             <div className="mt-1 font-mono text-gray-600 dark:text-gray-300">
                               {String(assetRecord.image_index ?? "-")}
@@ -816,7 +839,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                         </div>
                         <div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">
-                            Bounding box
+
+                            选区范围
                           </div>
                           <div className="mt-1 break-all rounded bg-gray-50 p-2 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                             [{boxText}]
@@ -835,7 +859,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
         <div>
           {event.status === "running" && (
             <div className="text-xs text-gray-600 dark:text-gray-400 py-1.5">
-              Rendering desktop and mobile previews...
+
+              正在渲染桌面和移动端预览…
             </div>
           )}
           {event.status !== "running" && (
@@ -853,20 +878,21 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
                 return (
                   <div key={viewport}>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 capitalize">
-                      {viewport}
+                      {viewport === "desktop" ? "桌面端" : "移动端"}
                     </div>
                     {imageUrl ? (
                       <div className="max-h-96 overflow-y-auto rounded border border-gray-200 dark:border-gray-700">
                         <img
                           src={imageUrl}
-                          alt={`Screenshot of the generated ${viewport} preview`}
+                          alt={`生成页面截图：${viewport === "desktop" ? "桌面端" : "移动端"}`}
                           className="w-full"
                           loading="lazy"
                         />
                       </div>
                     ) : (
                       <div className="aspect-square rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                        Missing
+
+                        缺失
                       </div>
                     )}
                   </div>
@@ -882,7 +908,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
           {event.input && (
             <div>
               <div className="text-xs uppercase tracking-wide text-gray-400">
-                Input
+
+                输入
               </div>
               {renderJson(event.input)}
             </div>
@@ -890,7 +917,8 @@ function renderToolDetails(event: AgentEvent, variantCode?: string) {
           {event.output && (
             <div className="mt-3">
               <div className="text-xs uppercase tracking-wide text-gray-400">
-                Output
+
+                输出
               </div>
               {renderJson(event.output)}
             </div>
@@ -1071,7 +1099,8 @@ function AgentActivity() {
                     <BsChevronRight className="text-gray-400 text-xs" />
                   )}
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Worked through {group.events.length} step
+
+                    已完成 {group.events.length}  步骤
                     {group.events.length !== 1 ? "s" : ""}
                     {groupDuration ? ` in ${groupDuration}` : ""}
                   </span>
@@ -1100,10 +1129,11 @@ function AgentActivity() {
           <div className="flex items-center justify-between rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-white dark:from-violet-900/20 dark:to-zinc-900 px-3 py-2 shadow-[0_0_15px_-3px_rgba(139,92,246,0.3)] dark:shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)] transition-all duration-500">
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <WorkingPulse />
-              <span>Working...</span>
+              <span>正在处理…</span>
             </div>
             <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-              Time so far {runningDuration || "--"}
+
+              已用时 {runningDuration || "--"}
             </div>
           </div>
           {events.map((event) => (

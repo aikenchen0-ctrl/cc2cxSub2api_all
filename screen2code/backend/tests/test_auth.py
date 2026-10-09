@@ -43,7 +43,7 @@ def test_ticket_is_verified_and_replay_is_rejected(monkeypatch, tmp_path):
     with pytest.raises(HTTPException) as exc_info:
         auth.consume_ticket(payload)
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "SSO ticket already used"
+    assert exc_info.value.detail == "单点登录票据已使用，请从主站菜单重新进入"
 
 
 def test_identity_is_reused_for_same_issuer_and_subject(monkeypatch, tmp_path):
@@ -63,7 +63,7 @@ def test_legacy_relay_key_claim_is_rejected(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         auth.verify_ticket(_ticket(secret, rk="legacy-secret"))
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Invalid SSO payload"
+    assert exc_info.value.detail == "单点登录票据数据无效"
 
 
 @pytest.mark.parametrize("value", ["/", "/editor?tab=code", "//evil.example", "https://evil.example", r"/a\\b"])

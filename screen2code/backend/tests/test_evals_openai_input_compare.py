@@ -39,4 +39,4 @@ async def test_compare_openai_inputs_for_evals_rejects_invalid_json() -> None:
         )
 
     assert error_info.value.status_code == 400
-    assert "Invalid left JSON" in error_info.value.detail
+    assert "左侧 JSON 格式无效" in error_info.value.detail

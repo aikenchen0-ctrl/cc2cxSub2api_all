@@ -315,7 +315,7 @@ function LLMProviderPanel({
         </CardHeader>
         <CardContent>
           <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-            模型由 Sub2API 托管，当前使用公开模型 <span className="font-mono font-medium">gpt-5.5</span>。
+            模型由 Sub2API 托管，当前使用公开模型 <span className="font-mono font-medium">gpt-6-astra</span>。
             本页面不会要求或保存模型 API Key。
           </div>
         </CardContent>

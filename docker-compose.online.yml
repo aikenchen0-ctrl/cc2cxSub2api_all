@@ -9,6 +9,8 @@ services:
     command: ["./node_modules/.bin/vite", "--config", "config/vite.config.ts", "--host", "0.0.0.0"]
     ports: ["127.0.0.1:5199:5199"]
     environment:
+      LLM_PROVIDER: ${AICUT_LLM_PROVIDER:-openai}
+      LLM_OPENAI_MODEL: ${AICUT_LLM_MODEL:-gpt-6-astra}
       SUB2API_BASE: http://sub2api:8080
       LINK: https://api.cc2.cx
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
@@ -30,6 +32,7 @@ services:
     environment:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_MODEL: ${AIEXCEL_RELAY_MODEL:-gpt-6-astra}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       LINK: https://api.cc2.cx
       NODE_ENV: production
@@ -251,6 +254,7 @@ services:
       LINK: https://api.cc2.cx
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       AIHUOKE_SSO_CALLBACK_URL: https://aihuoke.cc2.cx/api/auth/sso/callback
+      SUB2API_RELAY_MODEL: gpt-6-astra
     volumes: ["aihuoke_data:/app/data"]
     networks: [gateway]
 

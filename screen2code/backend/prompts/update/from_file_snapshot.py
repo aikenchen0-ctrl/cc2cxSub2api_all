@@ -22,7 +22,7 @@ def build_update_prompt_from_file_snapshot(
     request_text = (
         prompt.get("full_text", "").strip()
         or prompt.get("text", "").strip()
-        or "Apply the requested update."
+        or "请按要求完成修改。"
     )
     selected_stack = build_selected_stack_policy(stack)
     image_policy = build_user_image_policy(image_generation_enabled)
@@ -33,7 +33,7 @@ def build_update_prompt_from_file_snapshot(
     prompt_prefix = "\n\n".join(prompt_parts)
     bootstrap_text = f"""{prompt_prefix}
 
-You are editing an existing file.
+你正在编辑已有文件。
 
 <current_file path="{path}">
 {file_state["content"]}

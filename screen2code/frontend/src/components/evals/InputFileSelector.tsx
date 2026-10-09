@@ -17,7 +17,7 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   useEffect(() => {
     fetchInputFiles();
   }, []);
@@ -31,17 +31,17 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
     try {
       const response = await fetch(`${HTTP_BACKEND_URL}/eval_input_files`);
       if (!response.ok) {
-        throw new Error("Failed to fetch input files");
+        throw new Error("获取输入文件失败");
       }
-      
+
       const data = await response.json();
       setInputFiles(data);
-      
+
       // By default, select all files
       const allFilePaths = data.map((file: InputFile) => file.path);
       setSelectedFiles(allFilePaths);
     } catch (error) {
-      console.error("Error fetching input files:", error);
+      console.error("获取输入文件失败：", error);
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +69,7 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
   };
 
   if (isLoading) {
-    return <div className="text-center text-sm text-gray-500">Loading input files...</div>;
+    return <div className="text-center text-sm text-gray-500">正在加载输入文件…</div>;
   }
 
   const fileCount = inputFiles.length;
@@ -77,20 +77,20 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
 
   return (
     <div className="w-full">
-      <div 
-        className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 mb-2 border" 
+      <div
+        className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 mb-2 border"
         onClick={toggleExpanded}
       >
         <div className="flex items-center gap-2">
           {isExpanded ? <BsChevronDown className="text-gray-500" /> : <BsChevronRight className="text-gray-500" />}
           <div>
-            <span className="text-sm font-medium">Input Files</span>
+            <span className="text-sm font-medium">输入文件</span>
             <span className="ml-2 text-xs text-gray-500">
-              {selectedCount} of {fileCount} selected
+              {selectedCount}  / {fileCount}  已选择
             </span>
           </div>
         </div>
-        
+
         <div className="flex space-x-1" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
@@ -99,7 +99,8 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
             className="text-xs h-6 px-2 text-gray-500 hover:text-gray-700"
             disabled={selectedCount === fileCount}
           >
-            All
+
+            全部
           </Button>
           <Button
             variant="ghost"
@@ -108,11 +109,12 @@ function InputFileSelector({ onFilesSelected }: InputFileSelectorProps) {
             className="text-xs h-6 px-2 text-gray-500 hover:text-gray-700"
             disabled={selectedCount === 0}
           >
-            None
+
+            无
           </Button>
         </div>
       </div>
-      
+
       {isExpanded && (
         <div className="border rounded-md overflow-hidden">
           <div className="max-h-48 overflow-y-auto">

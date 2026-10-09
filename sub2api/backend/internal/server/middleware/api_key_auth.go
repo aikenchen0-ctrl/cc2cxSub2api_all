@@ -206,6 +206,16 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				clone.GroupID = &group.ID
 				apiKey = &clone
 			}
+			if satelliteHandled && strings.TrimSpace(c.GetHeader(HeaderSatellitePayer)) != "" {
+				payer, rate, ok := satellitePayerFromRequest(c)
+				if !ok {
+					return
+				}
+				if payer != apiKey.UserID {
+					apiKey.BillingPayerID = payer
+					apiKey.BillingCommissionRate = rate
+				}
+			}
 		}
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return

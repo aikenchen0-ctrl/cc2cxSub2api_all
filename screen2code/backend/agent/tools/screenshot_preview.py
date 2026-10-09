@@ -25,8 +25,8 @@ async def run_screenshot_preview(
     if not file_state.content:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "No file exists yet. Call create_file first."},
-            summary={"error": "No file to screenshot"},
+            result={"error": "尚无文件，请先调用 create_file。"},
+            summary={"error": "没有可截图的文件"},
         )
 
     screenshots: list[Dict[str, Any]] = []
@@ -65,14 +65,14 @@ async def run_screenshot_preview(
         print(f"Preview screenshot failed: {exc}")
         return ToolExecutionResult(
             ok=False,
-            result={"error": f"Screenshot failed: {exc}"},
-            summary={"error": "Screenshot failed"},
+            result={"error": f"截图失败: {exc}"},
+            summary={"error": "截图失败"},
         )
 
     result: Dict[str, Any] = {
         "content": (
-            "Full-page desktop and mobile screenshots of the current preview "
-            "are attached."
+            "当前预览的桌面端和移动端整页截图已作为附件返回。"
+            ""
         ),
         "details": {
             "screenshots": [

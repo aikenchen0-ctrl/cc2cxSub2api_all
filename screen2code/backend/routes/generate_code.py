@@ -291,16 +291,16 @@ class ParameterExtractionStage:
         generated_code_config = params.get("generatedCodeConfig", "")
         if generated_code_config not in get_args(Stack):
             await self.throw_error(
-                f"Invalid generated code config: {generated_code_config}"
+                f"生成代码配置无效： {generated_code_config}"
             )
-            raise ValueError(f"Invalid generated code config: {generated_code_config}")
+            raise ValueError(f"生成代码配置无效： {generated_code_config}")
         validated_stack = cast(Stack, generated_code_config)
 
         # Validate the input mode
         input_mode = params.get("inputMode")
         if input_mode not in get_args(InputMode):
-            await self.throw_error(f"Invalid input mode: {input_mode}")
-            raise ValueError(f"Invalid input mode: {input_mode}")
+            await self.throw_error(f"输入模式无效： {input_mode}")
+            raise ValueError(f"输入模式无效： {input_mode}")
         validated_input_mode = cast(InputMode, input_mode)
 
         openai_api_key = self._get_from_settings_dialog_or_env(
@@ -335,7 +335,7 @@ class ParameterExtractionStage:
             subject = str(getattr(identity, "subject", "") or "").strip()
             if not credential or not subject or not SUB2API_RELAY_BASE_URL:
                 await self.throw_error("当前账户的 AI 服务尚未准备好，请稍后重试")
-                raise ValueError("Sub2API satellite credential is unavailable")
+                raise ValueError("Sub2API 卫星服务凭据不可用")
             from agent.providers.factory import satellite_on_behalf_of
             satellite_on_behalf_of.set(subject)
             openai_api_key = credential
@@ -350,8 +350,8 @@ class ParameterExtractionStage:
         # Extract and validate generation type
         generation_type = params.get("generationType", "create")
         if generation_type not in ["create", "update"]:
-            await self.throw_error(f"Invalid generation type: {generation_type}")
-            raise ValueError(f"Invalid generation type: {generation_type}")
+            await self.throw_error(f"生成类型无效： {generation_type}")
+            raise ValueError(f"生成类型无效： {generation_type}")
         generation_type = cast(Literal["create", "update"], generation_type)
 
         # Extract prompt content
@@ -461,11 +461,9 @@ class ModelSelectionStage:
             return variant_models
         except Exception:
             await self.throw_error(
-                "No OpenAI, Anthropic, or Gemini API key found. Please add the environment variable "
-                "OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY to backend/.env or in the settings dialog. "
-                "If you add it to .env, make sure to restart the backend server."
+                "没有可用的 OpenAI、Anthropic 或 Gemini 接口密钥。独立运行时请在设置或 backend/.env 中配置相应密钥，并在修改 .env 后重启后端；门户模式请联系管理员检查服务配置。"
             )
-            raise Exception("No API key")
+            raise Exception("没有可用的接口密钥")
 
     def _get_variant_models(
         self,
@@ -478,15 +476,14 @@ class ModelSelectionStage:
     ) -> List[Llm]:
         """Simple model cycling that scales with num_variants"""
 
-        # Video mode prefers Gemini. Satellite / OpenAI-only traffic uses gpt-5.5.
+        # Video mode prefers Gemini. Satellite / OpenAI-only traffic uses gpt-6-astra.
         if input_mode == "video":
             if gemini_api_key:
                 return list(VIDEO_VARIANT_MODELS)
             if openai_api_key:
                 return list(OPENAI_ONLY_MODELS)
             raise Exception(
-                "Video mode requires a Gemini API key. "
-                "Please add GEMINI_API_KEY to backend/.env or in the settings dialog"
+                "视频模式需要可用的 OpenAI 或 Gemini 接口密钥，请检查设置或服务端配置。"
             )
 
         # Define models based on available API keys
@@ -510,7 +507,7 @@ class ModelSelectionStage:
         elif openai_api_key:
             models = list(OPENAI_ONLY_MODELS)
         else:
-            raise Exception("No OpenAI or Anthropic key")
+            raise Exception("缺少 OpenAI 或 Anthropic 接口密钥")
 
         # Cycle through models: [A, B] with num=5 becomes [A, B, A, B, A]
         selected_models: List[Llm] = []
@@ -545,9 +542,9 @@ class PromptCreationStage:
             print_prompt_preview(prompt_messages)
 
             return prompt_messages
-        except Exception:
+        except Exception as exc:
             await self.throw_error(
-                "Error assembling prompt. Contact support at support@getwhimsyworks.com"
+                str(exc) if isinstance(exc, ValueError) else "组装生成提示词失败，请检查输入内容后重试或联系管理员。"
             )
             raise
 
@@ -684,7 +681,7 @@ class AgenticGenerationStage:
                 await self.send_message("setCode", completion, index, None, None)
             await self.send_message(
                 "variantComplete",
-                "Variant generation complete",
+                "方案生成完成",
                 index,
                 None,
                 None,
@@ -693,10 +690,9 @@ class AgenticGenerationStage:
         except openai.AuthenticationError as e:
             print(f"[VARIANT {index + 1}] OpenAI Authentication failed", e)
             error_message = (
-                "Incorrect OpenAI key. Please make sure your OpenAI API key is correct, "
-                "or create a new OpenAI API key on your OpenAI dashboard."
+                "模型服务鉴权失败。门户模式请联系管理员；独立运行时请检查 OpenAI 接口密钥。"
                 + (
-                    " Alternatively, you can purchase code generation credits directly on this website."
+                    "也可在本站充值后重试。"
                     if IS_PROD
                     else ""
                 )
@@ -706,12 +702,9 @@ class AgenticGenerationStage:
         except openai.NotFoundError as e:
             print(f"[VARIANT {index + 1}] OpenAI Model not found", e)
             error_message = (
-                e.message
-                + ". Please make sure you have followed the instructions correctly to obtain "
-                "an OpenAI key with GPT vision access: "
-                "https://github.com/abi/screenshot-to-code/blob/main/Troubleshooting.md"
+                "未找到所选模型或模型接口，请联系管理员检查模型配置和访问权限。"
                 + (
-                    " Alternatively, you can purchase code generation credits directly on this website."
+                    "也可在本站充值后重试。"
                     if IS_PROD
                     else ""
                 )
@@ -721,9 +714,9 @@ class AgenticGenerationStage:
         except openai.RateLimitError as e:
             print(f"[VARIANT {index + 1}] OpenAI Rate limit exceeded", e)
             error_message = (
-                "OpenAI error - 'You exceeded your current quota, please check your plan and billing details.'"
+                "模型服务请求过于频繁或额度不足，请检查账户余额并稍后重试。"
                 + (
-                    " Alternatively, you can purchase code generation credits directly on this website."
+                    "也可在本站充值后重试。"
                     if IS_PROD
                     else ""
                 )
@@ -733,7 +726,14 @@ class AgenticGenerationStage:
         except Exception as e:
             print(f"Error in variant {index + 1}: {e}")
             traceback.print_exception(type(e), e, e.__traceback__)
-            await self.send_message("variantError", str(e), index, None, None)
+            error_message = str(e)
+            if isinstance(e, openai.BadRequestError):
+                error_message = "模型服务拒绝了生成请求，请检查上传文件和输入内容后重试。"
+            elif isinstance(e, openai.APIConnectionError):
+                error_message = "无法连接模型服务，请稍后重试或联系管理员。"
+            elif not any("\u4e00" <= char <= "\u9fff" for char in error_message):
+                error_message = "生成该方案时发生错误，请重试；若持续失败，请联系管理员查看服务日志。"
+            await self.send_message("variantError", error_message, index, None, None)
             return ""
 
 
@@ -803,7 +803,7 @@ class StatusBroadcastMiddleware(Middleware):
         await context.send_message("variantCount", str(num_variants), 0)
 
         for i in range(num_variants):
-            await context.send_message("status", "Generating code...", i)
+            await context.send_message("status", "正在生成代码…", i)
 
         await next_func()
 
@@ -879,7 +879,7 @@ class CodeGenerationMiddleware(Middleware):
             # Check if all variants failed
             if len(context.variant_completions) == 0:
                 await context.throw_error(
-                    "Error generating code. Please contact support."
+                    "代码生成失败，请重试或联系管理员。"
                 )
                 return  # Don't continue the pipeline
 
@@ -893,7 +893,7 @@ class CodeGenerationMiddleware(Middleware):
 
         except Exception as e:
             print(f"[GENERATE_CODE] Unexpected error: {e}")
-            await context.throw_error(f"An unexpected error occurred: {str(e)}")
+            await context.throw_error(f"发生意外错误： {str(e)}")
             return  # Don't continue the pipeline
 
         await next_func()
@@ -918,10 +918,10 @@ async def stream_code(websocket: WebSocket):
     """Handle WebSocket code generation requests using a pipeline pattern."""
     identity = get_identity(websocket) if SCREEN2CODE_AUTH_REQUIRED else None
     if SCREEN2CODE_AUTH_REQUIRED and identity is None:
-        await websocket.close(code=1008, reason="Authentication required")
+        await websocket.close(code=1008, reason="请从主站菜单登录后进入")
         return
     if SCREEN2CODE_AUTH_REQUIRED and not origin_is_allowed(websocket):
-        await websocket.close(code=1008, reason="Invalid origin")
+        await websocket.close(code=1008, reason="请求来源无效")
         return
     websocket.scope["screen2code_identity"] = identity
     pipeline = Pipeline()

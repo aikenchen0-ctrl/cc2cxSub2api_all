@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, X, Save } from 'lucide-react';
+import FailureNotice from './FailureNotice';
 import {
   getApiConfig,
   saveApiConfig,
@@ -155,7 +156,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSaved, req
 
           {error && (
             <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-500">
-              {error}
+              <FailureNotice error={error} context="保存连接设置" />
             </div>
           )}
         </div>

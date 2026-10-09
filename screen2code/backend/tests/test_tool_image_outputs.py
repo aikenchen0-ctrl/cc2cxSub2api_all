@@ -240,8 +240,8 @@ async def test_generate_images_does_not_fallback_to_openai_key(
     )
 
     assert result.ok is False
-    assert result.result == {"error": "No API key available for image generation."}
-    assert result.summary == {"error": "Missing image generation API key"}
+    assert result.result == {"error": "没有可用于图片生成的接口密钥。"}
+    assert result.summary == {"error": "缺少图片生成接口密钥"}
 
 
 @pytest.mark.asyncio

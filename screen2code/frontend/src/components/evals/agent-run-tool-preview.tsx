@@ -55,7 +55,7 @@ function UrlChip({ url }: { url: string }) {
   );
 }
 
-function MissingBox({ label = "Missing" }: { label?: string }) {
+function MissingBox({ label = "缺失" }: { label?: string }) {
   return (
     <div className="flex h-20 w-20 items-center justify-center rounded bg-zinc-800 text-xs text-zinc-500">
       {label}
@@ -88,12 +88,13 @@ function ToolPreview({
     return (
       <div className="rounded-md border border-red-900 bg-red-950/40 p-3">
         <div className="text-xs uppercase tracking-wide text-red-400">
-          Error
+
+          错误
         </div>
         <div className="mt-1 text-sm text-red-200">{error}</div>
         {args !== undefined && args !== null && (
           <div className="mt-2">
-            <FieldLabel>Input</FieldLabel>
+            <FieldLabel>输入</FieldLabel>
             <CompactJson data={args} />
           </div>
         )}
@@ -143,17 +144,18 @@ function ToolPreview({
                 className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3"
               >
                 <div className="text-xs uppercase tracking-wide text-zinc-500">
-                  Edit {index + 1}
+
+                  编辑 {index + 1}
                 </div>
                 <div className="mt-2 grid gap-2">
                   <div>
-                    <FieldLabel>Old</FieldLabel>
+                    <FieldLabel>原内容</FieldLabel>
                     <div className="break-all rounded bg-red-950/40 p-2 font-mono text-xs text-red-200">
                       {oldText}
                     </div>
                   </div>
                   <div>
-                    <FieldLabel>New</FieldLabel>
+                    <FieldLabel>新内容</FieldLabel>
                     <div className="break-all rounded bg-emerald-950/40 p-2 font-mono text-xs text-emerald-200">
                       {newText}
                     </div>
@@ -161,8 +163,8 @@ function ToolPreview({
                 </div>
                 {replaced !== undefined && (
                   <div className="mt-2 text-xs text-zinc-500">
-                    Replaced {String(replaced)} time
-                    {replaced === 1 ? "" : "s"}
+
+                    已替换 {String(replaced)}  次
                   </div>
                 )}
               </div>
@@ -185,9 +187,9 @@ function ToolPreview({
               <div key={`${prompt}-${index}`} className="flex items-center gap-3 py-1.5">
                 <div className="shrink-0">
                   {url ? (
-                    <Img src={url} alt={prompt || `Generated image ${index + 1}`} />
+                    <Img src={url} alt={prompt || `生成的图片${index + 1}`} />
                   ) : (
-                    <MissingBox label="Failed" />
+                    <MissingBox label="失败" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1 text-xs text-zinc-400">
@@ -212,19 +214,19 @@ function ToolPreview({
             return (
               <div key={`${before}-${index}`} className="flex gap-4 py-1.5">
                 <div>
-                  <FieldLabel>Before</FieldLabel>
+                  <FieldLabel>修改前</FieldLabel>
                   {before ? (
-                    <Img src={before} alt={`Original image ${index + 1}`} />
+                    <Img src={before} alt={`原始图片${index + 1}`} />
                   ) : (
                     <MissingBox />
                   )}
                 </div>
                 <div>
-                  <FieldLabel>After</FieldLabel>
+                  <FieldLabel>修改后</FieldLabel>
                   {after ? (
-                    <Img src={after} alt="Background removed" />
+                    <Img src={after} alt="已移除背景" />
                   ) : (
-                    <MissingBox label="Failed" />
+                    <MissingBox label="失败" />
                   )}
                 </div>
               </div>
@@ -264,7 +266,8 @@ function ToolPreview({
             <div key={`${prompt}-${index}`} className="space-y-3 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs font-semibold text-zinc-300">
-                  Edit {index + 1}
+
+                  编辑 {index + 1}
                 </div>
                 <div className="rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
                   {aspectRatio}
@@ -272,7 +275,7 @@ function ToolPreview({
               </div>
               {prompt && (
                 <div>
-                  <FieldLabel>Prompt</FieldLabel>
+                  <FieldLabel>提示词</FieldLabel>
                   <p className="whitespace-pre-wrap break-words text-xs text-zinc-300">
                     {prompt}
                   </p>
@@ -280,30 +283,30 @@ function ToolPreview({
               )}
               <div className="flex flex-wrap gap-4">
                 <div>
-                  <FieldLabel>Main image</FieldLabel>
+                  <FieldLabel>主图</FieldLabel>
                   {mainUrl ? (
-                    <Img src={mainUrl} alt={`Main image ${index + 1}`} />
+                    <Img src={mainUrl} alt={`主图${index + 1}`} />
                   ) : (
                     <MissingBox />
                   )}
                 </div>
                 <div>
-                  <FieldLabel>Edited image</FieldLabel>
+                  <FieldLabel>编辑后的图片</FieldLabel>
                   {resultUrl ? (
-                    <Img src={resultUrl} alt={`Edited image ${index + 1}`} />
+                    <Img src={resultUrl} alt={`编辑后的图片${index + 1}`} />
                   ) : (
-                    <MissingBox label="Failed" />
+                    <MissingBox label="失败" />
                   )}
                 </div>
                 {referenceUrls.length > 0 && (
                   <div>
-                    <FieldLabel>Reference images</FieldLabel>
+                    <FieldLabel>参考图片</FieldLabel>
                     <div className="flex flex-wrap gap-2">
                       {referenceUrls.map((url, referenceIndex) => (
                         <Img
                           key={`${url}-${referenceIndex}`}
                           src={url}
-                          alt={`Reference ${referenceIndex + 1}`}
+                          alt={`参考图${referenceIndex + 1}`}
                         />
                       ))}
                     </div>
@@ -317,7 +320,7 @@ function ToolPreview({
               )}
               {resultUrl && (
                 <div>
-                  <FieldLabel>Result URL</FieldLabel>
+                  <FieldLabel>结果地址</FieldLabel>
                   <UrlChip url={resultUrl} />
                 </div>
               )}
@@ -342,13 +345,13 @@ function ToolPreview({
               >
                 <div className="shrink-0">
                   {publicUrl ? (
-                    <Img src={publicUrl} alt={`Saved asset ${index + 1}`} />
+                    <Img src={publicUrl} alt={`已保存素材${index + 1}`} />
                   ) : (
-                    <MissingBox label="Failed" />
+                    <MissingBox label="失败" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <FieldLabel>Permanent URL</FieldLabel>
+                  <FieldLabel>永久地址</FieldLabel>
                   {publicUrl && <UrlChip url={publicUrl} />}
                 </div>
               </div>
@@ -366,7 +369,7 @@ function ToolPreview({
         <div className="divide-y divide-zinc-800">
           {assets.map((asset, index) => {
             const description =
-              getString(asset, "description") ?? `Asset ${index + 1}`;
+              getString(asset, "description") ?? `素材${index + 1}`;
             const previewUrl =
               getString(asset, "public_url") ?? getString(asset, "data_url");
             const box = getArray(asset, "box_2d");
@@ -410,13 +413,13 @@ function ToolPreview({
           return (
             <div key={viewport}>
               <FieldLabel>
-                <span className="capitalize">{viewport}</span>
+                <span>{viewport === "desktop" ? "桌面端" : "移动端"}</span>
               </FieldLabel>
               {imageUrl ? (
                 <div className="max-h-48 overflow-y-auto rounded border border-zinc-800">
                   <LightboxImage
                     src={imageUrl}
-                    alt={`${viewport} preview screenshot`}
+                    alt={`${viewport === "desktop" ? "桌面端" : "移动端"}预览截图`}
                     className="w-full"
                   />
                 </div>
@@ -435,13 +438,13 @@ function ToolPreview({
     <div className="space-y-3">
       {args !== undefined && args !== null && (
         <div>
-          <FieldLabel>Input</FieldLabel>
+          <FieldLabel>输入</FieldLabel>
           <CompactJson data={args} />
         </div>
       )}
       {summary !== undefined && summary !== null && (
         <div>
-          <FieldLabel>Output</FieldLabel>
+          <FieldLabel>输出</FieldLabel>
           <CompactJson data={summary} />
         </div>
       )}

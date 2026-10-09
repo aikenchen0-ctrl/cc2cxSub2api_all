@@ -6,6 +6,7 @@ import com.artisanlab.userconfig.UserApiConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -27,8 +28,6 @@ import java.util.function.Predicate;
 @Service
 public class AgentPlannerService {
     private static final Logger log = LoggerFactory.getLogger(AgentPlannerService.class);
-    private static final Duration AGENT_PLANNER_TIMEOUT = Duration.ofSeconds(45);
-    private static final Duration AGENT_INTENT_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration PRODUCT_POSTER_ANALYSIS_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration PRODUCT_POSTER_FOLLOW_UP_TIMEOUT = Duration.ofSeconds(20);
     private static final String DEFAULT_SCOPE_REJECTION_MESSAGE = "我目前只支持 livart 里的图片生成、图片编辑、局部重绘、去背景、删除物体、画布操作和作品导出相关问题。你可以直接描述想生成的画面，或告诉我想怎么修改图片。";
@@ -181,6 +180,15 @@ public class AgentPlannerService {
     private final UserMemoryService userMemoryService;
     private final ObjectMapper objectMapper;
 
+    // GPT-5.5 can spend longer on intent/planning than the old 20/45 second
+    // budgets, especially while the relay fails over between upstreams. Keep
+    // these server-side budgets configurable without changing test constructors.
+    @Value("${artisan.ai.agent-planner-timeout-seconds:150}")
+    private long agentPlannerTimeoutSeconds = 150;
+
+    @Value("${artisan.ai.agent-intent-timeout-seconds:150}")
+    private long agentIntentTimeoutSeconds = 150;
+
     @Autowired
     public AgentPlannerService(
             UserApiConfigService userApiConfigService,
@@ -316,7 +324,7 @@ public class AgentPlannerService {
                     config,
                     getPlannerSystemPrompt(),
                     buildPlannerInput(request, userMemoryContext),
-                    AGENT_PLANNER_TIMEOUT,
+                    agentPlannerTimeout(),
                     "agent-planner"
             );
             AiProxyDtos.AgentPlanResponse plan = normalizePlan(parseRawPlan(responseText), request, "ai");
@@ -439,7 +447,7 @@ public class AgentPlannerService {
                     config,
                     getProductPosterPlannerSystemPrompt(),
                     buildProductPosterPlannerInput(productPoster, productImages, aspectRatio, count, industryResearchContext, userMemoryContext),
-                    AGENT_PLANNER_TIMEOUT,
+                    agentPlannerTimeout(),
                     "product-poster-planner"
             );
             List<ProductPosterPlanItem> items = parseProductPosterPlan(responseText, count, aspectRatio);
@@ -1639,10 +1647,18 @@ public class AgentPlannerService {
                 config,
                 getIntentClassifierSystemPrompt(),
                 buildIntentClassifierInput(request),
-                AGENT_INTENT_TIMEOUT,
+                agentIntentTimeout(),
                 "agent-intent-classifier"
         );
         return parseIntentDecision(responseText);
+    }
+
+    private Duration agentPlannerTimeout() {
+        return Duration.ofSeconds(Math.max(1, agentPlannerTimeoutSeconds));
+    }
+
+    private Duration agentIntentTimeout() {
+        return Duration.ofSeconds(Math.max(1, agentIntentTimeoutSeconds));
     }
 
     private String getProductPosterPlannerSystemPrompt() {

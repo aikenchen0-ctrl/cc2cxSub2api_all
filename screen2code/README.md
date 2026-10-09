@@ -18,7 +18,7 @@ Supported stacks:
 Default AI models:
 
 - Gemini 3 Flash Preview and Gemini 3.1 Pro Preview - the best models
-- GPT-5.5 and GPT-5.4 Mini
+- GPT-6 Astra (default for Sub2API deployments), GPT-5.5 and GPT-5.4 Mini
 - Claude Opus 4.6, Claude Opus 4.8
 - z-image-turbo (using Replicate) for image generation
 
@@ -48,7 +48,7 @@ the best results and lets you compare multiple models per generation.
 
 | Key | Required? | What it unlocks |
 |-----|-----------|-----------------|
-| `OPENAI_API_KEY` | One of these three | GPT code-gen variants (GPT-5.5, GPT-5.4 Mini) |
+| `OPENAI_API_KEY` | One of these three | GPT code-gen variants (GPT-6 Astra by default, GPT-5.5, GPT-5.4 Mini) |
 | `ANTHROPIC_API_KEY` | One of these three | Claude code-gen variants (Opus 5, Opus 4.8, Fable 5, Sonnet 4.6) |
 | `GEMINI_API_KEY` | One of these three — **strongly recommended** | Gemini code-gen variants (3 Flash, 3.1 Pro); extracts real assets from the screenshot; required for video mode |
 | `REPLICATE_API_KEY` | **Strongly recommended** | Image editing, background removal, and Replicate-backed image generation — without it, `edit_images` and `remove_backgrounds` are unavailable |
@@ -91,6 +91,11 @@ pnpm dev
 Open http://localhost:5173 to use the app.
 
 ### Sub2API single sign-on
+
+Sub2API deployments use the public model `gpt-6-astra` for screenshot and text
+code generation, including subsequent edits. Variants retain high and low
+reasoning effort; the API model name is always `gpt-6-astra`. Raw video input is
+not supported by this model and requires frame extraction before generation.
 
 The hosted deployment can use Sub2API as its identity provider. Configure the
 same random `SUB2API_SSO_SECRET` (at least 32 characters) in both services,

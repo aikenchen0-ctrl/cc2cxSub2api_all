@@ -1,4 +1,5 @@
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 
 export interface SiteStatsOverview {
   userCount: number;
@@ -42,7 +43,7 @@ export const loadSiteStatsOverview = async (signal?: AbortSignal) => {
   });
   const payload = await response.json().catch(() => null) as ApiResponse<SiteStatsOverview> | null;
   if (!response.ok || !payload?.success || !payload.data) {
-    throw new Error(payload?.error?.message || `统计数据加载失败：${response.status}`);
+    throw createApiError(payload, response.status, '使用统计暂时无法加载');
   }
   return payload.data;
 };

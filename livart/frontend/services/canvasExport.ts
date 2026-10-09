@@ -1,5 +1,6 @@
 import type { CanvasItem } from '../types';
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 import { ensureCanvasImageAsset, getCanvasItemAssetId } from './canvasPersistence';
 import { getOriginalImageSrc } from './imageSources';
 
@@ -29,7 +30,7 @@ export type CanvasExportScope = 'selected' | 'final' | 'derived' | 'delivery' | 
 const unwrapApiResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `导出请求失败：${response.status}`);
+    throw createApiError(payload, response.status, '导出请求没有完成');
   }
   if (payload.data === undefined) {
     throw new Error('导出响应为空');
@@ -143,7 +144,7 @@ const downloadExportZip = async (downloadUrl: string, filename: string) => {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as ApiResponse<unknown> | null;
-    throw new Error(payload?.error?.message || `压缩包下载失败：${response.status}`);
+    throw createApiError(payload, response.status, '压缩包下载没有完成');
   }
 
   downloadBlob(await response.blob(), filename);

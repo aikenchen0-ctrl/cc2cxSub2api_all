@@ -905,11 +905,11 @@ func TestAgentAPIKeyIsOneTimeVisibleAndRevocable(t *testing.T) {
 	if _, err := store.ResolveAPIKey("agent-other", raw); !errors.Is(err, errNotFound) {
 		t.Fatalf("AgentAPI key escaped its issuing agent: %v", err)
 	}
-	if err := store.RevokeAPIKey("agent-test", "42", view.ID); err != nil {
+	if err := store.DeleteAPIKey("agent-test", "42", view.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.ResolveAPIKey("agent-test", raw); !errors.Is(err, errNotFound) {
-		t.Fatalf("revoked key resolved: %v", err)
+		t.Fatalf("deleted key resolved: %v", err)
 	}
 }
 

@@ -292,7 +292,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           [hash]: {
             ...commit,
             variants: commit.variants.map((variant, index) =>
-              index === numVariant 
+              index === numVariant
                 ? {
                     ...variant,
                     status,
@@ -317,7 +317,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const currentVariants = commit.variants;
       const requestStartedAt = new Date(commit.dateCreated).getTime();
       const seedHistory = currentVariants[0]?.history || [];
-      const newVariants = Array(count).fill(null).map((_, index) => 
+      const newVariants = Array(count).fill(null).map((_, index) =>
         currentVariants[index] || {
           code: "",
           history: seedHistory.map((message) => ({

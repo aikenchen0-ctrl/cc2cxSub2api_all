@@ -106,7 +106,7 @@ describe('AgentAPI route guards', () => {
     expect(router.currentRoute.value.path).toBe('/admin/dashboard')
   })
 
-  it.each(['users', 'usage', 'announcements', 'settings'])('rejects ordinary users at retained admin route %s', async (section) => {
+  it.each(['users', 'member-facts', 'payments', 'usage', 'announcements', 'settings'])('rejects ordinary users at retained admin route %s', async (section) => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'user-1', agent_admin: false })
     await router.push('/home')
     await router.push(`/admin/${section}`)
@@ -115,7 +115,7 @@ describe('AgentAPI route guards', () => {
 
   it('does not register main-site-only administrator modules', () => {
     const paths = router.getRoutes().map(route => route.path)
-    for (const path of ['/model-plaza', '/models', '/console', '/batch-image', '/admin/groups', '/admin/accounts', '/admin/orders', '/admin/orders/dashboard', '/admin/affiliates/invites', '/admin/agent-provisioning', '/admin/ops', '/admin/proxies', '/admin/promo-codes', '/admin/plugins', '/admin/audit', '/admin/audit-logs', '/admin/redeem', '/admin/risk-control', '/admin/prompt-audit', '/admin/upstream-audit', '/admin/subscriptions', '/admin/orders/plans', '/admin/channels', '/admin/channels/pricing', '/admin/satellite-billing', '/admin/content', '/admin/backup', '/affiliate', '/profile']) {
+    for (const path of ['/model-plaza', '/models', '/console', '/batch-image', '/admin/groups', '/admin/accounts', '/admin/orders/dashboard', '/admin/affiliates/invites', '/admin/agent-provisioning', '/admin/ops', '/admin/proxies', '/admin/promo-codes', '/admin/plugins', '/admin/audit', '/admin/audit-logs', '/admin/redeem', '/admin/risk-control', '/admin/prompt-audit', '/admin/upstream-audit', '/admin/subscriptions', '/admin/orders/plans', '/admin/channels', '/admin/channels/pricing', '/admin/satellite-billing', '/admin/content', '/admin/backup']) {
       expect(paths).not.toContain(path)
     }
   })
@@ -136,6 +136,23 @@ describe('AgentAPI route guards', () => {
     vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'owner-1', agent_admin: true })
     await router.push('/admin')
     expect(router.currentRoute.value.path).toBe('/admin/dashboard')
+  })
+
+  it.each(['/admin/payment', '/admin/billing', '/admin/settings/payment'])('redirects legacy payment path %s into the system-settings tab', async (path) => {
+    vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'owner-1', agent_admin: true })
+    await router.push(path)
+    expect(router.currentRoute.value.path).toBe('/admin/settings')
+    expect(router.currentRoute.value.query.tab).toBe('payment')
+  })
+
+  it('protects local order administration with the tenant owner guard', async () => {
+    vi.spyOn(agentAPI.auth, 'me').mockResolvedValue({ id: 'member-1', agent_admin: false })
+    await router.push('/admin/orders')
+    expect(router.currentRoute.value.path).not.toBe('/admin/orders')
+    const route = router.getRoutes().find(item => item.path === '/admin/orders')!
+    expect(route.meta.requiresAuth).toBe(true)
+    expect(route.meta.requiresAgentAdmin).toBe(true)
+    expect(route.props.default).toEqual({ admin: true })
   })
 
   it('leaves the removed audit module at the not-found page', async () => {

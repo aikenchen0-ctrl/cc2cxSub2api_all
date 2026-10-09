@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Copy, Download, ExternalLink, Sparkles } from 'lucide-react';
 import { parseLivartImageSharePageParams } from '../services/shareLinks';
+import { getFailureDetails } from '../services/errorMessages';
 
 const copyTextToClipboard = async (text: string) => {
   if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -50,7 +51,7 @@ const ShareLandingPage: React.FC = () => {
       setCopyNotice('分享文案已复制');
       window.setTimeout(() => setCopyNotice(''), 1800);
     } catch (error) {
-      setCopyNotice(error instanceof Error ? error.message : '复制失败');
+      setCopyNotice(getFailureDetails(error instanceof Error ? error.message : '复制失败').message);
     }
   };
 

@@ -5108,6 +5108,25 @@ input:focus-visible + i {
   gap: 7px;
   overflow: auto;
   padding: 0 12px 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.selection-shelf .organelles-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-state.active svg {
+  animation: queue-spin 1.2s linear infinite;
+}
+
+@keyframes queue-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-state.active svg { animation: none; }
 }
 
 .left-queue-row {

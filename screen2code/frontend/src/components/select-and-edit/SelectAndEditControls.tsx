@@ -13,8 +13,8 @@ export function SelectAndEditToolbarButton() {
       data-testid="select-edit-toggle"
       title={
         inSelectAndEditMode
-          ? "Exit selection mode"
-          : "Select an element in the preview to target your edit"
+          ? "退出选择模式"
+          : "在预览中选择需要修改的元素"
       }
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors border ${
         inSelectAndEditMode
@@ -25,12 +25,14 @@ export function SelectAndEditToolbarButton() {
       {inSelectAndEditMode ? (
         <>
           <LuX className="w-3.5 h-3.5" />
-          Exit select mode
+
+          退出选择模式
         </>
       ) : (
         <>
           <LuMousePointerClick className="w-3.5 h-3.5" />
-          Select & edit
+
+          选择并编辑
         </>
       )}
     </button>

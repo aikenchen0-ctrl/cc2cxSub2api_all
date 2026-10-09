@@ -466,7 +466,7 @@ async def test_run_evals_threads_set_and_session(
             )
         )
     assert excinfo.value.status_code == 400
-    assert "Start a new session" in str(excinfo.value.detail)
+    assert "创建新会话" in str(excinfo.value.detail)
 
     # Unknown set -> 404.
     create_session("set-a")  # keep active pinned to an existing set

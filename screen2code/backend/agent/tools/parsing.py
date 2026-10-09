@@ -16,7 +16,7 @@ def parse_json_arguments(raw_args: Any) -> Tuple[Dict[str, Any], Optional[str]]:
     try:
         return json.loads(raw_text), None
     except json.JSONDecodeError as exc:
-        return {}, f"Invalid JSON arguments: {exc}"
+        return {}, f"JSON 参数无效： {exc}"
 
 
 def _strip_incomplete_escape(value: str) -> str:

@@ -315,6 +315,17 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		cmd.SubscriptionCost = p.Cost.ActualCost
 	} else if p.Cost.ActualCost > 0 {
 		cmd.BalanceCost = p.Cost.ActualCost
+		if p.APIKey != nil && p.APIKey.BillingPayerID > 0 && p.APIKey.BillingPayerID != p.User.ID {
+			cmd.PayerUserID = p.APIKey.BillingPayerID
+			rate := p.APIKey.BillingCommissionRate
+			if rate < 0 {
+				rate = 0
+			}
+			if rate > 0.95 {
+				rate = 0.95
+			}
+			cmd.PayerCost = p.Cost.ActualCost * (1 - rate)
+		}
 	}
 
 	if p.shouldDeductAPIKeyQuota() {

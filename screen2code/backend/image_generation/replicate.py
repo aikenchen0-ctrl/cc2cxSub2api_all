@@ -43,7 +43,7 @@ def _build_headers(api_token: str) -> dict[str, str]:
 def _extract_prediction_id(response_json: Mapping[str, Any]) -> str:
     prediction_id = response_json.get("id")
     if not isinstance(prediction_id, str) or not prediction_id:
-        raise ValueError("Prediction ID not found in initial response.")
+        raise ValueError("初始响应中没有预测任务 ID。")
     return prediction_id
 
 
@@ -58,19 +58,19 @@ async def _poll_prediction(
         status_response.raise_for_status()
         status_response_raw: Any = status_response.json()
         if not isinstance(status_response_raw, dict):
-            raise ValueError("Invalid prediction status response.")
+            raise ValueError("预测任务状态响应无效。")
         status_response_json = cast(dict[str, Any], status_response_raw)
 
         status = status_response_json.get("status")
         if status == "succeeded":
             return cast(dict[str, Any], status_response_json)
         if status == "error":
-            error_message = str(status_response_json.get("error", "Unknown error"))
-            raise ValueError(f"Inference errored out: {error_message}")
+            error_message = str(status_response_json.get("error", "未知错误"))
+            raise ValueError(f"推理出错： {error_message}")
         if status == "failed":
-            raise ValueError("Inference failed")
+            raise ValueError("推理失败")
 
-    raise TimeoutError("Inference timed out")
+    raise TimeoutError("推理超时")
 
 
 async def _run_prediction(
@@ -84,21 +84,21 @@ async def _run_prediction(
             response.raise_for_status()
             response_json = response.json()
             if not isinstance(response_json, dict):
-                raise ValueError("Invalid prediction creation response.")
+                raise ValueError("预测任务创建响应无效。")
 
             prediction_id = _extract_prediction_id(response_json)
             final_response = await _poll_prediction(client, prediction_id, headers)
             return final_response.get("output")
         except httpx.HTTPStatusError as exc:
-            raise ValueError(f"HTTP error occurred: {exc}") from exc
+            raise ValueError(f"HTTP 请求出错： {exc}") from exc
         except httpx.RequestError as exc:
-            raise ValueError(f"An error occurred while requesting: {exc}") from exc
+            raise ValueError(f"请求时发生错误： {exc}") from exc
         except asyncio.TimeoutError as exc:
-            raise TimeoutError("Request timed out") from exc
+            raise TimeoutError("请求超时") from exc
         except (TimeoutError, ValueError):
             raise
         except Exception as exc:
-            raise ValueError(f"An unexpected error occurred: {exc}") from exc
+            raise ValueError(f"发生意外错误： {exc}") from exc
 
 
 def _extract_output_url(result: Any, context: str) -> str:
@@ -119,7 +119,7 @@ def _extract_output_url(result: Any, context: str) -> str:
             if isinstance(url, str) and url:
                 return url
 
-    raise ValueError(f"Unexpected response from {context}: {result}")
+    raise ValueError(f"{context} 返回意外响应： {result}")
 
 
 async def call_replicate_model(

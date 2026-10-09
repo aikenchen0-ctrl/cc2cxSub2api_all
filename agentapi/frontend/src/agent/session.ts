@@ -1,8 +1,9 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { agentAPI, type AgentUser, type LoginResponse } from './api'
 import { agentPasskeyAPI } from './passkeys'
 import { errorMessage } from './client'
+import { AGENT_PAYMENT_RECOVERY_KEY } from './paymentFlow'
 
 function validUser(value: unknown): value is AgentUser {
   if (!value || typeof value !== 'object') return false
@@ -17,6 +18,17 @@ export const useAgentSession = defineStore('agent-session', () => {
   let identityVersion = 0
   const isAuthenticated = computed(() => validUser(user.value))
   const isAgentAdmin = computed(() => user.value?.agent_admin === true)
+
+  // A shared browser origin can host multiple stations. Persist the verified
+  // identity alongside recovery state so login/SSO switches discard old orders.
+  watch(() => user.value ? JSON.stringify([user.value.agent_id || '', String(user.value.id)]) : '', identity => {
+    try {
+      const key = 'agentapi.payment.identity.v1'
+      if (window.localStorage.getItem(key) !== identity) window.localStorage.removeItem(AGENT_PAYMENT_RECOVERY_KEY)
+      if (identity) window.localStorage.setItem(key, identity)
+      else window.localStorage.removeItem(key)
+    } catch { /* Storage may be unavailable in private browsing. */ }
+  }, { flush: 'sync' })
 
   async function checkAuth(): Promise<void> {
     const version = identityVersion

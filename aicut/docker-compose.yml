@@ -12,6 +12,8 @@ services:
     ports:
       - "${AICUT_HOST_PORT:-5199}:5199"
     environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_OPENAI_MODEL: ${LLM_OPENAI_MODEL:-gpt-6-astra}
       SUB2API_BASE: ${SUB2API_BASE:-${LINK:-http://sub2api:8080}}
       LINK: ${LINK:-}
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}

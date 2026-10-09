@@ -169,7 +169,7 @@ function LightboxViewer({
       >
         <button
           className={toolbarButton}
-          title="Zoom out (-)"
+          title="缩小（-）"
           onClick={() => {
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect)
@@ -183,7 +183,7 @@ function LightboxViewer({
         </span>
         <button
           className={toolbarButton}
-          title="Zoom in (+)"
+          title="放大（+）"
           onClick={() => {
             const rect = containerRef.current?.getBoundingClientRect();
             if (rect)
@@ -194,14 +194,14 @@ function LightboxViewer({
         </button>
         <button
           className={`${toolbarButton} w-auto px-2 text-xs`}
-          title="Fit to screen (0 / f)"
+          title="适应屏幕（0 / f）"
           onClick={resetToFit}
         >
-          <BsArrowsFullscreen className="mr-1" /> Fit
+          <BsArrowsFullscreen className="mr-1" />  适应
         </button>
         <button
           className={`${toolbarButton} w-auto px-2 font-mono text-xs`}
-          title="Actual size (1)"
+          title="原始大小（1）"
           onClick={() => setScale(1)}
         >
           1:1
@@ -212,11 +212,11 @@ function LightboxViewer({
           target="_blank"
           rel="noreferrer"
           className={toolbarButton}
-          title="Open in new tab"
+          title="在新标签页打开"
         >
           <BsBoxArrowUpRight />
         </a>
-        <button className={toolbarButton} title="Close (Esc)" onClick={onClose}>
+        <button className={toolbarButton} title="关闭（Esc）" onClick={onClose}>
           <BsX className="text-lg" />
         </button>
       </div>
@@ -280,7 +280,7 @@ function LightboxViewer({
           <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/90 px-2 py-1">
             <button
               className={toolbarButton}
-              title="Previous image (←)"
+              title="上一张图片（←）"
               onClick={() =>
                 onNavigate((index - 1 + entries.length) % entries.length)
               }
@@ -292,7 +292,7 @@ function LightboxViewer({
             </span>
             <button
               className={toolbarButton}
-              title="Next image (→)"
+              title="下一张图片（→）"
               onClick={() => onNavigate((index + 1) % entries.length)}
             >
               <BsChevronRight />
@@ -401,7 +401,7 @@ export function LightboxImage({
         context.open(id);
       }}
       className="inline-block cursor-zoom-in"
-      title={`${alt} — click to zoom`}
+      title={`${alt}— 点击缩放`}
     >
       {image}
     </button>

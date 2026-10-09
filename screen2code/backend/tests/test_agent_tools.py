@@ -43,8 +43,8 @@ def test_edit_file_tool_description_matches_runtime_output_shape() -> None:
         tool for tool in canonical_tool_definitions(True) if tool.name == "edit_file"
     )
 
-    assert "success message" in edit_tool.description
-    assert "unified diff" in edit_tool.description
+    assert "成功消息" in edit_tool.description
+    assert "统一 diff" in edit_tool.description
 
 
 def test_canonical_tool_definitions_include_save_assets() -> None:
@@ -87,21 +87,21 @@ def test_canonical_tool_definitions_include_extract_assets() -> None:
     # mapping assets across multiple screenshots instead of making Gemini guess.
     item_description = asset_descriptions["items"]["description"].lower()
     for required_detail in (
-        "distinctive appearance",
-        "precise location",
-        "nearby ui/context",
-        "1-based screenshot number",
-        "repeated lookalikes",
-        "leftmost vs. rightmost",
+        "独特外观",
+        "精确位置",
+        "附近界面/上下文",
+        "从 1 开始的截图编号",
+        "重复的相似素材",
+        "最左与最右",
     ):
         assert required_detail in item_description
 
     tool_description = extract_assets_tool.description.lower()
-    assert "request order" in tool_description
-    assert "permanent, embeddable public_url" in tool_description
-    assert "attached crop preview" in tool_description
-    assert "absent or unisolatable" in tool_description
-    assert "do not call save_assets" in tool_description
+    assert "请求顺序" in tool_description
+    assert "永久可嵌入 public_url" in tool_description
+    assert "裁剪预览" in tool_description
+    assert "不存在或无法单独提取" in tool_description
+    assert "不要再次调用 save_assets" in tool_description
 
 
 def test_canonical_tool_definitions_exclude_extract_assets_when_disabled() -> None:
@@ -247,7 +247,7 @@ def test_canonical_tool_definitions_include_batched_edit_images() -> None:
     tool_names = [tool.name for tool in tools]
     assert "edit_images" in tool_names
     edit_images_tool = next(tool for tool in tools if tool.name == "edit_images")
-    assert "upscale" in edit_images_tool.description.lower()
+    assert "放大" in edit_images_tool.description.lower()
     assert edit_images_tool.parameters["required"] == ["edits"]
     edits_schema = edit_images_tool.parameters["properties"]["edits"]
     assert edits_schema["type"] == "array"

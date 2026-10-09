@@ -1,9 +1,11 @@
 package com.artisanlab.ai;
 
+import com.artisanlab.common.ApiException;
 import com.artisanlab.knowledge.KnowledgeChunkMapper;
 import com.artisanlab.knowledge.KnowledgeSearchResult;
 import com.artisanlab.userconfig.UserApiConfigDtos;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 
@@ -115,6 +117,66 @@ class KnowledgeAnswerServiceTest {
         assertThatThrownBy(() -> service.answerSystemQuestion(CONFIG, "怎么去背景？", "默认回答"))
                 .hasMessageContaining("embedding failed");
 
+        verify(mapper, never()).searchByText(anyString(), anyInt());
+        verify(textService, never()).completeText(any(), anyString(), anyString(), any(), anyString());
+    }
+
+    @Test
+    void answersFromKeywordSnippetsWhenEmbeddingConfigIsMissing() {
+        KnowledgeChunkMapper mapper = mock(KnowledgeChunkMapper.class);
+        KnowledgeEmbeddingService embeddingService = mock(KnowledgeEmbeddingService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        KnowledgeAnswerService service = new KnowledgeAnswerService(mapper, embeddingService, textService, 4);
+
+        when(embeddingService.createEmbedding(CONFIG, "怎么导出图片？"))
+                .thenThrow(new ApiException(HttpStatus.BAD_GATEWAY, "KNOWLEDGE_EMBEDDING_CONFIG_MISSING", "知识库向量生成配置缺失"));
+        when(mapper.searchByText("导出", 4)).thenReturn(List.of(
+                new KnowledgeSearchResult("chunk-keyword", "livart-system", "下载与导出", "点击顶部下载按钮导出成品图片。", 1.0d)
+        ));
+        when(textService.completeText(eq(CONFIG), anyString(), anyString(), any(), eq("knowledge-answer")))
+                .thenReturn("点击顶部下载按钮即可导出成品图片。");
+
+        String answer = service.answerSystemQuestion(CONFIG, "怎么导出图片？", "默认功能说明");
+
+        assertThat(answer).isEqualTo("点击顶部下载按钮即可导出成品图片。");
+        verify(mapper).searchByText("导出", 4);
+        verify(mapper, never()).searchByVector(anyString(), anyInt());
+        verify(mapper, never()).upsertCachedQueryEmbedding(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void returnsFallbackWhenEmbeddingConfigIsMissingAndKeywordsMiss() {
+        KnowledgeChunkMapper mapper = mock(KnowledgeChunkMapper.class);
+        KnowledgeEmbeddingService embeddingService = mock(KnowledgeEmbeddingService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        KnowledgeAnswerService service = new KnowledgeAnswerService(mapper, embeddingService, textService, 4);
+
+        when(embeddingService.createEmbedding(CONFIG, "怎么导出图片？"))
+                .thenThrow(new ApiException(HttpStatus.BAD_GATEWAY, "KNOWLEDGE_EMBEDDING_CONFIG_MISSING", "知识库向量生成配置缺失"));
+        when(mapper.searchByText("导出", 4)).thenReturn(List.of());
+        when(mapper.searchByText("怎么导出图片？", 4)).thenReturn(List.of());
+
+        String answer = service.answerSystemQuestion(CONFIG, "怎么导出图片？", "我是 livart 助手，可以帮你生成和编辑图片。");
+
+        assertThat(answer).isEqualTo("我是 livart 助手，可以帮你生成和编辑图片。");
+        verify(mapper).searchByText("导出", 4);
+        verify(mapper).searchByText("怎么导出图片？", 4);
+        verify(mapper, never()).searchByVector(anyString(), anyInt());
+        verify(textService, never()).completeText(any(), anyString(), anyString(), any(), anyString());
+    }
+
+    @Test
+    void throwsWhenConfiguredEmbeddingUpstreamFails() {
+        KnowledgeChunkMapper mapper = mock(KnowledgeChunkMapper.class);
+        KnowledgeEmbeddingService embeddingService = mock(KnowledgeEmbeddingService.class);
+        SpringAiTextService textService = mock(SpringAiTextService.class);
+        KnowledgeAnswerService service = new KnowledgeAnswerService(mapper, embeddingService, textService, 4);
+        ApiException upstreamError = new ApiException(HttpStatus.BAD_GATEWAY, "KNOWLEDGE_EMBEDDING_UPSTREAM_ERROR", "上游返回状态 404");
+
+        when(embeddingService.createEmbedding(CONFIG, "怎么去背景？")).thenThrow(upstreamError);
+
+        assertThatThrownBy(() -> service.answerSystemQuestion(CONFIG, "怎么去背景？", "默认回答"))
+                .isSameAs(upstreamError);
         verify(mapper, never()).searchByText(anyString(), anyInt());
         verify(textService, never()).completeText(any(), anyString(), anyString(), any(), anyString());
     }

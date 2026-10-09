@@ -279,6 +279,18 @@ func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(account *Acc
 		isOpenAICompatibleModelNotFound400(upstreamBody) {
 		return true
 	}
+	// A missing continuation anchor is request context, not account availability.
+	if statusCode == http.StatusNotFound && isOpenAICompatPreviousResponseNotFound(statusCode, upstreamMsg, upstreamBody) {
+		return false
+	}
+	// A managed OpenAI-compatible account can return a bare HTTP 404 when its
+	// configured upstream endpoint (or the requested model route) is missing.
+	// Treat it as account-scoped availability so the gateway can select another
+	// eligible account. Keep the repository guard: direct/single-account callers
+	// have no scheduler to consume a failover sentinel and must preserve 404.
+	if s != nil && s.accountRepo != nil && account != nil && account.IsOpenAICompatible() && statusCode == http.StatusNotFound {
+		return true
+	}
 	if s.shouldFailoverUpstreamError(statusCode) {
 		return true
 	}

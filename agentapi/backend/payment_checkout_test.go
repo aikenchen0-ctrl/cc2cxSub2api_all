@@ -161,19 +161,15 @@ func TestPaymentCheckoutUsesSessionIdentityAndMainSiteLedger(t *testing.T) {
 	}
 
 	checkout := request(http.MethodGet, "/api/v1/agent/payment/checkout-info", "")
-	if checkout.Code != http.StatusOK || !strings.Contains(checkout.Body.String(), "支付宝") || strings.Contains(checkout.Body.String(), "must-not-leak") || strings.Contains(checkout.Body.String(), "admin_key") {
+	if checkout.Code != http.StatusOK || strings.Contains(checkout.Body.String(), "must-not-leak") || strings.Contains(checkout.Body.String(), "admin_key") || !strings.Contains(checkout.Body.String(), `"balance_disabled":true`) {
 		t.Fatalf("checkout status=%d body=%s", checkout.Code, checkout.Body.String())
 	}
 	created := request(http.MethodPost, "/api/v1/agent/payment/orders", `{"amount":50,"payment_type":"alipay","order_type":"balance","is_wechat_browser":true,"user_id":"999","return_url":"https://attacker.example"}`)
-	if created.Code != http.StatusCreated || !strings.Contains(created.Body.String(), "PAY-000077") || strings.Contains(created.Body.String(), "app-secret") {
+	if created.Code != http.StatusGone || !strings.Contains(created.Body.String(), "STATION_BILLING_DISABLED") || strings.Contains(created.Body.String(), "app-secret") {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body.String())
 	}
-	verified := request(http.MethodPost, "/api/v1/agent/payment/orders/verify", `{"out_trade_no":"PAY-000077"}`)
-	if verified.Code != http.StatusOK || !strings.Contains(verified.Body.String(), "COMPLETED") {
-		t.Fatalf("verify status=%d body=%s", verified.Code, verified.Body.String())
-	}
-	if requests != 3 {
-		t.Fatalf("upstream calls=%d", requests)
+	if requests != 0 {
+		t.Fatalf("station checkout must not call the main site, calls=%d", requests)
 	}
 	if checkout.Header().Get("Cache-Control") != "no-store" || created.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("payment responses must not be cached")

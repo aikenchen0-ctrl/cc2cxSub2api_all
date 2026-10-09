@@ -71,6 +71,7 @@ type Config struct {
 	CORS                    CORSConfig                    `mapstructure:"cors"`
 	Security                SecurityConfig                `mapstructure:"security"`
 	Billing                 BillingConfig                 `mapstructure:"billing"`
+	Payment                 PaymentConfig                 `mapstructure:"payment"`
 	Turnstile               TurnstileConfig               `mapstructure:"turnstile"`
 	Database                DatabaseConfig                `mapstructure:"database"`
 	Redis                   RedisConfig                   `mapstructure:"redis"`
@@ -104,6 +105,11 @@ type Config struct {
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
 	Plugins                 PluginConfig                  `mapstructure:"plugins"`
+}
+
+type PaymentConfig struct {
+	// Controls background payment reconciliation and expiry, including provider calls.
+	OrderExpiryEnabled bool `mapstructure:"order_expiry_enabled"`
 }
 
 // PluginConfig 控制管理员手动上传的本地进程插件。
@@ -2082,6 +2088,7 @@ func setDefaults() {
 	viper.SetDefault("billing.minimum_balance_reserve", 0.000001)
 	viper.SetDefault("billing.user_platform_quota_cache_ttl_seconds", 86400)
 	viper.SetDefault("billing.user_platform_quota_sentinel_ttl_seconds", 3600)
+	viper.SetDefault("payment.order_expiry_enabled", true)
 
 	// Turnstile
 	viper.SetDefault("turnstile.required", false)

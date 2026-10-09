@@ -15,7 +15,7 @@ function RatingPicker({
         <button
           key={rating}
           onClick={() => onSelect(rating)}
-          className={`w-8 h-8 rounded-full border border-gray-300 
+          className={`w-8 h-8 rounded-full border border-gray-300
             ${
               value === rating
                 ? "bg-blue-500 text-white"

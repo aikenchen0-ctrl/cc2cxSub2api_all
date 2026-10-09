@@ -1,4 +1,5 @@
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 
 export const joinUrl = (baseUrl: string, path: string) => {
   if (!baseUrl) return '';
@@ -83,7 +84,7 @@ export const normalizeApiConfig = (config: Partial<ApiConfig>): ApiConfig => {
 const unwrapApiResponse = async <T>(response: Response): Promise<T | null> => {
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `用户配置请求失败：${response.status}`);
+    throw createApiError(payload, response.status, '连接设置暂时无法读取或保存');
   }
   return payload.data ?? null;
 };

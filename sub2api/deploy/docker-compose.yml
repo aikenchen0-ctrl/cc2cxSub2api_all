@@ -137,6 +137,8 @@ services:
       # with 2FA).
       # Generate a secure key: openssl rand -hex 32
       - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
+      - TOKEN_REFRESH_ENABLED=${TOKEN_REFRESH_ENABLED:-true}
+      - PAYMENT_ORDER_EXPIRY_ENABLED=${PAYMENT_ORDER_EXPIRY_ENABLED:-true}
 
       # =======================================================================
       # Timezone Configuration

@@ -112,10 +112,10 @@ def test_append_uploaded_asset_ids_to_prompt_keeps_image_and_adds_id(
     )
 
     assert prompt["images"] == [image]
-    assert "Uploaded image asset IDs" in prompt["text"]
+    assert "已上传图片素材 ID" in prompt["text"]
     assert "asset_id `tmp_asset_" in prompt["text"]
     assert "tmp-assets" not in prompt["text"]
     assert "http://127.0.0.1:7001" not in prompt["text"]
     assert "save_assets" in prompt["text"]
-    assert "asset_ids list" in prompt["text"]
-    assert "Decide" in prompt["text"]
+    assert "asset_ids 列表" in prompt["text"]
+    assert "请判断" in prompt["text"]

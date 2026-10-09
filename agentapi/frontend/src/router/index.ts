@@ -11,6 +11,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAgentAdmin: true, title: '仪表盘' },
   },
   {
+    path: '/admin/member-facts', name: 'AgentAdmin-member-facts',
+    component: () => import('@/views/admin/users/AgentMemberFactsView.vue'),
+    meta: { requiresAuth: true, requiresAgentAdmin: true, title: '成员余额与用量' },
+  },
+  {
     path: '/admin/users', name: 'AgentAdmin-users',
     component: () => import('@/views/admin/users/AgentAdminUsersView.vue'),
     meta: { requiresAuth: true, requiresAgentAdmin: true, title: '用户管理' },
@@ -25,6 +30,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/settings/AgentAdminSettingsView.vue'),
     meta: { requiresAuth: true, requiresAgentAdmin: true, title: '系统设置' },
   },
+  { path: '/admin/payment', redirect: '/admin/settings?tab=payment' },
+  {
+    path: '/admin/payments', name: 'AgentAdmin-payments',
+    component: () => import('@/views/admin/payments/AgentAdminPaymentsView.vue'),
+    meta: { requiresAuth: true, requiresAgentAdmin: true, title: '支付统计' },
+  },
+  { path: '/admin/billing', redirect: '/admin/settings?tab=payment' },
+  { path: '/admin/orders', name: 'AgentAdmin-orders', component: () => import('@/views/AgentOrdersView.vue'), props: { admin: true }, meta: { requiresAuth: true, requiresAgentAdmin: true, title: '本站订单' } },
+  { path: '/admin/settings/payment', redirect: '/admin/settings?tab=payment' },
   {
     path: '/admin/announcements', name: 'AgentAdmin-announcements',
     component: () => import('@/views/admin/announcements/AgentAnnouncementsView.vue'),
@@ -66,6 +80,10 @@ const routes: RouteRecordRaw[] = [
   { path: '/auth/oauth/binding/callback', name: 'OAuthBindingCallback', component: () => import('@/views/auth/AgentOAuthBindingCallbackView.vue'), meta: { requiresAuth: true, title: '账号绑定' } },
   { path: '/recharge', redirect: '/purchase' },
   { path: '/orders', name: 'Orders', component: () => import('@/views/AgentOrdersView.vue'), meta: { requiresAuth: true, title: '订单记录' } },
+  { path: '/affiliate', name: 'Affiliate', component: () => import('@/views/user/AgentAffiliateView.vue'), meta: { requiresAuth: true, title: '推广返利' } },
+  { path: '/profile', name: 'Profile', component: () => import('@/views/user/AgentProfileView.vue'), meta: { requiresAuth: true, title: '个人资料' } },
+  { path: '/balance', name: 'Balance', component: () => import('@/views/user/AgentBalanceView.vue'), meta: { requiresAuth: true, title: '余额' } },
+  { path: '/redeem', name: 'Redeem', component: () => import('@/views/user/AgentRedeemView.vue'), meta: { requiresAuth: true, title: '兑换' } },
   { path: '/agent-admin', redirect: '/admin/dashboard' },
   { path: '/keys', name: 'Keys', component: () => import('@/views/user/AgentAPIKeysView.vue'), meta: { requiresAuth: true, title: 'API 密钥' } },
   { path: '/usage', name: 'Usage', component: () => import('@/views/AgentUsageView.vue'), meta: { requiresAuth: true, title: '用量记录' } },

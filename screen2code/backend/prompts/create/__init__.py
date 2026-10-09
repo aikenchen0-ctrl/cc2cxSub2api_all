@@ -31,18 +31,17 @@ def build_create_prompt_from_input(
             design_system=design_system,
         )
     if input_mode == "video":
-        video_urls = prompt.get("videos", [])
-        if not video_urls:
-            raise ValueError("Video mode requires a video to be provided")
-        video_url = video_urls[0]
+        frame_urls = prompt.get("images", [])
+        if not frame_urls:
+            raise ValueError("视频模式需要上传视频或录制屏幕。")
         return build_video_prompt_messages(
-            video_data_url=video_url,
+            frame_data_urls=frame_urls,
             stack=stack,
             text_prompt=prompt.get("text", ""),
             image_generation_enabled=image_generation_enabled,
             design_system=design_system,
         )
-    raise ValueError(f"Unsupported input mode: {input_mode}")
+    raise ValueError(f"不支持的输入模式： {input_mode}")
 
 
 __all__ = ["build_create_prompt_from_input"]

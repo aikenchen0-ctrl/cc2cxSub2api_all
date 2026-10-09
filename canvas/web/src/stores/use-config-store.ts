@@ -102,7 +102,7 @@ export const defaultConfig: AiConfig = {
     model: "gpt-image-2",
     imageModel: "gpt-image-2",
     videoModel: "grok-imagine-video-1.5",
-    textModel: "gpt-5.5",
+    textModel: "gpt-6-astra",
     audioModel: "gpt-4o-mini-tts",
     audioVoice: "alloy",
     audioFormat: "mp3",

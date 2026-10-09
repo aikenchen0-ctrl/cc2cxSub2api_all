@@ -20,7 +20,7 @@ def build_update_prompt_from_history(
         -1,
     )
     if first_user_index == -1:
-        raise ValueError("Update history must include at least one user message")
+        raise ValueError("更新历史必须包含至少一条用户消息")
 
     prompt_messages: Prompt = [
         cast(

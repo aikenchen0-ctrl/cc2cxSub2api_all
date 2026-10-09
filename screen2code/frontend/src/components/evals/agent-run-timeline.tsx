@@ -16,7 +16,7 @@ import {
   BsScissors,
 } from "react-icons/bs";
 
-import { formatCost, formatMs } from "./report-format";
+import { formatCost, formatMs, statusLabel, toolLabel } from "./report-format";
 import { JsonNode } from "./report-json";
 import ToolPreview from "./agent-run-tool-preview";
 
@@ -200,7 +200,7 @@ function CollapsibleCard({
 }
 
 function usageBreakdown(usage: UsageDict | null | undefined): string {
-  if (!usage) return "no usage";
+  if (!usage) return "无用量记录";
   const parts = [
     `in ${usage.input.toLocaleString()}`,
     `out ${usage.output.toLocaleString()}`,
@@ -247,7 +247,8 @@ function StepCard({
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5">
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
         <div className="text-xs font-semibold text-zinc-200">
-          Step {group.step}
+
+          步骤 {group.step}
           {apiModel && (
             <span className="ml-2 font-mono text-[11px] font-normal text-zinc-500">
               {apiModel}
@@ -260,7 +261,7 @@ function StepCard({
         {!readable && group.start && (
           <CollapsibleCard
             icon={<BsChatDots className="text-blue-400" />}
-            title="LLM request"
+            title="模型请求"
             meta="full payload"
             expandSignal={expandSignal}
           >
@@ -271,7 +272,7 @@ function StepCard({
           <CollapsibleCard
             icon={<BsLightbulb className="text-yellow-400" />}
             title={
-              thinkingMs > 0 ? `Thought for ${formatMs(thinkingMs)}` : "Thinking"
+              thinkingMs > 0 ? `思考用时${formatMs(thinkingMs)}` : "正在思考"
             }
             meta={`${thinkingText.length.toLocaleString()} chars`}
             expandSignal={expandSignal}
@@ -293,8 +294,8 @@ function StepCard({
             <CollapsibleCard
               key={tool.toolEventId}
               icon={toolIcon(tool.name)}
-              title={tool.name}
-              meta={`${formatMs(toolDuration)}${ok ? "" : " · error"}`}
+              title={toolLabel(tool.name)}
+              meta={`${formatMs(toolDuration)}${ok ? "" : "· 错误"}`}
               tint={ok ? undefined : "error"}
               collapseInBest={bulky}
               expandSignal={expandSignal}
@@ -327,7 +328,8 @@ function StepCard({
               )}
               {!toolEnd && (
                 <p className="mt-2 text-xs italic text-zinc-500">
-                  No result recorded (run may have been interrupted).
+
+                  暂无结果记录，任务可能已中断。
                 </p>
               )}
             </CollapsibleCard>
@@ -336,8 +338,8 @@ function StepCard({
         {assistantText && (
           <CollapsibleCard
             icon={<BsChatDots className="text-blue-400" />}
-            title="Response"
-            meta={`${assistantText.length.toLocaleString()} chars`}
+            title="响应"
+            meta={`${assistantText.length.toLocaleString()} 个字符`}
             expandSignal={expandSignal}
           >
             <div className="max-h-96 overflow-y-auto text-xs leading-5 text-zinc-300">
@@ -347,7 +349,8 @@ function StepCard({
         )}
         {!end && (
           <p className="text-xs italic text-zinc-500">
-            LLM call did not complete (run failed or is still in flight).
+
+            模型请求尚未完成，任务可能失败或仍在运行。
           </p>
         )}
       </div>
@@ -369,7 +372,8 @@ function AgentRunTimeline({
   if (steps.length === 0 && !runEnd) {
     return (
       <p className="py-4 text-center text-sm text-zinc-400">
-        No timeline events recorded for this run.
+
+        此任务没有执行过程记录。
       </p>
     );
   }
@@ -397,7 +401,8 @@ function AgentRunTimeline({
         >
           <BsFlagFill />
           <span>
-            Run {String(runEnd.status)} · total{" "}
+
+            任务 {statusLabel(String(runEnd.status))} · 合计{" "}
             {formatMs(
               typeof runEnd.total_duration_ms === "number"
                 ? runEnd.total_duration_ms

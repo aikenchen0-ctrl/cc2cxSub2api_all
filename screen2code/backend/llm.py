@@ -16,6 +16,8 @@ class Llm(Enum):
     GPT_5_5_MEDIUM = "gpt-5.5 (medium thinking)"
     GPT_5_5_HIGH = "gpt-5.5 (high thinking)"
     GPT_5_5_XHIGH = "gpt-5.5 (xhigh thinking)"
+    GPT_6_ASTRA_LOW = "gpt-6-astra (low thinking)"
+    GPT_6_ASTRA_HIGH = "gpt-6-astra (high thinking)"
     GPT_5_6_SOL_NONE = "gpt-5.6-sol (no thinking)"
     GPT_5_6_SOL_LOW = "gpt-5.6-sol (low thinking)"
     GPT_5_6_SOL_MEDIUM = "gpt-5.6-sol (medium thinking)"
@@ -77,6 +79,8 @@ MODEL_PROVIDER: dict[Llm, str] = {
     Llm.GPT_5_5_MEDIUM: "openai",
     Llm.GPT_5_5_HIGH: "openai",
     Llm.GPT_5_5_XHIGH: "openai",
+    Llm.GPT_6_ASTRA_LOW: "openai",
+    Llm.GPT_6_ASTRA_HIGH: "openai",
     Llm.GPT_5_6_SOL_NONE: "openai",
     Llm.GPT_5_6_SOL_LOW: "openai",
     Llm.GPT_5_6_SOL_MEDIUM: "openai",
@@ -149,6 +153,8 @@ OPENAI_MODEL_CONFIG: dict[Llm, dict[str, str]] = {
     Llm.GPT_5_5_MEDIUM: {"api_name": "gpt-5.5", "reasoning_effort": "medium"},
     Llm.GPT_5_5_HIGH: {"api_name": "gpt-5.5", "reasoning_effort": "high"},
     Llm.GPT_5_5_XHIGH: {"api_name": "gpt-5.5", "reasoning_effort": "xhigh"},
+    Llm.GPT_6_ASTRA_LOW: {"api_name": "gpt-6-astra", "reasoning_effort": "low"},
+    Llm.GPT_6_ASTRA_HIGH: {"api_name": "gpt-6-astra", "reasoning_effort": "high"},
     Llm.GPT_5_6_SOL_NONE: {"api_name": "gpt-5.6-sol", "reasoning_effort": "none"},
     Llm.GPT_5_6_SOL_LOW: {"api_name": "gpt-5.6-sol", "reasoning_effort": "low"},
     Llm.GPT_5_6_SOL_MEDIUM: {"api_name": "gpt-5.6-sol", "reasoning_effort": "medium"},

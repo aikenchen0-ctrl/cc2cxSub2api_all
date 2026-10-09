@@ -379,8 +379,6 @@ function App() {
 
   function handleStageOrganelleSelect(organelleId) {
     setSelectedOrganelle(organelleId)
-    setActivePanel(null)
-    setInspectorOpen(true)
   }
 
   function openInspector() {
@@ -536,6 +534,7 @@ function App() {
             provider,
             requestedProvider,
             status: 'uploading',
+            phase: 'submitting',
             progress: 0,
             modelUrl: '',
             rawModelUrl: '',
@@ -757,19 +756,28 @@ function App() {
     setSelectedCell(customCell.id)
     setSelectedOrganelle(getDefaultOrganelle(customCell.id, [customCell, ...customCells]))
     setCompareCell(customCell.template)
-    setActivePanel('Library')
+    setActivePanel(null)
+    setInspectorOpen(false)
 
     try {
       if (requestedMode === 'local') setToast('Local GLB mode needs a model file; using Hunyuan')
       const { displayUrl, generationUrl } = await prepareImageForUpload(file)
       const thumbnailUrl = await createImageThumbnailDataUrl(displayUrl)
-      setToast('Analyzing source image')
-      const assetInsight = await analyzeUploadedAsset(generationUrl, file.name)
-      customCell = applyAssetInsightToCell({
+      customCell = {
         ...customCell,
         imageUrl: displayUrl,
         thumbnailUrl: thumbnailUrl || displayUrl,
-      }, assetInsight)
+        generation: {
+          ...customCell.generation,
+          phase: 'analyzing',
+          message: t(settings.language, 'analyzing'),
+        },
+      }
+      updateCustomCell(customCell.id, () => customCell)
+      setUploadedImage({ name: file.name, url: displayUrl })
+      setToast('Analyzing source image')
+      const assetInsight = await analyzeUploadedAsset(generationUrl, file.name)
+      customCell = applyAssetInsightToCell(customCell, assetInsight)
       customCell.generation = {
         ...customCell.generation,
         provider: resolvedMode === HUNYUAN_SKETCH_MODE ? 'hunyuan' : resolvedMode,

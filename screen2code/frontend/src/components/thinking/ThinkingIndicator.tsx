@@ -55,11 +55,11 @@ function ThinkingIndicator() {
   }
 
   // Determine header text
-  let headerText = "AI Thinking";
+  let headerText = "AI 正在思考";
   if (isWaiting) {
-    headerText = "AI is thinking...";
+    headerText = "AI 正在思考…";
   } else if (isThinkingComplete && thinkingDuration !== undefined) {
-    headerText = `AI thought for ${thinkingDuration}s`;
+    headerText = `AI 思考用时${thinkingDuration}s`;
   }
 
   const previewText = thinking ? getLastSentence(thinking) : "";

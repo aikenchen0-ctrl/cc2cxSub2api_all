@@ -179,7 +179,15 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		chargeUserID := cmd.UserID
+		chargeAmount := cmd.BalanceCost
+		if cmd.PayerUserID > 0 && cmd.PayerUserID != cmd.UserID {
+			chargeUserID = cmd.PayerUserID
+			if cmd.PayerCost > 0 {
+				chargeAmount = cmd.PayerCost
+			}
+		}
+		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, chargeUserID, chargeAmount)
 		if err != nil {
 			return err
 		}

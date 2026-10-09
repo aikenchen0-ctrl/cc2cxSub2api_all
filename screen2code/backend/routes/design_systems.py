@@ -42,7 +42,7 @@ def utc_timestamp() -> str:
 def normalize_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:
-        raise HTTPException(status_code=400, detail="Design system name is required")
+        raise HTTPException(status_code=400, detail="设计规范名称不能为空")
     return normalized
 
 
@@ -72,13 +72,13 @@ def read_design_systems() -> list[DesignSystem]:
     except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Design systems storage is not valid JSON",
+            detail="设计规范存储数据不是有效的 JSON",
         ) from exc
 
     if not isinstance(raw_items, list):
         raise HTTPException(
             status_code=500,
-            detail="Design systems storage must contain a list",
+            detail="设计规范存储数据必须为列表",
         )
 
     design_systems: list[DesignSystem] = []
@@ -146,7 +146,7 @@ async def update_design_system(
         write_design_systems(design_systems)
         return updated
 
-    raise HTTPException(status_code=404, detail="Design system not found")
+    raise HTTPException(status_code=404, detail="未找到设计规范")
 
 
 @router.delete("/api/design-systems/{design_system_id}")
@@ -159,7 +159,7 @@ async def delete_design_system(design_system_id: str) -> Response:
     ]
 
     if len(remaining) == len(design_systems):
-        raise HTTPException(status_code=404, detail="Design system not found")
+        raise HTTPException(status_code=404, detail="未找到设计规范")
 
     write_design_systems(remaining)
     return Response(status_code=204)

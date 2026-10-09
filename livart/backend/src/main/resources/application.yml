@@ -53,6 +53,8 @@ artisan:
     default-image-size-enabled: ${LIVART_DEFAULT_IMAGE_SIZE_ENABLED:true}
     default-image-long-side: ${LIVART_DEFAULT_IMAGE_LONG_SIDE:2048}
     image-job-worker-count: ${LIVART_IMAGE_JOB_WORKER_COUNT:16}
+    agent-intent-timeout-seconds: ${LIVART_AGENT_INTENT_TIMEOUT_SECONDS:150}
+    agent-planner-timeout-seconds: ${LIVART_AGENT_PLANNER_TIMEOUT_SECONDS:150}
     product-industry-web-search-enabled: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_ENABLED:true}
     product-industry-web-search-model: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_MODEL:}
     product-industry-web-search-timeout-seconds: ${LIVART_PRODUCT_INDUSTRY_WEB_SEARCH_TIMEOUT_SECONDS:25}

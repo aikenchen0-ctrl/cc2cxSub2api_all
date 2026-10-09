@@ -128,7 +128,7 @@ export function buildUpdateGenerationRequest({
   const parentVariant =
     parentCommit.variants[parentCommit.selectedVariantIndex];
   if (!parentVariant) {
-    throw new Error("The selected option from the previous version was not found");
+    throw new Error("未找到上一版本中的所选方案。");
   }
 
   const fullInstruction = prompt.fullText ?? prompt.text;

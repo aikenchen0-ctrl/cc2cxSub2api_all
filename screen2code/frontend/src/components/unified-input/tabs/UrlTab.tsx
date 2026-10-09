@@ -42,27 +42,27 @@ function UrlTab({
 
     if (!screenshotOneApiKey) {
       toast.error(
-        "Please add a ScreenshotOne API key in Settings. You can also upload screenshots directly in the Upload tab.",
+        "请在设置中填写 ScreenshotOne 接口密钥，也可直接在“上传”页面上传截图。",
         { duration: 6000 },
       );
       return;
     }
 
     if (!trimmedReferenceUrl) {
-      toast.error("Please enter a URL");
+      toast.error("请输入网址");
       return;
     }
 
     if (trimmedReferenceUrl.toLowerCase().startsWith("file://")) {
       toast.error(
-        "file:// URLs can't be screenshot. If you're trying to import a local file, please use the Import tab.",
+        "无法截取本地文件网址，请在“导入”页面导入本地文件。",
       );
       return;
     }
 
     if (isFigmaUrl(trimmedReferenceUrl)) {
       toast.error(
-        "Direct Figma import is not supported. Take a screenshot of your design or export the artboards as images, then use the Upload tab.",
+        "暂不支持直接导入 Figma，请将设计截图或导出为图片后上传。",
         { duration: 6000 },
       );
       return;
@@ -82,7 +82,7 @@ function UrlTab({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to capture screenshot");
+        throw new Error("获取截图失败");
       }
 
       const res = await response.json();
@@ -94,7 +94,7 @@ function UrlTab({
       );
     } catch (error) {
       console.error(error);
-      toast.error("Failed to capture screenshot. Check console for details.");
+      toast.error("获取截图失败，请检查网址和截图服务配置。");
     } finally {
       setIsLoading(false);
     }
@@ -118,10 +118,12 @@ function UrlTab({
           </span>
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">
-              Screenshot from URL
+
+              网址截图
             </h3>
             <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-zinc-400">
-              Enter a public webpage and we’ll capture it before generating code.
+
+              输入公开网页地址，截取页面后生成代码。
             </p>
           </div>
         </div>
@@ -131,7 +133,8 @@ function UrlTab({
             htmlFor="reference-url"
             className="block text-xs font-medium text-gray-600 dark:text-zinc-300"
           >
-            Website URL
+
+            网页地址
           </label>
           <Input
             id="reference-url"
@@ -152,12 +155,13 @@ function UrlTab({
           />
           {isFigmaUrl(referenceUrl) ? (
             <p className="text-xs leading-5 text-amber-600 dark:text-amber-400">
-              Direct Figma import isn’t supported. Export your artboards as
-              images and use the Upload tab instead.
+
+              暂不支持直接导入 Figma，请导出设计为图片后上传。
             </p>
           ) : (
             <p className="text-[11px] text-gray-400 dark:text-zinc-500">
-              Requires a ScreenshotOne API key in Settings.
+
+              需要在设置中填写 ScreenshotOne 接口密钥。
             </p>
           )}
         </div>
@@ -175,8 +179,8 @@ function UrlTab({
         isAssetExtractionEnabled={isAssetExtractionEnabled}
         onAssetExtractionChange={setIsAssetExtractionEnabled}
         onGenerate={takeScreenshot}
-        actionLabel="Capture & Generate"
-        loadingActionLabel="Capturing…"
+        actionLabel="获取截图并生成"
+        loadingActionLabel="正在获取截图…"
         isActionLoading={isLoading}
         actionTestId="url-capture"
       />

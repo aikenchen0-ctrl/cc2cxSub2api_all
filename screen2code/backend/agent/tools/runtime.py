@@ -59,10 +59,10 @@ class AgentToolRuntime:
             return ToolExecutionResult(
                 ok=False,
                 result={
-                    "error": "Tool arguments were invalid JSON.",
+                    "error": "工具参数不是有效的 JSON。",
                     "INVALID_JSON": invalid_json,
                 },
-                summary={"error": "Invalid JSON tool arguments"},
+                summary={"error": "JSON 工具参数无效"},
             )
 
         if tool_call.name == "create_file":
@@ -94,8 +94,8 @@ class AgentToolRuntime:
             return self._retrieve_option(tool_call.arguments)
         return ToolExecutionResult(
             ok=False,
-            result={"error": f"Unknown tool: {tool_call.name}"},
-            summary={"error": f"Unknown tool: {tool_call.name}"},
+            result={"error": f"未知工具： {tool_call.name}"},
+            summary={"error": f"未知工具： {tool_call.name}"},
         )
 
     def _create_file(self, args: Dict[str, Any]) -> ToolExecutionResult:
@@ -104,8 +104,8 @@ class AgentToolRuntime:
         if not content:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "create_file requires non-empty content"},
-                summary={"error": "Missing content"},
+                result={"error": "create_file 需要非空的 content"},
+                summary={"error": "缺少 content"},
             )
 
         extracted = extract_html_content(content)
@@ -118,7 +118,7 @@ class AgentToolRuntime:
             "preview": summarize_text(self.file_state.content, 320),
         }
         result = {
-            "content": f"Successfully created file at {self.file_state.path}.",
+            "content": f"已成功创建文件 {self.file_state.path}。",
             "details": {
                 "path": self.file_state.path,
                 "contentLength": len(self.file_state.content),
@@ -181,8 +181,8 @@ class AgentToolRuntime:
         if not self.file_state.content:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "No file exists yet. Call create_file first."},
-                summary={"error": "No file to edit"},
+                result={"error": "尚无文件，请先调用 create_file。"},
+                summary={"error": "没有可编辑的文件"},
             )
 
         edits = args.get("edits")
@@ -195,8 +195,8 @@ class AgentToolRuntime:
         if not isinstance(edits, list):
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "edits must be a list"},
-                summary={"error": "Invalid edits payload"},
+                result={"error": "edits 必须为列表"},
+                summary={"error": "编辑请求数据无效"},
             )
 
         content = self.file_state.content
@@ -209,17 +209,17 @@ class AgentToolRuntime:
             if not old_text:
                 return ToolExecutionResult(
                     ok=False,
-                    result={"error": "edit_file requires old_text"},
-                    summary={"error": "Missing old_text"},
+                    result={"error": "edit_file 需要 old_text"},
+                    summary={"error": "缺少 old_text"},
                 )
 
             content, replaced = self._apply_single_edit(content, old_text, new_text, count)
             if replaced == 0:
                 return ToolExecutionResult(
                     ok=False,
-                    result={"error": "old_text not found", "old_text": old_text},
+                    result={"error": "未找到 old_text", "old_text": old_text},
                     summary={
-                        "error": "old_text not found",
+                        "error": "未找到 old_text",
                         "old_text": summarize_text(old_text, 160),
                     },
                 )
@@ -243,7 +243,7 @@ class AgentToolRuntime:
             "firstChangedLine": diff_info["firstChangedLine"],
         }
         result = {
-            "content": f"Successfully edited file at {path}.",
+            "content": f"已成功编辑文件 {path}。",
             "details": {
                 "diff": diff_info["diff"],
                 "firstChangedLine": diff_info["firstChangedLine"],
@@ -260,16 +260,16 @@ class AgentToolRuntime:
         if not self.should_generate_images:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "Image generation is disabled."},
-                summary={"error": "Image generation disabled"},
+                result={"error": "图片生成已关闭。"},
+                summary={"error": "图片生成已关闭"},
             )
 
         prompts = args.get("prompts") or []
         if not isinstance(prompts, list) or not prompts:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "generate_images requires a non-empty prompts list"},
-                summary={"error": "Missing prompts"},
+                result={"error": "generate_images 需要非空的 prompts 列表"},
+                summary={"error": "缺少 prompts"},
             )
 
         cleaned = [prompt.strip() for prompt in prompts if isinstance(prompt, str)]
@@ -277,15 +277,15 @@ class AgentToolRuntime:
         if not unique_prompts:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "No valid prompts provided"},
-                summary={"error": "No valid prompts"},
+                result={"error": "未提供有效的提示词"},
+                summary={"error": "没有有效的提示词"},
             )
         replicate_api_key = self._effective_replicate_api_key()
         if not replicate_api_key:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "No API key available for image generation."},
-                summary={"error": "Missing image generation API key"},
+                result={"error": "没有可用于图片生成的接口密钥。"},
+                summary={"error": "缺少图片生成接口密钥"},
             )
         model = "flux"
         api_key = replicate_api_key
@@ -328,8 +328,8 @@ class AgentToolRuntime:
         if not replicate_api_key:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "Background removal requires REPLICATE_API_KEY."},
-                summary={"error": "Missing Replicate API key"},
+                result={"error": "移除背景需要配置 REPLICATE_API_KEY。"},
+                summary={"error": "缺少 Replicate 接口密钥"},
             )
 
         image_urls = args.get("image_urls") or []
@@ -337,9 +337,9 @@ class AgentToolRuntime:
             return ToolExecutionResult(
                 ok=False,
                 result={
-                    "error": "remove_backgrounds requires a non-empty image_urls list"
+                    "error": "remove_backgrounds 需要非空的 image_urls 列表"
                 },
-                summary={"error": "Missing image_urls"},
+                summary={"error": "缺少 image_urls"},
             )
 
         cleaned = [url.strip() for url in image_urls if isinstance(url, str)]
@@ -347,8 +347,8 @@ class AgentToolRuntime:
         if not unique_urls:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "No valid image URLs provided"},
-                summary={"error": "No valid image_urls"},
+                result={"error": "未提供有效的图片 URL"},
+                summary={"error": "没有有效的 image_urls"},
             )
 
         raw_results: list[str | BaseException] = []
@@ -404,16 +404,16 @@ class AgentToolRuntime:
         if not replicate_api_key:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "Image editing requires REPLICATE_API_KEY."},
-                summary={"error": "Missing Replicate API key"},
+                result={"error": "图片编辑需要配置 REPLICATE_API_KEY。"},
+                summary={"error": "缺少 Replicate 接口密钥"},
             )
 
         raw_edits = args.get("edits") or []
         if not isinstance(raw_edits, list) or not raw_edits:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "edit_images requires a non-empty edits list"},
-                summary={"error": "Missing edits"},
+                result={"error": "edit_images 需要非空的 edits 列表"},
+                summary={"error": "缺少 edits"},
             )
 
         results: List[Dict[str, Any]] = []
@@ -427,7 +427,7 @@ class AgentToolRuntime:
                         "result_url": None,
                         "status": "error",
                         "aspect_ratio": "match_input_image",
-                        "error": f"Edit {index + 1} must be an object.",
+                        "error": f"编辑项 {index + 1} 必须为对象。",
                     }
                 )
                 continue
@@ -459,9 +459,9 @@ class AgentToolRuntime:
             }
             errors: List[str] = []
             if not prompt:
-                errors.append("prompt must be non-empty")
+                errors.append("prompt 不能为空")
             if not image_urls:
-                errors.append("image_urls must contain at least one valid URL")
+                errors.append("image_urls 必须包含至少一个有效 URL")
             if errors:
                 item["status"] = "error"
                 item["error"] = "; ".join(errors)
@@ -539,28 +539,28 @@ class AgentToolRuntime:
         if option_number is None and index is None:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "retrieve_option requires option_number"},
-                summary={"error": "Missing option_number"},
+                result={"error": "retrieve_option 需要 option_number"},
+                summary={"error": "缺少 option_number"},
             )
 
         resolved_index = index if option_number is None else option_number - 1
         if resolved_index is None:
             return ToolExecutionResult(
                 ok=False,
-                result={"error": "Invalid option_number"},
-                summary={"error": "Invalid option_number"},
+                result={"error": "option_number 无效"},
+                summary={"error": "option_number 无效"},
             )
 
         if resolved_index < 0 or resolved_index >= len(self.option_codes):
             return ToolExecutionResult(
                 ok=False,
                 result={
-                    "error": "Option index out of range",
+                    "error": "方案编号超出范围",
                     "option_number": resolved_index + 1,
                     "available": len(self.option_codes),
                 },
                 summary={
-                    "error": "Option index out of range",
+                    "error": "方案编号超出范围",
                     "available": len(self.option_codes),
                 },
             )
@@ -570,10 +570,10 @@ class AgentToolRuntime:
             return ToolExecutionResult(
                 ok=False,
                 result={
-                    "error": "Option code is empty or unavailable",
+                    "error": "方案代码为空或不可用",
                     "option_number": resolved_index + 1,
                 },
-                summary={"error": "Option code unavailable"},
+                summary={"error": "方案代码不可用"},
             )
 
         summary = {

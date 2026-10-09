@@ -70,7 +70,8 @@ function shortModelName(model: string): string {
   return model
     .replace("-preview", "")
     .replace(" thinking)", ")")
-    .replace(" effort)", ")");
+    .replace(" effort)", ")")
+    .replace(/\((no|minimal|low|medium|high|xhigh|max)\)/g, (_, level: string) => `(${{ no: "无推理", minimal: "极低推理", low: "低推理", medium: "中推理", high: "高推理", xhigh: "超高推理", max: "最高推理" }[level as "no" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"]})`);
 }
 
 function EvalComparePage() {
@@ -137,7 +138,7 @@ function EvalComparePage() {
       setConnectionFailed(false);
       return data.sessions as EvalSession[];
     } catch (error) {
-      console.error("Error fetching sessions", error);
+      console.error("获取评测会话失败", error);
       setConnectionFailed(true);
       return [];
     }
@@ -149,7 +150,7 @@ function EvalComparePage() {
         const response = await fetch(
           `${HTTP_BACKEND_URL}/eval-sessions/${encodeURIComponent(id)}/matrix`
         );
-        if (!response.ok) throw new Error("Request failed");
+        if (!response.ok) throw new Error("请求失败");
         const data: SessionMatrix = await response.json();
         setMatrix(data);
         // Default: first two models that actually have runs.
@@ -161,8 +162,8 @@ function EvalComparePage() {
         setImageIndex(0);
         setPaneIndex(1);
       } catch (error) {
-        console.error("Error loading matrix", error);
-        toast.error("Failed to load session data.");
+        console.error("加载评测矩阵失败", error);
+        toast.error("加载评测会话失败。");
       }
     },
     []
@@ -266,7 +267,7 @@ function EvalComparePage() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-2">
         <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs">
-          <h1 className="text-sm font-semibold tracking-tight">Compare</h1>
+          <h1 className="text-sm font-semibold tracking-tight">对比</h1>
           <select
             value={matrix?.session.session_id ?? ""}
             onChange={(e) => switchSession(e.target.value)}
@@ -294,7 +295,8 @@ function EvalComparePage() {
             </button>
           ))}
           <span className="ml-auto hidden text-[11px] text-zinc-600 lg:inline">
-            ←/→ switch output · ↑/↓ image · S source
+
+            ←/→ 切换结果 · ↑/↓ 切换图片 · S 原图
           </span>
         </div>
 
@@ -303,14 +305,14 @@ function EvalComparePage() {
             <button
               onClick={() => stepImage(-1)}
               className="rounded-md border border-zinc-700 p-1.5 text-zinc-300 hover:bg-zinc-800"
-              title="Previous image (↑)"
+              title="上一张图片（↑）"
             >
               <BsChevronLeft />
             </button>
             <button
               onClick={() => stepImage(1)}
               className="rounded-md border border-zinc-700 p-1.5 text-zinc-300 hover:bg-zinc-800"
-              title="Next image (↓)"
+              title="下一张图片（↓）"
             >
               <BsChevronRight />
             </button>
@@ -328,8 +330,8 @@ function EvalComparePage() {
               const label =
                 pane.model === "__source__"
                   ? currentImage?.image_url
-                    ? "Source"
-                    : "Brief"
+                    ? "原始内容"
+                    : "需求"
                   : shortModelName(pane.model);
               const colorClass =
                 pane.model === "__source__"
@@ -371,7 +373,8 @@ function EvalComparePage() {
                   }
                   className="rounded-md border border-zinc-700 px-2 py-1 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Run details
+
+                  任务详情
                 </button>
                 <a
                   href={`${HTTP_BACKEND_URL}/agent-runs/${encodeURIComponent(
@@ -380,7 +383,7 @@ function EvalComparePage() {
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-md border border-zinc-700 p-1.5 text-zinc-300 hover:bg-zinc-800"
-                  title="Open output in new tab"
+                  title="在新标签页打开结果"
                 >
                   <BsBoxArrowUpRight />
                 </a>
@@ -392,12 +395,13 @@ function EvalComparePage() {
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-zinc-800 bg-white">
           {!matrix && (
             <p className="py-8 text-center text-sm text-zinc-500">
-              {connectionFailed ? "Backend unreachable — retrying…" : "Loading…"}
+              {connectionFailed ? "无法连接后端，正在重试…" : "加载中…"}
             </p>
           )}
           {matrix && images.length === 0 && (
             <p className="py-8 text-center text-sm text-zinc-500">
-              No completed runs for the selected models. Toggle models above.
+
+              所选模型暂无已完成任务，请在上方切换模型。
             </p>
           )}
           {/* All panes stay mounted; switching just flips visibility, so
@@ -422,7 +426,8 @@ function EvalComparePage() {
                     ) : (
                       <div className="mx-auto max-w-2xl px-8 py-12 text-zinc-900">
                         <div className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                          Brief
+
+                          需求
                         </div>
                         <h2 className="mt-1 text-2xl font-semibold">
                           {currentImage.title ?? currentImage.filename}
@@ -438,7 +443,7 @@ function EvalComparePage() {
               return (
                 <iframe
                   key={pane.run!.run_id}
-                  title={`${pane.model} output`}
+                  title={`${pane.model} 生成结果`}
                   src={`${HTTP_BACKEND_URL}/agent-runs/${encodeURIComponent(
                     pane.run!.run_id
                   )}/output`}

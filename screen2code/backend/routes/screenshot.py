@@ -32,7 +32,7 @@ def normalize_url(url: str) -> str:
             url = f"https://{url}"
         else:
             # Invalid protocol
-            raise ValueError(f"Unsupported protocol: {parsed.scheme}")
+            raise ValueError(f"不支持的协议： {parsed.scheme}")
     
     return url
 
@@ -70,7 +70,7 @@ async def capture_screenshot(
         if response.status_code == 200 and response.content:
             return response.content
         else:
-            raise Exception("Error taking screenshot")
+            raise Exception("获取截图失败")
 
 
 class ScreenshotRequest(BaseModel):
@@ -104,4 +104,4 @@ async def app_screenshot(request: ScreenshotRequest):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         # Handle other errors
-        raise HTTPException(status_code=500, detail=f"Error capturing screenshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取截图失败： {str(e)}")

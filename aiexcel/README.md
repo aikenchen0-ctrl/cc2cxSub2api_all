@@ -65,7 +65,7 @@ Excel 文件在浏览器中解析和修改，不会上传到业务服务器。AI
 - ExcelJS
 - SheetJS
 - Lucide React
-- DeepSeek API
+- Sub2API 文本模型服务（默认 `gpt-6-astra`）
 
 ## 环境要求
 
@@ -91,13 +91,17 @@ http://localhost:3000
 
 从 Sub2API 左侧的“AI表格”入口打开应用。登录通过短期一次性 SSO 票据完成，模型请求由 AIExcel 服务端转发到 Sub2API，浏览器不会接触 API Key。
 
+AIExcel 使用文本大模型理解需求并生成 JSON 操作计划，默认模型为 `gpt-6-astra`；用户确认后，具体的数据修改和导出在浏览器中执行。
+
+GPT-6 Astra 表格规划使用低推理档以减少等待。AIExcel 直接发送公开模型名 `gpt-6-astra`，由 Sub2API 选择支持该模型的上游账号。
+
 服务端配置 `.env.local`：
 
 ```env
 SUB2API_SSO_SECRET=与 Sub2API 相同的至少 32 位密钥
 SUB2API_RELAY_BASE_URL=http://localhost:18080/v1
 SUB2API_APP_CREDENTIAL=Sub2API 为卫星签发的应用凭据
-SUB2API_RELAY_MODEL=gpt-5.5
+SUB2API_RELAY_MODEL=gpt-6-astra
 AIEXCEL_SSO_CALLBACK_URL=http://localhost:4173/api/auth/sso/callback
 ```
 
@@ -144,7 +148,7 @@ http://localhost:4173
 
 ## 隐私说明
 
-Excel 原始文件不会上传到 DeepSeek。发送给 AI 的内容仅包括：
+Excel 原始文件不会作为完整文件上传给模型服务。经 Sub2API 转发给 AI 的内容仅包括：
 
 - Sheet 名称
 - 表头候选行
@@ -158,7 +162,7 @@ Excel 原始文件不会上传到 DeepSeek。发送给 AI 的内容仅包括：
 
 ```text
 app/
-├── api/ai/route.ts     # 本地开发模式的 AI 代理
+├── api/ai/route.ts     # 使用当前用户会话的 Sub2API 模型代理
 ├── globals.css         # 页面和工作区样式
 ├── layout.tsx
 └── page.tsx            # Excel、AI 与交互式报表核心功能

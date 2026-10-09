@@ -23,6 +23,8 @@ type UsageBillingCommand struct {
 	RequestPayloadHash string
 
 	UserID              int64
+	PayerUserID         int64
+	PayerCost           float64
 	AccountID           int64
 	SubscriptionID      *int64
 	AccountType         string

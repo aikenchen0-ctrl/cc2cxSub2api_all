@@ -62,3 +62,63 @@ func (c *MainClient) CreateMainUser(ctx context.Context, email, password, userna
 func invalidCreatedUser() error {
 	return &MainAPIError{Status: 502, Code: "UPSTREAM_IDENTITY_MISMATCH", Message: "main user creation returned an unexpected identity"}
 }
+
+// AdminReadUserBalance reads one main-site user's balance with the deployment
+// admin key. It is read-only: the key never leaves the server, and the caller
+// must already have proven the user belongs to the current tenant or session.
+func (c *MainClient) AdminReadUserBalance(ctx context.Context, mainUserID string) (MainUserResult, error) {
+	mainUserID = strings.TrimSpace(mainUserID)
+	parsedID, err := strconv.ParseInt(mainUserID, 10, 64)
+	if err != nil || parsedID <= 0 {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusBadRequest, Code: "INVALID_USER", Message: "invalid user"}
+	}
+	path, err := adminUserPath(mainUserID, "")
+	if err != nil {
+		return MainUserResult{}, err
+	}
+	data, err := c.adminGet(ctx, path)
+	if err != nil || mainUserIDFromJSON(data) != mainUserID {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusBadGateway, Code: "MAIN_BALANCE_UNAVAILABLE", Message: "main balance lookup is temporarily unavailable"}
+	}
+	balance, frozen, positive, err := decodeMainBalanceFacts(data)
+	if err != nil {
+		return MainUserResult{}, &MainAPIError{Status: http.StatusBadGateway, Code: "MAIN_BALANCE_UNAVAILABLE", Message: "main balance lookup returned an invalid balance"}
+	}
+	return MainUserResult{ID: mainUserID, Balance: balance, FrozenBalance: frozen, BalancePositive: positive}, nil
+}
+
+func (c *MainClient) AdminAddUserBalance(ctx context.Context, mainUserID string, amount float64, notes string) error {
+	path, err := adminUserPath(mainUserID, "/balance")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(c.cfg.MainAdminAPIKey) == "" {
+		return &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_ADMIN_NOT_CONFIGURED", Message: "main administrator key is not configured"}
+	}
+	headers := make(http.Header)
+	headers.Set("Accept", "application/json")
+	headers.Set("Content-Type", "application/json")
+	headers.Set("x-api-key", c.cfg.MainAdminAPIKey)
+	payload, err := json.Marshal(map[string]any{"balance": amount, "operation": "add", "notes": notes})
+	if err != nil {
+		return err
+	}
+	response, raw, err := c.request(ctx, http.MethodPost, c.endpoint(path), payload, headers)
+	if err != nil {
+		return &MainAPIError{Status: http.StatusServiceUnavailable, Code: "MAIN_BALANCE_UNAVAILABLE", Message: "main user recharge record is temporarily unavailable"}
+	}
+	if _, err := unwrapMainResponse(response.StatusCode, raw); err != nil {
+		return &MainAPIError{Status: http.StatusBadGateway, Code: "MAIN_BALANCE_UNAVAILABLE", Message: "main user recharge record was rejected"}
+	}
+	return nil
+}
+
+func (s *Server) lookupDisplayBalance(ctx context.Context, mainUserID string) (int64, int64, bool) {
+	if result, err := s.main.AdminReadUserBalance(ctx, mainUserID); err == nil {
+		return result.Balance, result.FrozenBalance, true
+	}
+	if result, err := s.main.SatelliteUserBalance(ctx, mainUserID); err == nil {
+		return result.Balance, result.FrozenBalance, true
+	}
+	return 0, 0, false
+}

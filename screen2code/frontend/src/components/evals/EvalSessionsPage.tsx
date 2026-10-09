@@ -1,3 +1,4 @@
+import { statusLabel } from "./report-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -84,7 +85,7 @@ function CellFace({
             ? "border-red-900 bg-red-950/30"
             : "border-zinc-700 bg-zinc-950/60"
         } ${newest.is_stale ? "opacity-50" : ""}`}
-        title={`${newest.status} · ${formatTimestamp(newest.created_at)}`}
+        title={`${statusLabel(newest.status)} · ${formatTimestamp(newest.created_at)}`}
       >
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(
@@ -100,7 +101,8 @@ function CellFace({
         </span>
         {newest.source === "ui" && (
           <span className="rounded bg-amber-900/60 px-1 text-[10px] font-medium text-amber-200">
-            UI
+
+            界面
           </span>
         )}
         {runs.length > 1 && (
@@ -110,7 +112,7 @@ function CellFace({
               setExpanded(!expanded);
             }}
             className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400 hover:text-zinc-100"
-            title="Show all attempts"
+            title="显示全部尝试"
           >
             ×{runs.length}
           </button>
@@ -122,7 +124,7 @@ function CellFace({
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          title="Open captured HTML"
+          title="打开记录的 HTML"
           className="ml-auto shrink-0 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-200 group-hover:opacity-100"
         >
           <BsBoxArrowUpRight className="text-[10px]" />
@@ -144,7 +146,7 @@ function CellFace({
             <span className="font-mono text-[10px] text-zinc-400">
               {formatMs(run.total_duration_ms)} ·{" "}
               {formatCost(run.total_cost_usd)}
-              {run.source === "ui" ? " · UI" : ""}
+              {run.source === "ui" ? "· 界面" : ""}
             </span>
           </div>
         ))}
@@ -212,7 +214,7 @@ function EvalSessionsPage() {
       // Dev backends restart (--reload) and briefly refuse connections;
       // flag it and let the retry effect re-attempt instead of settling
       // into a misleading empty state.
-      console.error("Error fetching sessions", error);
+      console.error("获取评测会话失败", error);
       setConnectionFailed(true);
       return [];
     }
@@ -228,7 +230,7 @@ function EvalSessionsPage() {
         setNewSessionSet((current) => current || data[0].name);
       }
     } catch (error) {
-      console.error("Error fetching eval sets", error);
+      console.error("获取评测集失败", error);
       setConnectionFailed(true);
     }
   }, []);
@@ -258,12 +260,12 @@ function EvalSessionsPage() {
           sessionId
         )}/matrix`
       );
-      if (!response.ok) throw new Error("Request failed");
+      if (!response.ok) throw new Error("请求失败");
       setMatrix(await response.json());
     } catch (error) {
-      console.error("Error loading matrix", error);
+      console.error("加载评测矩阵失败", error);
       setMatrix(null);
-      toast.error("Failed to load session matrix.");
+      toast.error("加载会话对比表失败。");
     } finally {
       setIsLoadingMatrix(false);
     }
@@ -299,12 +301,12 @@ function EvalSessionsPage() {
         )}/activate`,
         { method: "POST" }
       );
-      if (!response.ok) throw new Error("Request failed");
-      toast.success("Session activated.");
+      if (!response.ok) throw new Error("请求失败");
+      toast.success("已启用会话。");
       fetchSessions();
     } catch (error) {
-      console.error("Error activating session", error);
-      toast.error("Failed to activate session.");
+      console.error("激活评测会话失败", error);
+      toast.error("启用会话失败。");
     }
   };
 
@@ -322,15 +324,15 @@ function EvalSessionsPage() {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Request failed");
+        throw new Error(data.detail || "请求失败");
       }
       const created: EvalSession = await response.json();
       setNewSessionName("");
-      toast.success(`Session "${created.name}" started.`);
+      toast.success(`会话「${created.name}」已开始。`);
       await fetchSessions();
       loadMatrix(created.session_id);
     } catch (error) {
-      console.error("Error creating session", error);
+      console.error("创建评测会话失败", error);
       toast.error(String(error));
     } finally {
       setIsCreating(false);
@@ -356,8 +358,8 @@ function EvalSessionsPage() {
         }
       );
     } catch (error) {
-      console.error("Error saving model order", error);
-      toast.error("Failed to save column order.");
+      console.error("保存模型顺序失败", error);
+      toast.error("保存列顺序失败。");
     }
   };
 
@@ -396,8 +398,8 @@ function EvalSessionsPage() {
         }
       );
     } catch (error) {
-      console.error("Error saving model notes", error);
-      toast.error("Failed to save notes.");
+      console.error("保存模型备注失败", error);
+      toast.error("保存备注失败。");
     }
   };
 
@@ -409,7 +411,8 @@ function EvalSessionsPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-2 px-4 py-2">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-2">
           <h1 className="text-base font-semibold tracking-tight">
-            Eval Sessions
+
+            评测会话
           </h1>
           <div className="flex items-center gap-2 text-xs">
             <select
@@ -417,7 +420,7 @@ function EvalSessionsPage() {
               onChange={(e) => setNewSessionSet(e.target.value)}
               className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200"
             >
-              {sets.length === 0 && <option value="">No sets found</option>}
+              {sets.length === 0 && <option value="">暂无评测集</option>}
               {sets.map((set) => (
                 <option key={set.name} value={set.name}>
                   {set.display_name} ({set.image_count})
@@ -427,7 +430,7 @@ function EvalSessionsPage() {
             <input
               value={newSessionName}
               onChange={(e) => setNewSessionName(e.target.value)}
-              placeholder="Session name (optional)"
+              placeholder="会话名称（选填）"
               className="w-44 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200 placeholder:text-zinc-600"
             />
             <button
@@ -435,7 +438,7 @@ function EvalSessionsPage() {
               disabled={isCreating || !newSessionSet}
               className="rounded-md border border-emerald-800 bg-emerald-950/60 px-2.5 py-1 text-emerald-200 transition-colors hover:bg-emerald-900/60 disabled:opacity-50"
             >
-              {isCreating ? "Starting…" : "New session"}
+              {isCreating ? "正在启动…" : "新建会话"}
             </button>
           </div>
         </div>
@@ -443,17 +446,18 @@ function EvalSessionsPage() {
         <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[300px_minmax(0,1fr)]">
           <section className="min-h-0 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-2">
             <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-500">
-              {sessions.length} session{sessions.length === 1 ? "" : "s"}
+              {sessions.length} 个会话
             </div>
             {connectionFailed && (
               <p className="px-2 py-4 text-sm text-amber-300">
-                Backend unreachable — retrying…
+
+                无法连接后端，正在重试…
               </p>
             )}
             {!connectionFailed && sessions.length === 0 && (
               <p className="px-2 py-4 text-sm text-zinc-400">
-                No sessions yet. Pick a set above and start one, or just run
-                evals with a set — a session is created automatically.
+
+                暂无会话。选择上方评测集创建会话，或运行评测自动创建。
               </p>
             )}
             {sessions.map((session) => (
@@ -470,7 +474,7 @@ function EvalSessionsPage() {
                   {session.is_active && (
                     <span
                       className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
-                      title="Active session"
+                      title="当前会话"
                     />
                   )}
                   <span className="min-w-0 flex-1 truncate text-xs text-zinc-100">
@@ -484,7 +488,8 @@ function EvalSessionsPage() {
                       }}
                       className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
                     >
-                      Activate
+
+                      启用
                     </button>
                   )}
                 </div>
@@ -501,39 +506,39 @@ function EvalSessionsPage() {
           <section className="min-h-0 overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
             {!selectedSessionId && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Select a session to see its matrix.
+
+                请选择会话查看对比表。
               </p>
             )}
             {isLoadingMatrix && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Loading matrix…
+
+                正在加载对比表…
               </p>
             )}
             {!isLoadingMatrix && matrix && (
               <div className="flex flex-col gap-2">
                 {matrix.set_missing && (
                   <div className="rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-                    The set "{matrix.session.eval_set}" no longer exists on
-                    disk — showing recorded history only.
+
+                    评测集「{matrix.session.eval_set}」已不存在，仅显示历史记录。
                   </div>
                 )}
                 {matrix.unmatched_run_count > 0 && (
                   <div className="rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
-                    {matrix.unmatched_run_count} run
-                    {matrix.unmatched_run_count === 1 ? "" : "s"} reference
-                    images no longer in the set.
+                    {matrix.unmatched_run_count} 条任务记录的参考图片已不在评测集中。
                   </div>
                 )}
                 {matrix.rows.length === 0 && !matrix.set_missing && (
                   <p className="py-8 text-center text-sm text-zinc-400">
-                    This set has no images. Drop PNGs into the set's inputs
-                    folder.
+
+                    此评测集没有图片，请将 PNG 图片放入输入目录。
                   </p>
                 )}
                 {matrix.models.length === 0 && matrix.rows.length > 0 && (
                   <p className="py-2 text-center text-xs text-zinc-500">
-                    No runs in this session yet — run evals with this set and
-                    cells will appear here.
+
+                    此会话暂无任务，请先运行评测。
                   </p>
                 )}
                 {matrix.rows.length > 0 && (
@@ -542,7 +547,8 @@ function EvalSessionsPage() {
                       <thead>
                         <tr>
                           <th className="sticky left-0 z-10 bg-zinc-900/95 px-2 py-1 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                            Image
+
+                            图片
                           </th>
                           {matrix.models.map((model) => (
                             <th
@@ -602,7 +608,7 @@ function EvalSessionsPage() {
                                       setEditingNotesModel(null);
                                     }
                                   }}
-                                  placeholder="Notes for this model…"
+                                  placeholder="填写此模型的备注…"
                                   className="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-1.5 py-0.5 font-sans text-[11px] text-zinc-200 placeholder:text-zinc-600"
                                 />
                               ) : (
@@ -613,14 +619,14 @@ function EvalSessionsPage() {
                                       matrix.model_notes[model] ?? ""
                                     );
                                   }}
-                                  title="Click to edit notes"
+                                  title="点击编辑备注"
                                   className={`mt-1 block w-full truncate rounded px-1 py-0.5 text-left font-sans text-[11px] transition-colors hover:bg-zinc-800 ${
                                     matrix.model_notes[model]
                                       ? "text-amber-200/90"
                                       : "text-zinc-600 opacity-0 group-hover/col:opacity-100"
                                   }`}
                                 >
-                                  {matrix.model_notes[model] || "+ add note"}
+                                  {matrix.model_notes[model] || "+ 添加备注"}
                                 </button>
                               )}
                             </th>
@@ -646,7 +652,7 @@ function EvalSessionsPage() {
                                     href={`${HTTP_BACKEND_URL}${row.image_url}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    title="Open image in new tab"
+                                    title="在新标签页打开图片"
                                     className="shrink-0 rounded p-1 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-200"
                                   >
                                     <BsBoxArrowUpRight className="text-[11px]" />

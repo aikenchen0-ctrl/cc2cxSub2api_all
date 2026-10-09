@@ -49,13 +49,13 @@ def create_provider_session(
         managed = bool(credential or os.environ.get("SUB2API_SSO_SECRET", "").strip())
         api_key = openai_api_key
         if managed and (not credential or not subject):
-            raise Exception("Sub2API satellite credential and session subject are required.")
+            raise Exception("缺少 Sub2API 卫星凭据或当前登录用户身份。")
         if credential:
             headers["X-Sub2API-On-Behalf-Of"] = subject
             headers["X-Sub2API-Satellite"] = "screen2code"
             api_key = credential
         if not api_key:
-            raise Exception("OpenAI API key is missing.")
+            raise Exception("缺少 OpenAI 接口密钥。")
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=openai_base_url,
@@ -71,7 +71,7 @@ def create_provider_session(
 
     if model in ANTHROPIC_MODELS:
         if not anthropic_api_key:
-            raise Exception("Anthropic API key is missing.")
+            raise Exception("缺少 Anthropic 接口密钥。")
 
         client = AsyncAnthropic(api_key=anthropic_api_key)
         return AnthropicProviderSession(
@@ -84,7 +84,7 @@ def create_provider_session(
 
     if model in GEMINI_MODELS:
         if not gemini_api_key:
-            raise Exception("Gemini API key is missing.")
+            raise Exception("缺少 Gemini 接口密钥。")
 
         client = genai.Client(api_key=gemini_api_key)
         return GeminiProviderSession(
@@ -95,4 +95,4 @@ def create_provider_session(
             recorder=recorder,
         )
 
-    raise ValueError(f"Unsupported model: {model.value}")
+    raise ValueError(f"不支持的模型： {model.value}")

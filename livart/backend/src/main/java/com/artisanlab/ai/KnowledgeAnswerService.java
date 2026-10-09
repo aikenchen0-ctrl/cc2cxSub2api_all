@@ -2,6 +2,7 @@ package com.artisanlab.ai;
 
 import com.artisanlab.knowledge.KnowledgeChunkMapper;
 import com.artisanlab.knowledge.KnowledgeSearchResult;
+import com.artisanlab.common.ApiException;
 import com.artisanlab.userconfig.UserApiConfigDtos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -124,9 +125,22 @@ public class KnowledgeAnswerService {
             return cachedEmbedding;
         }
 
-        String embedding = KnowledgeEmbeddingService.toVectorLiteral(
-                embeddingService.createEmbedding(config, normalizedQuestion)
-        );
+        String embedding;
+        try {
+            embedding = KnowledgeEmbeddingService.toVectorLiteral(
+                    embeddingService.createEmbedding(config, normalizedQuestion)
+            );
+        } catch (ApiException exception) {
+            if (!"KNOWLEDGE_EMBEDDING_CONFIG_MISSING".equals(exception.code())) {
+                throw exception;
+            }
+            // Embeddings are optional for the built-in help flow. A deployment
+            // without the optional embedding key can still use the keyword
+            // index below; configured embedding upstream failures must remain
+            // visible to callers.
+            log.info("[knowledge-answer] embedding config missing; using keyword search");
+            return "";
+        }
         if (!embedding.isBlank() && !"[]".equals(embedding)) {
             mapper.upsertCachedQueryEmbedding(model, questionHash, normalizedQuestion, embedding);
             if (redisEmbeddingCacheService != null) {

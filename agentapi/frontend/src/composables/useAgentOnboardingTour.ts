@@ -44,6 +44,15 @@ export function agentOnboardingSteps(role: AgentOnboardingRole): DriveStep[] {
       },
     },
     {
+      element: '[data-tour="sidebar-profile"]',
+      popover: {
+        title: '个人资料',
+        description: '修改当前账户的名称和密码。这些资料属于主站账户，不会暴露其他用户。',
+        side: 'right',
+        align: 'start',
+      },
+    },
+    {
       element: '[data-tour="sidebar-usage"]',
       popover: {
         title: '使用记录',

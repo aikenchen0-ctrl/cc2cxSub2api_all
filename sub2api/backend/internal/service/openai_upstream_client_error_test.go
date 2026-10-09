@@ -76,6 +76,34 @@ func TestOpenAICompatibleModelNotFound400FailoverScope(t *testing.T) {
 	))
 }
 
+func TestOpenAICompatibleBare404FailoverScope(t *testing.T) {
+	svc := &OpenAIGatewayService{accountRepo: &modelNotFoundManagedAccountRepo{}}
+
+	for _, tc := range []struct {
+		name    string
+		account *Account
+		want    bool
+	}{
+		{name: "openai api key", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, want: true},
+		{name: "compatible provider", account: &Account{Platform: PlatformDeepseek, Type: AccountTypeAPIKey}, want: true},
+		{name: "anthropic account", account: &Account{Platform: PlatformAnthropic, Type: AccountTypeAPIKey}, want: false},
+		{name: "missing account", account: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, svc.shouldFailoverOpenAIUpstreamResponse(
+				tc.account, http.StatusNotFound, "404 page not found", []byte("404 page not found"),
+			))
+		})
+	}
+
+	// Direct/single-account callers have no scheduler to consume a failover
+	// sentinel, so a bare 404 remains terminal there.
+	require.False(t, (&OpenAIGatewayService{}).shouldFailoverOpenAIUpstreamResponse(
+		&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+		http.StatusNotFound, "404 page not found", []byte("404 page not found"),
+	))
+}
+
 func TestOpenAICompatibleModelNotFound400WithoutManagedCandidatesRemainsTerminal(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	body := []byte(`{"error":{"code":"model_not_found","message":"model not found"}}`)

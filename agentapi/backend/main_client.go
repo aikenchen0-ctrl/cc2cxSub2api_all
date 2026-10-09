@@ -932,6 +932,7 @@ func (c *MainClient) OpenModelResponse(ctx context.Context, method, path string,
 		path = "/"
 	}
 	target += "/" + strings.TrimLeft(path, "/")
+	query = stripClientGroupSelector(query)
 	if encoded := query.Encode(); encoded != "" {
 		target += "?" + encoded
 	}
@@ -954,6 +955,15 @@ func (c *MainClient) OpenModelResponse(ctx context.Context, method, path string,
 	// choose the Sub2API billing identity from a browser request.
 	headers.Set("X-Sub2API-On-Behalf-Of", mainUserID)
 	headers.Set("X-Sub2API-Satellite", c.cfg.SatelliteSlug)
+	if groupID := relayGroupHeader(relayGroupFromContext(ctx)); groupID != "" {
+		headers.Set("X-Sub2API-Group-ID", groupID)
+	}
+	if payer := relayPayerFromContext(ctx); payer != "" && payer != mainUserID {
+		headers.Set("X-Sub2API-Payer", payer)
+		if rate := relayCommissionFromContext(ctx); rate > 0 {
+			headers.Set("X-Sub2API-Commission-Rate", strconv.FormatFloat(rate, 'f', -1, 64))
+		}
+	}
 	if requestID != "" {
 		headers.Set("X-Request-ID", requestID)
 	}

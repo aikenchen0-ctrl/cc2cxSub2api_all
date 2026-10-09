@@ -94,6 +94,7 @@ type AgentWechatJSAPI struct {
 }
 
 type AgentPaymentCreateResult struct {
+	StripePublishableKey          string                `json:"stripe_publishable_key,omitempty"`
 	OrderID                       int64                 `json:"order_id"`
 	Amount                        float64               `json:"amount"`
 	PayAmount                     float64               `json:"pay_amount"`
@@ -242,7 +243,7 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 	const basePath = "/api/v1/agent/payment"
 	switch {
 	case r.URL.Path == basePath+"/checkout-info" && r.Method == http.MethodGet:
-		checkout, err := s.main.PaymentCheckoutInfo(r.Context(), session.MainUserID)
+		checkout, err := s.stationCheckoutInfo(tenant.AgentID)
 		if err != nil {
 			s.writeMainError(w, requestID, err)
 			return
@@ -262,13 +263,8 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_PAYMENT_ORDER", err)
 			return
 		}
-		result, err := s.main.CreatePaymentOrder(r.Context(), session.MainUserID, request, s.paymentReturnURL(r))
-		if err != nil {
-			s.writeMainError(w, requestID, err)
-			return
-		}
-		s.recordTenantAudit(tenant.AgentID, "agent_user", session.MainUserID, "payment.order.create", "main_order", result.OutTradeNo, requestID, "success", request.OrderType)
-		s.writeData(w, http.StatusCreated, requestID, result)
+		s.createStationCheckoutOrder(w, r, requestID, tenant, session, request)
+		return
 	case r.URL.Path == basePath+"/orders/verify" && r.Method == http.MethodPost:
 		if !sameOrigin(r) {
 			s.writeError(w, http.StatusForbidden, requestID, "CSRF_ORIGIN_REJECTED", "cross-origin state-changing requests are not allowed")
@@ -286,12 +282,17 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 			s.writeError(w, http.StatusBadRequest, requestID, "INVALID_ORDER_NUMBER", "invalid order number")
 			return
 		}
-		order, err := s.main.VerifyPaymentOrder(r.Context(), session.MainUserID, request.OutTradeNo)
-		if err != nil {
-			s.writeMainError(w, requestID, err)
+		stationOrder, err := s.store.StationOrderByNo(tenant.AgentID, request.OutTradeNo)
+		if err != nil || stationOrder.MainUserID != session.MainUserID {
+			s.writeError(w, http.StatusNotFound, requestID, "ORDER_NOT_FOUND", "station order was not found")
 			return
 		}
-		s.writeData(w, http.StatusOK, requestID, order)
+		s.writeData(w, http.StatusOK, requestID, AgentOrder{
+			ID: stationOrder.ID, Amount: stationOrder.Amount, PayAmount: stationOrder.PayAmount, FeeRate: stationOrder.FeeRate,
+			Currency: stationOrder.Currency, PaymentType: stationOrder.PaymentType, OutTradeNo: stationOrder.OutTradeNo,
+			Status: stationOrder.Status, OrderType: stationOrder.OrderType, CreatedAt: stationOrder.CreatedAt, ExpiresAt: stationOrder.ExpiresAt,
+			PaidAt: stationOrder.PaidAt, PlanID: stationOrder.PlanID,
+		})
 	default:
 		s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "unsupported payment operation")
 	}

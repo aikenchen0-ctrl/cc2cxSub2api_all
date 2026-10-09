@@ -18,8 +18,12 @@ export function useDesignSystems(
       setIsLoading(true);
       setDesignSystems(await client.fetchDesignSystems());
     } catch (error) {
-      console.error("Failed to load design systems", error);
-      toast.error("Could not load design systems from the backend.");
+      if (error instanceof Error && "status" in error && error.status === 401) {
+        setDesignSystems([]);
+        return;
+      }
+      console.error("加载设计规范失败", error);
+      toast.error("加载设计规范失败，请从主站菜单重新进入后重试。");
     } finally {
       setIsLoading(false);
     }

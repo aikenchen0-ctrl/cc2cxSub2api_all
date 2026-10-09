@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentAdminSettingsView from './AgentAdminSettingsView.vue'
 import { agentAPI } from '@/agent/api'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { applyHomeSettings, compactHomeEnabled, homeContent, siteSubtitle } from '@/agent/branding'
 
 function createContext() {
@@ -16,7 +17,31 @@ function createContext() {
 }
 
 describe('AgentAdminSettingsView', () => {
+  it('opens payment inside system settings and keeps the selected tab in the URL', async () => {
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
+    const legacy = vi.spyOn(agentAPI, 'paymentConfig')
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/settings', component: AgentAdminSettingsView }] })
+    await router.push('/admin/settings?tab=payment')
+    await router.isReady()
+    const wrapper = mount(AgentAdminSettingsView, { global: { plugins: [router], stubs: { AgentPaymentSettings: { template: '<div data-testid="payment-panel">Payment panel</div>' } } } })
+    await flushPromises()
+    expect(wrapper.get('#settings-tab-payment').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="payment-panel"]').exists()).toBe(true)
+    expect(legacy).not.toHaveBeenCalled()
+    await wrapper.get('#settings-tab-branding').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tab).toBe('branding')
+    expect(wrapper.find('#agent-name').exists()).toBe(true)
+    await wrapper.get('#settings-tab-payment').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tab).toBe('payment')
+    expect(wrapper.find('[data-testid="payment-panel"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
   afterEach(() => { vi.restoreAllMocks(); applyHomeSettings({}) })
+  beforeEach(() => {
+    vi.spyOn(agentAPI, 'paymentConfig').mockResolvedValue({ enabled: false, provider: 'manual', currency: 'CNY', webhook_secret_configured: false, min_amount_cents: 100, max_amount_cents: 1000000, order_ttl_seconds: 1800 })
+  })
 
   it('loads tenant branding and saves only the current agent branding fields', async () => {
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
@@ -96,14 +121,18 @@ describe('AgentAdminSettingsView', () => {
     wrapper.unmount()
   })
 
-  it('states that main-site global settings and credentials remain isolated', async () => {
+  it('shows only branding and payment tabs and falls back from the removed tab', async () => {
     vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
-    const wrapper = mount(AgentAdminSettingsView)
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/settings', component: AgentAdminSettingsView }] })
+    await router.push('/admin/settings?tab=boundary')
+    await router.isReady()
+    const wrapper = mount(AgentAdminSettingsView, { global: { plugins: [router] } })
     await flushPromises()
 
-    await wrapper.findAll('button').find(button => button.text().includes('数据边界'))!.trigger('click')
-    expect(wrapper.text()).toContain('不能修改其他站点的配置')
-    expect(wrapper.text()).toContain('不能读取平台级密钥、令牌或内部凭证')
-    expect(wrapper.text()).toContain('用户余额与实际计费记录由系统统一核算')
+    expect(wrapper.findAll('[role="tab"]').map(tab => tab.text())).toEqual(['站点设置', '支付配置'])
+    expect(wrapper.text()).not.toContain('数据与权限边界')
+    expect(wrapper.get('#settings-tab-branding').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('#agent-name').exists()).toBe(true)
+    wrapper.unmount()
   })
 })

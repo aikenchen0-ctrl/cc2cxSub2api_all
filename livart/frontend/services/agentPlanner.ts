@@ -1,5 +1,6 @@
 import type { AgentPlan, AgentPlanStep, AgentToolId, CanvasItem, ImageAspectRatio, ImageResolution, ProductPosterAnalysis, ProductPosterRequest } from '../types';
 import { authHeaders, getStoredAuthSession } from './auth';
+import { createApiError } from './errorMessages';
 import { getCanvasItemAssetId } from './canvasPersistence';
 import { hasUsableImageSource } from './imageSources';
 import { getImageReferenceLabel } from './imageReferences';
@@ -703,7 +704,7 @@ export const createAgentRun = async (request: AgentRunRequest): Promise<AgentRun
 
   const payload = await response.json().catch(() => null) as ApiResponse<AgentRunApiResponse> | null;
   if (!response.ok || !payload?.success || !payload.data) {
-    throw new Error(payload?.error?.message || `Agent 执行失败：${response.status}`);
+    throw createApiError(payload, response.status, 'AI 助手没有完成请求');
   }
 
   return normalizeAgentRunPayload(payload.data, aspectRatio, request.prompt);
@@ -734,7 +735,7 @@ export const analyzeProductPosterDescription = async (
 
   const payload = await response.json().catch(() => null) as ApiResponse<ProductPosterAnalysis> | null;
   if (!response.ok || !payload?.success || !payload.data) {
-    throw new Error(payload?.error?.message || `产品特征分析失败：${response.status}`);
+    throw createApiError(payload, response.status, '产品特征分析没有完成');
   }
   return payload.data;
 };
@@ -752,7 +753,7 @@ export const getAgentRunStatus = async (
 
   const payload = await response.json().catch(() => null) as ApiResponse<AgentRunStatusApiResponse> | null;
   if (!response.ok || !payload?.success || !payload.data) {
-    throw new Error(payload?.error?.message || `Agent 任务状态查询失败：${response.status}`);
+    throw createApiError(payload, response.status, '任务状态暂时无法查询');
   }
   return normalizeAgentRunStatusPayload(payload.data, aspectRatio);
 };

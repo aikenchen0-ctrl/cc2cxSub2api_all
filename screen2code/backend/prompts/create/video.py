@@ -6,7 +6,7 @@ from prompts.policies import build_selected_stack_policy, build_user_image_polic
 
 
 def build_video_prompt_messages(
-    video_data_url: str,
+    frame_data_urls: list[str],
     stack: Stack,
     text_prompt: str,
     image_generation_enabled: bool,
@@ -16,35 +16,33 @@ def build_video_prompt_messages(
     selected_stack = build_selected_stack_policy(stack)
     design_system_block = build_design_system_prompt_block(design_system)
     user_text = f"""
-    You have been given a video of a user interacting with a web app. You need to re-create the same app exactly such that the same user interactions will produce the same results in the app you build.
+    你收到的是用户操作网页的录屏采样帧，已按时间先后排序。请复刻同一应用，使相同操作得到相同的页面状态和结果。
 
-    - Watch the entire video carefully and understand all the user interactions and UI state changes.
-    - Make sure the app looks exactly like what you see in the video.
-    - Pay close attention to background color, text color, font size, font family,
-    padding, margin, border, etc. Match the colors and sizes exactly.
+    - 对比连续帧，理解导航、按钮点击、表单输入和界面状态变化。
+    - 精确还原画面中的布局、文字、背景色、字体、字号、内外边距和边框。
     - {image_policy}
-    - If some functionality requires a backend call, just mock the data instead.
-    - MAKE THE APP FUNCTIONAL using JavaScript. Allow the user to interact with the app and get the same behavior as shown in the video.
-    - Use SVGs and interactive 3D elements if needed to match the functionality shown in the video.
+    - 需要后端数据时使用模拟数据，勿虚构真实后端接口。
+    - 使用 JavaScript 实现可操作的交互，使行为与录屏展示一致。
+    - 必要时使用 SVG 和可交互的 3D 元素。
 
-    Analyze this video and generate the code.
+    请分析这些录屏帧并生成代码。
     
     {selected_stack}
     {design_system_block}
     """
     if text_prompt.strip():
-        user_text = user_text + "\n\nAdditional instructions: " + text_prompt
+        user_text = user_text + "\n\n补充要求：" + text_prompt
 
-    user_content: list[ChatCompletionContentPartParam] = [
-        {
+    user_content: list[ChatCompletionContentPartParam] = []
+    for frame_url in frame_data_urls:
+        user_content.append({
             "type": "image_url",
-            "image_url": {"url": video_data_url, "detail": "high"},
-        },
-        {
+            "image_url": {"url": frame_url, "detail": "high"},
+        })
+    user_content.append({
             "type": "text",
             "text": user_text,
-        },
-    ]
+        })
 
     return [
         {

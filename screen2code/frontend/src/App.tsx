@@ -97,7 +97,7 @@ function App() {
       isImageGenerationEnabled: true,
       editorTheme: EditorTheme.COBALT,
       generatedCodeConfig: Stack.HTML_TAILWIND,
-      codeGenerationModel: CodeGenerationModel.GEMINI_3_FLASH_PREVIEW_MINIMAL,
+      codeGenerationModel: CodeGenerationModel.GPT_6_ASTRA_HIGH,
       selectedDesignSystemId: null,
       // Only relevant for hosted version
       isTermOfServiceAccepted: false,
@@ -145,7 +145,7 @@ function App() {
     try {
       const isFirst = designSystems.length === 0;
       const created = await createDesignSystem({
-        name: `Design system ${designSystems.length + 1}`,
+        name: `设计规范${designSystems.length + 1}`,
         content: NEW_DESIGN_SYSTEM_CONTENT,
       });
       if (isFirst) {
@@ -153,8 +153,8 @@ function App() {
       }
       openDesignSystemsManager(created.id);
     } catch (error) {
-      console.error("Failed to create design system", error);
-      toast.error("Could not create design system.");
+      console.error("创建设计规范失败", error);
+      toast.error("创建设计规范失败，请重试。");
     }
   }, [
     createDesignSystem,
@@ -258,14 +258,14 @@ function App() {
   const regenerate = () => {
     if (head === null) {
       toast.error(
-        "No current version set. Please contact support via chat or Github."
+        "当前版本不可用，请重新生成。"
       );
       throw new Error("Regenerate called with no head");
     }
 
     const currentCommit = commits[head];
     if (!currentCommit) {
-      toast.error("The selected version could not be found.");
+      toast.error("未找到所选版本。");
       return;
     }
 
@@ -275,7 +275,7 @@ function App() {
     }
 
     if (currentCommit.type === "code_create") {
-      toast.error("Imported code cannot be regenerated.");
+      toast.error("导入的代码无法重新生成，请直接提交修改要求。");
       return;
     }
 
@@ -547,7 +547,7 @@ function App() {
                 commit.hash,
                 variantIndex,
                 "error",
-                errorMessage || "Generation failed. Please retry."
+                errorMessage || "生成失败，请重试。"
               );
             }
           });
@@ -644,14 +644,14 @@ function App() {
     const parentHash = commit.parentHash;
     const parentCommit = parentHash ? commits[parentHash] : null;
     if (!parentHash || !parentCommit) {
-      toast.error("The previous version needed to retry this edit was not found.");
+      toast.error("未找到重试此修改所需的上一版本。");
       return;
     }
 
     const parentVariant =
       parentCommit.variants[parentCommit.selectedVariantIndex];
     if (!parentVariant) {
-      toast.error("The selected option from the previous version was not found.");
+      toast.error("未找到上一版本中的所选方案。");
       return;
     }
 
@@ -678,20 +678,20 @@ function App() {
   // Subsequent updates
   async function doUpdate(updateInstruction: string) {
     if (updateInstruction.trim() === "") {
-      toast.error("Please include some instructions for AI on what to update.");
+      toast.error("请输入希望 AI 修改的内容。");
       return;
     }
 
     if (head === null) {
       toast.error(
-        "No current version set. Contact support or open a Github issue."
+        "当前版本不可用，请重新生成。"
       );
       throw new Error("Update called with no head");
     }
 
     const currentCommit = commits[head];
     if (!currentCommit) {
-      toast.error("The selected version could not be found.");
+      toast.error("未找到所选版本。");
       return;
     }
 
@@ -848,7 +848,8 @@ function App() {
                   : "text-gray-500 dark:text-zinc-400"
               }`}
             >
-              Preview
+
+              预览
             </button>
             <button
               onClick={() => setMobilePane("chat")}
@@ -858,7 +859,8 @@ function App() {
                   : "text-gray-500 dark:text-zinc-400"
               }`}
             >
-              Chat
+
+              对话
             </button>
           </div>
         </div>
@@ -875,13 +877,14 @@ function App() {
               <div className="flex-1 overflow-y-auto sidebar-scrollbar-stable px-4">
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-3 px-1">
-                    <h2 className="text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">Versions</h2>
+                    <h2 className="text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">版本</h2>
                     <button
                       onClick={() => setIsHistoryOpen(false)}
                       className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                     >
                       <LuChevronLeft className="w-3.5 h-3.5" />
-                      Back to editor
+
+                      返回编辑器
                     </button>
                   </div>
                   <HistoryDisplay />

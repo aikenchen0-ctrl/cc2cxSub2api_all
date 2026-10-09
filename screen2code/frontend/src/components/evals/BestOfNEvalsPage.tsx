@@ -55,7 +55,7 @@ function BestOfNEvalsPage() {
         const folders: OutputFolder[] = await response.json();
         setAvailableFolders(folders);
       } catch (error) {
-        console.error("Error fetching folders:", error);
+        console.error("获取文件夹失败：", error);
       }
     };
     fetchFolders();
@@ -227,7 +227,7 @@ function BestOfNEvalsPage() {
           e.preventDefault();
           handleVote(currentComparisonIndex, "tie");
           break;
-        case "Tab":
+        case "标签页":
           e.preventDefault();
           setCurrentModelIndex((prev) => (prev + 1) % folderNames.length);
           break;
@@ -273,7 +273,7 @@ function BestOfNEvalsPage() {
 
   const loadEvals = async () => {
     if (folderPaths.some((path) => !path)) {
-      alert("Please select all folder paths");
+      alert("请为所有模型选择目录");
       return;
     }
 
@@ -299,9 +299,9 @@ function BestOfNEvalsPage() {
       // Reset iframe refs
       iframeRefs.current = [];
     } catch (error) {
-      console.error("Error loading evals:", error);
+      console.error("加载评测失败：", error);
       alert(
-        "Error loading evals. Please check the folder paths and try again."
+        "加载评测失败，请检查目录路径后重试。"
       );
     } finally {
       setIsLoading(false);
@@ -326,7 +326,7 @@ function BestOfNEvalsPage() {
       rows.push(`${stat.name}\t${stat.wins}\t${stat.percentage}%`);
     });
     if (stats.ties > 0) {
-      rows.push(`Ties\t${stats.ties}\t${stats.tiePercentage}%`);
+      rows.push(`平局${stats.ties}\t${stats.tiePercentage}%`);
     }
 
     const csvContent = rows.join("\n");
@@ -353,7 +353,8 @@ function BestOfNEvalsPage() {
           <div className="flex flex-col gap-4 max-w-5xl mx-auto px-6">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-semibold text-gray-200">
-                Configure Model Comparison
+
+                配置模型对比
               </h2>
               <button
                 onClick={async () => {
@@ -364,11 +365,11 @@ function BestOfNEvalsPage() {
                     const folders: OutputFolder[] = await response.json();
                     setAvailableFolders(folders);
                   } catch (error) {
-                    console.error("Error fetching folders:", error);
+                    console.error("获取文件夹失败：", error);
                   }
                 }}
                 className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2"
-                title="Refresh folder list"
+                title="刷新目录列表"
               >
                 <svg
                   className="w-4 h-4"
@@ -383,7 +384,8 @@ function BestOfNEvalsPage() {
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                Refresh
+
+                刷新
               </button>
             </div>
             <div className="space-y-3">
@@ -391,7 +393,8 @@ function BestOfNEvalsPage() {
                 <div key={index} className="relative">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-400 font-medium w-16">
-                      Model {index + 1}
+
+                      模型 {index + 1}
                     </span>
                     <div className="flex-1 relative">
                       <select
@@ -401,7 +404,7 @@ function BestOfNEvalsPage() {
                         }
                         className="w-full px-4 py-3 pr-10 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none transition-colors text-sm appearance-none cursor-pointer"
                       >
-                        <option value="">Select a folder...</option>
+                        <option value="">请选择目录…</option>
                         {availableFolders.map((folder) => (
                           <option
                             key={folder.path}
@@ -432,7 +435,7 @@ function BestOfNEvalsPage() {
                       <button
                         onClick={() => removeFolderInput(index)}
                         className="bg-red-500 hover:bg-red-600 px-3 py-3 rounded-lg transition-colors"
-                        title="Remove model"
+                        title="移除模型"
                       >
                         <svg
                           className="w-4 h-4"
@@ -471,7 +474,8 @@ function BestOfNEvalsPage() {
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Add Model
+
+                添加模型
               </button>
               <button
                 onClick={loadEvals}
@@ -496,7 +500,8 @@ function BestOfNEvalsPage() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    Loading...
+
+                    正在加载…
                   </>
                 ) : (
                   <>
@@ -519,7 +524,8 @@ function BestOfNEvalsPage() {
                         d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    Start Comparison
+
+                    开始对比
                   </>
                 )}
               </button>
@@ -540,7 +546,7 @@ function BestOfNEvalsPage() {
                     setCurrentModelIndex(0);
                   }}
                   className="bg-gray-700 hover:bg-gray-600 text-white px-2.5 py-1 rounded-lg text-sm transition-colors"
-                  title="Back to setup"
+                  title="返回配置"
                 >
                   <svg
                     className="w-4 h-4"
@@ -562,7 +568,7 @@ function BestOfNEvalsPage() {
                     onClick={goToPrevious}
                     disabled={currentComparisonIndex === 0}
                     className="px-2.5 py-1 rounded-l-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Previous comparison (↑)"
+                    title="上一组对比（↑）"
                   >
                     <svg
                       className="w-4 h-4"
@@ -591,7 +597,8 @@ function BestOfNEvalsPage() {
                             value={index}
                             className="bg-gray-800"
                           >
-                            Comparison {index + 1}{" "}
+
+                            对比 {index + 1}{" "}
                             {outcomes[index] !== null ? "✓" : ""}
                           </option>
                         ))
@@ -601,7 +608,8 @@ function BestOfNEvalsPage() {
                             value={index}
                             className="bg-gray-800"
                           >
-                            Comparison {index + 1}{" "}
+
+                            对比 {index + 1}{" "}
                             {outcomes[index] !== null ? "✓" : ""}
                           </option>
                         ))}
@@ -611,7 +619,7 @@ function BestOfNEvalsPage() {
                     onClick={goToNext}
                     disabled={currentComparisonIndex === evals.length - 1}
                     className="px-2.5 py-1 rounded-r-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Next comparison (↓)"
+                    title="下一组对比（↓）"
                   >
                     <svg
                       className="w-4 h-4"
@@ -631,10 +639,10 @@ function BestOfNEvalsPage() {
 
                 <span className="text-sm text-gray-400 font-medium">
                   {winnerFilter === "all"
-                    ? `${currentComparisonIndex + 1} of ${evals.length}`
+                    ? `${currentComparisonIndex + 1}/${evals.length}`
                     : `${
                         filteredIndices.indexOf(currentComparisonIndex) + 1
-                      } of ${filteredIndices.length} (filtered)`}
+                      }/${filteredIndices.length} (filtered)`}
                 </span>
               </div>
 
@@ -642,7 +650,8 @@ function BestOfNEvalsPage() {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 bg-gray-700/50 px-3 py-1 rounded-lg">
                   <span className="text-xs text-gray-400 font-medium">
-                    Progress
+
+                    进度
                   </span>
                   <div className="w-24 h-1.5 bg-gray-600 rounded-full overflow-hidden">
                     <div
@@ -676,7 +685,8 @@ function BestOfNEvalsPage() {
                       d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                     />
                   </svg>
-                  Results
+
+                  结果
                   <svg
                     className={`w-3 h-3 transition-transform duration-200 ${
                       showResults ? "rotate-180" : ""
@@ -707,33 +717,35 @@ function BestOfNEvalsPage() {
                   }}
                   className="px-2 py-1 bg-gray-700 text-white text-xs rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                 >
-                  <option value="all">All Comparisons</option>
+                  <option value="all">全部对比</option>
                   {folderNames.map((name, index) => (
                     <option key={index} value={index}>
-                      {name} Wins
+                      {name}  获胜次数
                     </option>
                   ))}
-                  <option value="tie">Ties</option>
+                  <option value="tie">平局</option>
                 </select>
 
                 {showResults && (
                   <div className="bg-gray-800 rounded overflow-hidden">
                     <div className="flex items-center justify-between px-2 py-1 bg-gray-700">
                       <span className="text-xs text-gray-300 font-semibold">
-                        Results
+
+                        结果
                       </span>
                       <button
                         onClick={copyResultsAsCSV}
                         className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
                       >
-                        Copy CSV
+
+                        复制 CSV
                       </button>
                     </div>
                     <table className="text-xs w-full">
                       <thead>
                         <tr className="bg-gray-700">
-                          <th className="px-2 py-1 text-gray-300">Model</th>
-                          <th className="px-2 py-1 text-gray-300">Wins</th>
+                          <th className="px-2 py-1 text-gray-300">模型</th>
+                          <th className="px-2 py-1 text-gray-300">获胜次数</th>
                           <th className="px-2 py-1 text-gray-300">%</th>
                         </tr>
                       </thead>
@@ -753,7 +765,7 @@ function BestOfNEvalsPage() {
                         ))}
                         {stats.ties > 0 && (
                           <tr className="border-t border-gray-600">
-                            <td className="px-2 py-1 text-white">Ties</td>
+                            <td className="px-2 py-1 text-white">平局</td>
                             <td className="px-2 py-1 text-yellow-400 text-center">
                               {stats.ties}
                             </td>
@@ -770,7 +782,8 @@ function BestOfNEvalsPage() {
 
               {/* Right: Quick help */}
               <div className="text-xs text-gray-400">
-                ↑↓ nav | ←→ switch | 1-{folderNames.length} vote | T tie
+
+                ↑↓ 导航 | ←→ 切换 | 1-{folderNames.length}  投票 | T 平局
               </div>
             </div>
           </div>
@@ -799,13 +812,14 @@ function BestOfNEvalsPage() {
                         d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
-                    Reference Image
+
+                    参考图片
                   </h3>
                 </div>
                 <div className="w-full h-[calc(100vh-200px)] flex items-center justify-center bg-gray-50 p-2">
                   <img
                     src={currentEval.input}
-                    alt={`Input for comparison ${currentComparisonIndex + 1}`}
+                    alt={`对比输入${currentComparisonIndex + 1}`}
                     className="max-w-full max-h-full object-contain rounded shadow-sm"
                   />
                 </div>
@@ -844,7 +858,7 @@ function BestOfNEvalsPage() {
                       >
                         {outcomes[currentComparisonIndex] === index
                           ? "✓"
-                          : "Vote"}
+                          : "投票"}
                       </button>
                     </div>
                   ))}
@@ -857,8 +871,8 @@ function BestOfNEvalsPage() {
                     }`}
                   >
                     {outcomes[currentComparisonIndex] === "tie"
-                      ? "Tie ✓"
-                      : "Tie (T)"}
+                      ? "平局 ✓"
+                      : "平局（T）"}
                   </button>
                 </div>
               </div>
@@ -867,9 +881,9 @@ function BestOfNEvalsPage() {
               <div className="bg-white shadow-lg overflow-hidden">
                 <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
                   <span className="text-xs text-gray-600 font-medium">
-                    {folderNames[currentModelIndex]} Output
+                    {folderNames[currentModelIndex]}  输出
                     {outcomes[currentComparisonIndex] === currentModelIndex && (
-                      <span className="ml-2 text-green-600">✓ Winner</span>
+                      <span className="ml-2 text-green-600">✓ 优胜方案</span>
                     )}
                   </span>
                   <Dialog>
@@ -895,7 +909,8 @@ function BestOfNEvalsPage() {
                             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
                           />
                         </svg>
-                        Full Screen
+
+                        全屏
                       </button>
                     </DialogTrigger>
                     <DialogContent className="w-[95vw] max-w-[95vw] h-[95vh] max-h-[95vh] bg-gray-900">

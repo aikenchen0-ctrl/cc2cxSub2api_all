@@ -51,15 +51,15 @@ async def run_extract_assets(
     if not gemini_api_key:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "Asset extraction requires GEMINI_API_KEY."},
-            summary={"error": "Missing Gemini API key"},
+            result={"error": "提取素材需要配置 GEMINI_API_KEY。"},
+            summary={"error": "缺少 Gemini 接口密钥"},
         )
 
     if not input_images:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "No input images are available for asset extraction."},
-            summary={"error": "No input images"},
+            result={"error": "没有可用于提取素材的输入图片。"},
+            summary={"error": "没有输入图片"},
         )
 
     raw_descriptions = args.get("asset_descriptions") or args.get("descriptions")
@@ -67,9 +67,9 @@ async def run_extract_assets(
         return ToolExecutionResult(
             ok=False,
             result={
-                "error": "extract_assets requires a non-empty asset_descriptions list"
+                "error": "extract_assets 需要非空的 asset_descriptions 列表"
             },
-            summary={"error": "Missing asset_descriptions"},
+            summary={"error": "缺少 asset_descriptions"},
         )
 
     raw_description_items = cast(list[object], raw_descriptions)
@@ -81,8 +81,8 @@ async def run_extract_assets(
     if not descriptions:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "No valid asset descriptions provided"},
-            summary={"error": "No valid asset_descriptions"},
+            result={"error": "未提供有效的素材描述"},
+            summary={"error": "没有有效的 asset_descriptions"},
         )
 
     try:
@@ -96,11 +96,11 @@ async def run_extract_assets(
         # abort the whole variant. Like the other external image tools, report it
         # as a tool error so the agent can continue or fall back (e.g. redraw with
         # generate_images) instead of propagating out of the tool runtime.
-        print(f"Asset extraction failed: {exc}")
+        print(f"素材提取失败: {exc}")
         return ToolExecutionResult(
             ok=False,
-            result={"error": f"Asset extraction failed: {exc}"},
-            summary={"error": "Asset extraction failed"},
+            result={"error": f"素材提取失败: {exc}"},
+            summary={"error": "素材提取失败"},
         )
     assets = extraction_result.get("assets", [])
     promoted_assets: List[Dict[str, Any]] = []
@@ -190,7 +190,7 @@ async def run_extract_assets(
         ]
     if not extracted:
         result["error"] = (
-            extraction_note or "No assets could be extracted from the input images."
+            extraction_note or "无法从输入图片提取素材。"
         )
 
     summary_assets: List[Dict[str, Any]] = []

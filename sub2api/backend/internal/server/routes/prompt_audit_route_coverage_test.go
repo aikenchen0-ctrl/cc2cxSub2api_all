@@ -59,6 +59,7 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/sub2api/orders/:id/refund-request":  "account refund request with no model prompt",
 		"/sub2api/affiliate/transfer":         "account affiliate-balance transfer with no model prompt",
 		"/sub2api/affiliate/bind":             "account inviter binding with no model prompt",
+		"/sub2api/api-keys":                   "account API key creation with no model prompt",
 		"/sub2api/redeem":                     "account redemption mutation with no model prompt",
 		"/sub2api/auth-identities/bind/start": "account identity-binding handoff with no model prompt",
 		"/stt":                                "speech transcription is not a text-generation prompt",

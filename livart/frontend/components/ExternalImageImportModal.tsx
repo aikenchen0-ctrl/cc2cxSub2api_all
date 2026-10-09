@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, DownloadCloud, Link2, Loader2, Search, X } from 'lucide-react';
 import type { ExternalImageCandidate, ExternalImageParseHistoryItem } from '../services/externalImages';
 import { loadExternalImageParseHistory, searchExternalImages } from '../services/externalImages';
+import FailureNotice from './FailureNotice';
 
 const SUPPORTED_SOCIAL_PLATFORMS = [
   { label: '抖音', logo: '抖音', className: 'bg-zinc-950 text-white shadow-[inset_2px_0_0_#25f4ee,inset_-2px_0_0_#fe2c55]' },
@@ -190,7 +191,7 @@ const ExternalImageImportModal: React.FC<ExternalImageImportModalProps> = ({
           </div>
           {error && (
             <div className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-500">
-              {error}
+              <FailureNotice error={error} context="获取外部图片" />
             </div>
           )}
         </div>

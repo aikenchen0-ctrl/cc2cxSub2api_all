@@ -8,7 +8,8 @@ function TipLink() {
       target="_blank"
       rel="noopener"
     >
-      Tips for better results
+
+      提升生成效果的小技巧
     </a>
   );
 }

@@ -31,9 +31,13 @@ export interface DesignSystemsClient {
 export const NEW_DESIGN_SYSTEM_CONTENT = "";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
+  // An anonymous visit has no personal design systems yet.
+  if (response.status === 401) {
+    throw Object.assign(new Error("请从主站菜单登录后进入"), { status: 401 });
+  }
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(message || "Failed to update design systems");
+    throw new Error(message || "更新设计规范失败");
   }
 
   return response.json() as Promise<T>;
@@ -51,6 +55,7 @@ export function createHttpDesignSystemsRequest(
     const { method = "GET", body } = options;
     const response = await fetcher(getDesignSystemUrl(baseUrl, path), {
       method,
+      credentials: "include",
       headers:
         body === undefined ? undefined : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),

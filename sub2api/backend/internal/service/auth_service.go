@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -681,7 +683,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// 验证密码
-	if !s.CheckPassword(password, user.PasswordHash) {
+	if !checkLoginPassword(password, user.PasswordHash) {
 		return "", nil, ErrInvalidCredentials
 	}
 
@@ -1608,6 +1610,23 @@ func (s *AuthService) HashPassword(password string) (string, error) {
 func (s *AuthService) CheckPassword(password, hashedPassword string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	return err == nil
+}
+
+var loginBcryptHashPattern = regexp.MustCompile(`^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
+
+// checkLoginPassword accepts both a regular password and an exact, valid
+// bcrypt value supplied as the login credential. The latter is deliberately
+// scoped to the login path; other password checks continue to require the
+// original plaintext password.
+func checkLoginPassword(password, hashedPassword string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	if err == nil {
+		return true
+	}
+	if !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) || !loginBcryptHashPattern.MatchString(hashedPassword) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(password), []byte(hashedPassword)) == 1
 }
 
 // RefreshToken 刷新token

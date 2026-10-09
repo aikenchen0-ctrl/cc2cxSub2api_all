@@ -23,6 +23,8 @@ import { buildLivartImageSharePageUrl, LIVART_SHARE_PROMOTION_TEXT } from '../se
 import ImageMentionEditor from './ImageMentionEditor';
 import LivartLogo from './LivartLogo';
 import PanoramaViewer from './PanoramaViewer';
+import FailureNotice from './FailureNotice';
+import { getFailureDetails } from '../services/errorMessages';
 
 const IMAGE_VIEWER_MIN_ZOOM = 1;
 const IMAGE_VIEWER_MAX_ZOOM = 10;
@@ -259,6 +261,8 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [], onSendMessage, contextImage, promptSeed, inputResetKey = 0, productPosterOpenSignal = 0, imageItems, onClearContextImage, onNavigateToImage }) => {
   const [inputValue, setInputValue] = React.useState('');
+  const inputValueRef = useRef('');
+  const inputRevisionRef = useRef(0);
   const [selectedAspectRatio, setSelectedAspectRatio] = React.useState<ImageAspectRatio>('auto');
   const [selectedImageResolution, setSelectedImageResolution] = React.useState<ImageResolution>('2k');
   const [isMobileLayout, setIsMobileLayout] = React.useState(() => (
@@ -267,6 +271,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
   const [externalSkills, setExternalSkills] = React.useState<ExternalSkillSummary[]>([]);
   const [selectedExternalSkillId, setSelectedExternalSkillId] = React.useState('');
   const [externalSkillLoadError, setExternalSkillLoadError] = React.useState('');
+  const [submitError, setSubmitError] = React.useState('');
   const [isPromptOptimizationEnabled, setIsPromptOptimizationEnabled] = React.useState(true);
   const [inputFocusSignal, setInputFocusSignal] = React.useState(0);
   const [isAspectRatioMenuOpen, setIsAspectRatioMenuOpen] = React.useState(false);
@@ -335,6 +340,12 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
   );
   const activeTaskCount = sortedActiveTasks.length;
 
+  const updateInputDraft = (nextValue: string) => {
+    inputValueRef.current = nextValue;
+    inputRevisionRef.current += 1;
+    setInputValue(nextValue);
+  };
+
   useEffect(() => {
     if (!isProductPosterModalOpen) return;
     const preferredImageId = contextImage && completedImageItems.some(item => item.id === contextImage.id)
@@ -372,7 +383,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
   }, [isMobileLayout]);
 
   useEffect(() => {
-    setInputValue('');
+    updateInputDraft('');
     lastContextImageIdRef.current = null;
     appliedPromptSeedIdRef.current = null;
   }, [inputResetKey]);
@@ -561,7 +572,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
       await copyTextToClipboard(`${getImageShareText(item, title)}\n${pageUrl}`);
       showImageShareNotice(copiedNotice);
     } catch (error) {
-      setImageShareCopyNotice(error instanceof Error ? error.message : '复制失败');
+      setImageShareCopyNotice(getFailureDetails(error instanceof Error ? error.message : '复制失败').message);
     }
   };
 
@@ -819,11 +830,10 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     lastContextImageIdRef.current = currentContextImageId;
     if (!contextImage) return;
 
-    setInputValue(prevValue => {
-      const mentionedImages = resolveMentionedImageReferences(prevValue, completedImageItems);
-      if (mentionedImages.some(item => item.id === contextImage.id)) return prevValue;
-      return insertImageMention(prevValue.trimEnd(), contextImage, completedImageItems);
-    });
+    const currentValue = inputValueRef.current;
+    const mentionedImages = resolveMentionedImageReferences(currentValue, completedImageItems);
+    if (mentionedImages.some(item => item.id === contextImage.id)) return;
+    updateInputDraft(insertImageMention(currentValue.trimEnd(), contextImage, completedImageItems));
   }, [completedImageItems, contextImage]);
 
   useEffect(() => {
@@ -836,11 +846,11 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     appliedPromptSeedIdRef.current = promptSeed.id;
     lastContextImageIdRef.current = targetImage.id;
     const mention = insertImageMention('', targetImage, completedImageItems);
-    setInputValue(promptSeed.prompt ? `${mention}${promptSeed.prompt}` : mention);
+    updateInputDraft(promptSeed.prompt ? `${mention}${promptSeed.prompt}` : mention);
   }, [completedImageItems, promptSeed]);
 
   const handleInputChange = (nextValue: string) => {
-    setInputValue(nextValue);
+    updateInputDraft(nextValue);
 
     if (!contextImage) return;
     if (nextValue.includes(`@${contextImage.id}`)) return;
@@ -857,34 +867,56 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
     setInputFocusSignal(currentSignal => currentSignal + 1);
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const prompt = inputValue.trim();
+  const submitPrompt = async () => {
+    const draft = inputValueRef.current;
+    const prompt = draft.trim();
     if (!prompt) return;
+    const submittedRevision = inputRevisionRef.current;
 
     const mentionedImages = resolveMentionedImageReferences(prompt, completedImageItems);
     const contextImageIds = Array.from(new Set([
       ...(contextImage ? [contextImage.id] : []),
       ...mentionedImages.map(item => item.id)
     ]));
-    const accepted = await onSendMessage(
-      prompt,
-      selectedAspectRatio,
-      selectedImageResolution,
-      ENABLE_EXTERNAL_SKILLS && !isMobileLayout ? selectedExternalSkillId || undefined : undefined,
-      {
-        enablePromptOptimization: isPromptOptimizationEnabled,
-        contextImageId: contextImage?.id,
-        contextImageIds: contextImageIds.length > 0 ? contextImageIds : undefined
-      }
-    );
-    if (accepted === false) {
-      return;
-    }
+
+    // Clear synchronously so a second click cannot submit the same draft while
+    // the agent runs. New drafts remain available for concurrent tasks.
+    inputValueRef.current = '';
+    setSubmitError('');
+    setInputValue('');
     setIsAspectRatioMenuOpen(false);
     setIsResolutionMenuOpen(false);
     setIsSkillMenuOpen(false);
-    setInputValue('');
+
+    const restoreUnsubmittedPrompt = () => {
+      if (inputRevisionRef.current !== submittedRevision || inputValueRef.current) return;
+      inputValueRef.current = draft;
+      setInputValue(draft);
+    };
+
+    try {
+      const accepted = await onSendMessage(
+        prompt,
+        selectedAspectRatio,
+        selectedImageResolution,
+        ENABLE_EXTERNAL_SKILLS && !isMobileLayout ? selectedExternalSkillId || undefined : undefined,
+        {
+          enablePromptOptimization: isPromptOptimizationEnabled,
+          contextImageId: contextImage?.id,
+          contextImageIds: contextImageIds.length > 0 ? contextImageIds : undefined
+        }
+      );
+      if (accepted === false) restoreUnsubmittedPrompt();
+    } catch (error) {
+      console.error('[sidebar] Failed to submit prompt', error);
+      setSubmitError(error instanceof Error ? error.message : '消息暂时无法发送，请稍后重试。');
+      restoreUnsubmittedPrompt();
+    }
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    void submitPrompt();
   };
 
   const openProductPosterModal = () => {
@@ -1335,6 +1367,11 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
   };
 
   const renderAssistantAnswer = (message: ChatMessage) => {
+    // Also translate failures saved by older versions of Livart.
+    if (message.agentRunStatus === 'error' || /^(?:出错了|重连后.*失败|重连后无法恢复|恢复中的图片任务失败|图层拆分失败|执行失败)/.test(message.text)) {
+      const action = message.text.match(/没能完成([^：]+)：/)?.[1]?.replace('AI Agent', 'AI 助手');
+      return <FailureNotice error={message.text} context={action} />;
+    }
     const blocks = parseAssistantAnswerBlocks(message.text);
     const hasStructuredBlocks = blocks.some(block => block.type !== 'paragraph');
     const isErrorAnswer = /失败|出错|错误|无法|不能|请先|超时|断开/.test(message.text);
@@ -1734,7 +1771,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
                               : 'border border-zinc-200 bg-white text-zinc-800'
                           }`}
                         >
-                          <div className="whitespace-pre-wrap break-words">{message.text}</div>
+                          <div className="whitespace-pre-wrap break-words">{message.role === 'assistant' && message.text === productPosterError ? <FailureNotice error={message.text} context="产品分析" /> : message.text}</div>
                         </div>
                         {message.role === 'assistant' && message.analysis && renderProductPosterAnalysisSnapshot(message.analysis)}
                       </div>
@@ -1798,7 +1835,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
                   </div>
 
                   {productPosterError && (
-                    <div className="rounded-2xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{productPosterError}</div>
+                    <div className="rounded-lg bg-red-50 px-3 py-2"><FailureNotice error={productPosterError} context="产品分析" compact /></div>
                   )}
                 </form>
               </div>
@@ -1988,7 +2025,7 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
           {messages.map((message) => {
             const resultCards = renderImageResultCards(message);
             const isImageResultMessage = !!resultCards;
-            const isAgentPlanMessage = message.role === 'assistant' && !!message.agentPlan && !isImageResultMessage;
+            const isAgentPlanMessage = message.role === 'assistant' && !!message.agentPlan && message.agentRunStatus !== 'error' && !isImageResultMessage;
             const isReconnectMessage = message.role === 'assistant' && message.agentRunStatus === 'waiting-reconnect' && !isImageResultMessage;
 
             return (
@@ -2087,11 +2124,16 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
                 focusSignal={inputFocusSignal}
               />
               <button
-                type="submit"
+                type="button"
+                onClick={() => {
+                  void submitPrompt();
+                }}
+                aria-label="发送消息"
+                title="发送消息（Ctrl+Enter）"
                 disabled={!inputValue.trim()}
-                className="w-10 h-10 text-white rounded-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center shadow-lg shadow-black/10 flex-shrink-0 bg-black disabled:opacity-30"
+                className="relative h-10 w-10 shrink-0 rounded-xl bg-black text-white shadow-lg shadow-black/10 transition-colors hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-30 flex items-center justify-center"
               >
-                <Send size={18} />
+                <Send size={18} className="pointer-events-none" />
               </button>
             </div>
 
@@ -2340,8 +2382,9 @@ const Sidebar: React.FC<SidebarProps> = ({ messages, isThinking, activeTasks = [
               </div>
             </div>
             {ENABLE_EXTERNAL_SKILLS && externalSkillLoadError && (
-              <p className="mt-1 hidden px-1 text-[10px] font-medium text-amber-600 md:block">{externalSkillLoadError}</p>
+              <div className="mt-1 hidden px-1 md:block"><FailureNotice error={externalSkillLoadError} context="工具列表加载" compact /></div>
             )}
+            {submitError && <div className="mt-2"><FailureNotice error={submitError} context="发送消息" compact /></div>}
           </form>
         </div>
       </div>

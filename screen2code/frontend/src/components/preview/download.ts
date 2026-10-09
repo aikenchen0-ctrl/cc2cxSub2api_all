@@ -31,7 +31,7 @@ export const downloadCode = async (code: string) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Export failed with status ${response.status}`);
+      throw new Error(`导出失败，状态码 ${response.status}`);
     }
 
     const blob = await response.blob();
@@ -40,7 +40,7 @@ export const downloadCode = async (code: string) => {
       filenameFromContentDisposition(response.headers.get("Content-Disposition"))
     );
   } catch (error) {
-    console.warn("Falling back to downloading index.html", error);
+    console.warn("导出接口不可用，改为下载 index.html", error);
     downloadBlob(
       new Blob([normalizeBabelCdn(code)], { type: "text/html" }),
       "index.html"

@@ -1,5 +1,6 @@
 import type { CanvasItem } from '../types';
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 import { hasUsableImageSource } from './imageSources';
 
 export const IMAGE_REFERENCE_TOKEN_PATTERN = /@([^\s@，。,.!?！？:：；;]+)/g;
@@ -332,7 +333,7 @@ const requestImageReferenceRoleAnalysis = async (
   const payload = await response.json().catch(() => null) as ApiResponse<ImageReferenceRoleAnalysis> | null;
 
   if (!response.ok || !payload?.success || !payload.data?.baseImageId) {
-    throw new Error(payload?.error?.message || `图片角色分析失败：${response.status}`);
+    throw createApiError(payload, response.status, '参考图片分析没有完成');
   }
 
   return payload.data;

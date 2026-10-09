@@ -810,7 +810,7 @@
                 <div class="config-section"><label class="config-label">模型通道</label><input type="text"
                         class="config-input" id="aiUrl" value="Sub2API /v1（服务端代调）" readonly></div>
                 <div class="config-section"><label class="config-label">公开模型</label><input type="text"
-                        class="config-input" id="aiModel" value="gpt-5.5" readonly></div>
+                        class="config-input" id="aiModel" value="gpt-6-astra" readonly></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline" style="flex:1" onclick="closeModal('aiModal')">取消</button>
@@ -1244,7 +1244,7 @@
             document.getElementById('aiEnabled').checked = currentConfig.ai_enabled || false;
             const ac = currentConfig.ai_config || {};
             document.getElementById('aiUrl').value = 'Sub2API /v1（服务端代调）';
-            document.getElementById('aiModel').value = 'gpt-5.5';
+            document.getElementById('aiModel').value = 'gpt-6-astra';
             document.getElementById('aiModal').classList.add('active');
         }
 
@@ -1253,7 +1253,7 @@
             currentConfig.ai_config = {
                 enable: document.getElementById('aiEnabled').checked,
                 base_url: '',
-                model: 'gpt-5.5'
+                model: 'gpt-6-astra'
             };
             await saveFullConfig();
             closeModal('aiModal');

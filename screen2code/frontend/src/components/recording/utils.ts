@@ -21,11 +21,11 @@ export function blobToBase64DataUrl(blob: Blob): Promise<string> {
       if (reader.result) {
         resolve(reader.result as string);
       } else {
-        reject(new Error("FileReader did not return a result."));
+        reject(new Error("读取录屏文件没有返回结果。"));
       }
     };
     reader.onerror = () =>
-      reject(new Error("FileReader encountered an error."));
+      reject(new Error("读取录屏文件时发生错误。"));
     reader.readAsDataURL(blob);
   });
 }

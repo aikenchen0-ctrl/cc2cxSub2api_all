@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
+import { routeLocationKey, routerKey } from 'vue-router'
+import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import AgentPaymentSettings from '@/views/admin/settings/AgentPaymentSettings.vue'
 import AgentInput from '@/components/common/AgentInput.vue'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -28,10 +31,27 @@ const emit = defineEmits<{
   'update:compactHomeEnabled': [value: boolean]
   'update:homeContent': [value: string]
   save: []
+  uploadLogo: [file: File]
 }>()
 
-const activeTab = ref<'branding' | 'boundary'>('branding')
+const route = inject(routeLocationKey, { query: {} } as unknown as RouteLocationNormalizedLoaded)
+const router = inject(routerKey, null)
+type SettingsTab = 'branding' | 'payment'
+const activeTab = ref<SettingsTab>('branding')
+watch(() => route.query?.tab, value => {
+  activeTab.value = value === 'payment' ? value : 'branding'
+}, { immediate: true })
+function selectTab(tab: SettingsTab) {
+  activeTab.value = tab
+  if (router) void router.replace({ query: { ...route.query, tab } })
+}
+const tabs = [
+  { key: 'branding' as const, label: '站点设置', icon: 'home' as const },
+
+  { key: 'payment' as const, label: '支付配置', icon: 'creditCard' as const },
+]
 const logoFailed = ref(false)
+const logoInput = ref<HTMLInputElement | null>(null)
 const agentName = computed({ get: () => props.name, set: value => emit('update:name', value) })
 const siteName = computed({ get: () => props.siteName, set: value => emit('update:siteName', value) })
 const siteLogo = computed({ get: () => props.siteLogo, set: value => emit('update:siteLogo', value) })
@@ -45,26 +65,36 @@ const previewName = computed(() => agentName.value.trim() || siteName.value.trim
 const previewInitial = computed(() => previewName.value.slice(0, 1).toUpperCase())
 
 watch(() => props.siteLogo, () => { logoFailed.value = false })
+
+function chooseLogo(event: Event): void {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  emit('uploadLogo', file)
+  if (logoInput.value) logoInput.value.value = ''
+}
 </script>
 
 <template>
-  <section class="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-label="站点系统设置">
-    <nav class="h-fit rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-dark-700 dark:bg-dark-800" aria-label="设置分类">
-      <button
-        type="button"
-        :class="['flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors', activeTab === 'branding' ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-dark-300 dark:hover:bg-dark-700']"
-        @click="activeTab = 'branding'"
-      >
-        <Icon name="home" size="sm" />站点设置
-      </button>
-      <button
-        type="button"
-        :class="['mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors', activeTab === 'boundary' ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-dark-300 dark:hover:bg-dark-700']"
-        @click="activeTab = 'boundary'"
-      >
-        <Icon name="shield" size="sm" />数据边界
-      </button>
-    </nav>
+  <section class="space-y-6" aria-label="站点系统设置">
+    <div class="settings-tabs-shell">
+      <nav class="settings-tabs-scroll" role="tablist" aria-label="系统设置">
+        <div class="settings-tabs">
+          <button
+            v-for="tab in tabs"
+            :id="`settings-tab-${tab.key}`"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            :aria-selected="activeTab === tab.key"
+            :class="['settings-tab', activeTab === tab.key && 'settings-tab-active']"
+            @click="selectTab(tab.key)"
+          >
+            <span class="settings-tab-icon"><Icon :name="tab.icon" size="sm" /></span>
+            <span class="settings-tab-label">{{ tab.label }}</span>
+          </button>
+        </div>
+      </nav>
+    </div>
 
     <div v-if="activeTab === 'branding'" class="space-y-6">
       <div class="card overflow-hidden">
@@ -89,9 +119,13 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
             </div>
 
             <div>
-              <label for="site-logo" class="input-label">Logo 图片网址或站内路径</label>
+              <label for="site-logo-file" class="input-label">上传 Logo</label>
+              <div class="mt-2 flex flex-wrap items-center gap-3">
+                <input id="site-logo-file" ref="logoInput" class="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-700" type="file" accept="image/png,image/jpeg,image/webp,image/gif" :disabled="saving" @change="chooseLogo">
+              </div>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">支持 PNG、JPEG、WEBP、GIF，最大 1 MB。上传后立即应用到本站。</p>
+              <label for="site-logo" class="input-label mt-4 block">或填写 Logo 网址</label>
               <AgentInput id="site-logo" v-model="siteLogo" class="mt-2 font-mono text-sm" maxlength="2048" type="text" placeholder="/logo.svg 或 https://…" />
-              <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">建议使用正方形 SVG/PNG；留空时显示站点名称首字。</p>
             </div>
 
             <div>
@@ -159,31 +193,59 @@ watch(() => props.siteLogo, () => { logoFailed.value = false })
       </div>
     </div>
 
-    <div v-else class="space-y-6">
-      <div class="card overflow-hidden">
-        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">数据与权限边界</h2>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">站点管理员只能管理当前站点的数据与展示配置。</p>
-        </div>
-        <div class="grid gap-4 p-6 md:grid-cols-2">
-          <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
-            <div class="flex items-center gap-2 font-medium text-emerald-800 dark:text-emerald-200"><Icon name="checkCircle" size="sm" />本站可管理</div>
-            <ul class="mt-3 space-y-2 text-sm text-emerald-800/90 dark:text-emerald-200/90">
-              <li>本站品牌、Logo、文档入口、客服信息与模型允许列表</li>
-              <li>本站用户归属与本地访问状态</li>
-              <li>本站用户的代理 API Key 与用量视图</li>
-            </ul>
-          </div>
-          <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
-            <div class="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-200"><Icon name="lock" size="sm" />安全边界</div>
-            <ul class="mt-3 space-y-2 text-sm text-amber-800/90 dark:text-amber-200/90">
-              <li>不能修改其他站点的配置</li>
-              <li>不能读取平台级密钥、令牌或内部凭证</li>
-              <li>用户余额与实际计费记录由系统统一核算</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
+
+    <AgentPaymentSettings v-else-if="activeTab === 'payment'" />
   </section>
 </template>
+
+<style scoped>
+.settings-tabs-shell {
+  @apply sticky z-20 rounded-2xl border border-gray-200/80 bg-white/90 p-1.5 backdrop-blur-xl dark:border-dark-700/80 dark:bg-dark-900/80;
+  top: 4.75rem;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 0.07), 0 1px 0 rgb(255 255 255 / 0.9) inset;
+}
+.settings-tabs-scroll {
+  @apply overflow-x-auto;
+  scrollbar-width: none;
+}
+.settings-tabs-scroll::-webkit-scrollbar { display: none; }
+.settings-tabs { @apply flex min-w-max items-center gap-1 md:min-w-full; }
+.settings-tab {
+  @apply relative isolate flex h-10 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors dark:text-dark-300 md:min-w-0 md:flex-1;
+}
+.settings-tab::before {
+  content: "";
+  @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity;
+  background: linear-gradient(135deg, rgb(240 253 250 / 0.95), rgb(204 251 241 / 0.75));
+}
+.settings-tab:hover::before,
+.settings-tab:focus-visible::before { opacity: 1; }
+.settings-tab:focus-visible { @apply ring-2 ring-primary-500/40 ring-offset-2 ring-offset-white dark:ring-offset-dark-900; }
+.settings-tab-active {
+  @apply border-primary-200/80 bg-white text-primary-700 shadow-sm dark:border-primary-400/30 dark:bg-dark-800 dark:text-primary-200;
+}
+.settings-tab-active::before { opacity: 0; }
+.settings-tab-active::after {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.25rem;
+  left: 0.75rem;
+  height: 2px;
+  border-radius: 9999px;
+  content: "";
+  background: linear-gradient(90deg, #14b8a6, #0d9488);
+}
+.settings-tab-icon { @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors dark:text-dark-400; }
+.settings-tab:hover .settings-tab-icon { @apply text-primary-600 dark:text-primary-300; }
+.settings-tab-active .settings-tab-icon { @apply bg-primary-50 text-primary-600 dark:bg-primary-400/10 dark:text-primary-300; }
+.settings-tab-label { @apply min-w-0 truncate leading-none; }
+</style>
+
+<style>
+.dark .settings-tabs-shell {
+  box-shadow: 0 16px 36px rgb(0 0 0 / 0.28), 0 1px 0 rgb(255 255 255 / 0.06) inset;
+}
+.dark .settings-tab::before {
+  background: linear-gradient(135deg, rgb(19 78 74 / 0.45), rgb(15 23 42 / 0.8));
+}
+</style>

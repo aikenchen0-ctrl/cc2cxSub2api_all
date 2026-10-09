@@ -1,4 +1,5 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, Heart, RotateCcw, Sparkles as SparklesIcon, Trash2 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, Heart, LoaderCircle, RotateCcw, Sparkles as SparklesIcon, Trash2 } from 'lucide-react'
 
 import { CELL_TYPES } from '../domain/cellData.js'
 import { getCell, getPrimaryCells } from '../domain/cellCatalog.js'
@@ -10,6 +11,7 @@ const ACTIVE_STATUSES = new Set(['uploading', 'processing', 'queued', 'running',
 const READY_STATUSES = new Set(['success', 'local'])
 
 export function LeftSidebar({ selectedCell, setSelectedCell, customCells, onDeleteCustomCell, onRetryGeneration, language = 'zh' }) {
+  const selectedTaskRef = useRef(null)
   const libraryCells = getPrimaryCells(customCells).filter((cell) => cell.custom && !cell.reference)
   const activeModel = getCell(selectedCell, customCells)
   const activeIsCustom = Boolean(activeModel.custom && !activeModel.reference)
@@ -19,11 +21,15 @@ export function LeftSidebar({ selectedCell, setSelectedCell, customCells, onDele
   const storedCustomIds = new Set(customCells.map((cell) => cell.id))
   const queueCount = queueItems.filter((cell) => ACTIVE_STATUSES.has(String(cell.generation?.status || '').toLowerCase())).length || queueItems.length
 
+  useEffect(() => {
+    selectedTaskRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [selectedCell])
+
   function renderCellRow(cell, { compact = false } = {}) {
     const canDelete = Boolean(cell.custom && storedCustomIds.has(cell.id))
     const generation = cell.generation || {}
     const providerLabel = cell.custom ? getProviderLabel(generation.provider || generation.requestedProvider) : t(language, 'starter')
-    const status = cell.custom ? formatQueueStatus(String(generation.status || 'ready').toLowerCase(), generation.progress, language) : t(language, 'ready')
+    const status = cell.custom ? formatQueueStatus(String(generation.status || 'ready').toLowerCase(), generation.progress, language, generation.phase) : t(language, 'ready')
 
     return (
       <div key={cell.id} className={canDelete ? 'cell-row-shell can-delete' : 'cell-row-shell'}>
@@ -116,16 +122,16 @@ export function LeftSidebar({ selectedCell, setSelectedCell, customCells, onDele
               const active = ACTIVE_STATUSES.has(status)
 
               return (
-                <div key={cell.id} className={selectedCell === cell.id ? 'left-queue-row active' : 'left-queue-row'}>
+                <div key={cell.id} ref={selectedCell === cell.id ? selectedTaskRef : null} className={selectedCell === cell.id ? 'left-queue-row active' : 'left-queue-row'}>
                   <button type="button" onClick={() => setSelectedCell(cell.id)}>
                     <CellThumb cell={cell} selected={selectedCell === cell.id} />
                     <span>
                       <strong>{cell.name}</strong>
-                      <small>{getProviderLabel(generation.provider || generation.requestedProvider)} · {formatQueueStatus(status, generation.progress, language)}</small>
+                      <small role="status">{getProviderLabel(generation.provider || generation.requestedProvider)} · {formatQueueStatus(status, generation.progress, language, generation.phase)}</small>
                     </span>
                   </button>
                   <span className={failed ? 'queue-state failed' : ready ? 'queue-state ready' : active ? 'queue-state active' : 'queue-state'}>
-                    {failed ? <AlertTriangle size={13} /> : ready ? <CheckCircle2 size={13} /> : <Clock3 size={13} />}
+                    {failed ? <AlertTriangle size={13} /> : ready ? <CheckCircle2 size={13} /> : active ? <LoaderCircle size={13} /> : <Clock3 size={13} />}
                   </span>
                   {failed && (
                     <button type="button" className="queue-retry" onClick={() => onRetryGeneration?.(cell.id)} aria-label={`Retry ${cell.name}`}>
@@ -142,13 +148,12 @@ export function LeftSidebar({ selectedCell, setSelectedCell, customCells, onDele
   )
 }
 
-function formatQueueStatus(status, progress, language = 'zh') {
+function formatQueueStatus(status, progress, language = 'zh', phase) {
   if (status === 'success') return t(language, 'ready')
   if (status === 'local') return t(language, 'localReady')
   if (status === 'failed') return t(language, 'failed')
-  if (Number.isFinite(progress)) return `${progress}%`
-  if (status === 'uploading') return t(language, 'uploading')
-  if (status === 'processing' || status === 'running') return t(language, 'generating')
+  if (status === 'uploading') return t(language, phase === 'analyzing' ? 'analyzing' : phase === 'submitting' ? 'uploading' : 'preparing')
+  if (status === 'processing' || status === 'running') return `${t(language, 'generating')}${Number.isFinite(progress) && progress > 0 ? ` · ${progress}%` : ''}`
   if (status === 'queued' || status === 'pending') return t(language, 'queued')
   return status || t(language, 'pending')
 }

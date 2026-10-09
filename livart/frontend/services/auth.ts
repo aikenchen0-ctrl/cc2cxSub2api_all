@@ -1,3 +1,5 @@
+import { createApiError } from './errorMessages';
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -27,7 +29,7 @@ const WEEKLY_CLEANUP_NOTICE_STORAGE_KEY = 'livart_weekly_cleanup_notice_seen';
 const unwrapApiResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `认证请求失败：${response.status}`);
+    throw createApiError(payload, response.status, '登录服务没有回复');
   }
   if (payload.data === undefined) {
     throw new Error('认证响应为空');

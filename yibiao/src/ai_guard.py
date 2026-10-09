@@ -53,11 +53,11 @@ class AIGuard:
             # missing.  Falling back to loopback can accidentally call an
             # unrelated local service and violates the shared relay contract.
             self.base_url = f'{relay}/chat/completions' if relay else ''
-            self.model = os.getenv('SUB2API_RELAY_MODEL', 'gpt-5.5').strip() or 'gpt-5.5'
+            self.model = os.getenv('SUB2API_RELAY_MODEL', 'gpt-6-astra').strip() or 'gpt-6-astra'
         else:
             self.api_key = config.get('api_key', '')
             self.base_url = config.get('base_url', 'https://cc.honoursoft.cn/').rstrip('/')
-            self.model = config.get('model', 'gpt-5.5')
+            self.model = config.get('model', 'gpt-6-astra')
         self.enabled = config.get('enable', False)
         self.custom_prompt = config.get('prompt', '')
 

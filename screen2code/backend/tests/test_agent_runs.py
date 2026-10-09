@@ -659,7 +659,7 @@ async def test_engine_fails_empty_output_runs(
 
     events = _read_events(recorder)
     assert events[-1]["status"] == "failed"
-    assert "without producing" in events[-1]["error"]
+    assert "没有输出任何页面代码" in events[-1]["error"]
 
 
 @pytest.mark.asyncio

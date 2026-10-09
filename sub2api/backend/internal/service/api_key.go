@@ -54,6 +54,11 @@ type APIKey struct {
 	UpdatedAt           time.Time
 	User                *User
 	Group               *Group
+	// BillingPayerID is the station owner charged for a satellite call.
+	// It is request-scoped and is not persisted.
+	BillingPayerID int64 `json:"-"`
+	// BillingCommissionRate is the fraction retained from the payer charge.
+	BillingCommissionRate float64 `json:"-"`
 	CurrentConcurrency  int
 
 	// Quota fields

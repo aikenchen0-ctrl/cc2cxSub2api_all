@@ -36,10 +36,10 @@ describe('AgentAPI browser boundary', () => {
       data: { item: { id: 1, name: 'desktop', prefix: 'sk-abc', status: 'active' }, key: 'sk-secret' },
     } as never)
 
-    const response = await agentAPI.keys.create('desktop')
+    const response = await agentAPI.keys.create('desktop', 7)
 
     expect(response.key).toBe('sk-secret')
-    expect(create).toHaveBeenCalledWith('/api-keys', { name: 'desktop' })
+    expect(create).toHaveBeenCalledWith('/api-keys', { name: 'desktop', group_id: 7 })
     expect(response.key).not.toMatch(/^sk-super-/)
   })
 

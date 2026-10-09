@@ -840,7 +840,7 @@ export default function Home() {
           </div>
         </section>
         <aside className="ai-panel">
-          <div className="ai-head"><div><span className="ai-avatar"><Sparkles/></span><div><strong>AI 助手</strong><small><i/> DeepSeek 已连接</small></div></div><button className="icon-btn" onClick={() => setShowSettings(true)}><Settings/></button></div>
+          <div className="ai-head"><div><span className="ai-avatar"><Sparkles/></span><div><strong>AI 助手</strong></div></div><button className="icon-btn" onClick={() => setShowSettings(true)}><Settings/></button></div>
           <div className="quick-actions">
             <button onClick={() => setPrompt("帮我美化当前工作表")}><Sparkles/> 美化报表</button>
             <button onClick={() => setPrompt("分析当前工作表并创建分析表")}><BarChart3/> 智能分析</button>
@@ -923,7 +923,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const save = () => {
     setSaved(true); window.setTimeout(() => setSaved(false), 1800);
   };
-  return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="modal"><div className="modal-head"><div><span className="ai-avatar"><Settings/></span><div><strong>连接设置</strong><small>配置你的 DeepSeek API</small></div></div><button className="icon-btn" onClick={onClose}><X/></button></div>
+  return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="modal"><div className="modal-head"><div><span className="ai-avatar"><Settings/></span><div><strong>连接设置</strong><small>使用 Sub2API 统一模型服务</small></div></div><button className="icon-btn" onClick={onClose}><X/></button></div>
     <div className="setting-status"><span><i/> Sub2API 已接入</span><strong>统一账号与中转额度</strong><small>AI 请求由服务端转发到 Sub2API，浏览器不会接触模型 API Key。</small></div>
     <div className="security-card"><ShieldCheck/><div><strong>本地优先，数据最小化</strong><p>Excel 文件始终在浏览器内解析。AI 仅接收字段名、行列数及少量结构样例，用于生成可审阅的操作计划。</p></div></div>
     <div className="settings-actions"><button className="modal-done" onClick={() => { save(); window.setTimeout(onClose, 450); }}>{saved ? <><Check/> 已保存</> : "关闭"}</button></div></div></div>;

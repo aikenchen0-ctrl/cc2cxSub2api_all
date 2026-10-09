@@ -31,6 +31,11 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
     "gpt-5.6-terra": ModelPricing(
         input=2.50, output=15.00, cache_read=0.25
     ),
+    # GPT-6 Astra standard pricing matches Sub2API.
+    # Standard rates from sub2api/backend/internal/service/billing_service.go.
+    "gpt-6-astra": ModelPricing(
+        input=10.00, output=50.00, cache_read=1.00, cache_write=12.50
+    ),
     # --- Anthropic ---
     # Verified against platform.claude.com/docs/en/about-claude/pricing on
     # 2026-07-24. cache_write is the 5-minute cache-write rate (1.25x input).

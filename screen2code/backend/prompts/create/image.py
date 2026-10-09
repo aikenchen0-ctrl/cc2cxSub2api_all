@@ -16,36 +16,36 @@ def build_image_prompt_messages(
     selected_stack = build_selected_stack_policy(stack)
     design_system_block = build_design_system_prompt_block(design_system)
     user_prompt = f"""
-Generate code for a web page that looks exactly like the provided screenshot(s).
+请生成与所提供截图外观一致的网页代码。
 
 {selected_stack}
 {design_system_block}
 
-## Replication instructions
+## 复刻要求
 
-- Make sure the web page looks exactly like the screenshot.
-- Use the exact text from the screenshot.
-- Since our goal is to make the web page look as close to the screenshot as possible, we need to extract the exact image assets where possible and generate images for the assets that are not extractable.
-- Extracting assets can be done with the extract_assets tool. After extracting assets, make sure to inspect the extracted image closely to ensure that it is what we want.
-- When available, use edit_images for asset edits such as removing unwanted elements, batching independent edits into one call.
-- If an extracted or supplied asset is visibly low-resolution or pixelated and must render larger, upscale it with edit_images—not CSS stretching or generate_images.
-- If an asset in the original screenshot is not extractable (for example, occluded by other objects or is the background), when available, use generate_images to create image URLs from prompts (you may pass multiple prompts).
+- 精确还原截图的布局、颜色、尺寸和间距。
+- 保留截图中的原始文字。
+- 尽量提取原图的准确素材，无法提取的素材可通过图片生成补充。
+- 使用 extract_assets 提取素材，并仔细检查结果是否符合要求。
+- edit_images 可用时，用它编辑素材或去除不需要的元素，将独立编辑合并调用。
+- 素材分辨率过低、需要放大时，使用 edit_images 提升分辨率，不要靠 CSS 拉伸或 generate_images 重绘。
+- 原图素材被遮挡或属于背景、无法提取时，可用 generate_images 生成图片地址并批量传入提示词。
 
 - {image_policy}
 
-## Multiple screenshots
+## 多张截图
 
-If multiple screenshots are provided, organize them meaningfully:
+提供多张截图时，按其内容合理组织：
 
-- If they appear to be different pages in a website, make them distinct pages and link them.
-- If they look like different tabs or views in an app, connect them with appropriate navigation.
-- If they appear unrelated, create a scaffold that separates them into "Screenshot 1", "Screenshot 2", "Screenshot 3", etc. so it is easy to navigate.
-- For mobile screenshots, do not include the device frame or browser chrome; focus only on the actual UI mockups.
+- 同一网站的不同页面应实现为独立页面并通过链接连接。
+- 同一应用的不同标签页或视图应通过导航切换。
+- 无关联的截图可通过“截图 1”“截图 2”等入口分别展示，便于浏览。
+- 移动端截图只复刻实际界面，不包含设备边框和浏览器外框。
 """
 
     # Add additional instructions provided by the user
     if text_prompt.strip():
-        user_prompt = f"{user_prompt}\n\nAdditional instructions: {text_prompt}"
+        user_prompt = f"{user_prompt}\n\n补充要求：{text_prompt}"
 
     user_content: list[ChatCompletionContentPartParam] = []
     for image_data_url in image_data_urls:

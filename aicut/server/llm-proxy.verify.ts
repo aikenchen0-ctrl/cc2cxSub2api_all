@@ -56,8 +56,8 @@ assert.equal(llmOperationPath('orcarouter'), '/chat/completions');
     assert.equal(llmProviderForRequest(reqFor(` ${preset.id.toUpperCase()} `)), preset.id);
   }
   assert.equal(llmProviderForRequest(), 'anthropic');
-  assert.equal(llmProviderForRequest(reqFor('')), 'anthropic');
-  assert.equal(normalizeLlmProvider('retired-provider'), 'anthropic', 'settings fallback stays compatible');
+  assert.equal(llmProviderForRequest(reqFor('')), 'openai');
+  assert.equal(normalizeLlmProvider('retired-provider'), 'openai', 'settings fallback uses the default provider');
   assert.deepEqual(llmHeaders(reqFor('gemini')), { 'x-goog-api-key': 'gk-1' }, 'gemini 原生协议注入 x-goog-api-key');
   assert.deepEqual(llmHeaders(reqFor('minimax')), { authorization: 'Bearer mk-1' }, 'openai-compatible 厂商 Bearer');
   assert.deepEqual(llmHeaders(reqFor('orcarouter')), { authorization: 'Bearer ork-1' },

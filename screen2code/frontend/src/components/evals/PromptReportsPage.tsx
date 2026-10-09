@@ -8,6 +8,8 @@ import {
   formatCost,
   formatTimestamp,
   providerBadgeClass,
+  providerLabel,
+  modelLabel,
 } from "./report-format";
 import { JsonNode } from "./report-json";
 
@@ -94,14 +96,14 @@ function groupBySession(reports: PromptReportSummary[]): SessionGroup[] {
 
 function UsagePanel({ usage }: { usage: PromptReportUsage }) {
   const metrics: [string, string][] = [
-    ["Input tokens", usage.input_tokens.toLocaleString()],
-    ["Output tokens", usage.output_tokens.toLocaleString()],
-    ["Cache read", usage.cache_read.toLocaleString()],
-    ["Cache write", usage.cache_write.toLocaleString()],
-    ["Total tokens", usage.total_tokens.toLocaleString()],
-    ["Cache hit rate", `${usage.cache_hit_rate_percent.toFixed(1)}%`],
+    ["输入词元", usage.input_tokens.toLocaleString()],
+    ["输出词元", usage.output_tokens.toLocaleString()],
+    ["缓存读取", usage.cache_read.toLocaleString()],
+    ["缓存写入", usage.cache_write.toLocaleString()],
+    ["词元总数", usage.total_tokens.toLocaleString()],
+    ["缓存命中率", `${usage.cache_hit_rate_percent.toFixed(1)}%`],
     [
-      "Cost",
+      "费用",
       usage.cost_usd === null ? "n/a" : `$${usage.cost_usd.toFixed(4)}`,
     ],
   ];
@@ -150,8 +152,8 @@ function PromptReportsPage() {
       setReportsDirectory(data.reports_directory);
       return data.reports;
     } catch (error) {
-      console.error("Error fetching prompt reports", error);
-      toast.error("Failed to load prompt reports.");
+      console.error("获取提示词报告失败", error);
+      toast.error("加载提示词报告失败。");
       return [];
     } finally {
       setIsLoadingList(false);
@@ -170,13 +172,13 @@ function PromptReportsPage() {
       );
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Request failed");
+        throw new Error(data.detail || "请求失败");
       }
       setContent(await response.json());
     } catch (error) {
-      console.error("Error fetching report content", error);
+      console.error("获取报告内容失败", error);
       setContent(null);
-      toast.error("Failed to load report.");
+      toast.error("加载报告失败。");
     } finally {
       setIsLoadingContent(false);
     }
@@ -194,7 +196,7 @@ function PromptReportsPage() {
   const handlePrune = async () => {
     if (
       !window.confirm(
-        "Delete all reports older than 7 days? This also removes legacy run_logs artifacts."
+        "删除 7 天前的全部报告及旧任务日志？"
       )
     ) {
       return;
@@ -207,12 +209,10 @@ function PromptReportsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ max_age_days: 7 }),
       });
-      if (!response.ok) throw new Error("Prune request failed");
+      if (!response.ok) throw new Error("清理请求失败");
       const data = await response.json();
       toast.success(
-        `Pruned ${data.deleted_count} item${
-          data.deleted_count === 1 ? "" : "s"
-        }, freed ${formatBytes(data.freed_bytes)}.`,
+        `已清理 ${data.deleted_count} 项报告，释放空间 ${formatBytes(data.freed_bytes)}。`,
         { duration: 8000 }
       );
       const refreshed = await fetchReports();
@@ -224,8 +224,8 @@ function PromptReportsPage() {
         setContent(null);
       }
     } catch (error) {
-      console.error("Error pruning prompt reports", error);
-      toast.error("Failed to prune reports.");
+      console.error("清理提示词报告失败", error);
+      toast.error("清理报告失败。");
     } finally {
       setIsPruning(false);
     }
@@ -241,14 +241,17 @@ function PromptReportsPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-2xl font-semibold tracking-tight">
-                Prompt Reports
+
+                提示词报告
               </h1>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">
-                Every LLM request is captured as a JSON report when{" "}
+
+                启用以下配置后，每次模型请求均记录为 JSON 报告：{" "}
                 <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-100">
                   PROMPT_REPORTS_ENABLED=1
                 </code>{" "}
-                is set.{" "}
+
+                。{" "}
                 {reportsDirectory && (
                   <span className="font-mono text-xs text-zinc-500">
                     {reportsDirectory}
@@ -259,7 +262,8 @@ function PromptReportsPage() {
             <div className="flex items-center gap-3">
               <div className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-right">
                 <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-                  Total size on disk
+
+                  占用空间总计
                 </div>
                 <div className="font-mono text-lg text-zinc-100">
                   {formatBytes(totalSizeBytes)}
@@ -270,7 +274,7 @@ function PromptReportsPage() {
                 disabled={isPruning}
                 className="rounded-lg border border-red-800 bg-red-950/60 px-3 py-2 text-sm text-red-200 transition-colors hover:bg-red-900/60 disabled:opacity-50"
               >
-                {isPruning ? "Pruning…" : "Prune reports older than 7 days"}
+                {isPruning ? "正在清理…" : "清理 7 天前的报告"}
               </button>
             </div>
           </div>
@@ -280,18 +284,18 @@ function PromptReportsPage() {
           <section className="min-h-0 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/60 p-2">
             <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-500">
               {isLoadingList
-                ? "Loading…"
-                : `${sessionGroups.length} request${
-                    sessionGroups.length === 1 ? "" : "s"
-                  } · ${reports.length} turn${reports.length === 1 ? "" : "s"}`}
+                ? "加载中…"
+                : `${sessionGroups.length} 次请求 · ${reports.length} 轮调用`}
             </div>
             {!isLoadingList && reports.length === 0 && (
               <p className="px-2 py-4 text-sm text-zinc-400">
-                No reports yet. Start the backend with{" "}
+
+                暂无报告。启用后端配置{" "}
                 <code className="rounded bg-zinc-800 px-1 py-0.5">
                   PROMPT_REPORTS_ENABLED=1
                 </code>{" "}
-                and generate some code.
+
+                后生成代码即可查看。
               </p>
             )}
             {sessionGroups.map((group) => (
@@ -305,14 +309,14 @@ function PromptReportsPage() {
                       group.provider
                     )}`}
                   >
-                    {group.provider}
+                    {providerLabel(group.provider)}
                   </span>
                   <span className="font-mono text-[11px] text-zinc-500">
                     {formatBytes(group.sizeBytes)}
                   </span>
                 </div>
                 <div className="mt-1 truncate font-mono text-sm text-zinc-100">
-                  {group.model}
+                  {modelLabel(group.model)}
                 </div>
                 <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px]">
                   <span className="text-zinc-500">
@@ -320,7 +324,7 @@ function PromptReportsPage() {
                   </span>
                   <span
                     className="font-mono font-medium text-emerald-400"
-                    title="Total cost across all turns in this request"
+                    title="此请求所有轮次的总费用"
                   >
                     {formatCost(group.costUsd)}
                   </span>
@@ -336,7 +340,8 @@ function PromptReportsPage() {
                           : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                       }`}
                     >
-                      turn {turnReport.turn}
+
+                      轮次 {turnReport.turn}
                     </button>
                   ))}
                 </div>
@@ -347,12 +352,14 @@ function PromptReportsPage() {
           <section className="min-h-0 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
             {!selectedFilename && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Select a report to inspect the request.
+
+                请选择报告查看请求详情。
               </p>
             )}
             {selectedFilename && isLoadingContent && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Loading report…
+
+                正在加载报告…
               </p>
             )}
             {selectedFilename && !isLoadingContent && content && (
@@ -363,14 +370,15 @@ function PromptReportsPage() {
                       content.provider
                     )}`}
                   >
-                    {content.provider}
+                    {providerLabel(content.provider)}
                   </span>
                   <span className="font-mono text-sm text-zinc-100">
-                    {content.model}
+                    {modelLabel(content.model)}
                   </span>
                   <span className="font-mono text-xs text-zinc-500">
-                    api: {content.api_model_name} · session{" "}
-                    {content.session_id} · turn {content.turn} ·{" "}
+
+                    接口： {content.api_model_name}  · 会话{" "}
+                    {content.session_id}  · 轮次 {content.turn} ·{" "}
                     {formatTimestamp(content.created_at)}
                   </span>
                 </div>
@@ -379,21 +387,22 @@ function PromptReportsPage() {
                   <UsagePanel usage={content.usage} />
                 ) : (
                   <p className="text-xs italic text-zinc-500">
-                    Usage unavailable for this request (turn may not have
-                    completed).
+
+                    此请求暂无用量信息，当前轮次可能尚未完成。
                   </p>
                 )}
 
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-zinc-200">
-                      Request structure
+
+                      请求结构
                     </h2>
                     <button
                       onClick={() => setShowRawJson(!showRawJson)}
                       className="text-xs text-blue-400 hover:text-blue-300"
                     >
-                      {showRawJson ? "Show tree" : "Show raw JSON"}
+                      {showRawJson ? "显示树状结构" : "显示原始数据"}
                     </button>
                   </div>
                   {showRawJson ? (

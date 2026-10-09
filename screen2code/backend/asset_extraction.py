@@ -41,33 +41,30 @@ class AssetDetection(BaseModel):
     """One schema-constrained answer, correlated by our stable request ID."""
 
     request_id: str = Field(
-        description="The unchanged request_id from the corresponding input request."
+        description="对应输入请求中保持不变的 request_id。"
     )
     image_index: int | None = Field(
         description=(
-            "1-based source image number containing the requested asset, or null when "
-            "the exact asset is absent, ambiguous, or cannot be isolated."
+            "包含目标素材的源图编号，从 1 开始；目标不存在、无法明确区分或无法单独提取时返回 null。"
         )
     )
     box_2d: list[float] | None = Field(
         description=(
-            "Tight [ymin, xmin, ymax, xmax] bounds normalized to 0-1000, or null "
-            "when image_index is null."
+            "紧密包围素材的 [ymin, xmin, ymax, xmax] 边界，归一化至 0–1000；image_index 为 null 时此项也为 null。"
         ),
         min_length=4,
         max_length=4,
     )
     label: str | None = Field(
         description=(
-            "A short label that distinguishes this occurrence from lookalikes, or "
-            "null when the asset was not found."
+            "可区分此素材与相似副本的简短中文标签；未找到素材时返回 null。"
         )
     )
 
 
 class AssetDetectionBatch(BaseModel):
     detections: list[AssetDetection] = Field(
-        description="Exactly one detection for every requested request_id.",
+        description="每个请求的 request_id 必须恰好对应一条检测结果。",
         max_length=MAX_ASSETS_PER_GEMINI_REQUEST,
     )
 
@@ -126,8 +123,8 @@ class AssetExtractionMetrics:
         self.total_token_count += usage.total_token_count or 0
 
 
-ASSET_DETECTION_SYSTEM_INSTRUCTION = """You are a precise 2D object detector for screenshot asset extraction.
-Return only one schema-valid JSON object. Never return masks, segmentation, markdown fences, prose, or invented detections. Process no more than 25 requested objects per response.
+ASSET_DETECTION_SYSTEM_INSTRUCTION = """你是用于截图素材提取的精确二维目标检测器。
+只返回一个符合指定结构的 JSON 对象，不得返回蒙版、分割数据、Markdown 代码围栏、说明文字或虚构检测结果。每次响应最多处理 25 个请求对象。
 """
 
 
@@ -201,8 +198,8 @@ def _build_detection_prompt(
     requests: Sequence[AssetRequest],
 ) -> str:
     source_mapping = "\n".join(
-        f"- attached image {attachment_index} = source image {source.image_index} "
-        f"({source.image.width}x{source.image.height} pixels after EXIF normalization)"
+        f"- 附件图片 {attachment_index} = 源图 {source.image_index} "
+        f"（EXIF 方向归一化后为 {source.image.width}x{source.image.height} 像素）"
         for attachment_index, source in enumerate(source_images, start=1)
     )
     request_json = json.dumps(
@@ -217,23 +214,23 @@ def _build_detection_prompt(
         indent=2,
     )
 
-    return f"""Locate each requested visual asset in the attached source images.
+    return f"""请在附件源图中定位每个请求的视觉素材。
 
-SOURCE IMAGE MAPPING (image_index must use the 1-based source image number):
+源图映射（image_index 必须使用从 1 开始的源图编号）：
 {source_mapping}
 
-REQUESTS:
+请求：
 {request_json}
 
-BOUNDING-BOX RULES:
-- Return exactly one detections record per request, retaining each request_id unchanged. Requests are independent and output order is not used for matching.
-- box_2d is [ymin, xmin, ymax, xmax], relative to the selected source image and normalized to the documented 0-1000 range.
-- Return the smallest axis-aligned box that contains the whole visible requested asset. Include every visible edge/pixel of the asset; do not clip it.
-- Exclude surrounding UI: cards, containers, page backgrounds, padding, borders, nearby text, captions, controls, and unrelated shadows. Include one of those only when the description explicitly makes it part of the target.
-- For a photo or illustration, bound the visible media itself, not its card or caption. For a logo/wordmark, include the complete logo only. For a small icon, include the glyph, not its button/container/badge unless requested.
-- Repeated lookalikes are separate instances. Use the description's appearance, location, nearby context, and source image number to choose the one exact occurrence; do not reuse or merge boxes. Give labels distinguishing duplicate instances.
-- If the described occurrence is absent, not uniquely distinguishable, substantially occluded, or cannot be isolated from unrelated UI, return that request_id with image_index=null, box_2d=null, and label=null. Never guess a box, substitute a lookalike, or return the whole screenshot.
-- Return JSON only through the supplied schema. Never return masks, polygons, code fences, or explanatory text.
+边界框规则：
+- 每个请求恰好返回一条 detections 记录，保持 request_id 不变。各请求独立，不依靠输出顺序匹配。
+- box_2d 为 [ymin, xmin, ymax, xmax]，相对于所选源图，归一化至 0–1000。
+- 返回包含整个可见目标素材的最小轴对齐边界框，覆盖全部可见边缘与像素，不得裁掉目标。
+- 排除周围的界面：卡片、容器、页面背景、留白、边框、附近文字、说明、控件及无关阴影。仅当描述明确要求时才包含这些内容。
+- 照片或插画只框住可见媒体本身，不含卡片或说明。徽标/文字标识只包含完整标识。小图标只包含图形，除非明确要求，否则不包含按钮、容器或徽章。
+- 重复的相似素材是不同实例。依据描述的外观、位置、附近上下文和源图编号选择精确实例，不要复用或合并边界框；标签应能区分重复实例。
+- 目标不存在、无法唯一识别、大面积遮挡或无法与无关界面分离时，返回该 request_id，并令 image_index=null、box_2d=null、label=null。不得猜测边界框、用相似素材代替或返回整张截图。
+- 只按所提供结构返回 JSON，不得返回蒙版、多边形、代码围栏或解释文字。
 """
 
 
@@ -364,7 +361,7 @@ async def extract_assets_from_images(
     if not source_images:
         return {
             "assets": [],
-            "error": "No valid input images were available for asset extraction.",
+            "error": "没有可用于提取素材的有效输入图片。",
         }
 
     requests = [
@@ -436,7 +433,7 @@ async def extract_assets_from_images(
     result: Dict[str, Any] = {"assets": assets}
     if any(asset["status"] != "ok" for asset in assets):
         result["error"] = (
-            "Gemini did not return usable bounding boxes for every requested asset."
+            "Gemini 未能为所有请求素材返回可用的边界框。"
         )
 
     return result

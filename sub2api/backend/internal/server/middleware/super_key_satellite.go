@@ -19,6 +19,12 @@ const (
 	HeaderOnBehalfOf = "X-Sub2API-On-Behalf-Of"
 	// HeaderSatelliteApp identifies the calling project (canvas, aicut, ...).
 	HeaderSatelliteApp = "X-Sub2API-Satellite"
+	// HeaderSatellitePayer is the station owner charged for a satellite call.
+	// Usage and the recorded user balance stay on X-Sub2API-On-Behalf-Of.
+	HeaderSatellitePayer = "X-Sub2API-Payer"
+	// HeaderSatelliteCommissionRate is a fraction from 0 to 1 retained from the
+	// payer charge. 0.1 means the payer is charged 90 percent.
+	HeaderSatelliteCommissionRate = "X-Sub2API-Commission-Rate"
 	// HeaderAppCredential is accepted only as a legacy extra header.
 	// New satellite calls put the app credential in Authorization.
 	HeaderAppCredential = "X-Sub2API-App-Credential"
@@ -130,6 +136,28 @@ func bindSatelliteSuperKeyContext(c *gin.Context, satelliteHandled bool, apiKey 
 		}
 	}
 	c.Request = c.Request.WithContext(ctx)
+}
+
+func satellitePayerFromRequest(c *gin.Context) (int64, float64, bool) {
+	raw := strings.TrimSpace(c.GetHeader(HeaderSatellitePayer))
+	if raw == "" {
+		return 0, 0, false
+	}
+	payer, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || payer <= 0 {
+		AbortWithError(c, http.StatusBadRequest, "INVALID_PAYER", "X-Sub2API-Payer must be a user id")
+		return 0, 0, false
+	}
+	rate := 0.0
+	if rawRate := strings.TrimSpace(c.GetHeader(HeaderSatelliteCommissionRate)); rawRate != "" {
+		parsed, parseErr := strconv.ParseFloat(rawRate, 64)
+		if parseErr != nil || parsed < 0 || parsed >= 1 {
+			AbortWithError(c, http.StatusBadRequest, "INVALID_COMMISSION_RATE", "commission rate must be between 0 and 1")
+			return 0, 0, false
+		}
+		rate = parsed
+	}
+	return payer, rate, true
 }
 
 func loadSatelliteUserKey(c *gin.Context, apiKeyService satelliteUserKeyResolver, presented string) (*service.APIKey, bool) {

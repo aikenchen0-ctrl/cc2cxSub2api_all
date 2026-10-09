@@ -111,6 +111,15 @@ const currencyLabels: Record<string, string> = {
 }
 
 const reasonMessages: Record<string, string> = {
+  PENDING_ORDERS: '此服务商存在未完成订单，暂不能修改商户凭据、移除支付方式或删除服务商。',
+  PAYMENT_BUSY: '本站支付正在处理中，请稍后重试。',
+  INVALID_PROVIDER: '服务商配置无效，请检查必填凭据、支付方式、币种和限额。',
+  INVALID_BILLING_SETTINGS: '支付设置无效，请检查金额、订单超时和取消频率。',
+  PAYMENT_METHOD_UNAVAILABLE: '此金额暂无可用支付渠道，请更换支付方式或联系站长。',
+  DAILY_LIMIT_EXCEEDED: '今日充值已达到本站为你设置的每日限额。',
+  TOO_MANY_PENDING_ORDERS: '待支付订单过多，请先完成或取消已有订单。',
+  CANCEL_RATE_LIMITED: '取消订单次数已达本站限制，请稍后重试。',
+  PAYMENT_PROVIDER_UNAVAILABLE: '服务商暂时无法创建支付订单，请稍后重试或联系站长。',
   MAIN_ADMIN_NOT_CONFIGURED: '本站尚未配置注册服务，请联系站长。',
   REGISTRATION_RATE_LIMITED: '注册尝试过于频繁，请一小时后重试。',
   REGISTRATION_UNAVAILABLE: '注册安全检查暂不可用，请稍后重试。',
@@ -148,6 +157,7 @@ const reasonMessages: Record<string, string> = {
   API_KEY_NOT_FOUND: '找不到此 API 密钥。',
   API_KEY_CREATE_FAILED: '创建 API 密钥失败，请重试。',
   API_KEY_REVOKE_FAILED: '撤销 API 密钥失败，请重试。',
+  API_KEY_DELETE_FAILED: '删除 API 密钥失败，请重试。',
   AGENT_INSUFFICIENT_BALANCE: '账户余额不足，请先充值。',
   MAIN_OWNER_BALANCE_INSUFFICIENT: '站点账户余额不足，暂时无法完成操作。',
   MAIN_OWNER_BALANCE_OVERALLOCATED: '主账户余额低于已分配额度，请联系管理员。',

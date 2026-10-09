@@ -25,7 +25,7 @@ export const LLM_PROVIDER_PRESETS = [
     label: 'OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-5',
+    defaultModel: 'gpt-6-astra',
   },
   {
     id: 'gemini',
@@ -153,7 +153,7 @@ export const LLM_PROVIDER_PRESETS = [
 
 export type LlmProvider = (typeof LLM_PROVIDER_PRESETS)[number]['id'];
 
-export const DEFAULT_LLM_PROVIDER: LlmProvider = 'anthropic';
+export const DEFAULT_LLM_PROVIDER: LlmProvider = 'openai';
 
 export interface LlmProviderConfigNames {
   readonly apiKey: string;

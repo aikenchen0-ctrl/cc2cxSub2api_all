@@ -247,7 +247,7 @@ async def react_loop(
     max_iter = max_iterations or _settings.react_max_iterations
     if satellite_managed():
         # Only the public relay model is allowed to leave a managed satellite.
-        model = os.getenv("SUB2API_RELAY_MODEL", "gpt-5.5").strip() or "gpt-5.5"
+        model = os.getenv("SUB2API_RELAY_MODEL", "gpt-6-astra").strip() or "gpt-6-astra"
         model = apply_openai_api_mode(model, mode="chat", api_base=relay_base_url())
     elif model_scope == "email_reasoning":
         model = _settings.email_reasoning_model or _settings.reasoning_model

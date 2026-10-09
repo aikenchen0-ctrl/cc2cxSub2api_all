@@ -1,4 +1,5 @@
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 
 export interface ExternalImageCandidate {
   id: string;
@@ -56,7 +57,7 @@ interface ExternalImageParseHistoryResponse {
 const unwrapApiResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `社交媒体图片请求失败：${response.status}`);
+    throw createApiError(payload, response.status, '外部图片服务没有回复');
   }
   if (payload.data === undefined) {
     throw new Error('社交媒体图片响应为空');

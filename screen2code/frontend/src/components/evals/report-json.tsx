@@ -57,7 +57,7 @@ function MediaPreview({ media }: { media: MediaInfo }) {
   return (
     <LightboxImage
       src={media.src}
-      alt="embedded media"
+      alt="嵌入媒体"
       className="my-1 max-h-48 rounded-lg border border-zinc-700 bg-white object-contain"
     />
   );
@@ -65,11 +65,11 @@ function MediaPreview({ media }: { media: MediaInfo }) {
 
 function nodeSummary(value: unknown): string {
   if (Array.isArray(value)) {
-    return `array · ${value.length} item${value.length === 1 ? "" : "s"}`;
+    return `数组 · ${value.length} 项`;
   }
   if (typeof value === "object" && value !== null) {
     const keyCount = Object.keys(value).length;
-    return `object · ${keyCount} key${keyCount === 1 ? "" : "s"}`;
+    return `对象 · ${keyCount} 个字段`;
   }
   return typeof value;
 }
@@ -119,7 +119,7 @@ export function MarkdownLeaf({ text }: { text: string }) {
         onClick={() => setShowRaw(!showRaw)}
         className="mt-1 text-xs text-blue-400 hover:text-blue-300"
       >
-        {showRaw ? "Show rendered" : "Show raw"}
+        {showRaw ? "显示预览" : "显示原始数据"}
       </button>
     </div>
   );
@@ -146,8 +146,8 @@ function StringLeaf({ text }: { text: string }) {
         className="mt-1 text-xs text-blue-400 hover:text-blue-300"
       >
         {expanded
-          ? "Collapse"
-          : `Show all ${text.length.toLocaleString()} chars`}
+          ? "收起"
+          : `显示全部${text.length.toLocaleString()} chars`}
       </button>
     </div>
   );

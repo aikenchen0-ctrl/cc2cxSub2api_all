@@ -173,7 +173,7 @@ function ImageLightbox({ image, onClose }: ImageLightboxProps) {
               {image && (
                 <img
                   src={image}
-                  alt="Reference image"
+                  alt="参考图片"
                   className="rounded-lg shadow-2xl select-none shrink-0 m-auto"
                   draggable={false}
                   onClick={(e) => e.stopPropagation()}
@@ -208,14 +208,14 @@ function ImageLightbox({ image, onClose }: ImageLightboxProps) {
               onClick={zoomOut}
               className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
               disabled={zoom <= MIN_ZOOM}
-              title="Zoom out"
+              title="缩小"
             >
               <LuMinus className="h-4 w-4" />
             </button>
             <button
               onClick={zoomToDefault}
               className="min-w-[3.5rem] rounded-full px-3 py-1 text-center text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-              title="Reset zoom"
+              title="重置缩放"
             >
               {Math.round(zoom * 100)}%
             </button>
@@ -223,7 +223,7 @@ function ImageLightbox({ image, onClose }: ImageLightboxProps) {
               onClick={zoomIn}
               className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
               disabled={zoom >= MAX_ZOOM}
-              title="Zoom in"
+              title="放大"
             >
               <LuPlus className="h-4 w-4" />
             </button>
@@ -231,15 +231,16 @@ function ImageLightbox({ image, onClose }: ImageLightboxProps) {
             <button
               onClick={zoomToFit}
               className="rounded-full px-2.5 py-1 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-              title="Fit to screen"
+              title="适应屏幕"
             >
-              Fit
+
+              适应
             </button>
             <div className="mx-1 h-4 w-px bg-white/20" />
             <button
               onClick={onClose}
               className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-              title="Close"
+              title="关闭"
             >
               <LuX className="h-4 w-4" />
             </button>

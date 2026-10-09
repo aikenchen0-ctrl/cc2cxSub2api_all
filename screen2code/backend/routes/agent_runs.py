@@ -134,9 +134,9 @@ def _directory_size_bytes(path: str) -> int:
 
 def _fetch_run(run_id: str) -> AgentRunSummary:
     if not RUN_ID_PATTERN.match(run_id):
-        raise HTTPException(status_code=400, detail="Invalid run id")
+        raise HTTPException(status_code=400, detail="任务 ID 无效")
     if not os.path.isfile(get_agent_runs_db_path()):
-        raise HTTPException(status_code=404, detail="No runs recorded")
+        raise HTTPException(status_code=404, detail="暂无任务记录")
     conn = open_index_db()
     try:
         row = conn.execute(
@@ -146,7 +146,7 @@ def _fetch_run(run_id: str) -> AgentRunSummary:
     finally:
         conn.close()
     if row is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=404, detail="未找到任务")
     return _row_to_summary(row)
 
 
@@ -208,7 +208,7 @@ async def get_agent_run_output(run_id: str) -> HTMLResponse:
         if os.path.isfile(path):
             with open(path, "r", encoding="utf-8") as f:
                 return HTMLResponse(content=f.read())
-    raise HTTPException(status_code=404, detail="Run has no captured output")
+    raise HTTPException(status_code=404, detail="任务没有记录输出内容")
 
 
 @router.get("/agent-runs/{run_id}/assets/{filename}")
@@ -219,16 +219,16 @@ async def get_agent_run_asset(run_id: str, filename: str) -> FileResponse:
     safe_name = os.path.basename(filename)
     path = os.path.realpath(os.path.join(assets_dir, safe_name))
     if not path.startswith(os.path.realpath(assets_dir) + os.sep):
-        raise HTTPException(status_code=400, detail="Invalid asset path")
+        raise HTTPException(status_code=400, detail="素材路径无效")
     if not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Asset not found")
+        raise HTTPException(status_code=404, detail="未找到素材")
     return FileResponse(path)
 
 
 @router.post("/agent-runs/prune", response_model=PruneAgentRunsResponse)
 async def prune_agent_runs(request: PruneAgentRunsRequest) -> PruneAgentRunsResponse:
     if request.max_age_days < 1:
-        raise HTTPException(status_code=400, detail="max_age_days must be >= 1")
+        raise HTTPException(status_code=400, detail="max_age_days 必须大于或等于 1")
 
     runs_directory = get_agent_runs_directory()
     if not os.path.isdir(runs_directory):

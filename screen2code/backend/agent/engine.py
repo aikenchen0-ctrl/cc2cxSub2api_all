@@ -32,7 +32,7 @@ class EmptyOutputError(Exception):
     """
 
     def __init__(self) -> None:
-        super().__init__("Generation finished without producing any output.")
+        super().__init__("生成结束，但没有输出任何页面代码，请重试。")
 
 
 class BudgetExceededError(Exception):
@@ -44,7 +44,7 @@ class BudgetExceededError(Exception):
 
     def __init__(self) -> None:
         super().__init__(
-            "Generation stopped: this variant exceeded its resource limit."
+            "生成已停止：该方案超出资源限制，请简化要求后重试。"
         )
 
 

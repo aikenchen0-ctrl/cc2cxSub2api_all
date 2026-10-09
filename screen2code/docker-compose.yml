@@ -27,6 +27,9 @@ services:
       dockerfile: Dockerfile
     environment:
       PROXY_CODEGEN_BACKEND: http://backend:7001
+      # Browser requests use the frontend origin and its session-aware proxy.
+      VITE_HTTP_BACKEND_URL: ""
+      VITE_WS_BACKEND_URL: ""
     ports:
       - "5173:5173"
     depends_on:

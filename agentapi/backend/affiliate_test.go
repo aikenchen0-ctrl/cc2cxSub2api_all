@@ -107,3 +107,40 @@ func TestAffiliateRequiresSessionAndRejectsUnsupportedMethodsBeforeUpstream(t *t
 		t.Fatalf("invalid requests reached upstream: %d", upstreamCalls)
 	}
 }
+
+func TestAffiliateRecordsStayOnCurrentUserAndDropAdminFields(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Api-Key") != "" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" {
+			t.Fatalf("identity leaked or switched: %#v", r.Header)
+		}
+		if r.URL.Query().Get("user_id") != "" || r.URL.Query().Get("inviter_id") != "" {
+			t.Fatalf("browser selector reached upstream: %s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(envelope(map[string]any{
+			"items": []any{map[string]any{
+				"inviter_id": 42, "invitee_id": 88, "invitee_email": "m***@example.com", "invitee_username": "m***",
+				"aff_code": "ABC123", "total_rebate": 2.5, "created_at": "2026-09-29T00:00:00Z", "notes": "secret",
+			}},
+			"total": 1, "page": 1, "page_size": 20, "pages": 1,
+		}))
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	sessionID, err := server.store.CreateSession("42", json.RawMessage(`{"id":"42"}`), "", "", time.Now().Add(sessionTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/agent/affiliate/invites?user_id=99&search=m", nil)
+	req.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: sessionID})
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, `"email":"m***@example.com"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, body)
+	}
+	for _, forbidden := range []string{"invitee_id", "inviter_id", "notes", "secret"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("leaked %s: %s", forbidden, body)
+		}
+	}
+}

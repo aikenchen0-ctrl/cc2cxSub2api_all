@@ -36,7 +36,7 @@ export function UpdateImagePreview({ updateImages, setUpdateImages }: Props) {
             <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
               <img
                 src={image}
-                alt={`Reference ${index + 1}`}
+                alt={`参考图${index + 1}`}
                 className="max-h-full max-w-full object-contain"
               />
             </div>
@@ -62,7 +62,7 @@ function UpdateImageUpload({ updateImages, setUpdateImages }: Props) {
   const handleButtonClick = () => {
     if (isAtLimit) {
       toast.error(
-        `You’ve reached the limit of ${MAX_UPDATE_IMAGES} reference images. Remove one to add another.`
+        `已达到数量上限：${MAX_UPDATE_IMAGES}张参考图，请先移除一张再添加。`
       );
       return;
     }
@@ -75,7 +75,7 @@ function UpdateImageUpload({ updateImages, setUpdateImages }: Props) {
       try {
         if (updateImages.length >= MAX_UPDATE_IMAGES) {
           toast.error(
-            `You’ve reached the limit of ${MAX_UPDATE_IMAGES} reference images. Remove one to add another.`
+            `已达到数量上限：${MAX_UPDATE_IMAGES}张参考图，请先移除一张再添加。`
           );
           return;
         }
@@ -84,9 +84,9 @@ function UpdateImageUpload({ updateImages, setUpdateImages }: Props) {
         let filesToAdd = Array.from(files);
         if (filesToAdd.length > remainingSlots) {
           toast.error(
-            `Only ${remainingSlots} more image${
+            `本次最多添加${remainingSlots}张图片${
               remainingSlots === 1 ? "" : "s"
-            } will be added to stay within the ${MAX_UPDATE_IMAGES}-image limit.`
+            }，总数不能超过${MAX_UPDATE_IMAGES}张图片。`
           );
           filesToAdd = filesToAdd.slice(0, remainingSlots);
         }
@@ -96,8 +96,8 @@ function UpdateImageUpload({ updateImages, setUpdateImages }: Props) {
         setUpdateImages([...updateImages, ...newImages]);
         e.target.value = "";
       } catch (error) {
-        toast.error("Error reading image files");
-        console.error("Error reading files:", error);
+        toast.error("读取图片失败");
+        console.error("读取文件失败：", error);
       }
     }
   };
@@ -123,8 +123,8 @@ function UpdateImageUpload({ updateImages, setUpdateImages }: Props) {
         }`}
         title={
           isAtLimit
-            ? `Limit reached (${MAX_UPDATE_IMAGES})`
-            : "Add images"
+            ? `已达上限（${MAX_UPDATE_IMAGES})`
+            : "添加图片"
         }
       >
         <LuPlus className="w-[18px] h-[18px]" />

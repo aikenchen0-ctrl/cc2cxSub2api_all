@@ -151,17 +151,17 @@ async def list_prompt_reports() -> PromptReportListResponse:
 @router.get("/prompt-reports/content")
 async def get_prompt_report_content(filename: str) -> Any:
     if PROMPT_REPORT_FILENAME_PATTERN.match(filename) is None:
-        raise HTTPException(status_code=400, detail="Invalid report filename")
+        raise HTTPException(status_code=400, detail="报告文件名无效")
 
     filepath = os.path.join(get_prompt_reports_directory(), filename)
     if not os.path.isfile(filepath):
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="未找到报告")
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read report: {e}")
+        raise HTTPException(status_code=500, detail=f"读取报告失败： {e}")
 
 
 @router.post("/prompt-reports/prune", response_model=PrunePromptReportsResponse)
@@ -169,7 +169,7 @@ async def prune_prompt_reports(
     request: PrunePromptReportsRequest,
 ) -> PrunePromptReportsResponse:
     if request.max_age_days < 1:
-        raise HTTPException(status_code=400, detail="max_age_days must be >= 1")
+        raise HTTPException(status_code=400, detail="max_age_days 必须大于或等于 1")
 
     run_logs_directory = get_run_logs_directory()
     if not os.path.isdir(run_logs_directory):

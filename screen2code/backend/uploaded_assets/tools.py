@@ -25,8 +25,8 @@ def _save_assets_schema() -> Dict[str, Any]:
                 "items": {
                     "type": "string",
                     "description": (
-                        "Opaque temporary asset ID for an uploaded image that should be "
-                        "promoted to a permanent asset URL."
+                        "待转换为永久素材 URL 的上传图片临时不透明素材 ID。"
+                        ""
                     ),
                 },
             },
@@ -38,9 +38,9 @@ def _save_assets_schema() -> Dict[str, Any]:
 SAVE_ASSETS_TOOL_DEFINITION = CanonicalToolDefinition(
     name="save_assets",
     description=(
-        "Promote one or more uploaded temporary image asset IDs to permanent URLs. "
-        "Use this before embedding any uploaded images in code. "
-        "Returns permanent public_url values to use in the generated code."
+        "将一个或多个上传临时图片素材 ID 转换为永久 URL。"
+        "在代码中嵌入上传图片之前使用。"
+        "返回可在生成代码中使用的永久 public_url。"
     ),
     parameters=_save_assets_schema(),
 )
@@ -65,8 +65,8 @@ async def run_save_assets(
     if not isinstance(raw_asset_ids, list) or not raw_asset_ids:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "save_assets requires a non-empty asset_ids list"},
-            summary={"error": "Missing asset_ids"},
+            result={"error": "save_assets 需要非空的 asset_ids 列表"},
+            summary={"error": "缺少 asset_ids"},
         )
 
     asset_ids = cast(List[Any], raw_asset_ids)
@@ -79,8 +79,8 @@ async def run_save_assets(
     if not unique_asset_ids:
         return ToolExecutionResult(
             ok=False,
-            result={"error": "No valid asset IDs provided"},
-            summary={"error": "No valid asset_ids"},
+            result={"error": "未提供有效的素材 ID"},
+            summary={"error": "没有有效的 asset_ids"},
         )
 
     results: List[Dict[str, Any]] = []

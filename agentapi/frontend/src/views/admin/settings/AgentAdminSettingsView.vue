@@ -21,6 +21,7 @@ const brandingSubtitle = ref('')
 const brandingCompactHome = ref(false)
 const brandingHomeContent = ref('')
 
+
 function applyContext(nextContext: AgentContextResponse): void {
   context.value = nextContext
   brandingName.value = nextContext.agent.name
@@ -40,11 +41,54 @@ async function loadContext(): Promise<void> {
   notice.value = ''
   try {
     applyContext(await agentAPI.getContext())
+
   } catch (cause) {
     context.value = null
     error.value = errorMessage(cause, '站点信息加载失败，暂时不能安全修改本站设置。')
   } finally {
     loading.value = false
+  }
+}
+
+function applySavedBranding(updated: Awaited<ReturnType<typeof agentAPI.updateBranding>>): void {
+  if (!context.value) return
+  context.value.agent.name = updated.name
+  context.value.agent.site_name = updated.site_name
+  context.value.agent.site_logo = updated.site_logo || undefined
+  context.value.agent.doc_url = updated.doc_url || undefined
+  context.value.agent.contact_info = updated.contact_info || undefined
+  context.value.agent.api_base_url = updated.api_base_url || undefined
+  context.value.agent.site_subtitle = updated.site_subtitle
+  context.value.agent.compact_home_enabled = updated.compact_home_enabled
+  context.value.agent.home_content = updated.home_content
+  brandingName.value = updated.name
+  brandingSiteName.value = updated.site_name
+  brandingLogo.value = updated.site_logo || ''
+  brandingDocURL.value = updated.doc_url || ''
+  brandingContactInfo.value = updated.contact_info || ''
+  brandingAPIBaseURL.value = updated.api_base_url || ''
+  brandingSubtitle.value = updated.site_subtitle || ''
+  brandingCompactHome.value = updated.compact_home_enabled === true
+  brandingHomeContent.value = updated.home_content || ''
+  applyBranding(updated.site_name, updated.site_logo, updated.doc_url, updated.contact_info)
+  applyHomeSettings(updated)
+  applyPageTitle('系统设置')
+}
+
+
+async function uploadLogo(file: File): Promise<void> {
+  if (!context.value || saving.value) return
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const updated = await agentAPI.uploadLogo(file)
+    applySavedBranding(updated)
+    notice.value = 'Logo 已上传并应用到当前站点。'
+  } catch (cause) {
+    error.value = errorMessage(cause, '上传 Logo 失败，请使用 PNG、JPEG、WEBP 或 GIF，且不超过 1 MB。')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -54,7 +98,7 @@ async function saveBranding(): Promise<void> {
   error.value = ''
   notice.value = ''
   try {
-    const updated = await agentAPI.updateBranding({
+    applySavedBranding(await agentAPI.updateBranding({
       name: brandingName.value.trim(),
       site_name: brandingSiteName.value.trim(),
       site_logo: brandingLogo.value.trim(),
@@ -64,28 +108,7 @@ async function saveBranding(): Promise<void> {
       site_subtitle: brandingSubtitle.value.trim(),
       compact_home_enabled: brandingCompactHome.value,
       home_content: brandingHomeContent.value.trim(),
-    })
-    context.value.agent.name = updated.name
-    context.value.agent.site_name = updated.site_name
-    context.value.agent.site_logo = updated.site_logo || undefined
-    context.value.agent.doc_url = updated.doc_url || undefined
-    context.value.agent.contact_info = updated.contact_info || undefined
-    context.value.agent.api_base_url = updated.api_base_url || undefined
-    context.value.agent.site_subtitle = updated.site_subtitle
-    context.value.agent.compact_home_enabled = updated.compact_home_enabled
-    context.value.agent.home_content = updated.home_content
-    brandingName.value = updated.name
-    brandingSiteName.value = updated.site_name
-    brandingLogo.value = updated.site_logo || ''
-    brandingDocURL.value = updated.doc_url || ''
-    brandingContactInfo.value = updated.contact_info || ''
-    brandingAPIBaseURL.value = updated.api_base_url || ''
-    brandingSubtitle.value = updated.site_subtitle || ''
-    brandingCompactHome.value = updated.compact_home_enabled === true
-    brandingHomeContent.value = updated.home_content || ''
-    applyBranding(updated.site_name, updated.site_logo, updated.doc_url, updated.contact_info)
-    applyHomeSettings(updated)
-    applyPageTitle('系统设置')
+    }))
     notice.value = '本站品牌信息已保存，并已应用到当前界面。'
   } catch (cause) {
     error.value = errorMessage(cause, '更新本站品牌信息失败，请稍后重试。')
@@ -138,6 +161,7 @@ onMounted(() => void loadContext())
         :domain="context.agent.domain"
         :saving="saving"
         @save="saveBranding"
+        @upload-logo="uploadLogo"
       />
     </template>
   </main>

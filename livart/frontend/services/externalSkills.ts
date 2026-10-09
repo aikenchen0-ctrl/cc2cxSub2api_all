@@ -1,5 +1,6 @@
 import type { ExternalSkillSummary } from '../types';
 import { authHeaders } from './auth';
+import { createApiError } from './errorMessages';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -19,7 +20,7 @@ export const loadExternalSkills = async (): Promise<ExternalSkillSummary[]> => {
   });
   const payload = await response.json().catch(() => null) as ApiResponse<ExternalSkillSummary[]> | null;
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error?.message || `加载外部 Skill 失败：${response.status}`);
+    throw createApiError(payload, response.status, '扩展工具列表暂时无法加载');
   }
   return Array.isArray(payload.data) ? payload.data : [];
 };

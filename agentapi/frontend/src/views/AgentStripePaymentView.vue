@@ -152,9 +152,10 @@ onMounted(async () => {
   }
   try {
     const config = await agentAPI.payment.checkoutInfo()
-    if (!config.stripe_publishable_key) throw new Error('本站未配置 Stripe 公钥。')
+    const publishableKey = snapshot.value.stripePublishableKey || config.stripe_publishable_key
+    if (!publishableKey) throw new Error('本站未配置 Stripe 公钥。')
     const { loadStripe } = await import('@stripe/stripe-js/pure')
-    stripe = await loadStripe(config.stripe_publishable_key)
+    stripe = await loadStripe(publishableKey)
     if (!stripe) throw new Error('Stripe 组件加载失败。')
     loading.value = false
     if (method.value === 'alipay') await confirmAlipay(stripe, snapshot.value.clientSecret)

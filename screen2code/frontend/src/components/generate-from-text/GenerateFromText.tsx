@@ -20,7 +20,7 @@ function GenerateFromText({ doCreateFromText }: GenerateFromTextProps) {
 
   const handleGenerate = () => {
     if (text.trim() === "") {
-      toast.error("Please enter a prompt to generate from");
+      toast.error("请输入生成要求");
       return;
     }
     doCreateFromText(text);
@@ -38,7 +38,8 @@ function GenerateFromText({ doCreateFromText }: GenerateFromTextProps) {
       {!isOpen ? (
         <div className="flex justify-center">
           <Button variant="secondary" onClick={() => setIsOpen(true)}>
-            Generate from text prompt [BETA]
+
+            通过文字生成（测试版）
           </Button>
         </div>
       ) : (
@@ -46,7 +47,7 @@ function GenerateFromText({ doCreateFromText }: GenerateFromTextProps) {
           <Textarea
             ref={textareaRef}
             rows={2}
-            placeholder="A SaaS admin dashboard with charts and user management"
+            placeholder="包含图表和用户管理的 SaaS 管理后台"
             className="w-full mb-4"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -54,13 +55,15 @@ function GenerateFromText({ doCreateFromText }: GenerateFromTextProps) {
           />
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-500">
-              Press Cmd/Ctrl + Enter to generate
+
+              按 Cmd/Ctrl + Enter 生成
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsOpen(false)}>
-                Cancel
+
+                取消
               </Button>
-              <Button onClick={handleGenerate}>Generate</Button>
+              <Button onClick={handleGenerate}>生成</Button>
             </div>
           </div>
         </>

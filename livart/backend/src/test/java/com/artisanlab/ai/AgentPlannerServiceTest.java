@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -410,7 +411,7 @@ class AgentPlannerServiceTest {
                 eq(config),
                 anyString(),
                 anyString(),
-                any(),
+                eq(Duration.ofSeconds(150)),
                 eq("agent-intent-classifier")
         );
         verify(springAiTextService, never()).completeText(
@@ -479,7 +480,8 @@ class AgentPlannerServiceTest {
         service.createPlan(userId, request);
 
         ArgumentCaptor<String> plannerInputCaptor = ArgumentCaptor.forClass(String.class);
-        verify(springAiTextService).completeText(eq(config), anyString(), plannerInputCaptor.capture(), any(), eq("agent-planner"));
+        verify(springAiTextService).completeText(
+                eq(config), anyString(), plannerInputCaptor.capture(), eq(Duration.ofSeconds(150)), eq("agent-planner"));
         assertThat(plannerInputCaptor.getValue())
                 .contains("用户长期记忆")
                 .contains("视觉偏好：简洁优雅、高级留白");

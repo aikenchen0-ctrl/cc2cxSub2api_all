@@ -8,66 +8,75 @@ function EvalNavigation() {
           to="/evals"
           className="font-medium hover:text-blue-300 transition-colors"
         >
-          Evals Home
+
+          评测首页
         </Link>
-        
+
         <div className="text-gray-500">|</div>
-        
+
         <Link
           to="/evals/run"
           className="hover:text-blue-300 transition-colors"
         >
-          Run
+
+          任务
         </Link>
-        
+
         <Link
           to="/evals/best-of-n"
           className="hover:text-blue-300 transition-colors"
         >
-          Best of N
+
+          多方案对比
         </Link>
-        
+
         <Link
           to="/evals/openai-input-compare"
           className="hover:text-blue-300 transition-colors"
         >
-          Input Compare
+
+          输入对比
         </Link>
 
         <Link
           to="/evals/prompt-reports"
           className="hover:text-blue-300 transition-colors"
         >
-          Prompt Reports
+
+          提示词报告
         </Link>
 
         <Link
           to="/evals/agent-runs"
           className="hover:text-blue-300 transition-colors"
         >
-          Agent Runs
+
+          智能体任务
         </Link>
 
         <Link
           to="/evals/sessions"
           className="hover:text-blue-300 transition-colors"
         >
-          Sessions
+
+          会话
         </Link>
 
         <Link
           to="/evals/compare"
           className="hover:text-blue-300 transition-colors"
         >
-          Compare
+
+          对比
         </Link>
       </div>
-      
+
       <Link
         to="/"
         className="text-sm text-gray-300 hover:text-white transition-colors"
       >
-        ← Back to app
+
+        ← 返回应用
       </Link>
     </div>
   );

@@ -152,7 +152,7 @@ async def get_eval_set(set_name: str) -> EvalSetDetailModel:
     except eval_sets.InvalidSetNameError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except eval_sets.EvalSetNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Eval set not found: {set_name}")
+        raise HTTPException(status_code=404, detail=f"未找到评测集： {set_name}")
     return EvalSetDetailModel(
         **_set_info_to_model(info).model_dump(),
         images=[
@@ -174,9 +174,9 @@ async def get_eval_set_image(set_name: str, filename: str) -> FileResponse:
     except eval_sets.InvalidSetNameError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except eval_sets.EvalSetNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Eval set not found: {set_name}")
+        raise HTTPException(status_code=404, detail=f"未找到评测集： {set_name}")
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Image not found")
+        raise HTTPException(status_code=404, detail="未找到图片")
     return FileResponse(path)
 
 
@@ -204,7 +204,7 @@ async def create_eval_session(request: CreateEvalSessionRequest) -> EvalSessionM
         raise HTTPException(status_code=400, detail=str(e))
     except eval_sets.EvalSetNotFoundError:
         raise HTTPException(
-            status_code=404, detail=f"Eval set not found: {request.eval_set}"
+            status_code=404, detail=f"未找到评测集： {request.eval_set}"
         )
     session = eval_sessions.create_session(request.eval_set, request.name)
     return _session_to_model(session)
@@ -215,7 +215,7 @@ async def create_eval_session(request: CreateEvalSessionRequest) -> EvalSessionM
 )
 async def activate_eval_session(session_id: str) -> EvalSessionModel:
     if eval_sessions.get_session(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="未找到评测会话")
     session = eval_sessions.activate_session(session_id)
     assert session is not None
     return _session_to_model(session)
@@ -237,7 +237,7 @@ def _is_stale_running(status: str, created_at: str) -> bool:
 async def get_session_matrix(session_id: str) -> SessionMatrixResponse:
     session = eval_sessions.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="未找到评测会话")
 
     set_missing = False
     set_info: Optional[eval_sets.EvalSetInfo] = None
@@ -373,7 +373,7 @@ async def set_session_model_order(
     session_id: str, request: ModelOrderRequest
 ) -> Dict[str, str]:
     if eval_sessions.get_session(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="未找到评测会话")
     eval_sessions.set_model_order(session_id, request.models)
     return {"status": "ok"}
 
@@ -383,6 +383,6 @@ async def set_session_model_notes(
     session_id: str, request: ModelNotesRequest
 ) -> Dict[str, str]:
     if eval_sessions.get_session(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="未找到评测会话")
     eval_sessions.set_model_notes(session_id, request.model, request.notes)
     return {"status": "ok"}

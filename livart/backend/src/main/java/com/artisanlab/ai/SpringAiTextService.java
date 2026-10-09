@@ -17,10 +17,12 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class SpringAiTextService {
@@ -84,7 +86,7 @@ public class SpringAiTextService {
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "SPRING_AI_UPSTREAM_ERROR",
-                    "Spring AI 上游错误：%s（状态 %d）".formatted(detail, statusCode)
+                    upstreamErrorMessage(detail, statusCode)
             );
         } catch (WebClientResponseException exception) {
             String detail = previewText(exception.getResponseBodyAsString());
@@ -99,7 +101,7 @@ public class SpringAiTextService {
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "SPRING_AI_UPSTREAM_ERROR",
-                    "Spring AI 上游错误：%s（状态 %d）".formatted(detail, statusCode)
+                    upstreamErrorMessage(detail, statusCode)
             );
         } catch (ResourceAccessException exception) {
             boolean timeoutDetected = isTimeoutException(exception);
@@ -118,6 +120,19 @@ public class SpringAiTextService {
         } catch (ApiException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            if (isTimeoutException(exception)) {
+                log.warn(
+                        "[spring-ai] operation={} duration={}ms timeout={}",
+                        operationName,
+                        System.currentTimeMillis() - startedAt,
+                        safeMessage(exception)
+                );
+                throw new ApiException(
+                        HttpStatus.GATEWAY_TIMEOUT,
+                        "SPRING_AI_TIMEOUT",
+                        "Spring AI 调用超时：上游未在等待时间内完成响应，请稍后重试"
+                );
+            }
             log.error(
                     "[spring-ai] operation={} duration={}ms error={}",
                     operationName,
@@ -149,6 +164,20 @@ public class SpringAiTextService {
 
     static String resolveEmbeddingsPath(String baseUrl) {
         return hasVersionPath(baseUrl) ? "/embeddings" : "/v1/embeddings";
+    }
+
+    static String upstreamErrorMessage(String detail, int statusCode) {
+        String message = "Spring AI 上游错误：%s（状态 %d）".formatted(detail, statusCode);
+        if (statusCode == HttpStatus.NOT_FOUND.value()) {
+            return message + "；上游接口或模型不存在，请检查 Sub2API 上游账号的 Base URL、模型授权以及 Responses/Chat Completions 协议支持";
+        }
+        if (statusCode == HttpStatus.UNAUTHORIZED.value() || statusCode == HttpStatus.FORBIDDEN.value()) {
+            return message + "；请检查 Sub2API 上游账号凭据和模型权限";
+        }
+        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR.value()) {
+            return message + "；请稍后重试，或检查 Sub2API 当前可用上游账号";
+        }
+        return message;
     }
 
     static String extractText(OpenAiApi.ChatCompletion completion) {
@@ -251,9 +280,12 @@ public class SpringAiTextService {
         }
     }
 
-    private static boolean isTimeoutException(Throwable throwable) {
+    static boolean isTimeoutException(Throwable throwable) {
         Throwable current = throwable;
         while (current != null) {
+            if (current instanceof TimeoutException || current instanceof SocketTimeoutException) {
+                return true;
+            }
             String message = current.getMessage();
             if (message != null) {
                 String normalized = message.toLowerCase(Locale.ROOT);

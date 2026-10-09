@@ -37,6 +37,7 @@ import { buildImageResultDescription, generateImageTitleFromPrompt, getCanvasIte
 import { getApiConfig, getImageModelDisplayName } from '../services/config';
 import { buildLivartImageSharePageUrl, LIVART_SHARE_PROMOTION_TEXT } from '../services/shareLinks';
 import ThreeEyes from './ThreeEyes';
+import FailureNotice from './FailureNotice';
 
 interface CanvasProps {
   items: CanvasItem[];
@@ -3045,7 +3046,9 @@ const Canvas: React.FC<CanvasProps> = ({
       setSelectedIds([newId]);
     } catch (error) {
       console.error(error);
-      onItemUpdate(selectedItem.id, { status: 'error' });
+      const message = error instanceof Error ? error.message : '图片生成没有完成';
+      onItemUpdate(selectedItem.id, { status: 'error', label: message });
+      setInlineEditErrors(prev => ({ ...prev, [selectedItem.id]: message }));
     } finally {
       if (imageTaskStartedAt !== null) {
         onImageTaskFinish(imageTaskStartedAt);
@@ -4218,10 +4221,10 @@ const Canvas: React.FC<CanvasProps> = ({
                   const imageSrc = getCanvasImageSrc(item, zoom);
                   if (item.status === 'error') {
                     return (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 border border-red-200 bg-red-50 px-4 text-center">
+                      <div className="flex h-full w-full flex-col items-center gap-2 overflow-auto border border-red-200 bg-red-50 p-4 text-center">
                         <div className="text-sm font-bold text-red-600">生成失败</div>
                         <div className="max-w-full break-words text-[11px] leading-relaxed text-red-500">
-                          {item.label || '图片生成失败，请重新尝试'}
+                          <FailureNotice error={item.label || '图片生成失败，请重新尝试'} compact />
                         </div>
                       </div>
                     );
@@ -4719,7 +4722,7 @@ const Canvas: React.FC<CanvasProps> = ({
             {renderMultiAnglePanel()}
             {selectedInlineEditError && (
               <div className="max-w-[520px] rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[11px] font-bold text-red-500 shadow-lg">
-                {selectedInlineEditError}
+                <FailureNotice error={selectedInlineEditError} context="图片操作" compact />
               </div>
             )}
             </div>

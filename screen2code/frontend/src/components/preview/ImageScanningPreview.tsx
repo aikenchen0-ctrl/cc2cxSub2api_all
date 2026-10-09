@@ -14,7 +14,7 @@ function ImageScanningPreview({ imageUrl }: Props) {
           <div className="relative max-h-[72vh] overflow-hidden rounded-xl bg-slate-100 dark:bg-zinc-950">
             <img
               src={imageUrl}
-              alt="Uploaded screenshot being analyzed"
+              alt="正在分析上传的截图"
               className="block max-h-[72vh] w-full object-contain"
             />
             <div className="pointer-events-none absolute inset-0 bg-violet-950/[0.03] dark:bg-violet-300/[0.02]" />

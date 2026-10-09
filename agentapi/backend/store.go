@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -28,9 +29,10 @@ var errRechargeStateConflict = errors.New("recharge order is already in a termin
 var errAgentUserStatusConflict = errors.New("agent user is not in a changeable status")
 
 type Store struct {
-	db    *sql.DB
-	aead  cipher.AEAD
-	clock func() time.Time
+	db              *sql.DB
+	aead            cipher.AEAD
+	clock           func() time.Time
+	paymentCounters sync.Map
 }
 
 type Session struct {
@@ -82,6 +84,8 @@ type AgentAPIKeyView struct {
 	Name       string `json:"name"`
 	Prefix     string `json:"prefix"`
 	Key        string `json:"key,omitempty"`
+	GroupID    int64  `json:"group_id,omitempty"`
+	GroupName  string `json:"group_name,omitempty"`
 	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at"`
 	LastUsedAt string `json:"last_used_at,omitempty"`
@@ -93,6 +97,7 @@ type ResolvedAgentAPIKey struct {
 	MainUserID string
 	Name       string
 	Prefix     string
+	GroupID    int64
 }
 
 type AgentUsageView struct {
@@ -184,6 +189,7 @@ type VideoTask struct {
 	TaskID     string `json:"task_id"`
 	RequestID  string `json:"request_id"`
 	Status     string `json:"status"`
+	GroupID    int64  `json:"group_id,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 }
@@ -194,6 +200,7 @@ type ImageTask struct {
 	TaskID     string `json:"task_id"`
 	RequestID  string `json:"request_id"`
 	Status     string `json:"status"`
+	GroupID    int64  `json:"group_id,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 }
@@ -676,6 +683,104 @@ func (s *Store) migrate() error {
 			FOREIGN KEY(agent_id, main_user_id) REFERENCES agent_users(agent_id, main_user_id) ON DELETE RESTRICT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_image_tasks_user ON image_tasks(agent_id, main_user_id, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS station_payment_settings (
+			agent_id TEXT PRIMARY KEY,
+			enabled INTEGER NOT NULL DEFAULT 0,
+			min_amount REAL NOT NULL DEFAULT 1,
+			max_amount REAL NOT NULL DEFAULT 10000,
+			daily_limit REAL NOT NULL DEFAULT 0,
+			order_timeout_minutes INTEGER NOT NULL DEFAULT 30,
+			max_pending_orders INTEGER NOT NULL DEFAULT 3,
+			enabled_payment_types TEXT NOT NULL DEFAULT '',
+			balance_disabled INTEGER NOT NULL DEFAULT 0,
+			balance_recharge_multiplier REAL NOT NULL DEFAULT 1,
+			subscription_usd_to_cny_rate REAL NOT NULL DEFAULT 0,
+			recharge_fee_rate REAL NOT NULL DEFAULT 0,
+			load_balance_strategy TEXT NOT NULL DEFAULT 'round-robin',
+			product_name_prefix TEXT NOT NULL DEFAULT '',
+			product_name_suffix TEXT NOT NULL DEFAULT '',
+			help_image_url TEXT NOT NULL DEFAULT '',
+			help_text TEXT NOT NULL DEFAULT '',
+			cancel_rate_limit_enabled INTEGER NOT NULL DEFAULT 0,
+			cancel_rate_limit_max INTEGER NOT NULL DEFAULT 10,
+			cancel_rate_limit_window INTEGER NOT NULL DEFAULT 1,
+			cancel_rate_limit_unit TEXT NOT NULL DEFAULT 'day',
+			cancel_rate_limit_window_mode TEXT NOT NULL DEFAULT 'rolling',
+			alipay_force_qrcode INTEGER NOT NULL DEFAULT 0,
+			alipay_mobile_precreate_deep_link INTEGER NOT NULL DEFAULT 0,
+			visible_alipay_source TEXT NOT NULL DEFAULT '',
+			visible_wxpay_source TEXT NOT NULL DEFAULT '',
+			visible_alipay_enabled INTEGER NOT NULL DEFAULT 1,
+			visible_wxpay_enabled INTEGER NOT NULL DEFAULT 1,
+			updated_at INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE IF NOT EXISTS station_payment_providers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			provider_key TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
+			config_cipher TEXT NOT NULL DEFAULT '',
+			supported_types TEXT NOT NULL DEFAULT '',
+			enabled INTEGER NOT NULL DEFAULT 1,
+			payment_mode TEXT NOT NULL DEFAULT '',
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			limits TEXT NOT NULL DEFAULT '',
+			refund_enabled INTEGER NOT NULL DEFAULT 0,
+			allow_user_refund INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_station_providers_agent ON station_payment_providers(agent_id, enabled, sort_order, id)`,
+		`CREATE TABLE IF NOT EXISTS station_payment_plans (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			price REAL NOT NULL,
+			original_price REAL,
+			currency TEXT NOT NULL DEFAULT 'CNY',
+			validity_days INTEGER NOT NULL DEFAULT 30,
+			validity_unit TEXT NOT NULL DEFAULT 'day',
+			features TEXT NOT NULL DEFAULT '',
+			product_name TEXT NOT NULL DEFAULT '',
+			for_sale INTEGER NOT NULL DEFAULT 1,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_station_plans_agent ON station_payment_plans(agent_id, for_sale, sort_order, id)`,
+		`CREATE TABLE IF NOT EXISTS station_payment_orders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			main_user_id TEXT NOT NULL,
+			out_trade_no TEXT NOT NULL,
+			amount REAL NOT NULL,
+			pay_amount REAL NOT NULL,
+			fee_rate REAL NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT 'CNY',
+			payment_type TEXT NOT NULL,
+			provider_id INTEGER NOT NULL DEFAULT 0,
+			order_type TEXT NOT NULL,
+			plan_id INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'PENDING',
+			pay_url TEXT NOT NULL DEFAULT '',
+			qr_code TEXT NOT NULL DEFAULT '',
+			provider_trade_no TEXT NOT NULL DEFAULT '',
+			refund_reason TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			expires_at INTEGER NOT NULL,
+			paid_at INTEGER NOT NULL DEFAULT 0,
+			updated_at INTEGER NOT NULL,
+			UNIQUE(agent_id, out_trade_no)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_station_orders_user ON station_payment_orders(agent_id, main_user_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_station_orders_status ON station_payment_orders(agent_id, status, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS station_payment_refunds (
+			agent_id TEXT NOT NULL, order_id INTEGER NOT NULL, provider_key TEXT NOT NULL,
+			config_cipher TEXT NOT NULL, trade_no TEXT NOT NULL, refund_id TEXT NOT NULL DEFAULT '',
+			credit_cents INTEGER NOT NULL, state TEXT NOT NULL, updated_at INTEGER NOT NULL,
+			PRIMARY KEY(agent_id, order_id)
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -722,6 +827,10 @@ func (s *Store) migrate() error {
 		{"settlements", "agent_api_key_id", "INTEGER NOT NULL DEFAULT 0"},
 		{"agent_api_keys", "key_ciphertext", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_api_keys", "legacy_key_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_api_keys", "group_id", "INTEGER NOT NULL DEFAULT 0"},
+		{"agent_api_keys", "group_name", "TEXT NOT NULL DEFAULT ''"},
+		{"video_tasks", "group_id", "INTEGER NOT NULL DEFAULT 0"},
+		{"image_tasks", "group_id", "INTEGER NOT NULL DEFAULT 0"},
 		{"sessions", "agent_id", "TEXT NOT NULL DEFAULT ''"},
 		{"sessions", "role", "TEXT NOT NULL DEFAULT 'member'"},
 	} {
@@ -808,7 +917,7 @@ func (s *Store) RecordVideoTask(agentID, mainUserID, taskID, requestID, status s
 		status = "pending"
 	}
 	now := s.clock().UTC().Unix()
-	_, err := s.db.Exec(`INSERT INTO video_tasks(agent_id, main_user_id, task_id, request_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(agent_id, task_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at WHERE video_tasks.main_user_id=excluded.main_user_id AND video_tasks.request_id=excluded.request_id`, agentID, mainUserID, taskID, requestID, status, now, now)
+	_, err := s.db.Exec(`INSERT INTO video_tasks(agent_id, main_user_id, task_id, request_id, status, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?) ON CONFLICT(agent_id, task_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at WHERE video_tasks.main_user_id=excluded.main_user_id AND video_tasks.request_id=excluded.request_id`, agentID, mainUserID, taskID, requestID, status, now, now)
 	if err != nil {
 		return VideoTask{}, err
 	}
@@ -822,7 +931,7 @@ func (s *Store) RecordVideoTask(agentID, mainUserID, taskID, requestID, status s
 func (s *Store) VideoTask(agentID, taskID string) (VideoTask, error) {
 	var task VideoTask
 	var createdAt, updatedAt int64
-	err := s.db.QueryRow(`SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at FROM video_tasks WHERE agent_id=? AND task_id=?`, strings.TrimSpace(agentID), strings.TrimSpace(taskID)).Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &createdAt, &updatedAt)
+	err := s.db.QueryRow(`SELECT agent_id, main_user_id, task_id, request_id, status, COALESCE(group_id, 0), created_at, updated_at FROM video_tasks WHERE agent_id=? AND task_id=?`, strings.TrimSpace(agentID), strings.TrimSpace(taskID)).Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &task.GroupID, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return VideoTask{}, errNotFound
 	}
@@ -853,7 +962,7 @@ func (s *Store) PendingVideoTasks(agentID string, limit int) ([]VideoTask, error
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at FROM video_tasks
+	rows, err := s.db.Query(`SELECT agent_id, main_user_id, task_id, request_id, status, COALESCE(group_id, 0), created_at, updated_at FROM video_tasks
 		WHERE agent_id=? AND (
 			lower(status) NOT IN ('done','completed','complete','succeeded','success','failed','error','cancelled','canceled','rejected','expired')
 			OR EXISTS (
@@ -869,7 +978,7 @@ func (s *Store) PendingVideoTasks(agentID string, limit int) ([]VideoTask, error
 	for rows.Next() {
 		var task VideoTask
 		var createdAt, updatedAt int64
-		if err := rows.Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &task.GroupID, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		task.CreatedAt = time.Unix(createdAt, 0).UTC().Format(time.RFC3339)
@@ -877,6 +986,14 @@ func (s *Store) PendingVideoTasks(agentID string, limit int) ([]VideoTask, error
 		items = append(items, task)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) SetVideoTaskGroup(agentID, taskID string, groupID int64) error {
+	if groupID <= 0 {
+		return nil
+	}
+	_, err := s.db.Exec(`UPDATE video_tasks SET group_id=? WHERE agent_id=? AND task_id=? AND group_id=0`, groupID, strings.TrimSpace(agentID), strings.TrimSpace(taskID))
+	return err
 }
 
 func (s *Store) RecordImageTask(agentID, mainUserID, taskID, requestID, status string) (ImageTask, error) {
@@ -889,7 +1006,7 @@ func (s *Store) RecordImageTask(agentID, mainUserID, taskID, requestID, status s
 		status = "processing"
 	}
 	now := s.clock().UTC().Unix()
-	_, err := s.db.Exec(`INSERT INTO image_tasks(agent_id, main_user_id, task_id, request_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(agent_id, task_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at WHERE image_tasks.main_user_id=excluded.main_user_id AND image_tasks.request_id=excluded.request_id`, agentID, mainUserID, taskID, requestID, status, now, now)
+	_, err := s.db.Exec(`INSERT INTO image_tasks(agent_id, main_user_id, task_id, request_id, status, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?) ON CONFLICT(agent_id, task_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at WHERE image_tasks.main_user_id=excluded.main_user_id AND image_tasks.request_id=excluded.request_id`, agentID, mainUserID, taskID, requestID, status, now, now)
 	if err != nil {
 		return ImageTask{}, err
 	}
@@ -903,7 +1020,7 @@ func (s *Store) RecordImageTask(agentID, mainUserID, taskID, requestID, status s
 func (s *Store) ImageTask(agentID, taskID string) (ImageTask, error) {
 	var task ImageTask
 	var createdAt, updatedAt int64
-	err := s.db.QueryRow(`SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at FROM image_tasks WHERE agent_id=? AND task_id=?`, strings.TrimSpace(agentID), strings.TrimSpace(taskID)).Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &createdAt, &updatedAt)
+	err := s.db.QueryRow(`SELECT agent_id, main_user_id, task_id, request_id, status, COALESCE(group_id, 0), created_at, updated_at FROM image_tasks WHERE agent_id=? AND task_id=?`, strings.TrimSpace(agentID), strings.TrimSpace(taskID)).Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &task.GroupID, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ImageTask{}, errNotFound
 	}
@@ -934,7 +1051,7 @@ func (s *Store) PendingImageTasks(agentID string, limit int) ([]ImageTask, error
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT agent_id, main_user_id, task_id, request_id, status, created_at, updated_at FROM image_tasks
+	rows, err := s.db.Query(`SELECT agent_id, main_user_id, task_id, request_id, status, COALESCE(group_id, 0), created_at, updated_at FROM image_tasks
 		WHERE agent_id=? AND (
 			lower(status) NOT IN ('done','completed','complete','succeeded','success','failed','error','cancelled','canceled','rejected','expired')
 			OR EXISTS (
@@ -950,7 +1067,7 @@ func (s *Store) PendingImageTasks(agentID string, limit int) ([]ImageTask, error
 	for rows.Next() {
 		var task ImageTask
 		var createdAt, updatedAt int64
-		if err := rows.Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&task.AgentID, &task.MainUserID, &task.TaskID, &task.RequestID, &task.Status, &task.GroupID, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		task.CreatedAt = time.Unix(createdAt, 0).UTC().Format(time.RFC3339)
@@ -958,6 +1075,14 @@ func (s *Store) PendingImageTasks(agentID string, limit int) ([]ImageTask, error
 		items = append(items, task)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) SetImageTaskGroup(agentID, taskID string, groupID int64) error {
+	if groupID <= 0 {
+		return nil
+	}
+	_, err := s.db.Exec(`UPDATE image_tasks SET group_id=? WHERE agent_id=? AND task_id=? AND group_id=0`, groupID, strings.TrimSpace(agentID), strings.TrimSpace(taskID))
+	return err
 }
 
 func (s *Store) addColumnIfMissing(table, name, definition string) error {
@@ -1318,6 +1443,105 @@ func (s *Store) AgentByDomain(domain string) (AgentView, error) {
 // UpdateBranding changes only the presentation fields for the current Agent.
 // It deliberately cannot change the agent id, domain, owner or billing mode;
 // those fields belong to provisioning and accounting configuration.
+func (s *Store) SetBillingMode(agentID, mode, ownerID string) error {
+	mode = strings.TrimSpace(mode)
+	if mode != "user_upstream" && mode != "owner_upstream" {
+		return fmt.Errorf("invalid billing mode")
+	}
+	result, err := s.db.Exec(`UPDATE agent_config SET billing_mode=?, billing_main_user_id=?, updated_at=? WHERE agent_id=?`, mode, strings.TrimSpace(ownerID), s.clock().UTC().Unix(), strings.TrimSpace(agentID))
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func (s *Store) UserWalletCents(agentID, mainUserID string) (int64, error) {
+	var cents int64
+	err := s.db.QueryRow(`SELECT balance_cents FROM agent_user_wallets WHERE agent_id=? AND main_user_id=?`, strings.TrimSpace(agentID), strings.TrimSpace(mainUserID)).Scan(&cents)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return cents, err
+}
+
+func (s *Store) DebitUserUsage(agentID, mainUserID string, cents int64, requestID string) error {
+	if cents <= 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, _, exists, lookupErr := ledgerEntry(tx, agentID, "user_consume", requestID); lookupErr != nil {
+		return lookupErr
+	} else if exists {
+		return tx.Commit()
+	}
+	var balance, version int64
+	err = tx.QueryRow(`SELECT balance_cents, version FROM agent_user_wallets WHERE agent_id=? AND main_user_id=?`, agentID, mainUserID).Scan(&balance, &version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	next := balance - cents
+	if next < 0 {
+		next = 0
+	}
+	now := s.clock().UTC().Unix()
+	if _, err := tx.Exec(`UPDATE agent_user_wallets SET balance_cents=?, version=?, updated_at=? WHERE agent_id=? AND main_user_id=? AND version=?`, next, version+1, now, agentID, mainUserID, version); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO wallet_ledger(agent_id, main_user_id, kind, amount_cents, balance_after_cents, request_id, note, created_at) VALUES (?, ?, 'user_consume', ?, ?, ?, ?, ?)`, agentID, mainUserID, next-balance, next, requestID, "model usage recorded for station user", now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) CreditUserRecharge(agentID, mainUserID string, cents int64, orderNo string) error {
+	if cents <= 0 {
+		return fmt.Errorf("recharge amount must be positive")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	requestID := "recharge:" + orderNo
+	if _, _, exists, lookupErr := ledgerEntry(tx, agentID, "user_recharge", requestID); lookupErr != nil {
+		return lookupErr
+	} else if exists {
+		return tx.Commit()
+	}
+	now := s.clock().UTC().Unix()
+	if _, err := tx.Exec(`INSERT INTO agent_user_wallets (agent_id, main_user_id, balance_cents, version, updated_at) VALUES (?, ?, 0, 0, ?) ON CONFLICT(agent_id, main_user_id) DO NOTHING`, agentID, mainUserID, now); err != nil {
+		return err
+	}
+	var balance, version int64
+	if err := tx.QueryRow(`SELECT balance_cents, version FROM agent_user_wallets WHERE agent_id=? AND main_user_id=?`, agentID, mainUserID).Scan(&balance, &version); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE agent_user_wallets SET balance_cents=?, version=?, updated_at=? WHERE agent_id=? AND main_user_id=? AND version=?`, balance+cents, version+1, now, agentID, mainUserID, version); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO wallet_ledger(agent_id, main_user_id, kind, amount_cents, balance_after_cents, request_id, order_id, note, created_at) VALUES (?, ?, 'user_recharge', ?, ?, ?, ?, ?, ?)`, agentID, mainUserID, cents, balance+cents, requestID, orderNo, "station recharge recorded for user", now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE recharge_orders SET status='allocated', allocated_at=?, updated_at=? WHERE agent_id=? AND order_no=? AND status='paid_pending_allocation'`, now, now, agentID, orderNo); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) UpdateBranding(agentID, name, siteName, siteLogo, docURL, contactInfo, apiBaseURL string, home AgentHomeSettings) (AgentView, error) {
 	now := s.clock().UTC().Unix()
 	result, err := s.db.Exec(`
@@ -1898,6 +2122,19 @@ func (s *Store) CreateAPIKey(agentID, mainUserID, name string) (AgentAPIKeyView,
 	return view, key, nil
 }
 
+func (s *Store) CreateAPIKeyInGroup(agentID, mainUserID, name, groupName string, groupID int64) (AgentAPIKeyView, string, error) {
+	view, key, err := s.CreateAPIKey(agentID, mainUserID, name)
+	if err != nil {
+		return AgentAPIKeyView{}, "", err
+	}
+	if _, err := s.db.Exec(`UPDATE agent_api_keys SET group_id=?, group_name=? WHERE id=? AND agent_id=? AND main_user_id=?`, groupID, strings.TrimSpace(groupName), view.ID, agentID, mainUserID); err != nil {
+		return AgentAPIKeyView{}, "", err
+	}
+	view.GroupID = groupID
+	view.GroupName = strings.TrimSpace(groupName)
+	return view, key, nil
+}
+
 func generateAPIKey() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
@@ -1963,7 +2200,7 @@ func (s *Store) APIKeys(agentID, mainUserID string) ([]AgentAPIKeyView, error) {
 	if err := s.ensureRecoverableAPIKeys(agentID, mainUserID); err != nil {
 		return nil, fmt.Errorf("upgrade recoverable AgentAPI keys: %w", err)
 	}
-	rows, err := s.db.Query(`SELECT id, name, prefix, key_ciphertext, status, created_at, COALESCE(last_used_at, 0) FROM agent_api_keys WHERE agent_id=? AND main_user_id=? ORDER BY id DESC`, agentID, mainUserID)
+	rows, err := s.db.Query(`SELECT id, name, prefix, key_ciphertext, status, created_at, COALESCE(last_used_at, 0), COALESCE(group_id, 0), COALESCE(group_name, '') FROM agent_api_keys WHERE agent_id=? AND main_user_id=? ORDER BY id DESC`, agentID, mainUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -1973,7 +2210,7 @@ func (s *Store) APIKeys(agentID, mainUserID string) ([]AgentAPIKeyView, error) {
 		var view AgentAPIKeyView
 		var keyCiphertext string
 		var created, lastUsed int64
-		if err := rows.Scan(&view.ID, &view.Name, &view.Prefix, &keyCiphertext, &view.Status, &created, &lastUsed); err != nil {
+		if err := rows.Scan(&view.ID, &view.Name, &view.Prefix, &keyCiphertext, &view.Status, &created, &lastUsed, &view.GroupID, &view.GroupName); err != nil {
 			return nil, err
 		}
 		if keyCiphertext != "" {
@@ -1989,6 +2226,21 @@ func (s *Store) APIKeys(agentID, mainUserID string) ([]AgentAPIKeyView, error) {
 		result = append(result, view)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) DeleteAPIKey(agentID, mainUserID string, id int64) error {
+	result, err := s.db.Exec(`DELETE FROM agent_api_keys WHERE id=? AND agent_id=? AND main_user_id=?`, id, agentID, mainUserID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return errNotFound
+	}
+	return nil
 }
 
 func (s *Store) RevokeAPIKey(agentID, mainUserID string, id int64) error {
@@ -2021,7 +2273,7 @@ func (s *Store) ResolveAPIKeyDetails(agentID, key string) (ResolvedAgentAPIKey, 
 	}
 	var resolved ResolvedAgentAPIKey
 	keyHash := hashToken(key)
-	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND (k.key_hash=? OR k.legacy_key_hash=?) AND k.status='active'`, agentID, keyHash, keyHash).Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
+	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix, COALESCE(k.group_id, 0) FROM agent_api_keys k JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id WHERE k.agent_id=? AND (k.key_hash=? OR k.legacy_key_hash=?) AND k.status='active'`, agentID, keyHash, keyHash).Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix, &resolved.GroupID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResolvedAgentAPIKey{}, errNotFound
 	}
@@ -2042,12 +2294,12 @@ func (s *Store) ResolveAPIKeyDetailsAnyTenant(key string) (ResolvedAgentAPIKey, 
 	}
 	keyHash := hashToken(key)
 	var resolved ResolvedAgentAPIKey
-	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix
+	err := s.db.QueryRow(`SELECT k.id, k.agent_id, k.main_user_id, k.name, k.prefix, COALESCE(k.group_id, 0)
 		FROM agent_api_keys k
 		JOIN agent_users u ON u.agent_id=k.agent_id AND u.main_user_id=k.main_user_id
 		JOIN agent_config a ON a.agent_id=k.agent_id
 		WHERE (k.key_hash=? OR k.legacy_key_hash=?) AND k.status='active' AND a.status='active'`, keyHash, keyHash).
-		Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix)
+		Scan(&resolved.ID, &resolved.AgentID, &resolved.MainUserID, &resolved.Name, &resolved.Prefix, &resolved.GroupID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResolvedAgentAPIKey{}, errNotFound
 	}
@@ -2330,8 +2582,8 @@ func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, r
 // billing without consuming AgentAPI's legacy local wallet. Sub2API performs
 // the only real balance check and charge against billingMainUserID.
 func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64) (SettlementRecord, bool, error) {
-	if requestID == "" || usageID == "" || reservedCents <= 0 || strings.TrimSpace(proxyMainUserID) == "" || proxyMainUserID != billingMainUserID {
-		return SettlementRecord{}, false, fmt.Errorf("direct settlement requires matching proxy and billing users")
+	if requestID == "" || usageID == "" || reservedCents <= 0 || strings.TrimSpace(proxyMainUserID) == "" || strings.TrimSpace(billingMainUserID) == "" {
+		return SettlementRecord{}, false, fmt.Errorf("direct settlement requires proxy and billing users")
 	}
 	tx, err := s.db.Begin()
 	if err != nil {

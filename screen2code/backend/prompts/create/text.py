@@ -17,15 +17,15 @@ def build_text_prompt_messages(
     design_system_block = build_design_system_prompt_block(design_system)
 
     USER_PROMPT = f"""
-Generate UI for {text_prompt}.
+请根据以下要求生成界面：{text_prompt}。
 {selected_stack}
 {design_system_block}
 
-# Instructions
+# 实现要求
 
-- Make sure to make it look modern and sleek.
-- Use modern, professional fonts and colors.
-- Follow UX best practices.
+- 页面外观应现代、简洁。
+- 使用专业的字体和配色，保证中文排版清晰。
+- 遵循良好的用户体验规范，界面文案默认使用简体中文。
 - {image_policy}"""
 
     return [

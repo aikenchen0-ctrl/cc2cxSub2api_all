@@ -3,9 +3,9 @@ def build_design_system_prompt_block(design_system: str | None) -> str:
         return ""
 
     return f"""
-## Design system
+## 设计规范
 
-If the design system conflicts with other instructions, prioritize the design system.
+设计规范与其他要求冲突时，优先遵循设计规范。
 
 <design_system>
 {design_system.strip()}

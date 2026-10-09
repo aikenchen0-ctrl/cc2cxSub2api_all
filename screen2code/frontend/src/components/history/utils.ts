@@ -3,14 +3,14 @@ import { Commit, CommitType } from "../commits/types";
 function displayHistoryItemType(itemType: CommitType) {
   switch (itemType) {
     case "ai_create":
-      return "Create";
+      return "创建";
     case "ai_edit":
-      return "Edit";
+      return "编辑";
     case "code_create":
-      return "Imported from code";
+      return "导入代码";
     default: {
       const exhaustiveCheck: never = itemType;
-      throw new Error(`Unhandled case: ${exhaustiveCheck}`);
+      throw new Error(`未处理的情况：${exhaustiveCheck}`);
     }
   }
 }
@@ -50,14 +50,14 @@ export function summarizeHistoryItem(commit: Commit): string {
   const commitType = commit.type;
   switch (commitType) {
     case "ai_create":
-      return "Create";
+      return "创建";
     case "ai_edit":
-      return commit.inputs.text || "Edit";
+      return commit.inputs.text || "编辑";
     case "code_create":
-      return "Imported from code";
+      return "导入代码";
     default: {
       const exhaustiveCheck: never = commitType;
-      throw new Error(`Unhandled case: ${exhaustiveCheck}`);
+      throw new Error(`未处理的情况：${exhaustiveCheck}`);
     }
   }
 }

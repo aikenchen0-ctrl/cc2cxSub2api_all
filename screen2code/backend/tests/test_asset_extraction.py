@@ -176,7 +176,7 @@ async def test_batches_assets_with_schema_config_and_maps_out_of_order_response(
     )
     assert config.thinking_config is not None
     assert config.thinking_config.thinking_level == types.ThinkingLevel.MINIMAL
-    assert "Never return masks" in str(config.system_instruction)
+    assert "不得返回蒙版" in str(config.system_instruction)
 
     parts = _parts_for_call(calls[0])
     assert len(parts) == 2  # one normalized image + one prompt
@@ -192,12 +192,12 @@ async def test_batches_assets_with_schema_config_and_maps_out_of_order_response(
     assert '"request_id": "asset-0001"' in prompt
     assert '"request_id": "asset-0002"' in prompt
     assert "[ymin, xmin, ymax, xmax]" in prompt
-    assert "smallest axis-aligned box" in prompt
-    assert "Exclude surrounding UI" in prompt
-    assert "Repeated lookalikes are separate instances" in prompt
-    assert "image_index=null, box_2d=null" in prompt
-    assert "Never return masks" in prompt
-    assert "Never guess a box" in prompt
+    assert "最小轴对齐边界框" in prompt
+    assert "排除周围的界面" in prompt
+    assert "重复的相似素材是不同实例" in prompt
+    assert "image_index=null、box_2d=null" in prompt
+    assert "不得返回蒙版" in prompt
+    assert "不得猜测边界框" in prompt
 
     assets = cast(list[dict[str, Any]], result["assets"])
     # Response order is intentionally reversed; result order remains caller order.
@@ -314,9 +314,9 @@ async def test_maps_duplicate_instances_missing_items_and_original_source_number
     )
 
     prompt = _prompt_for_call(calls[0])
-    assert "attached image 1 = source image 1" in prompt
+    assert "附件图片 1 = 源图 1" in prompt
     # Invalid source 2 is skipped without renumbering the caller's screenshot 3.
-    assert "attached image 2 = source image 3" in prompt
+    assert "附件图片 2 = 源图 3" in prompt
 
     assets = cast(list[dict[str, Any]], result["assets"])
     assert [asset["description"] for asset in assets] == descriptions
@@ -548,5 +548,5 @@ async def test_rejects_unsupported_or_undecodable_inputs_before_client_creation(
     assert client_created is False
     assert result == {
         "assets": [],
-        "error": "No valid input images were available for asset extraction.",
+        "error": "没有可用于提取素材的有效输入图片。",
     }

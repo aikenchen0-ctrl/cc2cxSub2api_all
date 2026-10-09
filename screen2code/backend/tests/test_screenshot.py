@@ -34,10 +34,10 @@ class TestNormalizeUrl:
     
     def test_invalid_protocols(self):
         """Test that unsupported protocols raise ValueError."""
-        with pytest.raises(ValueError, match="Unsupported protocol: ftp"):
+        with pytest.raises(ValueError, match="不支持的协议： ftp"):
             normalize_url("ftp://example.com")
         
-        with pytest.raises(ValueError, match="Unsupported protocol: file"):
+        with pytest.raises(ValueError, match="不支持的协议： file"):
             normalize_url("file:///path/to/file")
     
     def test_localhost_urls(self):

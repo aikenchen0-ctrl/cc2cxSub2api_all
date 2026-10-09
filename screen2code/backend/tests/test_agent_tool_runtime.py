@@ -35,7 +35,7 @@ def test_edit_file_returns_structured_result_with_diff() -> None:
 
     assert result.ok is True
     assert result.updated_content == "<div>after</div>\n<p>keep</p>\n"
-    assert result.result["content"] == "Successfully edited file at index.html."
+    assert result.result["content"] == "已成功编辑文件 index.html。"
     assert set(result.result["details"].keys()) == {"diff", "firstChangedLine"}
     assert result.result["details"]["firstChangedLine"] == 1
     assert "--- index.html" in result.result["details"]["diff"]
@@ -65,7 +65,7 @@ async def test_execute_edit_file_uses_updated_result_shape() -> None:
 
     # execute() is sync for edit_file and should preserve the structured payload.
     assert result.ok is True
-    assert result.result["content"] == "Successfully edited file at index.html."
+    assert result.result["content"] == "已成功编辑文件 index.html。"
     assert set(result.result["details"].keys()) == {"diff", "firstChangedLine"}
     assert "--- index.html" in result.result["details"]["diff"]
 
@@ -132,7 +132,7 @@ async def test_extract_assets_requires_gemini_api_key() -> None:
     )
 
     assert result.ok is False
-    assert result.summary["error"] == "Missing Gemini API key"
+    assert result.summary["error"] == "缺少 Gemini 接口密钥"
 
 
 @pytest.mark.asyncio
@@ -163,7 +163,7 @@ async def test_extract_assets_returns_error_when_extraction_raises(
     )
 
     assert result.ok is False
-    assert result.summary["error"] == "Asset extraction failed"
+    assert result.summary["error"] == "素材提取失败"
     assert "429 quota exceeded" in result.result["error"]
 
 
@@ -275,7 +275,7 @@ async def test_extract_assets_partial_success_keeps_found_assets(
                 {"description": "logo", "data_url": _data_url(b"logo-bytes"), "status": "ok"},
                 {"description": "mascot", "data_url": None, "status": "missing"},
             ],
-            "error": "Gemini did not return usable bounding boxes for every requested asset.",
+            "error": "Gemini did not return usable 边界框 for every requested asset.",
         }
 
     monkeypatch.setattr(
@@ -327,7 +327,7 @@ async def test_extract_assets_all_missing_returns_error(
             "assets": [
                 {"description": "logo", "data_url": None, "status": "missing"},
             ],
-            "error": "Gemini did not return usable bounding boxes for every requested asset.",
+            "error": "Gemini did not return usable 边界框 for every requested asset.",
         }
 
     monkeypatch.setattr(
@@ -352,7 +352,7 @@ async def test_extract_assets_all_missing_returns_error(
 
     # Nothing extracted at all → the tool legitimately fails.
     assert result.ok is False
-    assert "bounding boxes" in result.result["error"]
+    assert "边界框" in result.result["error"]
     assert not result.multimodal_parts
 
 

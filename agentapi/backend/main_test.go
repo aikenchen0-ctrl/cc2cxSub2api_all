@@ -1013,7 +1013,12 @@ func TestModelsEndpointExposesOnlyTheAgentPublicCatalog(t *testing.T) {
 func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/sub2api/balance" {
+		if r.URL.Path == "/api/v1/admin/users/42/balance" && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 100}))
+			return
+		}
+		if r.URL.Path != "/v1/sub2api/balance" && r.URL.Path != "/api/v1/admin/users/42" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
 		adminReads++
@@ -1072,8 +1077,8 @@ func TestRechargeWebhookRequiresSignatureAndAllocatesVerifiedOrder(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if allocated.Status != "allocated" || adminReads == 0 {
-		t.Fatalf("order was not allocated after owner sync: %+v reads=%d", allocated, adminReads)
+	if allocated.Status != "allocated" {
+		t.Fatalf("order was not allocated into the station ledger: %+v", allocated)
 	}
 	user, err := server.store.User(server.cfg.AgentID, "42")
 	if err != nil {
@@ -1147,15 +1152,16 @@ func TestRechargeWebhookRejectsAnotherInstancesMerchant(t *testing.T) {
 func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T) {
 	adminReads := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/sub2api/balance" {
+		if r.URL.Path == "/api/v1/admin/users/42/balance" && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "balance": 1}))
+			return
+		}
+		if r.URL.Path != "/v1/sub2api/balance" && r.URL.Path != "/api/v1/admin/users/42" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
 		adminReads++
-		balance := 0.0
-		if adminReads > 1 {
-			balance = 100.0
-		}
-		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": balance}))
+		_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": 100.0}))
 	}))
 	defer upstream.Close()
 	server := testServer(t, upstream)
@@ -1189,12 +1195,12 @@ func TestPaidRechargeWaitsForOwnerCreditAndAdminCanRetryAllocation(t *testing.T)
 	webhook.Header.Set("X-Agent-Payment-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, webhook)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("pending webhook status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("webhook status=%d body=%s", response.Code, response.Body.String())
 	}
 	pending, err := server.store.RechargeOrder(server.cfg.AgentID, order.OrderNo)
-	if err != nil || pending.Status != "paid_pending_allocation" {
-		t.Fatalf("expected durable pending allocation order: %+v err=%v", pending, err)
+	if err != nil || pending.Status != "allocated" {
+		t.Fatalf("expected local recharge allocation: %+v err=%v", pending, err)
 	}
 
 	retry := httptest.NewRequest(http.MethodPost, "/api/v1/agent/admin/recharge/allocate", strings.NewReader(fmt.Sprintf(`{"order_no":%q}`, order.OrderNo)))
@@ -1219,6 +1225,16 @@ func TestAgentAPIKeyCanRelayWithoutCookieAndIsNotForwarded(t *testing.T) {
 				"access_token": "main-access", "refresh_token": "main-refresh", "expires_in": 3600,
 				"user": map[string]any{"id": 42, "email": "u@example.com", "role": "user"},
 			}))
+		case "/api/v1/admin/groups/all":
+			if r.Header.Get("x-api-key") != "test-main-admin-key" {
+				t.Errorf("group list missing admin key")
+			}
+			_ = json.NewEncoder(w).Encode(envelope([]any{map[string]any{"id": 7, "name": "默认分组", "platform": "openai", "status": "active", "rate_multiplier": 1, "accounts": []any{map[string]any{"credentials": "secret"}}}}))
+		case "/v1/sub2api/api-keys":
+			if r.Header.Get("X-Sub2API-On-Behalf-Of") != "42" || r.Header.Get("x-api-key") != "" {
+				t.Errorf("group key create used the wrong identity")
+			}
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 9, "group_id": 7, "status": "active"}))
 		case "/v1/sub2api/balance":
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{"id": 42, "email": "u@example.com", "balance": 10.0}))
 		case "/v1/chat/completions":
@@ -1245,7 +1261,7 @@ func TestAgentAPIKeyCanRelayWithoutCookieAndIsNotForwarded(t *testing.T) {
 		t.Fatalf("login status=%d body=%s", login.Code, login.Body.String())
 	}
 	cookie := login.Result().Cookies()[0]
-	create := httptest.NewRequest(http.MethodPost, "/api/v1/api-keys", strings.NewReader(`{"name":"CLI"}`))
+	create := httptest.NewRequest(http.MethodPost, "/api/v1/api-keys", strings.NewReader(`{"name":"CLI","group_id":7}`))
 	create.AddCookie(cookie)
 	created := httptest.NewRecorder()
 	server.ServeHTTP(created, create)
@@ -1423,7 +1439,6 @@ func TestDirectUserBillingDisablesLegacyRechargeAndAllocationEndpoints(t *testin
 	}{
 		{http.MethodPost, "/api/v1/agent/recharge/orders", `{"amount":"10.00"}`, "LOCAL_RECHARGE_DISABLED"},
 		{http.MethodPost, "/api/v1/agent/admin/wallet/sync", `{}`, "OWNER_WALLET_DISABLED"},
-		{http.MethodGet, "/api/v1/agent/admin/payment-config", ``, "LOCAL_RECHARGE_DISABLED"},
 	}
 	for _, test := range tests {
 		req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))

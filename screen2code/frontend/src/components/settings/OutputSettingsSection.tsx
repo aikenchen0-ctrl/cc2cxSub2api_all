@@ -24,7 +24,7 @@ interface Props {
 function OutputSettingsSection({
   stack,
   setStack,
-  label = "Stack:",
+  label = "技术栈：",
   shouldDisableUpdates = false,
   designSystem,
   inline = false,
@@ -40,7 +40,7 @@ function OutputSettingsSection({
         id="output-settings-js"
         data-testid="stack-select"
       >
-        <SelectValue placeholder="Select a stack" />
+        <SelectValue placeholder="选择技术栈" />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

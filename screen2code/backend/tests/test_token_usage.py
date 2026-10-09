@@ -287,6 +287,7 @@ class TestModelPricing:
             "gpt-5.4-mini",
             "gpt-5.4-2026-03-05",
             "gpt-5.5",
+            "gpt-6-astra",
             "claude-opus-5",
             "claude-opus-4-8",
             "gemini-3.5-flash",
@@ -296,6 +297,13 @@ class TestModelPricing:
 
     def test_unknown_model_returns_none(self) -> None:
         assert MODEL_PRICING.get("nonexistent-model") is None
+
+    def test_gpt_6_astra_uses_sub2api_standard_pricing(self) -> None:
+        pricing = MODEL_PRICING["gpt-6-astra"]
+        usage = TokenUsage(input=100_000, output=10_000, cache_read=50_000)
+
+        assert abs(usage.cost(pricing) - 1.55) < 1e-9
+        assert pricing.cache_write == 12.50
 
     def test_anthropic_has_cache_write_rate(self) -> None:
         for name in ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-4-6"]:

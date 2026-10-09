@@ -19,7 +19,7 @@ def derive_prompt_construction_plan(
         elif file_state and file_state.get("content", "").strip():
             strategy = "update_from_file_snapshot"
         else:
-            raise ValueError("Update requests require history or fileState.content")
+            raise ValueError("更新请求需要历史消息或 fileState.content")
         return {
             "generation_type": "update",
             "input_mode": input_mode,

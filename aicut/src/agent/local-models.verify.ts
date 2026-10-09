@@ -72,7 +72,7 @@ applyAgentModelStatus({
   LLM_GEMINI_API_KEY: { configured: true },
 }, { LLM_PROVIDER: 'openai' });
 assert.equal(PROVIDER, 'openai', 'preferred configured provider synchronizes runtime fallback');
-assert.equal(MODEL, 'gpt-5', 'preferred configured model synchronizes runtime fallback');
+assert.equal(MODEL, 'gpt-6-astra', 'preferred configured model synchronizes runtime fallback');
 const gemini = getAgentModelSnapshot().choices.find((choice) => choice.provider === 'gemini');
 assert.ok(gemini);
 selectAgentModel(gemini.id);
@@ -107,7 +107,7 @@ applyAgentModelStatus({
 }, { LLM_PROVIDER: 'openai' });
 assert.equal(getAgentModelSnapshot().activeId, codex.id, 'key refresh must preserve an active Codex model');
 assert.equal(PROVIDER, 'openai', 'Codex-active refresh synchronizes a valid API fallback');
-assert.equal(MODEL, 'gpt-5');
+assert.equal(MODEL, 'gpt-6-astra');
 applyAgentModelStatus({
   LLM_OPENAI_API_KEY: { configured: true },
 }, {

@@ -28,7 +28,7 @@ const getAugmentedFaviconDataUrl = (
       canvas.height = size;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
-        reject(new Error("Canvas not supported"));
+        reject(new Error("当前浏览器不支持 Canvas。"));
         return;
       }
 
@@ -51,7 +51,7 @@ const getAugmentedFaviconDataUrl = (
 
       resolve(canvas.toDataURL("image/png"));
     };
-    img.onerror = () => reject(new Error("Failed to load favicon"));
+    img.onerror = () => reject(new Error("加载网站图标失败。"));
     img.src = baseUrl;
   });
 

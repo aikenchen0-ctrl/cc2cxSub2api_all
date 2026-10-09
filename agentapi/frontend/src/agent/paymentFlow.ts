@@ -12,6 +12,8 @@ export interface AgentPaymentRecoverySnapshot {
   orderType: AgentPaymentOrderRequest['order_type']
   payURL: string
   qrCode: string
+  stripePublishableKey?: string
+  alipayMobilePrecreateDeepLink?: boolean
   clientSecret: string
   intentId: string
   currency: string
@@ -41,6 +43,8 @@ export function createAgentPaymentRecovery(
     orderType,
     payURL: result.pay_url || '',
     qrCode: result.qr_code || '',
+    stripePublishableKey: result.stripe_publishable_key || '',
+    alipayMobilePrecreateDeepLink: result.alipay_mobile_precreate_deep_link === true,
     clientSecret: result.client_secret || '',
     intentId: result.intent_id || '',
     currency: result.currency || 'CNY',
@@ -112,4 +116,25 @@ export function safePaymentURL(value: string | undefined, origin = window.locati
   } catch {
     return ''
   }
+}
+
+export function paymentCurrencyDigits(currency: string): number {
+  if (['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','VND','VUV','XAF','XOF','XPF','ISK','UGX'].includes(currency.toUpperCase())) return 0
+  if (['BHD','IQD','JOD','KWD','LYD','OMR','TND'].includes(currency.toUpperCase())) return 3
+  return 2
+}
+
+export function paymentFee(amount: number, rate: number, currency: string): number {
+  if (amount <= 0 || rate <= 0) return 0
+  const factor = 10 ** paymentCurrencyDigits(currency)
+  const minor = amount * rate / 100 * factor
+  return Math.ceil(minor - Number.EPSILON * Math.max(1, Math.abs(minor))) / factor
+}
+
+export function shouldOpenPaymentWindow(result: AgentPaymentCreateResult, isMobile: boolean, forceQR: boolean, mobilePrecreate: boolean): boolean {
+  if (!result.pay_url) return false
+  const alipay = result.payment_type === 'alipay' || result.payment_type === 'alipay_direct'
+  if (alipay && isMobile && mobilePrecreate && result.qr_code) return false
+  if (alipay && forceQR && !mobilePrecreate) return false
+  return result.payment_mode === 'popup' || result.payment_mode === 'redirect' || isMobile || !result.qr_code
 }

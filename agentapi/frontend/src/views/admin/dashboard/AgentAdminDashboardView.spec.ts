@@ -92,7 +92,7 @@ describe('AgentAdminDashboardView', () => {
     const wrapper = await mountView()
     const links = wrapper.findAll('a').map(item => item.attributes('href'))
 
-    expect(links).toEqual(expect.arrayContaining(['/admin/users', '/admin/usage', '/admin/announcements', '/admin/settings']))
+    expect(links).toEqual(expect.arrayContaining(['/admin/users', '/admin/payments', '/admin/usage', '/admin/announcements', '/admin/settings']))
     expect(links.some(path => path?.includes('sub2api'))).toBe(false)
   })
 })

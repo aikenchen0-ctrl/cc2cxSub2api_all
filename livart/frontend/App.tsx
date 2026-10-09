@@ -11,6 +11,8 @@ import ConfigModal from './components/ConfigModal';
 import CanvasUtilityDock from './components/CanvasUtilityDock';
 import ProjectLinks from './components/ProjectLinks';
 import ExternalImageImportModal from './components/ExternalImageImportModal';
+import FailureNotice from './components/FailureNotice';
+import { getFailureDetails } from './services/errorMessages';
 import {
   getImageJobQueueMessage,
   type ImageGenerationResult,
@@ -834,7 +836,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           {error && (
             <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-500">
-              {error}
+              <FailureNotice error={error} context="创建项目" />
             </div>
           )}
 
@@ -2771,7 +2773,7 @@ function App() {
       markAgentPlanStep(activePlanStepId, 'error');
       updateMessageById(planningMessageId, message => ({
         ...message,
-        text: '任务执行失败，请查看下面的错误原因。',
+        text: '任务未完成，原因和处理建议如下。',
         agentPlan: undefined,
         agentRunStatus: 'error'
       }));
@@ -2961,7 +2963,7 @@ function App() {
           <ProjectLinks />
           <div
             className="flex min-h-11 max-w-[calc(100vw-520px)] flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-gray-100 bg-white/90 px-3 py-2 text-[11px] font-black text-gray-500 shadow-[0_18px_48px_-28px_rgba(0,0,0,0.35)] backdrop-blur-2xl"
-            title={siteStatsError || '站点实时统计，每 3 秒刷新一次'}
+            title={siteStatsError ? getFailureDetails(siteStatsError).message : '站点实时统计，每 3 秒刷新一次'}
           >
             <span className="flex items-center gap-1.5">
               <Users size={14} className="text-gray-300" />
@@ -3064,7 +3066,7 @@ function App() {
 
         {exportProjectImageError && (
           <div className="absolute right-4 top-16 z-[5000000] max-w-sm rounded-2xl border border-red-100 bg-white px-4 py-3 text-sm font-bold text-red-500 shadow-2xl">
-            {exportProjectImageError}
+            <FailureNotice error={exportProjectImageError} context="导出图片" />
           </div>
         )}
 

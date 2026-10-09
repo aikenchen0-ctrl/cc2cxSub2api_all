@@ -6,13 +6,15 @@ function AllEvalsPage() {
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-3xl font-bold text-gray-900">
-            Evals Dashboard
+
+            评测工作台
           </h1>
-          <Link 
+          <Link
             to="/"
             className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
           >
-            ← Back to app
+
+            ← 返回应用
           </Link>
         </div>
         <div className="space-y-4">
@@ -20,9 +22,10 @@ function AllEvalsPage() {
             to="/evals/run"
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
-            <h2 className="text-xl font-semibold text-gray-800">Run Evals</h2>
+            <h2 className="text-xl font-semibold text-gray-800">运行评测</h2>
             <p className="text-gray-600">
-              Generate evaluations for multiple models
+
+              同时评测多个模型
             </p>
           </Link>
 
@@ -30,9 +33,10 @@ function AllEvalsPage() {
             to="/evals/best-of-n"
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
-            <h2 className="text-xl font-semibold text-gray-800">Best of N</h2>
+            <h2 className="text-xl font-semibold text-gray-800">多方案对比</h2>
             <p className="text-gray-600">
-              Compare multiple model outputs side by side
+
+              并排比较多个模型的生成结果
             </p>
           </Link>
 
@@ -41,10 +45,12 @@ function AllEvalsPage() {
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
             <h2 className="text-xl font-semibold text-gray-800">
-              OpenAI Input Compare
+
+              OpenAI 输入对比
             </h2>
             <p className="text-gray-600">
-              Find the first diverging input block between two requests
+
+              定位两个请求中首个不同的输入块
             </p>
           </Link>
 
@@ -53,10 +59,12 @@ function AllEvalsPage() {
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
             <h2 className="text-xl font-semibold text-gray-800">
-              Prompt Reports
+
+              提示词报告
             </h2>
             <p className="text-gray-600">
-              Browse logged LLM requests with images, usage, and cost
+
+              查看模型请求、图片、用量和费用记录
             </p>
           </Link>
         </div>

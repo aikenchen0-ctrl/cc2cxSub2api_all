@@ -13,11 +13,15 @@ import AgentRunTimeline, {
 } from "./agent-run-timeline";
 import { LightboxProvider } from "./image-lightbox";
 import {
+  entryPointLabel,
   formatBytes,
   formatCost,
   formatMs,
   formatTimestamp,
   providerBadgeClass,
+  providerLabel,
+  modelLabel,
+  stackLabel,
 } from "./report-format";
 
 interface AgentRunSummary {
@@ -128,24 +132,24 @@ function SummaryStats({ run }: { run: AgentRunSummary }) {
       className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs"
       title={
         run.has_unpriced_calls
-          ? "* some calls had no pricing entry; the true cost is higher"
+          ? "* 部分请求缺少价格记录，实际费用可能更高"
           : undefined
       }
     >
-      <StatChip label="cost" value={costLabel} />
-      <StatChip label="total" value={formatMs(run.total_duration_ms)} />
-      <StatChip label="llm" value={formatMs(run.llm_time_ms)} />
-      <StatChip label="tools" value={formatMs(run.tool_time_ms)} />
-      <StatChip label="llm calls" value={String(run.num_llm_calls)} />
-      <StatChip label="tool calls" value={String(run.num_tool_calls)} />
-      <StatChip label="in" value={(run.input_tokens ?? 0).toLocaleString()} />
-      <StatChip label="out" value={(run.output_tokens ?? 0).toLocaleString()} />
+      <StatChip label="费用" value={costLabel} />
+      <StatChip label="总耗时" value={formatMs(run.total_duration_ms)} />
+      <StatChip label="模型耗时" value={formatMs(run.llm_time_ms)} />
+      <StatChip label="工具耗时" value={formatMs(run.tool_time_ms)} />
+      <StatChip label="模型调用" value={String(run.num_llm_calls)} />
+      <StatChip label="工具调用" value={String(run.num_tool_calls)} />
+      <StatChip label="输入令牌" value={(run.input_tokens ?? 0).toLocaleString()} />
+      <StatChip label="输出令牌" value={(run.output_tokens ?? 0).toLocaleString()} />
       <StatChip
-        label="cache read"
+        label="缓存读取"
         value={(run.cache_read_tokens ?? 0).toLocaleString()}
       />
       <StatChip
-        label="total tok"
+        label="总令牌数"
         value={(run.total_tokens ?? 0).toLocaleString()}
       />
     </div>
@@ -184,8 +188,8 @@ function AgentRunsPage() {
       setRunsDirectory(data.runs_directory);
       return data.runs;
     } catch (error) {
-      console.error("Error fetching agent runs", error);
-      toast.error("Failed to load agent runs.");
+      console.error("获取任务记录失败", error);
+      toast.error("加载任务记录失败。");
       return [];
     } finally {
       setIsLoadingList(false);
@@ -208,13 +212,13 @@ function AgentRunsPage() {
         );
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.detail || "Request failed");
+          throw new Error(data.detail || "请求失败");
         }
         setDetail(await response.json());
       } catch (error) {
-        console.error("Error fetching run detail", error);
+        console.error("获取任务详情失败", error);
         setDetail(null);
-        toast.error("Failed to load run.");
+        toast.error("加载任务详情失败。");
       } finally {
         setIsLoadingDetail(false);
       }
@@ -238,7 +242,7 @@ function AgentRunsPage() {
   }, [fetchRuns, openRun]);
 
   const handlePrune = async () => {
-    if (!window.confirm("Delete all recorded runs older than 7 days?")) {
+    if (!window.confirm("删除 7 天前的全部任务记录？")) {
       return;
     }
     setIsPruning(true);
@@ -248,12 +252,10 @@ function AgentRunsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ max_age_days: 7 }),
       });
-      if (!response.ok) throw new Error("Prune request failed");
+      if (!response.ok) throw new Error("清理请求失败");
       const data = await response.json();
       toast.success(
-        `Pruned ${data.deleted_count} run${
-          data.deleted_count === 1 ? "" : "s"
-        }, freed ${formatBytes(data.freed_bytes)}.`,
+        `已清理 ${data.deleted_count} 条任务记录，释放空间 ${formatBytes(data.freed_bytes)}。`,
         { duration: 8000 }
       );
       const refreshed = await fetchRuns();
@@ -265,8 +267,8 @@ function AgentRunsPage() {
         setDetail(null);
       }
     } catch (error) {
-      console.error("Error pruning agent runs", error);
-      toast.error("Failed to prune runs.");
+      console.error("清理任务记录失败", error);
+      toast.error("清理任务记录失败。");
     } finally {
       setIsPruning(false);
     }
@@ -283,7 +285,8 @@ function AgentRunsPage() {
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-2">
           <div className="flex min-w-0 items-baseline gap-3">
             <h1 className="text-base font-semibold tracking-tight">
-              Agent Runs
+
+              智能体任务
             </h1>
             {runsDirectory && (
               <span
@@ -303,7 +306,7 @@ function AgentRunsPage() {
               disabled={isPruning}
               className="rounded-md border border-red-800 bg-red-950/60 px-2 py-1 text-red-200 transition-colors hover:bg-red-900/60 disabled:opacity-50"
             >
-              {isPruning ? "Pruning…" : "Prune >7d"}
+              {isPruning ? "正在清理…" : "清理 7 天前记录"}
             </button>
           </div>
         </div>
@@ -312,18 +315,18 @@ function AgentRunsPage() {
           <section className="min-h-0 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-2">
             <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-500">
               {isLoadingList
-                ? "Loading…"
-                : `${generationGroups.length} generation${
-                    generationGroups.length === 1 ? "" : "s"
-                  } · ${runs.length} run${runs.length === 1 ? "" : "s"}`}
+                ? "加载中…"
+                : `${generationGroups.length} 次生成 · ${runs.length} 条任务记录`}
             </div>
             {!isLoadingList && runs.length === 0 && (
               <p className="px-2 py-4 text-sm text-zinc-400">
-                No runs yet. Start the backend with{" "}
+
+                暂无任务记录。启用后端配置{" "}
                 <code className="rounded bg-zinc-800 px-1 py-0.5">
                   PROMPT_REPORTS_ENABLED=1
                 </code>{" "}
-                and generate some code.
+
+                后生成代码即可查看。
               </p>
             )}
             {generationGroups.map((group) => (
@@ -333,14 +336,14 @@ function AgentRunsPage() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="rounded-full border border-zinc-600 bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-200">
-                    {group.entryPoint}
+                    {entryPointLabel(group.entryPoint)}
                   </span>
                   <span className="text-[11px] text-zinc-500">
                     {formatTimestamp(group.createdAt)}
                   </span>
                   <span
                     className="font-mono text-[11px] font-medium text-emerald-400"
-                    title="Total cost across all variants"
+                    title="所有方案的总费用"
                   >
                     {formatCost(group.costUsd)}
                   </span>
@@ -362,10 +365,10 @@ function AgentRunsPage() {
                         )}`}
                       />
                       <span className="shrink-0 font-mono text-zinc-500">
-                        v{run.variant_index}
+                        方案 {run.variant_index + 1}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-mono">
-                        {run.model ?? "unknown"}
+                        {modelLabel(run.model)}
                       </span>
                       <span className="shrink-0 font-mono text-zinc-500">
                         {formatMs(run.total_duration_ms)}
@@ -375,7 +378,7 @@ function AgentRunsPage() {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        title="Open captured HTML in a new tab"
+                        title="在新标签页打开记录的 HTML"
                         className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
                       >
                         <BsBoxArrowUpRight />
@@ -390,12 +393,14 @@ function AgentRunsPage() {
           <section className="min-h-0 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
             {!selectedRunId && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Select a run to inspect it.
+
+                请选择一个任务查看详情。
               </p>
             )}
             {selectedRunId && isLoadingDetail && (
               <p className="py-8 text-center text-sm text-zinc-400">
-                Loading run…
+
+                正在加载任务…
               </p>
             )}
             {selectedRunId && !isLoadingDetail && detail && selectedRun && (
@@ -407,15 +412,15 @@ function AgentRunsPage() {
                         selectedRun.provider
                       )}`}
                     >
-                      {selectedRun.provider}
+                      {providerLabel(selectedRun.provider)}
                     </span>
                   )}
                   <span className="font-mono text-sm text-zinc-100">
-                    {selectedRun.model}
+                    {modelLabel(selectedRun.model)}
                   </span>
                   <span className="font-mono text-[11px] text-zinc-500">
-                    {selectedRun.stack} · {selectedRun.generation_type} · v
-                    {selectedRun.variant_index} ·{" "}
+                    {stackLabel(selectedRun.stack)} · {entryPointLabel(selectedRun.generation_type ?? "")} · 方案{" "}
+                    {selectedRun.variant_index + 1} ·{" "}
                     {formatTimestamp(selectedRun.created_at)}
                   </span>
                   <a
@@ -424,13 +429,13 @@ function AgentRunsPage() {
                     rel="noreferrer"
                     className="ml-auto flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-zinc-300 transition-colors hover:bg-zinc-800"
                   >
-                    <BsBoxArrowUpRight /> Open HTML
+                    <BsBoxArrowUpRight />  打开 HTML
                   </a>
                 </div>
 
                 {selectedRun.status === "failed" && (
                   <div className="rounded-lg border border-red-900 bg-red-950/40 px-2.5 py-1.5 font-mono text-xs text-red-200">
-                    {selectedRun.error ?? "Run failed"}
+                    {selectedRun.error ?? "任务失败"}
                   </div>
                 )}
 
@@ -447,7 +452,7 @@ function AgentRunsPage() {
                           : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      {tab === "raw" ? "Raw events" : tab}
+                      {{ raw: "原始事件", timeline: "执行过程", output: "输出" }[tab]}
                     </button>
                   ))}
                   {activeTab === "timeline" && (
@@ -464,23 +469,23 @@ function AgentRunsPage() {
                                 : "text-zinc-400 hover:text-zinc-200"
                             }`}
                           >
-                            {mode}
+                            {{ readable: "易读视图", raw: "原始数据" }[mode]}
                           </button>
                         ))}
                       </div>
                       <div className="flex overflow-hidden rounded-md border border-zinc-700">
                         {(
                           [
-                            ["expand", "Expanded"],
-                            ["best", "Best"],
-                            ["collapse", "Collapsed"],
+                            ["expand", "展开"],
+                            ["best", "最佳方案"],
+                            ["collapse", "收起"],
                           ] as [ExpandMode, string][]
                         ).map(([mode, label]) => (
                           <button
                             key={mode}
                             title={
                               mode === "best"
-                                ? "Everything open except create_file / edit_file"
+                                ? "展开除文件创建与编辑外的全部内容"
                                 : undefined
                             }
                             onClick={() =>
@@ -507,7 +512,8 @@ function AgentRunsPage() {
                             openRun(selectedRunId, e.target.checked)
                           }
                         />
-                        stream deltas
+
+                        流式片段
                       </label>
                     </>
                   )}
@@ -525,7 +531,7 @@ function AgentRunsPage() {
                 )}
                 {activeTab === "output" && (
                   <iframe
-                    title="Captured final output"
+                    title="记录的最终结果"
                     src={runOutputUrl(selectedRunId)}
                     className="h-[75vh] w-full rounded-xl border border-zinc-800 bg-white"
                   />

@@ -268,14 +268,14 @@ func configuredSub2APIChannel() (model.ModelChannel, error) {
 		if strings.TrimSpace(raw) == "" && strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL")) != "" {
 			switch name {
 			case "SUB2API_RELAY_MODELS":
-				raw = "gpt-5.5"
+				raw = "gpt-6-astra"
 			case "SUB2API_RELAY_IMAGE_MODELS":
 				raw = "gpt-image-2,grok-imagine-image-1.5"
 			case "SUB2API_RELAY_VIDEO_MODELS":
 				raw = "grok-imagine-video-1.5,seedance-2.0,kling-v3"
 			}
 		} else if name == "SUB2API_RELAY_MODELS" && strings.TrimSpace(raw) == "" {
-			raw = "gpt-5.5"
+			raw = "gpt-6-astra"
 		}
 		if name == "SUB2API_RELAY_VIDEO_MODELS" {
 			// Existing deployments often explicitly list only the original three models.

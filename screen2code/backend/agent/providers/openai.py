@@ -44,6 +44,8 @@ def _convert_message_to_responses_input(
                 parts.append({"type": "input_text", "text": part.get("text", "")})
             elif part.get("type") == "image_url":
                 image_url = part.get("image_url", {})
+                if str(image_url.get("url", "")).startswith("data:video/"):
+                    raise ValueError("视频必须先提取画面，不能作为图片发送给模型。请重新录制后重试。")
                 parts.append(
                     {
                         "type": "input_image",
@@ -60,6 +62,7 @@ def _get_image_detail_for_model(model: Llm) -> str:
         "gpt-5.5",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
+        "gpt-6-astra",
     }:
         return "original"
     return "high"

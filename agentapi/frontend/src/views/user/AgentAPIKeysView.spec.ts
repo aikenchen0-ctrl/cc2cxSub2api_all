@@ -31,6 +31,7 @@ describe('AgentAPIKeysView', () => {
 
   it('retains the modal and input after creation fails without displaying a secret', async () => {
     vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({ total: 0, items: [] })
+    vi.spyOn(agentAPI.keys, 'groups').mockResolvedValue({ total: 1, items: [{ id: 7, name: '默认分组', platform: 'openai', status: 'active', rate_multiplier: 1 }] })
     vi.spyOn(agentAPI.keys, 'create').mockRejectedValue(new Error('unavailable'))
     const wrapper = mount(AgentAPIKeysView, { global: { stubs: { Teleport: true } } })
     await flushPromises()
@@ -58,8 +59,9 @@ describe('AgentAPIKeysView', () => {
       api_base_url: 'https://agent.example.com/v1',
       items: [{ id: 1, name: 'existing', prefix: 'sk-old', key: 'sk-existing-secret', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
     })
+    vi.spyOn(agentAPI.keys, 'groups').mockResolvedValue({ total: 1, items: [{ id: 7, name: '默认分组', platform: 'openai', status: 'active', rate_multiplier: 1 }] })
     const create = vi.spyOn(agentAPI.keys, 'create').mockResolvedValue({
-      item: { id: 2, name: 'desktop', prefix: 'sk-new', status: 'active', created_at: '2026-09-22T00:00:00Z' },
+      item: { id: 2, name: 'desktop', prefix: 'sk-new', group_name: '默认分组', status: 'active', created_at: '2026-09-22T00:00:00Z' },
       key: 'sk-new-secret',
     })
     const wrapper = mount(AgentAPIKeysView, { global: { stubs: { Teleport: true } } })
@@ -70,7 +72,8 @@ describe('AgentAPIKeysView', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(create).toHaveBeenCalledWith('desktop')
+    expect(create).toHaveBeenCalledWith('desktop', 7)
+    expect(wrapper.text()).toContain('默认分组')
     expect(wrapper.text()).toContain('sk-new-secret')
     expect(wrapper.text()).not.toContain('sk-super-')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
@@ -83,7 +86,7 @@ describe('AgentAPIKeysView', () => {
     wrapper.unmount()
   })
 
-  it('uses a Chinese confirmation dialog before revoking a key', async () => {
+  it('uses a Chinese confirmation dialog before deleting a key', async () => {
     vi.spyOn(agentAPI.keys, 'list').mockResolvedValue({
       total: 1,
       items: [{ id: 1, name: 'desktop', prefix: 'sk-old', key: 'sk-old-secret', status: 'active', created_at: '2026-09-22T00:00:00Z' }],
@@ -92,17 +95,17 @@ describe('AgentAPIKeysView', () => {
     const wrapper = mount(AgentAPIKeysView)
     await flushPromises()
 
-    await wrapper.findAll('button').find((button) => button.text() === '撤销')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === '删除')!.trigger('click')
     await flushPromises()
 
     expect(revoke).not.toHaveBeenCalled()
-    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain('确定撤销“desktop”吗？')
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain('确定删除“desktop”吗？')
     document.body.querySelector<HTMLButtonElement>('[data-testid="agent-confirm-action"]')?.click()
     await flushPromises()
 
     expect(revoke).toHaveBeenCalledWith(1)
-    expect(wrapper.text()).toContain('已撤销')
-    expect(useAgentToast().toasts.value.at(-1)?.message).toBe('API 密钥已撤销。')
+    expect(wrapper.text()).not.toContain('desktop')
+    expect(useAgentToast().toasts.value.at(-1)?.message).toBe('API 密钥已删除。')
     wrapper.unmount()
   })
 })

@@ -40,18 +40,22 @@ export async function POST(request: NextRequest) {
   try {
     const user = readSession(request.cookies.get(SESSION_COOKIE)?.value || "");
     if (!user) return NextResponse.json({ error: "请先通过 Sub2API 登录" }, { status: 401 });
+    if (activeRequests.has(user.sub)) return NextResponse.json({ error: "当前用户已有 AI 任务执行中，请稍后再试" }, { status: 429 });
     activeUserSub = user.sub;
-    if (activeRequests.has(activeUserSub)) return NextResponse.json({ error: "当前用户已有 AI 任务执行中，请稍后再试" }, { status: 429 });
     activeRequests.add(activeUserSub);
     const body = await request.json();
-    const configuredBaseUrl = (process.env.SUB2API_RELAY_BASE_URL || process.env.LINK || "http://localhost:18080").replace(/\/$/, "");
-    const baseUrl = configuredBaseUrl.endsWith("/v1") ? configuredBaseUrl : `${configuredBaseUrl}/v1`;
+    const configuredBaseUrl = (process.env.SUB2API_RELAY_BASE_URL || process.env.LINK || "").trim().replace(/\/+$/, "");
+    if (!configuredBaseUrl) return NextResponse.json({ error: "服务端尚未配置 Sub2API 中转地址" }, { status: 503 });
+    const normalizedBaseUrl = configuredBaseUrl.includes("://") ? configuredBaseUrl : `http://${configuredBaseUrl}`;
+    const baseUrl = normalizedBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
     if (!process.env.SUB2API_APP_CREDENTIAL?.trim()) return NextResponse.json({ error: "服务端尚未配置 SUB2API_APP_CREDENTIAL" }, { status: 503 });
+    const model = process.env.SUB2API_RELAY_MODEL?.trim() || "gpt-6-astra";
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: satelliteHeaders(user.sub),
       body: JSON.stringify({
-        model: process.env.SUB2API_RELAY_MODEL || "gpt-5.5",
+        model,
+        ...(/^gpt-6(?:-|$)/i.test(model) ? { reasoning_effort: "low" } : {}),
         temperature: 0.1,
         response_format: { type: "json_object" },
         messages: [
@@ -61,8 +65,8 @@ export async function POST(request: NextRequest) {
         ]
       })
     });
-    const data = await response.json();
-    if (!response.ok) return NextResponse.json({ error: data?.error?.message || "DeepSeek 请求失败" }, { status: response.status });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) return NextResponse.json({ error: data?.error?.message || `AI 上游请求失败（${response.status}）` }, { status: response.status });
     const text = data?.choices?.[0]?.message?.content;
     const plan = JSON.parse(text);
     if (!plan?.title || !Array.isArray(plan.operations)) throw new Error("AI 返回的操作计划格式不正确");

@@ -184,29 +184,45 @@ class TestModelSelectionOpenAIOnly:
         self.model_selector = ModelSelectionStage(mock_throw_error)
 
     @pytest.mark.asyncio
-    async def test_openai_only(self):
-        """OpenAI only: GPT 5.5 high and low, cycling"""
+    @pytest.mark.parametrize("input_mode", ["text", "image"])
+    async def test_openai_only(self, input_mode):
+        """OpenAI only: GPT 6 Astra high and low, cycling"""
         models = await self.model_selector.select_models(
             generation_type="create",
-            input_mode="text",
+            input_mode=input_mode,
             openai_api_key="key",
             anthropic_api_key=None,
             gemini_api_key=None,
         )
 
         expected = [
-            Llm.GPT_5_5_HIGH,
-            Llm.GPT_5_5_LOW,
-            Llm.GPT_5_5_HIGH,
-            Llm.GPT_5_5_LOW,
+            Llm.GPT_6_ASTRA_HIGH,
+            Llm.GPT_6_ASTRA_LOW,
+            Llm.GPT_6_ASTRA_HIGH,
+            Llm.GPT_6_ASTRA_LOW,
         ]
         assert models == expected
 
     @pytest.mark.asyncio
-    async def test_openai_only_video_uses_gpt_55(self):
-        """Satellite / OpenAI-only video input uses gpt-5.5 instead of requiring Gemini."""
+    @pytest.mark.parametrize("input_mode", ["text", "image"])
+    async def test_openai_only_update_uses_two_gpt_6_variants(self, input_mode):
+        """OpenAI-only updates use two GPT 6 Astra variants."""
         models = await self.model_selector.select_models(
-            generation_type="create",
+            generation_type="update",
+            input_mode=input_mode,
+            openai_api_key="key",
+            anthropic_api_key=None,
+            gemini_api_key=None,
+        )
+
+        assert models == [Llm.GPT_6_ASTRA_HIGH, Llm.GPT_6_ASTRA_LOW]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("generation_type", ["create", "update"])
+    async def test_openai_only_video_uses_gpt_6(self, generation_type):
+        """Satellite / OpenAI-only video input uses two GPT 6 Astra variants."""
+        models = await self.model_selector.select_models(
+            generation_type=generation_type,
             input_mode="video",
             openai_api_key="key",
             anthropic_api_key=None,
@@ -214,8 +230,8 @@ class TestModelSelectionOpenAIOnly:
         )
 
         expected = [
-            Llm.GPT_5_5_HIGH,
-            Llm.GPT_5_5_LOW,
+            Llm.GPT_6_ASTRA_HIGH,
+            Llm.GPT_6_ASTRA_LOW,
         ]
         assert models == expected
 
@@ -231,7 +247,7 @@ class TestModelSelectionNoKeys:
     @pytest.mark.asyncio
     async def test_no_keys_raises_error(self):
         """No keys: Should raise an exception"""
-        with pytest.raises(Exception, match="No API key"):
+        with pytest.raises(Exception, match="没有可用的接口密钥"):
             await self.model_selector.select_models(
                 generation_type="create",
                 input_mode="text",
