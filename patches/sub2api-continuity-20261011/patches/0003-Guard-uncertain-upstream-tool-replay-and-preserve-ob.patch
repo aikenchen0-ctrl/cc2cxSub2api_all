@@ -1,0 +1,429 @@
+From eb623f4e0d65f68eb635174b05abe63c78277ec0 Mon Sep 17 00:00:00 2001
+From: aikenchen0-ctrl <aikenchen0@example.com>
+Date: Sun, 11 Oct 2026 06:06:41 +0800
+Subject: [PATCH] Guard uncertain upstream tool replay and preserve observed
+ billing usage
+
+---
+ .../upstream_execution_replay_guard_test.go   | 35 +++++++++
+ .../internal/service/gateway_forward.go       |  7 +-
+ .../service/gateway_record_usage_test.go      | 27 +++++++
+ .../internal/service/gateway_service.go       |  1 +
+ .../internal/service/gateway_usage_billing.go | 19 +++--
+ .../service/openai_encrypted_affinity.go      |  3 +
+ .../openai_encrypted_content_lineage.go       |  4 +-
+ .../openai_gateway_chat_completions.go        |  3 +-
+ .../service/openai_gateway_forward.go         |  2 +
+ .../service/openai_gateway_messages.go        |  3 +-
+ .../service/openai_gateway_passthrough.go     |  1 +
+ .../service/openai_ws_forwarder_ingress.go    |  1 +
+ .../upstream_execution_replay_guard.go        | 76 +++++++++++++++++++
+ .../upstream_execution_replay_guard_test.go   | 60 +++++++++++++++
+ 14 files changed, 229 insertions(+), 13 deletions(-)
+ create mode 100644 sub2api/backend/internal/handler/upstream_execution_replay_guard_test.go
+ create mode 100644 sub2api/backend/internal/service/upstream_execution_replay_guard.go
+ create mode 100644 sub2api/backend/internal/service/upstream_execution_replay_guard_test.go
+
+diff --git a/sub2api/backend/internal/handler/upstream_execution_replay_guard_test.go b/sub2api/backend/internal/handler/upstream_execution_replay_guard_test.go
+new file mode 100644
+index 0000000..18872ce
+--- /dev/null
++++ b/sub2api/backend/internal/handler/upstream_execution_replay_guard_test.go
+@@ -0,0 +1,35 @@
++//go:build unit
++
++package handler
++
++import (
++	"io"
++	"net/http"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestServerToolUnknownExecutionDoesNotReplayOnAnotherAccount(t *testing.T) {
++	for _, scenario := range []struct {
++		failure string
++		calls   []int64
++		status  int
++	}{
++		{"http_502", []int64{1}, http.StatusBadGateway},
++		{"http_429", []int64{1, 2}, http.StatusOK},
++	} {
++		t.Run(scenario.failure, func(t *testing.T) {
++			upstream := &transparentFailoverUpstream{failure: scenario.failure}
++			h := newTransparentFailoverHandler(t, upstream, false, nil)
++			c, recorder := transparentFailoverContext("/v1/responses")
++			body := `{"model":"test-model","stream":true,"input":"run remote calculation","tools":[{"type":"code_interpreter","container":{"type":"auto"}}]}`
++			c.Request.Body = io.NopCloser(strings.NewReader(body))
++			c.Request.ContentLength = int64(len(body))
++			serveTransparentFailover(h, c)
++			require.Equal(t, scenario.calls, upstream.calls(), recorder.Body.String())
++			require.Equal(t, scenario.status, recorder.Code, recorder.Body.String())
++		})
++	}
++}
+diff --git a/sub2api/backend/internal/service/gateway_forward.go b/sub2api/backend/internal/service/gateway_forward.go
+index 7ccf455..5552a7b 100644
+--- a/sub2api/backend/internal/service/gateway_forward.go
++++ b/sub2api/backend/internal/service/gateway_forward.go
+@@ -93,6 +93,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
+ 	if parsed == nil {
+ 		return nil, fmt.Errorf("parse request: empty request")
+ 	}
++	requestBody := parsed.Body.Bytes()
++	defer func() { err = guardUpstreamExecutionReplay(account, requestBody, err) }()
+ 	// Anthropic Fast is requested with speed=fast rather than OpenAI's
+ 	// service_tier. Attach it at this shared boundary so passthrough, OAuth and
+ 	// partial-stream results all use the same billing and usage-log path.
+@@ -851,8 +853,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
+ 				)
+ 
+ 				return nil, &UpstreamFailoverError{
+-					StatusCode:   semanticStatus,
+-					ResponseBody: body,
++					StatusCode:            semanticStatus,
++					ResponseBody:          body,
++					UpstreamStreamFailure: true,
+ 				}
+ 			}
+ 			// 流中断（缺失 terminal 事件、读错误、数据间隔超时等）时保留已观测到的
+diff --git a/sub2api/backend/internal/service/gateway_record_usage_test.go b/sub2api/backend/internal/service/gateway_record_usage_test.go
+index 9dfa556..1c3fe88 100644
+--- a/sub2api/backend/internal/service/gateway_record_usage_test.go
++++ b/sub2api/backend/internal/service/gateway_record_usage_test.go
+@@ -194,6 +194,33 @@ func TestGatewayServiceRecordUsage_PreservesRequestedAndUpstreamModels(t *testin
+ 	require.Equal(t, mappedModel, *usageRepo.lastLog.UpstreamModel)
+ }
+ 
++func TestGatewayServiceRecordUsage_CacheDiscountPreservesObservedUsageAndAccountPricing(t *testing.T) {
++	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
++	userRepo := &openAIRecordUsageUserRepoStub{}
++	svc := newGatewayRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{})
++	svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
++		"claude-sonnet-4": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, CacheReadInputTokenCost: 1e-7},
++	}})
++	groupID := int64(812)
++	svc.channelService = newTestChannelServiceForStats(t, &Channel{ID: 1, Status: StatusActive}, groupID, PlatformAnthropic)
++	svc.resolver = NewModelPricingResolver(svc.channelService, svc.billingService)
++	result := &ForwardResult{RequestID: "cache-discount-observed", Model: "claude-sonnet-4", UpstreamModel: "claude-sonnet-4",
++		Usage: ClaudeUsage{InputTokens: 1000, OutputTokens: 10, CacheReadInputTokens: 100}}
++	original := result.Usage
++	err := svc.RecordUsage(context.Background(), &RecordUsageInput{Result: result, ForceCacheBilling: true,
++		APIKey: &APIKey{ID: 1, GroupID: &groupID, Group: &Group{ID: groupID, Platform: PlatformAnthropic, RateMultiplier: 1}},
++		User: &User{ID: 2}, Account: &Account{ID: 3, Platform: PlatformAnthropic}})
++	require.NoError(t, err)
++	require.Equal(t, original, result.Usage, "计费不能改写转发结果的真实用量")
++	log := usageRepo.lastLog
++	require.NotNil(t, log)
++	require.Equal(t, 1000, log.InputTokens)
++	require.Equal(t, 100, log.CacheReadTokens, "优惠后的缓存计费token不能伪装成实际缓存命中")
++	require.InDelta(t, 1100*1e-7+10*2e-6, log.ActualCost, 1e-12, "客户既有缓存优惠保持")
++	require.NotNil(t, log.AccountStatsCost)
++	require.InDelta(t, 1000*1e-6+100*1e-7+10*2e-6, *log.AccountStatsCost, 1e-12, "账号模型统计使用真实输入与缓存用量")
++}
++
+ func TestGatewayServiceRecordUsage_GeminiFlashThinkingTierUsesCatalogPrice(t *testing.T) {
+ 	for _, baseModel := range []string{"gemini-3.7-flash", "gemini-3.8-flash"} {
+ 		t.Run(baseModel, func(t *testing.T) {
+diff --git a/sub2api/backend/internal/service/gateway_service.go b/sub2api/backend/internal/service/gateway_service.go
+index 233aeb2..797d6d6 100644
+--- a/sub2api/backend/internal/service/gateway_service.go
++++ b/sub2api/backend/internal/service/gateway_service.go
+@@ -697,6 +697,7 @@ type UpstreamFailoverError struct {
+ 	OpenAIBoundedSameAccountRetry bool          // 已核验短故障可安全重放，同请求同账号最多再试一次
+ 	RequestScopedTransient        bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：可同账号重试，但不得据此对账号做临时封禁
+ 	SafeToFailoverAfterWrite      bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
++	UpstreamStreamFailure         bool          // 流内失败可能发生于服务端工具执行之后
+ 	Stage                         GatewayFailureStage
+ 	Scope                         GatewayFailureScope
+ 	Reason                        GatewayFailureReason
+diff --git a/sub2api/backend/internal/service/gateway_usage_billing.go b/sub2api/backend/internal/service/gateway_usage_billing.go
+index 7228017..d855f7b 100644
+--- a/sub2api/backend/internal/service/gateway_usage_billing.go
++++ b/sub2api/backend/internal/service/gateway_usage_billing.go
+@@ -725,7 +725,10 @@ func logResponseModelBillingApplied(component string, account *Account, requestI
+ 
+ // recordUsageCore 是 RecordUsage 的核心实现。
+ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsageCoreInput) error {
+-	result := input.Result
++	// 客户优惠只能作用于计费副本；不能把缓存折扣写回真实上游用量。
++	observedUsage := input.Result.Usage
++	billingResult := *input.Result
++	result := &billingResult
+ 	apiKey := input.APIKey
+ 	user := input.User
+ 	account := input.Account
+@@ -850,7 +853,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
+ 		multiplier = 1
+ 		imageMultiplier = 1
+ 	}
+-	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
++	observedResult := *result
++	observedResult.Usage = observedUsage
++	usageLog := s.buildRecordUsageLog(ctx, input, &observedResult, apiKey, user, account, subscription,
+ 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
+ 
+ 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
+@@ -860,11 +865,11 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
+ 			// Anthropic's input_tokens excludes cache_read and cache_creation (billed separately);
+ 			// OpenAI gateway uses actualInputTokens which also excludes cache_read for the same reason.
+ 			UsageTokens{
+-				InputTokens:         result.Usage.InputTokens,
+-				OutputTokens:        result.Usage.OutputTokens,
+-				CacheCreationTokens: result.Usage.CacheCreationInputTokens,
+-				CacheReadTokens:     result.Usage.CacheReadInputTokens,
+-				ImageOutputTokens:   result.Usage.ImageOutputTokens,
++				InputTokens:         observedUsage.InputTokens,
++				OutputTokens:        observedUsage.OutputTokens,
++				CacheCreationTokens: observedUsage.CacheCreationInputTokens,
++				CacheReadTokens:     observedUsage.CacheReadInputTokens,
++				ImageOutputTokens:   observedUsage.ImageOutputTokens,
+ 			},
+ 			cost.TotalCost, pricingAt,
+ 		)
+diff --git a/sub2api/backend/internal/service/openai_encrypted_affinity.go b/sub2api/backend/internal/service/openai_encrypted_affinity.go
+index 80d28b2..9e88664 100644
+--- a/sub2api/backend/internal/service/openai_encrypted_affinity.go
++++ b/sub2api/backend/internal/service/openai_encrypted_affinity.go
+@@ -144,6 +144,9 @@ func (s *OpenAIGatewayService) observeOpenAIEncryptedOutput(ctx context.Context,
+ 
+ // prepareOpenAIEncryptedAttempt 只应用目标上游已确认的恢复记录；选号变化本身不触发删除。
+ func (s *OpenAIGatewayService) prepareOpenAIEncryptedAttempt(ctx context.Context, c *gin.Context, account *Account, body []byte) ([]byte, error) {
++	if c != nil {
++		c.Set("upstream_tool_execution_possible", upstreamToolExecutionPossible(body, PlatformOpenAI))
++	}
+ 	if account == nil || account.Platform != PlatformOpenAI || c == nil {
+ 		return body, nil
+ 	}
+diff --git a/sub2api/backend/internal/service/openai_encrypted_content_lineage.go b/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
+index ee6245e..64204d6 100644
+--- a/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
++++ b/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
+@@ -75,8 +75,8 @@ func collectOpenAIEncryptedContentDigestsRaw(payload []byte) []string {
+ }
+ 
+ // stripOpenAIInvalidEncryptedContentItems 剥离 input 中摘要命中 invalid 的密文
+-// 项；仅允许剥离普通 reasoning 的 encrypted_content，连带清理
+-// content:null 与空骨架。压缩历史即使摘要命中也必须保留。
++// 项；仅允许剥离普通 reasoning 的 encrypted_content，不处理其他字段。
++// 压缩历史即使摘要命中也必须保留。
+ // 返回被改写的项数。
+ func stripOpenAIInvalidEncryptedContentItems(reqBody map[string]any, invalid map[string]struct{}) int {
+ 	if len(reqBody) == 0 || len(invalid) == 0 {
+diff --git a/sub2api/backend/internal/service/openai_gateway_chat_completions.go b/sub2api/backend/internal/service/openai_gateway_chat_completions.go
+index 199eac1..ba1e2cc 100644
+--- a/sub2api/backend/internal/service/openai_gateway_chat_completions.go
++++ b/sub2api/backend/internal/service/openai_gateway_chat_completions.go
+@@ -70,7 +70,8 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
+ 	promptCacheKey string,
+ 	defaultMappedModel string,
+ 	compatPromptCacheTenantIsolated bool,
+-) (*OpenAIForwardResult, error) {
++) (finalResult *OpenAIForwardResult, returnErr error) {
++	defer func() { returnErr = guardUpstreamExecutionReplay(account, body, returnErr) }()
+ 	rememberOpenCodeInboundBody(c, body)
+ 	beginUpstreamResponseModelObservation(c)
+ 	ClearActualOpenAIUpstreamEndpoint(c)
+diff --git a/sub2api/backend/internal/service/openai_gateway_forward.go b/sub2api/backend/internal/service/openai_gateway_forward.go
+index e9faafe..0b2f1e7 100644
+--- a/sub2api/backend/internal/service/openai_gateway_forward.go
++++ b/sub2api/backend/internal/service/openai_gateway_forward.go
+@@ -19,7 +19,9 @@ import (
+ 
+ // Forward forwards request to OpenAI API
+ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (finalResult *OpenAIForwardResult, finalErr error) {
++	replayGuardBody := body
+ 	defer func() {
++		finalErr = guardUpstreamExecutionReplay(account, replayGuardBody, finalErr)
+ 		if account != nil && finalErr == nil && finalResult != nil && !finalResult.ClientDisconnect && finalResult.SucceededForScheduling() {
+ 			s.commitOpenAIEncryptedRecovery(c, account.ID, true)
+ 		}
+diff --git a/sub2api/backend/internal/service/openai_gateway_messages.go b/sub2api/backend/internal/service/openai_gateway_messages.go
+index 7951437..ebff80b 100644
+--- a/sub2api/backend/internal/service/openai_gateway_messages.go
++++ b/sub2api/backend/internal/service/openai_gateway_messages.go
+@@ -32,7 +32,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 	body []byte,
+ 	promptCacheKey string,
+ 	defaultMappedModel string,
+-) (*OpenAIForwardResult, error) {
++) (finalResult *OpenAIForwardResult, returnErr error) {
++	defer func() { returnErr = guardUpstreamExecutionReplayForProtocol(account, body, PlatformAnthropic, returnErr) }()
+ 	rememberOpenCodeInboundBody(c, body)
+ 	beginUpstreamResponseModelObservation(c)
+ 	ClearActualOpenAIUpstreamEndpoint(c)
+diff --git a/sub2api/backend/internal/service/openai_gateway_passthrough.go b/sub2api/backend/internal/service/openai_gateway_passthrough.go
+index 4e6bc1c..8fff41e 100644
+--- a/sub2api/backend/internal/service/openai_gateway_passthrough.go
++++ b/sub2api/backend/internal/service/openai_gateway_passthrough.go
+@@ -1798,6 +1798,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
+ 		classificationHeaders = nil
+ 	}
+ 	failoverErr := s.newOpenAIAccountFailoverErrorWithClassificationHeaders(account, statusCode, headers, classificationHeaders, payload, message, shouldDisable, retryableOnSameAccount)
++	failoverErr.UpstreamStreamFailure = true
+ 	if failoverErr.IsCredentialFailure() || failoverErr.RequestScopedTransient {
+ 		return failoverErr
+ 	}
+diff --git a/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go b/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
+index 7b68ced..3b6c8e4 100644
+--- a/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -83,6 +83,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 	if account == nil {
+ 		return errors.New("account is nil")
+ 	}
++	defer func() { returnErr = guardUpstreamExecutionRisk(account, c.GetBool("upstream_tool_execution_possible"), returnErr) }()
+ 	preparedMessage, preparationErr := s.prepareOpenAIEncryptedAttempt(ctx, c, account, firstClientMessage)
+ 	if preparationErr != nil {
+ 		return preparationErr
+diff --git a/sub2api/backend/internal/service/upstream_execution_replay_guard.go b/sub2api/backend/internal/service/upstream_execution_replay_guard.go
+new file mode 100644
+index 0000000..5e7493f
+--- /dev/null
++++ b/sub2api/backend/internal/service/upstream_execution_replay_guard.go
+@@ -0,0 +1,76 @@
++package service
++
++import (
++	"errors"
++	"net/http"
++	"strings"
++
++	"github.com/tidwall/gjson"
++)
++
++// upstreamToolExecutionPossible 只检查工具定义，不解析工具结果中的字符串。
++// 原生客户端函数由下游执行；服务端工具和未知扩展可能在错误返回前已经执行。
++func upstreamToolExecutionPossible(body []byte, platform string) bool {
++	tools := gjson.GetBytes(body, "tools")
++	if !tools.Exists() || tools.Type == gjson.Null {
++		return false
++	}
++	if !tools.IsArray() {
++		return true
++	}
++	for _, tool := range tools.Array() {
++		typ := tool.Get("type").String()
++		if platform == PlatformAnthropic {
++			if typ == "" || typ == "custom" {
++				continue
++			}
++		} else if typ == "function" || typ == "custom" {
++			continue
++		}
++		return true
++	}
++	return false
++}
++
++func guardUpstreamExecutionReplay(account *Account, body []byte, err error) error {
++	platform := ""
++	if account != nil {
++		platform = account.Platform
++	}
++	return guardUpstreamExecutionReplayForProtocol(account, body, platform, err)
++}
++
++func guardUpstreamExecutionReplayForProtocol(account *Account, body []byte, protocol string, err error) error {
++	return guardUpstreamExecutionRisk(account, upstreamToolExecutionPossible(body, protocol), err)
++}
++
++func guardUpstreamExecutionRisk(account *Account, executionPossible bool, err error) error {
++	if err == nil || !account.IsFastFailoverEnabled() || !executionPossible {
++		return err
++	}
++	var failure *UpstreamFailoverError
++	if !errors.As(err, &failure) || !failure.ShouldRetryNextAccount() {
++		return err
++	}
++	// 只对明确的请求接收前拒绝保留切换；流内429或错误可能发生在工具执行后。
++	eventType := gjson.GetBytes(failure.ResponseBody, "type").String()
++	streamFailure := failure.UpstreamStreamFailure || strings.HasPrefix(eventType, "response.") ||
++		gjson.GetBytes(failure.ResponseBody, "response.error").Exists() ||
++		strings.Contains(strings.ToLower(failure.ResponseHeaders.Get("Content-Type")), "text/event-stream")
++	if !streamFailure {
++		switch failure.StatusCode {
++		case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden,
++			http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusRequestEntityTooLarge,
++			http.StatusUnprocessableEntity, http.StatusTooManyRequests:
++			return err
++		}
++	}
++	failure.RetryableOnSameAccount = false
++	failure.OpenAIBoundedSameAccountRetry = false
++	failure.NextAccountAction = NextAccountStop
++	failure.Scope = GatewayFailureScopeRequest
++	failure.Reason = GatewayFailureReason("upstream_tool_execution_uncertain")
++	failure.ClientStatusCode = http.StatusBadGateway
++	failure.ClientMessage = "Upstream tool execution status is unknown; automatic replay stopped to avoid duplicate execution"
++	return err
++}
+diff --git a/sub2api/backend/internal/service/upstream_execution_replay_guard_test.go b/sub2api/backend/internal/service/upstream_execution_replay_guard_test.go
+new file mode 100644
+index 0000000..33883d3
+--- /dev/null
++++ b/sub2api/backend/internal/service/upstream_execution_replay_guard_test.go
+@@ -0,0 +1,60 @@
++package service
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestExecutionReplayGuardDistinguishesRejectedAndUnknownOutcomes(t *testing.T) {
++	for _, test := range []struct {
++		name     string
++		platform string
++		tools    string
++		status   int
++		response string
++		blocked  bool
++	}{
++		{"client_function", PlatformOpenAI, `[{"type":"function","name":"write"}]`, 502, `{}`, false},
++		{"remote_timeout", PlatformOpenAI, `[{"type":"computer"}]`, 504, `{}`, true},
++		{"remote_gateway_failure", PlatformOpenAI, `[{"type":"mcp"}]`, 502, `{}`, true},
++		{"auth_rejected", PlatformOpenAI, `[{"type":"computer"}]`, 401, `{"error":{"code":"invalid_api_key"}}`, false},
++		{"capacity_rejected", PlatformOpenAI, `[{"type":"computer"}]`, 429, `{"error":{"code":"rate_limit_exceeded"}}`, false},
++		{"stream_capacity", PlatformOpenAI, `[{"type":"computer"}]`, 429, `{"type":"response.failed","response":{"error":{"code":"rate_limit_exceeded"}}}`, true},
++		{"anthropic_function", PlatformAnthropic, `[{"name":"write","input_schema":{}}]`, 502, `{}`, false},
++		{"anthropic_server_tool", PlatformAnthropic, `[{"type":"code_execution_20250825"}]`, 503, `{}`, true},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			account := &Account{Platform: test.platform, Type: AccountTypeAPIKey, Credentials: map[string]any{"fast_failover": true}}
++			failure := &UpstreamFailoverError{StatusCode: test.status, ResponseBody: []byte(test.response), ResponseHeaders: make(http.Header), RetryableOnSameAccount: true}
++			err := guardUpstreamExecutionReplay(account, []byte(`{"tools":`+test.tools+`}`), failure)
++			require.Same(t, failure, err)
++			require.Equal(t, !test.blocked, failure.ShouldRetryNextAccount())
++			if test.blocked {
++				require.False(t, failure.RetryableOnSameAccount)
++			}
++		})
++	}
++}
++
++func TestExecutionReplayGuardUsesCurrentWebSocketTurnTools(t *testing.T) {
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	service := &OpenAIGatewayService{}
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"fast_failover": true}}
++	for _, test := range []struct {
++		body  string
++		risky bool
++	}{
++		{`{"tools":[{"type":"function","name":"lookup"}]}`, false},
++		{`{"tools":[{"type":"code_interpreter"}]}`, true},
++		{`{"tools":[]}`, false},
++	} {
++		_, err := service.prepareOpenAIEncryptedAttempt(context.Background(), c, account, []byte(test.body))
++		require.NoError(t, err)
++		require.Equal(t, test.risky, c.GetBool("upstream_tool_execution_possible"))
++	}
++}

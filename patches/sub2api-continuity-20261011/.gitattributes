@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# 补丁中的上下文行前缀和空行属于格式，不能按源代码缩进清理。
+patches/*.patch text eol=lf -whitespace

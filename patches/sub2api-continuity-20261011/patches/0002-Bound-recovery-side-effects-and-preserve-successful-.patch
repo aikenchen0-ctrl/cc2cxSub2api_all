@@ -1,0 +1,441 @@
+From dffdc9ee9c7168747bde548f064c4e272a6a297f Mon Sep 17 00:00:00 2001
+From: aikenchen0-ctrl <aikenchen0@example.com>
+Date: Sun, 11 Oct 2026 05:42:16 +0800
+Subject: [PATCH] Bound recovery side effects and preserve successful delivery
+ semantics
+
+---
+ .../gateway_cache_encrypted_recovery.go       |  2 -
+ .../gateway_cache_encrypted_recovery_test.go  |  6 ++
+ .../service/continuity_side_effects_test.go   | 84 +++++++++++++++++++
+ .../openai_bounded_same_account_retry.go      |  8 ++
+ .../openai_encrypted_content_lineage.go       | 14 +---
+ .../service/openai_encrypted_recovery.go      | 57 +++++++++++--
+ .../service/openai_gateway_forward.go         | 16 +++-
+ .../service/openai_gateway_passthrough.go     |  7 +-
+ .../service/openai_ws_forwarder_ingress.go    |  4 +
+ .../openai_ws_v2_passthrough_adapter.go       |  2 +
+ 10 files changed, 177 insertions(+), 23 deletions(-)
+ create mode 100644 sub2api/backend/internal/service/continuity_side_effects_test.go
+
+diff --git a/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery.go b/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery.go
+index 1e190b5..92faf34 100644
+--- a/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery.go
++++ b/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery.go
+@@ -19,11 +19,9 @@ for i=4,#ARGV do
+   local member = ARGV[3] .. ':' .. ARGV[i]
+   local expiry = redis.call('ZSCORE', KEYS[1], member)
+   if expiry and tonumber(expiry) > tonumber(ARGV[1]) then
+-    redis.call('ZADD', KEYS[1], ARGV[2], member)
+     table.insert(result, ARGV[i])
+   end
+ end
+-if #result > 0 then redis.call('PEXPIRE', KEYS[1], ARGV[2]-ARGV[1]) end
+ return result
+ `)
+ 
+diff --git a/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery_test.go b/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery_test.go
+index b944642..b7c193b 100644
+--- a/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery_test.go
++++ b/sub2api/backend/internal/repository/gateway_cache_encrypted_recovery_test.go
+@@ -23,6 +23,9 @@ func TestEncryptedRecoveryPersistsAcrossInstancesAndIsolatesTargets(t *testing.T
+ 		digests[index] = fmt.Sprintf("digest_%d", index)
+ 	}
+ 	require.NoError(t, first.SetOpenAIEncryptedRecovery(ctx, 8, 9, "target_a", digests, 48*time.Hour))
++	key := encryptedRecoveryKey(8, 9)
++	expiryBefore, err := client.ZScore(ctx, key, "target_a:"+digests[0]).Result()
++	require.NoError(t, err)
+ 	second := NewGatewayCache(client).(service.OpenAIEncryptedRecoveryCache)
+ 	for _, scope := range []struct {
+ 		group, key int64
+@@ -38,6 +41,9 @@ func TestEncryptedRecoveryPersistsAcrossInstancesAndIsolatesTargets(t *testing.T
+ 	require.NoError(t, err)
+ 	require.Len(t, got, 300)
+ 	require.NotContains(t, got, "new_cipher")
++	expiryAfter, err := client.ZScore(ctx, key, "target_a:"+digests[0]).Result()
++	require.NoError(t, err)
++	require.Equal(t, expiryBefore, expiryAfter, "读取不得将旧恢复许可无限续期")
+ 	server.FastForward(49 * time.Hour)
+ 	got, err = second.GetOpenAIEncryptedRecovery(ctx, 8, 9, "target_a", digests)
+ 	require.NoError(t, err)
+diff --git a/sub2api/backend/internal/service/continuity_side_effects_test.go b/sub2api/backend/internal/service/continuity_side_effects_test.go
+new file mode 100644
+index 0000000..e69d529
+--- /dev/null
++++ b/sub2api/backend/internal/service/continuity_side_effects_test.go
+@@ -0,0 +1,84 @@
++package service
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestBoundedRetryBudgetDoesNotResetOnAccountSwitch(t *testing.T) {
++	service := &OpenAIGatewayService{}
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	for index, id := range []int64{101, 202, 303} {
++		account := &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++			Credentials: map[string]any{"fast_failover": true, "pool_mode": true, "pool_mode_retry_count": 5}}
++		failure := &UpstreamFailoverError{StatusCode: 502}
++		service.allowOpenAIBoundedSameAccountRetry(c, account, "model", failure, false,
++			openAIUpstreamRetryAttempt{time.Now(), []byte(`{"input":"continue"}`)})
++		require.Equal(t, index == 0, failure.OpenAIBoundedSameAccountRetry)
++	}
++}
++
++func TestRecoveryBudgetSharedAndFieldsPreserved(t *testing.T) {
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	require.True(t, claimOpenAIEncryptedRecoveryRetry(c))
++	require.False(t, claimOpenAIEncryptedRecoveryRetry(c))
++	request := map[string]any{"input": []any{map[string]any{"type": "reasoning", "id": "r1", "summary": []any{}, "content": nil, "encrypted_content": "old"}}}
++	require.Equal(t, 1, stripOpenAIInvalidEncryptedContentItems(request, map[string]struct{}{openAIEncryptedContentDigest("old"): {}}))
++	item := request["input"].([]any)[0].(map[string]any)
++	require.Contains(t, item, "content", "清推理密文不能顺手清理其他字段")
++	require.Equal(t, "r1", item["id"])
++	require.Contains(t, item, "summary")
++}
++
++func TestPassthroughDisconnectIsNotAClientSuccess(t *testing.T) {
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/responses", nil)
++	c.Writer = &failWriteResponseWriter{ResponseWriter: c.Writer}
++	service := &OpenAIGatewayService{cfg: &config.Config{}}
++	response := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
++		Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"))}
++	result, _ := service.handleStreamingResponsePassthrough(context.Background(), response, c, &Account{ID: 1}, time.Now(), "model", "model")
++	require.NotNil(t, result)
++	require.True(t, result.clientDisconnect, "上游完成但客户写入失败，不得提交客户成功亲和")
++}
++
++type recoveryCommitTestCache struct {
++	GatewayCache
++	writes int
++}
++
++func (c *recoveryCommitTestCache) GetOpenAIEncryptedRecovery(context.Context, int64, int64, string, []string) (map[string]struct{}, error) {
++	return nil, nil
++}
++
++func (c *recoveryCommitTestCache) SetOpenAIEncryptedRecovery(context.Context, int64, int64, string, []string, time.Duration) error {
++	c.writes++
++	return nil
++}
++
++func TestRejectedCipherIsNotPersistedUntilRecoveryCompletes(t *testing.T) {
++	cache := &recoveryCommitTestCache{}
++	service := &OpenAIGatewayService{cache: cache}
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Set("api_key", &APIKey{ID: 11})
++	c.Set(openAIEncryptedRecoveryScopeKey, openAIEncryptedRecoveryScope{accountID: 22, target: "target"})
++	body := []byte(`{"input":[{"role":"user","content":"continue"},{"type":"reasoning","encrypted_content":"old"}]}`)
++	service.rememberOpenAIEncryptedRecovery(c, body, 22)
++	require.Zero(t, cache.writes)
++	service.commitOpenAIEncryptedRecovery(c, 22, false)
++	service.commitOpenAIEncryptedRecovery(c, 33, true)
++	require.Zero(t, cache.writes)
++	service.commitOpenAIEncryptedRecovery(c, 22, true)
++	require.Equal(t, 1, cache.writes)
++	service.commitOpenAIEncryptedRecovery(c, 22, true)
++	require.Equal(t, 1, cache.writes)
++}
+diff --git a/sub2api/backend/internal/service/openai_bounded_same_account_retry.go b/sub2api/backend/internal/service/openai_bounded_same_account_retry.go
+index 10e256a..cb641f2 100644
+--- a/sub2api/backend/internal/service/openai_bounded_same_account_retry.go
++++ b/sub2api/backend/internal/service/openai_bounded_same_account_retry.go
+@@ -95,6 +95,14 @@ func (s *OpenAIGatewayService) allowOpenAIBoundedSameAccountRetry(
+ 		strings.TrimSpace(failure.ResponseHeaders.Get("Retry-After")) != "" {
+ 		return failure
+ 	}
++	// 同一客户请求只额外赠予一次短故障原号重试，换号不重置该预算。
++	const boundedUsedKey = "openai_bounded_retry_request_used"
++	if c != nil {
++		if c.GetBool(boundedUsedKey) {
++			return failure
++		}
++		c.Set(boundedUsedKey, true)
++	}
+ 	failure.RetryableOnSameAccount = true
+ 	failure.OpenAIBoundedSameAccountRetry = true
+ 	failure.SameAccountRetryMax = 1
+diff --git a/sub2api/backend/internal/service/openai_encrypted_content_lineage.go b/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
+index 893c3d7..ee6245e 100644
+--- a/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
++++ b/sub2api/backend/internal/service/openai_encrypted_content_lineage.go
+@@ -102,7 +102,8 @@ func stripOpenAIInvalidEncryptedContentItems(reqBody map[string]any, invalid map
+ 		if _, hit := invalid[openAIEncryptedContentDigest(encrypted)]; !hit {
+ 			return item, false, true
+ 		}
+-		return sanitizeEncryptedReasoningInputItem(item)
++		delete(inputItem, "encrypted_content")
++		return inputItem, true, true
+ 	}
+ 	switch input := inputValue.(type) {
+ 	case []any:
+@@ -225,16 +226,9 @@ func stripOpenAIInvalidEncryptedContentFromReplayItems(items []json.RawMessage,
+ 			next = append(next, item)
+ 			continue
+ 		}
+-		nextItem, changed, keep := sanitizeEncryptedReasoningInputItem(decoded)
+-		if !changed {
+-			next = append(next, item)
+-			continue
+-		}
++		delete(decoded, "encrypted_content")
+ 		stripped++
+-		if !keep {
+-			continue
+-		}
+-		rebuilt, err := marshalOpenAIUpstreamJSON(nextItem)
++		rebuilt, err := marshalOpenAIUpstreamJSON(decoded)
+ 		if err != nil {
+ 			next = append(next, item)
+ 			stripped--
+diff --git a/sub2api/backend/internal/service/openai_encrypted_recovery.go b/sub2api/backend/internal/service/openai_encrypted_recovery.go
+index eced67c..34ef9ad 100644
+--- a/sub2api/backend/internal/service/openai_encrypted_recovery.go
++++ b/sub2api/backend/internal/service/openai_encrypted_recovery.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"fmt"
+ 	"log/slog"
+@@ -21,6 +22,25 @@ type OpenAIEncryptedRecoveryCache interface {
+ }
+ 
+ const openAIEncryptedRecoveryScopeKey = "openai_encrypted_recovery_scope_v1"
++const openAIEncryptedRecoveryPendingKey = "openai_encrypted_recovery_pending_v1"
++const openAIEncryptedRecoveryRetryKey = "openai_encrypted_recovery_retry_used_v1"
++
++func claimOpenAIEncryptedRecoveryRetry(c *gin.Context) bool {
++	if c == nil {
++		return true
++	}
++	if c.GetBool(openAIEncryptedRecoveryRetryKey) {
++		return false
++	}
++	c.Set(openAIEncryptedRecoveryRetryKey, true)
++	return true
++}
++
++type openAIEncryptedRecoveryPending struct {
++	target    string
++	accountID int64
++	digests   []string
++}
+ 
+ var openAIRejectedInputIndex = regexp.MustCompile(`^input(?:\[(\d+)\]|\.(\d+))(?:\.encrypted_content)?$`)
+ 
+@@ -82,6 +102,16 @@ func (s *OpenAIGatewayService) prepareOpenAIEncryptedRecovery(ctx context.Contex
+ 	model := canonicalOpenAIAccountSchedulingModel(account, gjson.GetBytes(body, "model").String())
+ 	scope := openAIEncryptedRecoveryScope{accountID: account.ID, target: openAIEncryptedIdentity(account, model)}
+ 	c.Set(openAIEncryptedRecoveryScopeKey, scope)
++	if value, exists := c.Get(openAIEncryptedRecoveryPendingKey); exists {
++		pending, ok := value.(openAIEncryptedRecoveryPending)
++		if !ok || pending.target != scope.target || pending.accountID != account.ID {
++			c.Set(openAIEncryptedRecoveryPendingKey, openAIEncryptedRecoveryPending{})
++		}
++	}
++	// 普通请求无需解析完整历史或访问恢复缓存。
++	if !bytes.Contains(body, []byte(`"encrypted_content"`)) {
++		return body
++	}
+ 	cache, ok := s.cache.(OpenAIEncryptedRecoveryCache)
+ 	if !ok || !AnalyzeOpenAIContinuationSafety(body).CanRecoverRejectedEncryptedReasoning() {
+ 		return body
+@@ -109,10 +139,6 @@ func (s *OpenAIGatewayService) rememberOpenAIEncryptedRecovery(c *gin.Context, b
+ 	if s == nil || c == nil || !AnalyzeOpenAIContinuationSafety(body).CanRecoverRejectedEncryptedReasoning() {
+ 		return
+ 	}
+-	cache, ok := s.cache.(OpenAIEncryptedRecoveryCache)
+-	if !ok {
+-		return
+-	}
+ 	value, _ := c.Get(openAIEncryptedRecoveryScopeKey)
+ 	scope, ok := value.(openAIEncryptedRecoveryScope)
+ 	if !ok || scope.accountID != accountID || scope.target == "" {
+@@ -133,14 +159,33 @@ func (s *OpenAIGatewayService) rememberOpenAIEncryptedRecovery(c *gin.Context, b
+ 	if len(digests) == 0 {
+ 		return
+ 	}
++	// 拒绝只产生请求内候选标记；完整恢复成功后才发布给其他请求。
++	c.Set(openAIEncryptedRecoveryPendingKey, openAIEncryptedRecoveryPending{target: scope.target, accountID: accountID, digests: digests})
++}
++
++func (s *OpenAIGatewayService) commitOpenAIEncryptedRecovery(c *gin.Context, accountID int64, success bool) {
++	if !success || s == nil || c == nil {
++		return
++	}
++	cache, ok := s.cache.(OpenAIEncryptedRecoveryCache)
++	if !ok {
++		return
++	}
++	value, _ := c.Get(openAIEncryptedRecoveryPendingKey)
++	pending, ok := value.(openAIEncryptedRecoveryPending)
++	if !ok || pending.accountID != accountID || pending.target == "" || len(pending.digests) == 0 {
++		return
++	}
+ 	ctx := context.Background()
+ 	if c.Request != nil {
+ 		ctx = c.Request.Context()
+ 	}
+ 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 100*time.Millisecond)
+ 	defer cancel()
+-	// 两天内重复引用刷新摘要期限；不借此延长任何正文的保留时间。
+-	if err := cache.SetOpenAIEncryptedRecovery(writeCtx, getOpenAIGroupIDFromContext(c), getAPIKeyIDFromContext(c), scope.target, digests, 48*time.Hour); err != nil {
++	// 固定两天有效期，读取不续期；不把长期坏请求变成永久删减许可。
++	if err := cache.SetOpenAIEncryptedRecovery(writeCtx, getOpenAIGroupIDFromContext(c), getAPIKeyIDFromContext(c), pending.target, pending.digests, 48*time.Hour); err != nil {
+ 		slog.Warn("openai.encrypted_recovery_write_failed", "account_id", accountID)
++	} else {
++		c.Set(openAIEncryptedRecoveryPendingKey, openAIEncryptedRecoveryPending{})
+ 	}
+ }
+diff --git a/sub2api/backend/internal/service/openai_gateway_forward.go b/sub2api/backend/internal/service/openai_gateway_forward.go
+index 0b9f28b..e9faafe 100644
+--- a/sub2api/backend/internal/service/openai_gateway_forward.go
++++ b/sub2api/backend/internal/service/openai_gateway_forward.go
+@@ -18,7 +18,12 @@ import (
+ )
+ 
+ // Forward forwards request to OpenAI API
+-func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
++func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (finalResult *OpenAIForwardResult, finalErr error) {
++	defer func() {
++		if account != nil && finalErr == nil && finalResult != nil && !finalResult.ClientDisconnect && finalResult.SucceededForScheduling() {
++			s.commitOpenAIEncryptedRecovery(c, account.ID, true)
++		}
++	}()
+ 	prepared, preparationErr := s.prepareOpenAIEncryptedAttempt(ctx, c, account, body)
+ 	if preparationErr != nil {
+ 		return nil, preparationErr
+@@ -830,9 +835,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 			if len(invalidDigests) != 1 {
+ 				return false
+ 			}
++			if !claimOpenAIEncryptedRecoveryRetry(c) {
++				return false
++			}
+ 			s.rememberOpenAIEncryptedRecovery(c, lineageEntryBody, account.ID)
+-			removedReasoningItems := trimOpenAIEncryptedReasoningItems(wsReqBody)
+-			if !removedReasoningItems {
++			removedReasoningItems := stripOpenAIInvalidEncryptedContentItems(wsReqBody, map[string]struct{}{invalidDigests[0]: {}})
++			if removedReasoningItems == 0 {
+ 				logOpenAIWSModeInfo(
+ 					"reconnect_invalid_encrypted_content_recovery_skip account_id=%d attempt=%d reason=missing_encrypted_reasoning_items",
+ 					account.ID,
+@@ -1097,7 +1105,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 				AnalyzeOpenAIContinuationSafety(body).CanRecoverRejectedEncryptedReasoning() {
+ 				invalid := openAIRejectedReasoningDigests(body, respBody)
+ 				retryBody, count, recoveryErr := stripOpenAIInvalidEncryptedContentRaw(body, invalid)
+-				if recoveryErr == nil && count > 0 {
++				if recoveryErr == nil && count > 0 && claimOpenAIEncryptedRecoveryRetry(c) {
+ 					invalidDigests := make([]string, 0, len(invalid))
+ 					for digest := range invalid {
+ 						invalidDigests = append(invalidDigests, digest)
+diff --git a/sub2api/backend/internal/service/openai_gateway_passthrough.go b/sub2api/backend/internal/service/openai_gateway_passthrough.go
+index 6de1a5f..4e6bc1c 100644
+--- a/sub2api/backend/internal/service/openai_gateway_passthrough.go
++++ b/sub2api/backend/internal/service/openai_gateway_passthrough.go
+@@ -358,6 +358,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+ 	var resp *http.Response
+ 	var usage *OpenAIUsage
+ 	var firstTokenMs *int
++	clientDisconnect := false
+ 	responseID := ""
+ 	imageCount := 0
+ 	var imageOutputSizes []string
+@@ -396,7 +397,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+ 				AnalyzeOpenAIContinuationSafety(body).CanRecoverRejectedEncryptedReasoning() {
+ 				invalid := openAIRejectedReasoningDigests(body, probeBody)
+ 				retryBody, changed, recoveryErr := prepareOpenAIEncryptedFailoverBodyForDigests(body, invalid)
+-				if recoveryErr == nil && changed {
++				if recoveryErr == nil && changed && claimOpenAIEncryptedRecoveryRetry(c) {
+ 					s.rememberOpenAIEncryptedRecovery(c, body, account.ID, invalid)
+ 					body = retryBody
+ 					encryptedRecoveryTried = true
+@@ -488,6 +489,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+ 			}
+ 			usage = result.usage
+ 			firstTokenMs = result.firstTokenMs
++			clientDisconnect = result.clientDisconnect
+ 			responseID = strings.TrimSpace(result.responseID)
+ 			imageCount = result.imageCount
+ 			imageOutputSizes = result.imageOutputSizes
+@@ -553,6 +555,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+ 		OpenAIWSMode:                  false,
+ 		Duration:                      time.Since(startTime),
+ 		FirstTokenMs:                  firstTokenMs,
++		ClientDisconnect:              clientDisconnect,
+ 	}
+ 	if imageCount > 0 {
+ 		forwardResult.ImageCount = imageCount
+@@ -1058,6 +1061,7 @@ func collectOpenAIPassthroughTimeoutHeaders(h http.Header) []string {
+ 
+ type openaiStreamingResultPassthrough struct {
+ 	usage            *OpenAIUsage
++	clientDisconnect bool
+ 	firstTokenMs     *int
+ 	responseID       string
+ 	imageCount       int
+@@ -2013,6 +2017,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
+ 	resultWithUsage := func() *openaiStreamingResultPassthrough {
+ 		return &openaiStreamingResultPassthrough{
+ 			usage:            usage,
++			clientDisconnect: clientDisconnected,
+ 			firstTokenMs:     firstTokenMs,
+ 			responseID:       responseID,
+ 			imageCount:       imageCounter.Count(),
+diff --git a/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go b/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
+index 58da35a..7b68ced 100644
+--- a/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/sub2api/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -326,6 +326,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 		}
+ 		accountIdentitySourceRaw := append([]byte(nil), normalized...)
+ 		if turn > 1 {
++			c.Set(openAIEncryptedRecoveryRetryKey, false)
++			c.Set(openAIEncryptedRecoveryPendingKey, openAIEncryptedRecoveryPending{})
+ 			turnContext := s.WithOpenAIEncryptedAffinity(ctx, c, normalized)
+ 			prepared, prepareErr := s.prepareOpenAIEncryptedAttempt(turnContext, c, account, normalized)
+ 			if prepareErr != nil {
+@@ -718,6 +720,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 			if bridgeErr != nil && isOpenAIWSSessionPreempted(ctx) {
+ 				return errOpenAIWSSessionPreempted
+ 			}
++			s.commitOpenAIEncryptedRecovery(c, account.ID, bridgeErr == nil && result != nil && !result.ClientDisconnect && result.SucceededForScheduling())
+ 			if hooks != nil && hooks.AfterTurn != nil {
+ 				hooks.AfterTurn(turn, result, bridgeErr)
+ 			}
+@@ -1935,6 +1938,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 		turnPrevRecoveryTried = false
+ 		lastTurnFinishedAt = time.Now()
+ 		lastTurnClean = true
++		s.commitOpenAIEncryptedRecovery(c, account.ID, result != nil && !result.ClientDisconnect && result.SucceededForScheduling())
+ 		if hooks != nil && hooks.AfterTurn != nil {
+ 			hooks.AfterTurn(turn, result, nil)
+ 		}
+diff --git a/sub2api/backend/internal/service/openai_ws_v2_passthrough_adapter.go b/sub2api/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+index 7f2256d..ab275e2 100644
+--- a/sub2api/backend/internal/service/openai_ws_v2_passthrough_adapter.go
++++ b/sub2api/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+@@ -1006,6 +1006,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
+ 			responseCreateAt := time.Time{}
+ 			acceptedTurn := false
+ 			if isResponseCreate {
++				c.Set(openAIEncryptedRecoveryRetryKey, false)
++				c.Set(openAIEncryptedRecoveryPendingKey, openAIEncryptedRecoveryPending{})
+ 				turnContext := s.WithOpenAIEncryptedAffinity(ctx, c, payload)
+ 				prepared, prepareErr := s.prepareOpenAIEncryptedAttempt(turnContext, c, account, payload)
+ 				if prepareErr != nil {

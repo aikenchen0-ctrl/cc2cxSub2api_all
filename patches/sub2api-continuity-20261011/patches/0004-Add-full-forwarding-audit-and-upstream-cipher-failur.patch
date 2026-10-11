@@ -1,0 +1,200 @@
+From 175e4be5ddafec391174e3b1382889141ab4d7cc Mon Sep 17 00:00:00 2001
+From: aikenchen0-ctrl <aikenchen0@example.com>
+Date: Sun, 11 Oct 2026 09:05:35 +0800
+Subject: [PATCH] Add full forwarding audit and upstream cipher failure
+ regression
+
+---
+ .../openai_continuity_wire_audit_test.go      | 183 ++++++++++++++++++
+ 1 file changed, 183 insertions(+)
+ create mode 100644 sub2api/backend/internal/service/openai_continuity_wire_audit_test.go
+
+diff --git a/sub2api/backend/internal/service/openai_continuity_wire_audit_test.go b/sub2api/backend/internal/service/openai_continuity_wire_audit_test.go
+new file mode 100644
+index 0000000..9e0010f
+--- /dev/null
++++ b/sub2api/backend/internal/service/openai_continuity_wire_audit_test.go
+@@ -0,0 +1,183 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++type continuityWireInventory struct {
++	Bytes      int                       `json:"bytes"`
++	ItemCounts map[string]int            `json:"item_counts"`
++	TypeHashes map[string]string         `json:"type_hashes"`
++	Fields     map[string]map[string]int `json:"field_counts"`
++	Ciphertext map[string]map[string]int `json:"ciphertext_hash_counts"`
++}
++
++func continuityWireFieldChanges(before, after []byte) map[string]map[string]int {
++	index := map[string]gjson.Result{}
++	gjson.GetBytes(after, "input").ForEach(func(_, item gjson.Result) bool {
++		key := item.Get("type").String() + ":" + item.Get("call_id").String()
++		if item.Get("call_id").Exists() {
++			index[key] = item
++		}
++		return true
++	})
++	changes := map[string]map[string]int{}
++	gjson.GetBytes(before, "input").ForEach(func(_, item gjson.Result) bool {
++		typ := item.Get("type").String()
++		if !strings.HasSuffix(typ, "_output") || !item.Get("call_id").Exists() {
++			return true
++		}
++		next, ok := index[typ+":"+item.Get("call_id").String()]
++		if !ok {
++			return true
++		}
++		item.ForEach(func(key, value gjson.Result) bool {
++			if value.Raw != next.Get(key.String()).Raw {
++				if changes[typ] == nil {
++					changes[typ] = map[string]int{}
++				}
++				changes[typ][key.String()]++
++			}
++			return true
++		})
++		return true
++	})
++	return changes
++}
++
++// 只记录结构、计数和摘要；真实会话正文、密文及工具参数不得进入测试输出。
++func continuityWireSummarize(body []byte) continuityWireInventory {
++	result := continuityWireInventory{Bytes: len(body), ItemCounts: map[string]int{},
++		TypeHashes: map[string]string{}, Fields: map[string]map[string]int{}, Ciphertext: map[string]map[string]int{}}
++	byType := map[string][]json.RawMessage{}
++	gjson.GetBytes(body, "input").ForEach(func(_, item gjson.Result) bool {
++		typ := item.Get("type").String()
++		result.ItemCounts[typ]++
++		if result.Fields[typ] == nil {
++			result.Fields[typ] = map[string]int{}
++			result.Ciphertext[typ] = map[string]int{}
++		}
++		var decoded map[string]any
++		_ = decodeOpenAIJSONUseNumber([]byte(item.Raw), &decoded)
++		canonical, _ := json.Marshal(decoded)
++		byType[typ] = append(byType[typ], canonical)
++		for key := range decoded {
++			result.Fields[typ][key]++
++		}
++		var visit func(any)
++		visit = func(value any) {
++			switch node := value.(type) {
++			case map[string]any:
++				for key, child := range node {
++					if key == "encrypted_content" {
++						if ciphertext, ok := child.(string); ok && ciphertext != "" {
++							hash := sha256.Sum256([]byte(ciphertext))
++							result.Ciphertext[typ][hex.EncodeToString(hash[:])]++
++						}
++					}
++					visit(child)
++				}
++			case []any:
++				for _, child := range node {
++					visit(child)
++				}
++			}
++		}
++		visit(decoded)
++		return true
++	})
++	for typ, items := range byType {
++		canonical, _ := json.Marshal(items)
++		hash := sha256.Sum256(canonical)
++		result.TypeHashes[typ] = hex.EncodeToString(hash[:])
++	}
++	return result
++}
++
++// 真实历史只从显式本地副本读取，HTTP 出口由内存替身接管，不调用上游或执行工具。
++func TestContinuityWireAuditLocalFixtures(t *testing.T) {
++	root := os.Getenv("CONTINUITY_WIRE_FIXTURES")
++	if root == "" {
++		t.Skip("未指定本地会话副本目录")
++	}
++	paths, err := filepath.Glob(filepath.Join(root, "*", "*", "captured-1.json"))
++	require.NoError(t, err)
++	require.NotEmpty(t, paths)
++	reports := make([]map[string]any, 0)
++	for _, path := range paths {
++		body, err := os.ReadFile(path)
++		require.NoError(t, err)
++		for _, passthrough := range []bool{false, true} {
++			upstream := &httpUpstreamRecorder{resp: &http.Response{
++				StatusCode: http.StatusOK,
++				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++				Body:       io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_audit\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n")),
++			}}
++			c := newOpenAIRejectedFieldTestContext(body)
++			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
++			account := newOpenAIRejectedFieldTestAccount()
++			account.Extra["openai_passthrough"] = passthrough
++			_, err = newOpenAIRejectedFieldTestService(upstream).Forward(context.Background(), c, account, body)
++			require.NoError(t, err)
++			require.Len(t, upstream.bodies, 1)
++			before, after := continuityWireSummarize(body), continuityWireSummarize(upstream.bodies[0])
++			report := map[string]any{"fixture": filepath.Base(filepath.Dir(filepath.Dir(path))),
++				"passthrough": passthrough, "before": before, "after": after,
++				"tool_output_changed_fields":     continuityWireFieldChanges(body, upstream.bodies[0]),
++				"previous_response_id_unchanged": gjson.GetBytes(body, "previous_response_id").Raw == gjson.GetBytes(upstream.bodies[0], "previous_response_id").Raw}
++			reports = append(reports, report)
++			t.Logf("本地副本=%s 透传模式=%v 请求字节=%d→%d 发送次数=%d", report["fixture"], passthrough, before.Bytes, after.Bytes, len(upstream.bodies))
++		}
++	}
++	encoded, err := json.MarshalIndent(reports, "", "  ")
++	require.NoError(t, err)
++	require.NoError(t, os.WriteFile(filepath.Join(root, "wire-audit.json"), encoded, 0600))
++}
++
++// 复现 HTTP 成功但流失败；错误文案来自上游，不得改成成功或触发工具历史清理。
++func TestForwardToolCipherFailurePreservesUpstreamError(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const message = "Encrypted function output content could not be decrypted or decoded."
++	for _, passthrough := range []bool{false, true} {
++		t.Run(fmt.Sprintf("passthrough_%v", passthrough), func(t *testing.T) {
++			body := []byte(`{"model":"gpt-6-astra","stream":true,"store":false,"input":[{"type":"function_call","id":"fc_1","name":"probe","call_id":"call_1","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":"done","encrypted_content":"opaque-tool-state"}]}`)
++			stream := `data: {"type":"response.failed","response":{"id":"resp_incident","status":"failed","error":{"code":"invalid_encrypted_content","type":"invalid_request_error","param":null,"message":"` + message + `"},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":" "}]}]}}` + "\n\n"
++			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK,
++				Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}}
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
++			c.Request.Header.Set("Content-Type", "application/json")
++			account := newOpenAIRejectedFieldTestAccount()
++			account.Extra["openai_passthrough"] = passthrough
++			account.Credentials["fast_failover"] = true
++			result, err := newOpenAIRejectedFieldTestService(upstream).Forward(context.Background(), c, account, body)
++			require.ErrorContains(t, err, message)
++			require.Len(t, upstream.bodies, 1)
++			require.Equal(t, continuityWireSummarize(body).TypeHashes, continuityWireSummarize(upstream.bodies[0]).TypeHashes)
++			require.True(t, c.Writer.Written())
++			require.Contains(t, recorder.Body.String(), message)
++			require.Contains(t, recorder.Body.String(), "response.failed")
++			require.NotContains(t, recorder.Body.String(), "response.completed")
++			require.True(t, result == nil || !result.SucceededForScheduling())
++		})
++	}
++}
