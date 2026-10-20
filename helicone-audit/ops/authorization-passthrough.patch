@@ -1,0 +1,121 @@
+diff --git a/ai-gateway/src/config/server.rs b/ai-gateway/src/config/server.rs
+index 964234d..77bf4a8 100644
+--- a/ai-gateway/src/config/server.rs
++++ b/ai-gateway/src/config/server.rs
+@@ -14,6 +14,9 @@ pub struct ServerConfig {
+     pub address: IpAddr,
+     #[serde(default = "default_port")]
+     pub port: u16,
++    /// 保留客户端认证，由固定上游验证；默认关闭以兼容原有行为。
++    #[serde(default)]
++    pub forward_client_authorization: bool,
+     #[serde(default)]
+     pub tls: TlsConfig,
+     #[serde(with = "humantime_serde", default = "default_shutdown_timeout")]
+@@ -25,6 +28,7 @@ impl Default for ServerConfig {
+         Self {
+             address: default_address(),
+             port: default_port(),
++            forward_client_authorization: false,
+             tls: TlsConfig::default(),
+             shutdown_timeout: default_shutdown_timeout(),
+         }
+diff --git a/ai-gateway/src/dispatcher/openai_compatible_client.rs b/ai-gateway/src/dispatcher/openai_compatible_client.rs
+index 811a408..0c944be 100644
+--- a/ai-gateway/src/dispatcher/openai_compatible_client.rs
++++ b/ai-gateway/src/dispatcher/openai_compatible_client.rs
+@@ -31,7 +31,10 @@ impl Client {
+             .clone();
+ 
+         let mut default_headers = HeaderMap::new();
+-        if let Some(ProviderKey::Secret(key)) = provider_key {
++        // 透传模式不能用固定密钥补全缺失认证，避免匿名请求借用网关权限。
++        if let Some(ProviderKey::Secret(key)) = provider_key
++            && !app_state.config().server.forward_client_authorization
++        {
+             default_headers.insert(
+                 http::header::AUTHORIZATION,
+                 HeaderValue::from_str(&format!("Bearer {}", key.expose()))
+diff --git a/ai-gateway/src/dispatcher/service.rs b/ai-gateway/src/dispatcher/service.rs
+index e6292b4..388aafb 100644
+--- a/ai-gateway/src/dispatcher/service.rs
++++ b/ai-gateway/src/dispatcher/service.rs
+@@ -231,10 +231,14 @@ impl Dispatcher {
+ 
+         let auth_ctx = req_ctx.auth_context.as_ref();
+         let target_provider = &self.provider;
++        let forward_auth =
++            self.app_state.config().server.forward_client_authorization;
+         {
+             let h = req.headers_mut();
+             h.remove(http::header::HOST);
+-            h.remove(http::header::AUTHORIZATION);
++            if !forward_auth {
++                h.remove(http::header::AUTHORIZATION);
++            }
+             h.remove(http::header::CONTENT_LENGTH);
+             h.remove(HeaderName::from_str("helicone-api-key").unwrap());
+             // TODO: properly support accept encoding
+@@ -245,7 +249,7 @@ impl Dispatcher {
+             );
+         }
+         let method = req.method().clone();
+-        let headers = req.headers().clone();
++        let mut headers = req.headers().clone();
+         let target_url = self.build_target_url(
+             &req_ctx,
+             target_provider,
+@@ -267,16 +271,21 @@ impl Dispatcher {
+             .request(method.clone(), target_url.clone())
+             .headers(headers.clone());
+ 
+-        let request_builder = self
+-            .client
+-            .authenticate(
+-                &self.app_state,
+-                request_builder,
+-                &req_body_bytes,
+-                auth_ctx,
+-                self.provider.clone(),
+-            )
+-            .await?;
++        // 认证头仅用于转发，不进入正文审计的请求头记录。
++        headers.remove(http::header::AUTHORIZATION);
++        let request_builder = if forward_auth {
++            request_builder
++        } else {
++            self.client
++                .authenticate(
++                    &self.app_state,
++                    request_builder,
++                    &req_body_bytes,
++                    auth_ctx,
++                    self.provider.clone(),
++                )
++                .await?
++        };
+ 
+         let metrics_for_stream = self.app_state.0.endpoint_metrics.clone();
+         if let Some(ref api_endpoint) = api_endpoint {
+diff --git a/ai-gateway/src/middleware/auth.rs b/ai-gateway/src/middleware/auth.rs
+index 385acd6..dc95885 100644
+--- a/ai-gateway/src/middleware/auth.rs
++++ b/ai-gateway/src/middleware/auth.rs
+@@ -125,9 +125,16 @@ where
+                 return Ok(request);
+             }
+             tracing::trace!("auth middleware");
++            // 审计认证与业务认证分离，不能把上游用户密钥当成审计平台密钥。
++            let auth_header =
++                if app_state.config().server.forward_client_authorization {
++                    "helicone-api-key"
++                } else {
++                    "authorization"
++                };
+             let Some(api_key) = request
+                 .headers()
+-                .get("authorization")
++                .get(auth_header)
+                 .and_then(|h| h.to_str().ok())
+             else {
+                 return Err(

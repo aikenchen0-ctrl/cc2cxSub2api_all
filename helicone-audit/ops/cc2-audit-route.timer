@@ -1,0 +1,11 @@
+[Unit]
+Description=CC2 audit route health and key refresh
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=30s
+AccuracySec=2s
+Unit=cc2-audit-route.service
+
+[Install]
+WantedBy=timers.target

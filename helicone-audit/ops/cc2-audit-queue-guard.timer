@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh CC2 audit queue admission marker
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

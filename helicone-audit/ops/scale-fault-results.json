@@ -1,0 +1,1 @@
+{"requests": 300, "peak_upstream_concurrency": 300, "business_seconds": 1.988, "first_byte_p95_seconds": 0.465, "first_byte_max_seconds": 0.547, "all_responses_match": true, "mode": "read_only_spool"}

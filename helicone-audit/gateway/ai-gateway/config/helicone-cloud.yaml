@@ -1,0 +1,19 @@
+telemetry:
+  level: "info,ai_gateway=trace"
+  format: "compact"
+  exporter: stdout
+
+helicone:
+  features: all
+
+minio:
+  bucket-name: "request-response-storage"
+
+cache-store:
+  type: redis
+
+rate-limit-store:
+  type: redis
+
+deployment-target:
+  type: cloud

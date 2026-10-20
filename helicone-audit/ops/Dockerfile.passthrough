@@ -1,0 +1,11 @@
+FROM rust:1.88-bookworm AS builder
+WORKDIR /src
+COPY . .
+ENV CARGO_BUILD_JOBS=2
+# 只获取锁文件指定的提交，避免下载 AWS SDK 的完整历史。
+RUN git init --bare /usr/local/cargo/git/db/aws-sdk-rust-f2b0d3768be5d2aa && git -C /usr/local/cargo/git/db/aws-sdk-rust-f2b0d3768be5d2aa fetch --depth 1 https://github.com/hcharlie1201/aws-sdk-rust.git b02ed2bb506efc9feb2ac44abb36637b84de9db9
+RUN cargo build --locked --release -p ai-gateway --config profile.release.lto=false --config profile.release.codegen-units=16
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /src/target/release/ai-gateway /usr/local/bin/ai-gateway
+ENTRYPOINT ["/usr/local/bin/ai-gateway"]

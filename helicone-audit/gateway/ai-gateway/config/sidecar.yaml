@@ -1,0 +1,11 @@
+routers:
+  my-router:
+    load-balance:
+      chat:
+        strategy: latency
+        providers:
+          - openai
+          - anthropic
+
+helicone:
+  features: all

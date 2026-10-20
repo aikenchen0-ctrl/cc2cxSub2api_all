@@ -1,0 +1,14 @@
+[Unit]
+Description=CC2 audit queue capacity guard
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cc2cx-audit-validation/audit_queue_worker.py --guard-only
+Nice=10
+CPUQuota=20%
+MemoryMax=128M
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/cc2cx-audit-validation/queue
+ProtectHome=true

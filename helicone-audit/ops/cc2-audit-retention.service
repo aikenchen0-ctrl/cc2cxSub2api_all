@@ -1,0 +1,10 @@
+[Unit]
+Description=CC2 audit retention policy
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cc2cx-audit-validation/audit_retention.py --apply --remove-default-ttl
+TimeoutStartSec=900
+UMask=0077
+Nice=10

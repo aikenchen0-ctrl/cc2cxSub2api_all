@@ -1,0 +1,9 @@
+[Unit]
+Description=CC2 audit route synchronization
+After=docker.service nginx.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cc2cx-audit-validation/sync_audit_route.py
+TimeoutStartSec=60
+UMask=0077

@@ -1,0 +1,11 @@
+[Unit]
+Description=CC2 hourly audit retention cleanup
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=cc2-audit-retention.service
+
+[Install]
+WantedBy=timers.target

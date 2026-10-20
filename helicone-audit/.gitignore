@@ -1,0 +1,26 @@
+# 凭据与运行时产物：不入库
+dashboard-credentials.json
+*.credentials.json
+.env
+.env.*
+!.env.example
+!.env.template
+
+# 运行时状态（不要用 *.lock，会误伤 Cargo.lock / yarn.lock）
+*.sqlite3
+retention.lock
+route-sync.lock
+queue/
+queue-test/
+dumps/
+*.dump
+
+# 日志与中间产物
+*.log
+*.tar.gz
+*.zip
+
+# 临时
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,12 @@
+server:
+  address: 127.0.0.1
+  port: 18480
+  forward-client-authorization: true
+helicone:
+  features: observability
+  base-url: http://127.0.0.1:18585
+  websocket-url: ws://127.0.0.1:18585/ws/v1/router/control-plane
+providers:
+  openai:
+    base-url: http://127.0.0.1:18481/
+    models: [gpt-4o-mini]

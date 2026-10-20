@@ -1,0 +1,3 @@
+{"case": "existing", "direct_status": 200, "proxy_status": 200, "same_body": true}
+{"case": "invalid", "direct_status": 401, "proxy_status": 401, "same_body": true}
+{"case": "missing", "direct_status": 401, "proxy_status": 401, "same_body": true}

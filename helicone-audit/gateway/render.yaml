@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ai-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter 
+    region: oregon
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080

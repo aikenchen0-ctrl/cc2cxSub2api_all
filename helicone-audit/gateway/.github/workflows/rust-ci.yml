@@ -1,0 +1,63 @@
+name: Rust CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "crates/**"
+      - "ai-gateway/src/**"
+      - "ai-gateway/stubs/**"
+      - "ai-gateway/tests/**"
+      - "ai-gateway/Cargo.toml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use nightly rustfmt
+        run: rustup component add --toolchain nightly-x86_64-unknown-linux-gnu rustfmt
+      - name: Output rustup and cargo version for educational purposes
+        run: rustup --version && echo "\n" && cargo --version
+      - name: Format
+        run: cargo +nightly fmt --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+          shared-key: "deps"
+          # To only cache runs from `main`:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: print rust version for educational purposes
+        run: cargo --version
+      - name: Clippy
+        run: cargo +stable ci-clippy
+  test:
+    runs-on: ubuntu-latest
+    env:
+      HELICONE_API_KEY: "sk-helicone-..."
+    services:
+      redis:
+        image: redis:8.0.2-alpine
+        ports:
+          - 6340:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+          shared-key: "deps"
+          # To only cache runs from `main`:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: print rust version for educational purposes
+        run: cargo --version
+      - name: Test
+        run: cargo +stable test --tests --all-features

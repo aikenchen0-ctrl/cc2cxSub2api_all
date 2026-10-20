@@ -1,0 +1,672 @@
+diff --git a/ai-gateway/src/config/server.rs b/ai-gateway/src/config/server.rs
+index 964234d..77bf4a8 100644
+--- a/ai-gateway/src/config/server.rs
++++ b/ai-gateway/src/config/server.rs
+@@ -14,6 +14,9 @@ pub struct ServerConfig {
+     pub address: IpAddr,
+     #[serde(default = "default_port")]
+     pub port: u16,
++    /// 保留客户端认证，由固定上游验证；默认关闭以兼容原有行为。
++    #[serde(default)]
++    pub forward_client_authorization: bool,
+     #[serde(default)]
+     pub tls: TlsConfig,
+     #[serde(with = "humantime_serde", default = "default_shutdown_timeout")]
+@@ -25,6 +28,7 @@ impl Default for ServerConfig {
+         Self {
+             address: default_address(),
+             port: default_port(),
++            forward_client_authorization: false,
+             tls: TlsConfig::default(),
+             shutdown_timeout: default_shutdown_timeout(),
+         }
+diff --git a/ai-gateway/src/dispatcher/openai_compatible_client.rs b/ai-gateway/src/dispatcher/openai_compatible_client.rs
+index 811a408..0c944be 100644
+--- a/ai-gateway/src/dispatcher/openai_compatible_client.rs
++++ b/ai-gateway/src/dispatcher/openai_compatible_client.rs
+@@ -31,7 +31,10 @@ impl Client {
+             .clone();
+ 
+         let mut default_headers = HeaderMap::new();
+-        if let Some(ProviderKey::Secret(key)) = provider_key {
++        // 透传模式不能用固定密钥补全缺失认证，避免匿名请求借用网关权限。
++        if let Some(ProviderKey::Secret(key)) = provider_key
++            && !app_state.config().server.forward_client_authorization
++        {
+             default_headers.insert(
+                 http::header::AUTHORIZATION,
+                 HeaderValue::from_str(&format!("Bearer {}", key.expose()))
+diff --git a/ai-gateway/src/dispatcher/service.rs b/ai-gateway/src/dispatcher/service.rs
+index e6292b4..1192fed 100644
+--- a/ai-gateway/src/dispatcher/service.rs
++++ b/ai-gateway/src/dispatcher/service.rs
+@@ -231,10 +231,103 @@ impl Dispatcher {
+ 
+         let auth_ctx = req_ctx.auth_context.as_ref();
+         let target_provider = &self.provider;
++        let forward_auth =
++            self.app_state.config().server.forward_client_authorization;
++        if forward_auth {
++            // 业务优先：只尝试获取审计名额，绝不排队；请求和响应均按原始字节流转发。
++            use futures::StreamExt;
++            const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
++            let mut audit_permit = crate::logger::service::AUDIT_SLOTS.clone().try_acquire_owned().ok();
++            if audit_permit.is_none() {
++                tracing::warn!(reason = "audit_slots_busy", "audit capture skipped; forwarding continues");
++            }
++            let expected_length = req.headers().get(http::header::CONTENT_LENGTH)
++                .and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<usize>().ok());
++            if expected_length.is_some_and(|length| length > CAPTURE_LIMIT) {
++                audit_permit = None;
++                tracing::warn!(reason = "request_capture_limit", "audit capture skipped; forwarding continues");
++            }
++            let capture_bytes = expected_length.unwrap_or(CAPTURE_LIMIT).min(CAPTURE_LIMIT);
++            let memory_permit = if audit_permit.is_some() {
++                crate::logger::service::AUDIT_BODY_BUDGET.clone()
++                    .try_acquire_many_owned(capture_bytes.div_ceil(65536).max(1) as u32).ok()
++            } else { None };
++            if memory_permit.is_none() { audit_permit = None; }
++            let capture = audit_permit.as_ref().map(|_| Arc::new(std::sync::Mutex::new((Some(bytes::BytesMut::new()), false))));
++            let target_url = self.build_target_url(&req_ctx, target_provider, extracted_path_and_query.as_str())?;
++            let method = req.method().clone();
++            let mut headers = req.headers().clone();
++            headers.remove(http::header::HOST);
++            headers.remove("helicone-api-key");
++            headers.remove(http::header::TRANSFER_ENCODING);
++            headers.remove(http::header::CONNECTION);
++            headers.remove(http::header::ACCEPT_ENCODING);
++            headers.insert(http::header::ACCEPT_ENCODING, HeaderValue::from_static("identity"));
++            let request_capture = capture.clone();
++            let stream = futures::stream::unfold(req.into_body().into_data_stream(), move |mut source| {
++                let capture = request_capture.clone();
++                async move {
++                    let next = source.next().await;
++                    if let Some(capture) = capture {
++                        // 临界区只做有界内存复制，不执行磁盘或网络操作。
++                        if let Ok(mut guard) = capture.lock() {
++                            match &next {
++                                Some(Ok(bytes)) => {
++                                    if let Some(buffer) = guard.0.as_mut() {
++                                        if buffer.len().saturating_add(bytes.len()) <= capture_bytes {
++                                            buffer.extend_from_slice(bytes);
++                                        } else { guard.0 = None; }
++                                    }
++                                }
++                                Some(Err(_)) => guard.0 = None,
++                                None => guard.1 = true,
++                            }
++                        }
++                    }
++                    next.map(|item| (item, source))
++                }
++            });
++            let upstream = self.client.as_ref().request(method, target_url.clone())
++                .headers(headers.clone()).body(reqwest::Body::wrap_stream(stream))
++                .send().await.map_err(InternalError::ReqwestError)?;
++            headers.remove(http::header::AUTHORIZATION);
++            let request_bytes = capture.and_then(|capture| {
++                let mut guard = capture.lock().ok()?;
++                let complete = guard.1 || guard.0.as_ref().is_some_and(|body| expected_length == Some(body.len()));
++                if complete { guard.0.take().map(bytes::BytesMut::freeze) } else { None }
++            });
++            let status = upstream.status();
++            let mut response_headers = upstream.headers().clone();
++            response_headers.remove(http::header::TRANSFER_ENCODING);
++            response_headers.remove(http::header::CONNECTION);
++            let response_stream = upstream.bytes_stream().map_err(|error| InternalError::ReqwestError(error).into());
++            let mut response;
++            if let (Some(permit), Some(request_bytes)) = (audit_permit, request_bytes) {
++                let id = Uuid::new_v4();
++                let (body, reader, tfft_rx) = BodyReader::wrap_stream_best_effort(response_stream);
++                response = http::Response::new(body);
++                *response.status_mut() = status;
++                *response.headers_mut() = response_headers;
++                response.headers_mut().remove(http::header::CONTENT_LENGTH);
++                response.headers_mut().insert("helicone-id", HeaderValue::from_str(&id.to_string()).expect("valid uuid"));
++                self.handle_logging(&req_ctx, start_time, start_instant, target_url, headers,
++                    request_bytes, &response, reader, tfft_rx, &mapper_ctx, router_id,
++                    id, prompt_ctx, Some(permit), memory_permit);
++            } else {
++                response = http::Response::new(crate::types::body::Body::from_stream(response_stream));
++                *response.status_mut() = status;
++                *response.headers_mut() = response_headers;
++            }
++            return Ok(response);
++        }
++        let audit_permit = None;
++        let memory_permit = None;
+         {
+             let h = req.headers_mut();
+             h.remove(http::header::HOST);
+-            h.remove(http::header::AUTHORIZATION);
++            if !forward_auth {
++                h.remove(http::header::AUTHORIZATION);
++            }
+             h.remove(http::header::CONTENT_LENGTH);
+             h.remove(HeaderName::from_str("helicone-api-key").unwrap());
+             // TODO: properly support accept encoding
+@@ -245,7 +338,7 @@ impl Dispatcher {
+             );
+         }
+         let method = req.method().clone();
+-        let headers = req.headers().clone();
++        let mut headers = req.headers().clone();
+         let target_url = self.build_target_url(
+             &req_ctx,
+             target_provider,
+@@ -254,12 +347,20 @@ impl Dispatcher {
+         // TODO: could change request type of dispatcher to
+         // http::Request<reqwest::Body>
+         // to avoid collecting the body twice
+-        let req_body_bytes = req
+-            .into_body()
++        let body = req.into_body();
++        let req_body_bytes = if forward_auth {
++            match http_body_util::Limited::new(body, 256 * 1024 * 1024).collect().await {
++                Ok(value) => value.to_bytes(),
++                Err(_) => return Ok(http::Response::builder().status(StatusCode::PAYLOAD_TOO_LARGE)
++                    .header("content-type", "application/json")
++                    .body(crate::types::body::Body::from("{\"error\":\"请求正文超过审计入口 256 MiB 上限，或读取失败\"}"))
++                    .expect("valid response")),
++            }
++        } else { body
+             .collect()
+             .await
+             .map_err(|e| InternalError::RequestBodyError(Box::new(e)))?
+-            .to_bytes();
++            .to_bytes() };
+ 
+         let request_builder = self
+             .client
+@@ -267,16 +368,21 @@ impl Dispatcher {
+             .request(method.clone(), target_url.clone())
+             .headers(headers.clone());
+ 
+-        let request_builder = self
+-            .client
+-            .authenticate(
+-                &self.app_state,
+-                request_builder,
+-                &req_body_bytes,
+-                auth_ctx,
+-                self.provider.clone(),
+-            )
+-            .await?;
++        // 认证头仅用于转发，不进入正文审计的请求头记录。
++        headers.remove(http::header::AUTHORIZATION);
++        let request_builder = if forward_auth {
++            request_builder
++        } else {
++            self.client
++                .authenticate(
++                    &self.app_state,
++                    request_builder,
++                    &req_body_bytes,
++                    auth_ctx,
++                    self.provider.clone(),
++                )
++                .await?
++        };
+ 
+         let metrics_for_stream = self.app_state.0.endpoint_metrics.clone();
+         if let Some(ref api_endpoint) = api_endpoint {
+@@ -372,6 +478,8 @@ impl Dispatcher {
+             router_id,
+             helicone_request_id,
+             prompt_ctx,
++            audit_permit,
++            memory_permit,
+         );
+ 
+         Ok(client_response)
+@@ -517,12 +625,16 @@ impl Dispatcher {
+         router_id: Option<RouterId>,
+         helicone_request_id: Uuid,
+         prompt_ctx: Option<PromptContext>,
++        audit_permit: Option<tokio::sync::OwnedSemaphorePermit>,
++        memory_permit: Option<tokio::sync::OwnedSemaphorePermit>,
+     ) {
+         let deployment_target =
+             self.app_state.config().deployment_target.clone();
+         if self.app_state.config().helicone.is_observability_enabled() {
+             if let Some(auth_ctx) = req_ctx.auth_context.clone() {
+                 let response_logger = LoggerService::builder()
++                    .audit_permit(audit_permit)
++                    .memory_permit(memory_permit)
+                     .app_state(self.app_state.clone())
+                     .auth_ctx(auth_ctx)
+                     .start_time(start_time)
+diff --git a/ai-gateway/src/error/logger.rs b/ai-gateway/src/error/logger.rs
+index 459b52b..4a3aac0 100644
+--- a/ai-gateway/src/error/logger.rs
++++ b/ai-gateway/src/error/logger.rs
+@@ -4,6 +4,10 @@ use thiserror::Error;
+ /// Logger errors
+ #[derive(Debug, Error, Display, strum::AsRefStr)]
+ pub enum LoggerError {
++    /// 审计旁路未采集完整，业务响应不受影响
++    CaptureIncomplete,
++    /// 审计临时文件操作失败：{0}
++    SpoolIo(#[from] std::io::Error),
+     /// Invalid header: {0}
+     InvalidHeaderStr(#[from] http::header::ToStrError),
+     /// Invalid log message
+diff --git a/ai-gateway/src/logger/service.rs b/ai-gateway/src/logger/service.rs
+index 5911f26..c1e4dc8 100644
+--- a/ai-gateway/src/logger/service.rs
++++ b/ai-gateway/src/logger/service.rs
+@@ -1,4 +1,4 @@
+-use std::time::Duration;
++use std::{time::Duration, sync::{Arc, LazyLock}};
+ 
+ use bytes::Bytes;
+ use chrono::{DateTime, Utc};
+@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
+ use indexmap::IndexMap;
+ use opentelemetry::KeyValue;
+ use reqwest::Client;
+-use tokio::{sync::oneshot, time::Instant};
++use tokio::{sync::{oneshot, Semaphore, OwnedSemaphorePermit}, time::Instant, io::AsyncWriteExt};
+ use typed_builder::TypedBuilder;
+ use url::Url;
+ use uuid::Uuid;
+@@ -30,6 +30,38 @@ use crate::{
+ };
+ 
+ const JAWN_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
++// 名额只限制旁路审计；获取失败时直接跳过采集，不阻塞业务转发。
++pub static AUDIT_SLOTS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(512)));
++// 每个令牌代表 64 KiB，所有请求正文合计最多预留 256 MiB。
++pub static AUDIT_BODY_BUDGET: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(4096)));
++
++struct SpoolFile(std::path::PathBuf, bool);
++impl Drop for SpoolFile {
++    fn drop(&mut self) {
++        if !self.1 {
++            let path = self.0.clone();
++            // 清理也走异步文件接口，避免故障磁盘的删除操作阻塞业务运行线程。
++            tokio::spawn(async move { let _ = tokio::fs::remove_file(path).await; });
++        }
++    }
++}
++
++// 按字节转义 JSON 字符串，UTF-8 多字节序列保持原样，不受帧边界影响。
++async fn write_json_bytes(file: &mut tokio::fs::File, bytes: &[u8]) -> Result<(), LoggerError> {
++    for chunk in bytes.chunks(65536) {
++        let mut escaped = Vec::with_capacity(chunk.len() * 2);
++        for &byte in chunk {
++            match byte {
++                b'"' => escaped.extend_from_slice(b"\\\""),
++                b'\\' => escaped.extend_from_slice(b"\\\\"),
++                0..=31 => escaped.extend_from_slice(format!("\\u{byte:04x}").as_bytes()),
++                _ => escaped.push(byte),
++            }
++        }
++        file.write_all(&escaped).await?;
++    }
++    Ok(())
++}
+ 
+ #[derive(Debug)]
+ pub struct JawnClient {
+@@ -42,6 +74,7 @@ impl JawnClient {
+             request_client: Client::builder()
+                 .tcp_nodelay(true)
+                 .connect_timeout(JAWN_CONNECT_TIMEOUT)
++                .timeout(Duration::from_secs(60))
+                 .build()
+                 .map_err(InitError::CreateReqwestClient)?,
+         })
+@@ -50,6 +83,10 @@ impl JawnClient {
+ 
+ #[derive(Debug, TypedBuilder)]
+ pub struct LoggerService {
++    #[builder(default)]
++    audit_permit: Option<OwnedSemaphorePermit>,
++    #[builder(default)]
++    memory_permit: Option<OwnedSemaphorePermit>,
+     app_state: AppState,
+     auth_ctx: AuthContext,
+     start_time: DateTime<Utc>,
+@@ -81,22 +118,79 @@ impl LoggerService {
+     #[tracing::instrument(skip_all)]
+     #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+     pub async fn log(mut self) -> Result<(), LoggerError> {
++        let _audit_permit = self.audit_permit.take();
+         tracing::trace!("logging request");
+         let tfft_future = TFFTFuture::new(self.start_instant, self.tfft_rx);
++        let req_body_len = self.request_body.len();
++        let resp_body_len;
++        let tfft_duration;
++        let mut queued_spool = None;
++        if self.app_state.config().server.forward_client_authorization {
++            let durable_root = std::env::var_os("CC2_AUDIT_SPOOL").map(std::path::PathBuf::from);
++            if let Some(root) = &durable_root {
++                if !tokio::fs::try_exists(root.join("capture-enabled")).await? {
++                    return Err(LoggerError::CaptureIncomplete);
++                }
++                let modified = tokio::fs::metadata(root.join("capture-enabled")).await?.modified()?;
++                if modified.elapsed().unwrap_or_default() > Duration::from_secs(30) {
++                    return Err(LoggerError::CaptureIncomplete);
++                }
++            }
++            let path = durable_root.as_ref().map_or_else(
++                || std::env::temp_dir().join(format!("cc2-audit-{}.json", self.request_id)),
++                |root| root.join(format!("{}.body.partial", self.request_id)));
++            let mut spool = SpoolFile(path, false);
++            let mut file = tokio::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&spool.0).await?;
++            file.write_all(b"{\"request\":\"").await?;
++            write_json_bytes(&mut file, &self.request_body).await?;
++            self.request_body = Bytes::new();
++            drop(self.memory_permit.take());
++            file.write_all(b"\",\"response\":\"").await?;
++            let collect_future = async {
++            let mut total = 0usize;
++            while let Some(frame) = self.response_body.frame().await {
++                if let Ok(bytes) = frame.expect("infallible body").into_data() {
++                    total += bytes.len();
++                    // 超大响应只撤销本条采集，消费者退出不会阻塞业务流。
++                    if total > 32 * 1024 * 1024 { return Err(LoggerError::CaptureIncomplete); }
++                    write_json_bytes(&mut file, &bytes).await?;
++                }
++            }
++            Ok::<usize, LoggerError>(total)
++            };
++            let (total, measured_tfft) = tokio::join!(collect_future, tfft_future);
++            if !self.response_body.audit_complete() {
++                return Err(LoggerError::CaptureIncomplete);
++            }
++            file.write_all(b"\"}").await?;
++            file.flush().await?;
++            if durable_root.is_some() { file.sync_all().await?; }
++            drop(file);
++            resp_body_len = total?;
++            tfft_duration = measured_tfft.unwrap_or_default();
++            if let Some(root) = durable_root {
++                let final_path = root.join(format!("{}.body", self.request_id));
++                tokio::fs::rename(&spool.0, &final_path).await?;
++                spool.0 = final_path;
++                queued_spool = Some(spool);
++            } else {
++                MinioClient::sidecar(&self.app_state.0.jawn_http_client)
++                    .log_body_file(&self.app_state, &self.auth_ctx, self.request_id, &spool.0).await?;
++            }
++        } else {
+         let collect_future = self.response_body.collect();
+-        let (response_body, tfft_duration) =
++        let (response_body, measured_tfft) =
+             tokio::join!(collect_future, tfft_future);
+         let response_body = response_body
+             .inspect_err(|_| tracing::error!("infallible errored"))
+             .expect("infallible never errors")
+             .to_bytes();
+-        let tfft_duration = tfft_duration.unwrap_or_else(|_| {
++        tfft_duration = measured_tfft.unwrap_or_else(|_| {
+             tracing::error!("Failed to get TFFT signal");
+             Duration::from_secs(0)
+         });
+         tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
+-        let req_body_len = self.request_body.len();
+-        let resp_body_len = response_body.len();
++        resp_body_len = response_body.len();
+         let s3_client = if self.app_state.config().deployment_target.is_cloud()
+         {
+             MinioClient::cloud(&self.app_state.0.minio)
+@@ -112,6 +206,7 @@ impl LoggerService {
+                 response_body,
+             )
+             .await?;
++        }
+ 
+         let model = self
+             .mapper_ctx
+@@ -175,12 +270,29 @@ impl LoggerService {
+             .delay_ms(tfft_duration.as_millis() as f64)
+             .build();
+         let log = Log::new(request_log, response_log);
+-        let log_message = LogMessage::builder()
++        let mut log_message = LogMessage::builder()
+             .authorization(self.auth_ctx.api_key.expose().to_string())
+             .helicone_meta(helicone_metadata)
+             .log(log)
+             .build();
+ 
++        if let Some(mut spool) = queued_spool {
++            // 先提交完整正文，再原子提交元数据；上传进程只读取 ready 文件。
++            // 凭证由独立上传进程从受限配置读取，持久队列不保存审计密钥。
++            log_message.authorization.clear();
++            let bytes = serde_json::to_vec(&log_message).map_err(|_| LoggerError::InvalidLogMessage)?;
++            let root = spool.0.parent().expect("spool has parent");
++            let partial = root.join(format!("{}.meta.partial", self.request_id));
++            let mut meta = tokio::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&partial).await?;
++            meta.write_all(&bytes).await?;
++            meta.sync_all().await?;
++            drop(meta);
++            tokio::fs::rename(&partial, root.join(format!("{}.ready", self.request_id))).await?;
++            spool.1 = true;
++            tokio::fs::File::open(root).await?.sync_all().await?;
++            return Ok(());
++        }
++
+         let helicone_url = self
+             .app_state
+             .config()
+diff --git a/ai-gateway/src/middleware/auth.rs b/ai-gateway/src/middleware/auth.rs
+index 385acd6..dc95885 100644
+--- a/ai-gateway/src/middleware/auth.rs
++++ b/ai-gateway/src/middleware/auth.rs
+@@ -125,9 +125,16 @@ where
+                 return Ok(request);
+             }
+             tracing::trace!("auth middleware");
++            // 审计认证与业务认证分离，不能把上游用户密钥当成审计平台密钥。
++            let auth_header =
++                if app_state.config().server.forward_client_authorization {
++                    "helicone-api-key"
++                } else {
++                    "authorization"
++                };
+             let Some(api_key) = request
+                 .headers()
+-                .get("authorization")
++                .get(auth_header)
+                 .and_then(|h| h.to_str().ok())
+             else {
+                 return Err(
+diff --git a/ai-gateway/src/store/minio.rs b/ai-gateway/src/store/minio.rs
+index 018690d..bf4db90 100644
+--- a/ai-gateway/src/store/minio.rs
++++ b/ai-gateway/src/store/minio.rs
+@@ -103,6 +103,32 @@ pub enum MinioClient<'a> {
+ }
+ 
+ impl<'a> MinioClient<'a> {
++    // 直接从磁盘流式上传，避免完整正文及 JSON 序列化副本同时驻留内存。
++    pub async fn log_body_file(&self, app_state: &AppState, auth_ctx: &AuthContext,
++        request_id: Uuid, path: &std::path::Path) -> Result<(), LoggerError> {
++        use tokio::io::AsyncReadExt;
++        let size = tokio::fs::metadata(path).await?.len();
++        let url = app_state.config().helicone.base_url.join("/v1/router/control-plane/sign-s3-url")?;
++        let signed = app_state.0.jawn_http_client.request_client.post(url)
++            .json(&SignedUrlRequest { request_id, payload_size: size as usize })
++            .bearer_auth(auth_ctx.api_key.expose()).send().await
++            .map_err(LoggerError::FailedToSendRequest)?.error_for_status().map_err(LoggerError::ResponseError)?
++            .json::<JawnResponse<SignedUrlResponse>>().await.map_err(LoggerError::ResponseError)?
++            .data().map_err(LoggerError::UnexpectedResponse)?;
++        let file = tokio::fs::File::open(path).await?;
++        let stream = futures::stream::try_unfold(file, |mut file| async move {
++            let mut bytes = vec![0u8; 65536];
++            let count = file.read(&mut bytes).await?;
++            if count == 0 { return Ok::<_, std::io::Error>(None); }
++            bytes.truncate(count);
++            Ok(Some((bytes, file)))
++        });
++        app_state.0.minio.client.put(signed.url).timeout(Duration::from_secs(120))
++            .header("content-type", "application/json").header("content-length", size)
++            .body(reqwest::Body::wrap_stream(stream)).send().await
++            .map_err(LoggerError::FailedToSendRequest)?.error_for_status().map_err(LoggerError::ResponseError)?;
++        Ok(())
++    }
+     #[must_use]
+     pub fn cloud(minio: &'a BaseMinioClient) -> Self {
+         Self::SelfSigned(minio)
+diff --git a/ai-gateway/src/types/body.rs b/ai-gateway/src/types/body.rs
+index c6e76a2..57cb139 100644
+--- a/ai-gateway/src/types/body.rs
++++ b/ai-gateway/src/types/body.rs
+@@ -1,6 +1,7 @@
+ use std::{
+     convert::Infallible,
+     pin::Pin,
++    sync::{Arc, LazyLock, atomic::{AtomicBool, Ordering}},
+     task::{Context, Poll},
+ };
+ 
+@@ -9,36 +10,49 @@ use bytes::{BufMut, Bytes, BytesMut};
+ use futures::{Stream, StreamExt};
+ use hyper::body::{Body as _, Frame, SizeHint};
+ use tokio::sync::{
+-    mpsc::{self, UnboundedReceiver},
+-    oneshot,
++    mpsc::{self, Receiver},
++    oneshot, Semaphore, OwnedSemaphorePermit,
+ };
+ 
+ use crate::error::api::ApiError;
+ 
++// 响应副本共享 128 MiB 实际字节预算，避免小帧数量触发误丢弃。
++static AUDIT_RESPONSE_BUDGET: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(128 * 1024 * 1024)));
++
++#[derive(Debug)]
++pub struct CaptureFrame {
++    data: Bytes,
++    permit: Option<OwnedSemaphorePermit>,
++}
++
+ /// Reads a stream of HTTP data frames as `Bytes` from a channel.
+ #[derive(Debug)]
+ pub struct BodyReader {
+-    rx: UnboundedReceiver<Bytes>,
++    rx: Receiver<CaptureFrame>,
++    held_permit: Option<OwnedSemaphorePermit>,
+     tfft_tx: Option<oneshot::Sender<()>>,
+     is_end_stream: bool,
+     size_hint: SizeHint,
+     append_newlines: bool,
++    capture_complete: Option<Arc<AtomicBool>>,
+ }
+ 
+ impl BodyReader {
+     #[must_use]
+     pub fn new(
+-        rx: UnboundedReceiver<Bytes>,
++        rx: Receiver<CaptureFrame>,
+         tfft_tx: oneshot::Sender<()>,
+         size_hint: SizeHint,
+         append_newlines: bool,
+     ) -> Self {
+         Self {
+             rx,
++            held_permit: None,
+             tfft_tx: Some(tfft_tx),
+             is_end_stream: false,
+             size_hint,
+             append_newlines,
++            capture_complete: None,
+         }
+     }
+ 
+@@ -48,17 +62,23 @@ impl BodyReader {
+         stream: impl Stream<Item = Result<Bytes, ApiError>> + Send + 'static,
+         append_newlines: bool,
+     ) -> (axum_core::body::Body, BodyReader, oneshot::Receiver<()>) {
+-        // unbounded channel is okay since we limit memory usage higher in the
+-        // stack by limiting concurrency and request/response body size.
+-        let (tx, rx) = mpsc::unbounded_channel();
++        // 写盘变慢时施加背压，最多排队八个数据帧，避免审计副本无限增长。
++        let (tx, rx) = mpsc::channel(8);
+         let (tfft_tx, tfft_rx) = oneshot::channel();
+-        let s = stream.map(move |b| {
++        let s = stream.then(move |b| {
++            let tx = tx.clone();
++            async move {
+             if let Ok(b) = &b {
+-                if let Err(e) = tx.send(b.clone()) {
++                let chunk_size = if append_newlines { b.len().max(1) } else { 65536 };
++                for start in (0..b.len()).step_by(chunk_size) {
++                if let Err(e) = tx.send(CaptureFrame { data: b.slice(start..(start + chunk_size).min(b.len())), permit: None }).await {
+                     tracing::error!(error = %e, "BodyReader dropped before stream ended");
++                    break;
++                }
+                 }
+             }
+             b
++            }
+         });
+         let client_response = axum_core::body::Body::from_stream(s);
+         let size_hint = client_response.size_hint();
+@@ -66,6 +86,50 @@ impl BodyReader {
+             BodyReader::new(rx, tfft_tx, size_hint, append_newlines);
+         (client_response, response_body_for_logger, tfft_rx)
+     }
++
++    pub fn audit_complete(&self) -> bool {
++        self.capture_complete.as_ref().is_none_or(|flag| flag.load(Ordering::Acquire))
++    }
++
++    // 审计仅旁路复制；队列满或消费者故障时撤销采集，业务响应永不等待审计。
++    pub fn wrap_stream_best_effort(
++        stream: impl Stream<Item = Result<Bytes, ApiError>> + Send + 'static,
++    ) -> (axum_core::body::Body, BodyReader, oneshot::Receiver<()>) {
++        let (tx, rx) = mpsc::channel(1024);
++        let (tfft_tx, tfft_rx) = oneshot::channel();
++        let complete = Arc::new(AtomicBool::new(false));
++        let marker = complete.clone();
++        let s = futures::stream::unfold((stream.boxed(), Some(tx)), move |(mut source, mut sender)| {
++            let marker = marker.clone();
++            async move {
++                match source.next().await {
++                    Some(result) => {
++                        if let Ok(bytes) = &result {
++                            for chunk in bytes.chunks(65536) {
++                                // 拷贝小片段，避免小切片持有超大上游缓冲区。
++                                let permit = AUDIT_RESPONSE_BUDGET.clone().try_acquire_many_owned(chunk.len() as u32).ok();
++                                if permit.is_none() || sender.as_ref().is_some_and(|tx| tx.try_send(CaptureFrame { data: Bytes::copy_from_slice(chunk), permit }).is_err()) {
++                                    sender = None;
++                                    tracing::warn!(reason = "response_queue_full_or_closed", "audit capture skipped; forwarding continues");
++                                    break;
++                                }
++                                if sender.is_none() { break; }
++                            }
++                        } else { sender = None; }
++                        Some((result, (source, sender)))
++                    }
++                    None => {
++                        if sender.is_some() { marker.store(true, Ordering::Release); }
++                        None
++                    }
++                }
++            }
++        });
++        let client = Body::from_stream(s);
++        let mut reader = BodyReader::new(rx, tfft_tx, SizeHint::default(), false);
++        reader.capture_complete = Some(complete);
++        (client, reader, tfft_rx)
++    }
+ }
+ 
+ impl hyper::body::Body for BodyReader {
+@@ -76,8 +140,12 @@ impl hyper::body::Body for BodyReader {
+         mut self: Pin<&mut Self>,
+         cx: &mut Context<'_>,
+     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
++        // 上一帧已被日志消费者处理，归还对应预算。
++        self.held_permit = None;
+         match Pin::new(&mut self.rx).poll_recv(cx) {
+-            Poll::Ready(Some(bytes)) => {
++            Poll::Ready(Some(frame)) => {
++                let bytes = frame.data;
++                self.held_permit = frame.permit;
+                 if let Some(tfft_tx) = self.tfft_tx.take() {
+                     if let Err(()) = tfft_tx.send(()) {
+                         tracing::error!("Failed to send TFFT signal");

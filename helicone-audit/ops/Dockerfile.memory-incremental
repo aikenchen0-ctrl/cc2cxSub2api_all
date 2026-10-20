@@ -1,0 +1,8 @@
+FROM cc2cx/audit-builder:20261007 AS builder
+WORKDIR /src
+COPY ai-gateway/src/ ai-gateway/src/
+RUN cargo build --locked --release -p ai-gateway --config profile.release.lto=false --config profile.release.codegen-units=16
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /src/target/release/ai-gateway /usr/local/bin/ai-gateway
+ENTRYPOINT ["/usr/local/bin/ai-gateway"]

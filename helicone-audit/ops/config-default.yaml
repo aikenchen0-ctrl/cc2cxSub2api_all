@@ -1,0 +1,11 @@
+server:
+  address: 127.0.0.1
+  port: 18480
+helicone:
+  features: none
+  base-url: http://127.0.0.1:18481
+  websocket-url: ws://127.0.0.1:18481
+providers:
+  openai:
+    base-url: http://127.0.0.1:18481/
+    models: [gpt-4o-mini]
