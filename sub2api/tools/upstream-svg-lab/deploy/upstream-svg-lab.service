@@ -1,0 +1,24 @@
+[Unit]
+Description=Upstream SVG comparison gallery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=svg-lab
+Group=svg-lab
+WorkingDirectory=/opt/upstream-svg-lab
+EnvironmentFile=/etc/upstream-svg-lab.env
+ExecStart=/usr/bin/node /opt/upstream-svg-lab/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=1230
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/upstream-svg-lab
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
