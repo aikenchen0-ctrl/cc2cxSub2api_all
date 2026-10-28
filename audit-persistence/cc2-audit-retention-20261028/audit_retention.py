@@ -452,6 +452,21 @@ def ledger_raw_states(ledger, organization):
     }
 
 
+def raw_state_counts(ledger, organization):
+    if not ledger_has_table(ledger, "permanent_requests"):
+        return {}
+    return {
+        row[0]: row[1]
+        for row in ledger.execute(
+            "SELECT raw_state, count(*) "
+            "FROM permanent_requests "
+            "WHERE organization=? "
+            "GROUP BY raw_state",
+            (organization,),
+        )
+    }
+
+
 def persist_permanent_ids(ledger, organization, current_ids):
     timestamp = now_utc().isoformat()
     for batch in chunks(sorted(current_ids), 500):
@@ -953,6 +968,7 @@ def main():
         stats["permanent_current"] = len(current_permanent)
         stats["permanent_ledger"] = len(ledger_permanent)
         stats["permanent_protected"] = len(protected)
+        stats["raw_state_counts"] = raw_state_counts(ledger, organization)
         if args.apply:
             stats["ledger_backup"] = backup_ledger(ledger, started)
 
