@@ -1,0 +1,23 @@
+[Unit]
+Description=CC2 asynchronous audit upload worker
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=AUDIT_RETENTION_DAYS=2
+ExecStart=/usr/bin/python3 /opt/cc2cx-audit-validation/audit_queue_worker.py
+Restart=on-failure
+RestartSec=5
+Nice=10
+CPUQuota=100%
+MemoryMax=384M
+IOWeight=10
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/cc2cx-audit-validation/queue
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

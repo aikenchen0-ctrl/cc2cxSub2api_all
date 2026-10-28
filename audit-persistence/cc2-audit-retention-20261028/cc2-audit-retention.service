@@ -1,0 +1,14 @@
+[Unit]
+Description=CC2 audit persistence and retention policy
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=AUDIT_RETENTION_DAYS=2
+Environment=AUDIT_RAW_RETENTION_DAYS=2
+ExecStart=/usr/bin/python3 /opt/cc2cx-audit-validation/audit_retention.py --apply --mode all --max-expired 200 --max-raw 2000
+TimeoutStartSec=1800
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
