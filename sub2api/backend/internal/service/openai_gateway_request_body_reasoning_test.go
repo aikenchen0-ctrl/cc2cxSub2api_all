@@ -140,7 +140,7 @@ func TestTrimOpenAIEncryptedReasoningItems_Compaction(t *testing.T) {
 	}
 }
 
-func TestSanitizeOpenAICrossModeFailoverReasoning_DropsWholeEncryptedItem(t *testing.T) {
+func TestSanitizeOpenAICrossModeFailoverReasoning_KeepsPortableSummary(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.1","input":[` +
 		`{"type":"message","role":"user","content":"hi"},` +
 		`{"type":"reasoning","id":"rs_kiro_1","encrypted_content":"ENC","summary":[{"type":"summary_text","text":"t"}]},` +
@@ -150,12 +150,13 @@ func TestSanitizeOpenAICrossModeFailoverReasoning_DropsWholeEncryptedItem(t *tes
 	sanitized, changed, err := SanitizeOpenAICrossModeFailoverReasoning(body)
 	require.NoError(t, err)
 	require.True(t, changed)
-	// The whole reasoning item is gone — id and summary go with encrypted_content,
-	// unlike trimOpenAIEncryptedReasoningItems which keeps the skeleton.
-	require.NotContains(t, string(sanitized), "reasoning")
+	// Provider ciphertext and reasoning id cannot move, but the visible summary is
+	// portable context and must survive the cross-mode switch.
+	require.Contains(t, string(sanitized), "reasoning")
 	require.NotContains(t, string(sanitized), "rs_kiro_1")
-	require.NotContains(t, string(sanitized), "summary_text")
-	require.Equal(t, int64(2), gjson.GetBytes(sanitized, "input.#").Int())
+	require.NotContains(t, string(sanitized), "encrypted_content")
+	require.Contains(t, string(sanitized), "summary_text")
+	require.Equal(t, int64(3), gjson.GetBytes(sanitized, "input.#").Int())
 }
 
 func TestSanitizeOpenAICrossModeFailoverReasoning_NoEncryptedIsNoop(t *testing.T) {
@@ -212,15 +213,36 @@ func TestNormalizeOpenAIAPIKeyStoreFalseReasoningReplay(t *testing.T) {
 	normalized, changed, err := normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body, false)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, int64(3), gjson.GetBytes(normalized, "input.#").Int())
+	require.Equal(t, int64(4), gjson.GetBytes(normalized, "input.#").Int())
 	require.Equal(t, "reasoning", gjson.GetBytes(normalized, "input.0.type").String())
 	require.False(t, gjson.GetBytes(normalized, "input.0.id").Exists())
 	require.False(t, gjson.GetBytes(normalized, "input.0.call_id").Exists())
 	require.Equal(t, "cipher", gjson.GetBytes(normalized, "input.0.encrypted_content").String())
 	require.True(t, gjson.GetBytes(normalized, "input.0.summary").IsArray())
 	require.Equal(t, "9007199254740993", gjson.GetBytes(normalized, "input.0.opaque").Raw)
-	require.Equal(t, "msg_keep", gjson.GetBytes(normalized, "input.1.id").String())
-	require.Equal(t, "message", gjson.GetBytes(normalized, "input.2.type").String())
+	// A summary-only reasoning item has no replayable ciphertext, but its visible
+	// summary remains useful context; only the server id is stripped.
+	require.Equal(t, "reasoning", gjson.GetBytes(normalized, "input.1.type").String())
+	require.False(t, gjson.GetBytes(normalized, "input.1.id").Exists())
+	require.Equal(t, "drop", gjson.GetBytes(normalized, "input.1.summary.0.text").String())
+	require.Equal(t, "msg_keep", gjson.GetBytes(normalized, "input.2.id").String())
+	require.Equal(t, "message", gjson.GetBytes(normalized, "input.3.type").String())
+}
+
+func TestNormalizeOpenAIAPIKeyStoreFalseReasoningReplay_DecodedFallbackKeepsSummary(t *testing.T) {
+	// Duplicate keys force the decoded fallback path.
+	body := []byte(`{"store":false,"input":[` +
+		`{"type":"reasoning","id":"rs_server_only","summary":[{"type":"summary_text","text":"keep me"}],"duplicate":1,"duplicate":2},` +
+		`{"type":"message","role":"user","content":"continue"}` +
+		`]}`)
+
+	normalized, changed, err := normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, int64(2), gjson.GetBytes(normalized, "input.#").Int())
+	require.Equal(t, "reasoning", gjson.GetBytes(normalized, "input.0.type").String())
+	require.False(t, gjson.GetBytes(normalized, "input.0.id").Exists())
+	require.Equal(t, "keep me", gjson.GetBytes(normalized, "input.0.summary.0.text").String())
 }
 
 func TestNormalizeOpenAIAPIKeyStoreFalseReasoningReplayRequiresExplicitStoreFalse(t *testing.T) {

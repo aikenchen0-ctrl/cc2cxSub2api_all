@@ -40,7 +40,7 @@ const recommendation = computed(() => recommendDownload())
           </div>
           <a
             :href="recommendation.url"
-            class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary-400 px-4 py-2 text-sm font-medium text-accent-950 transition hover:bg-primary-300 dark:bg-primary-400 dark:text-dark-950 dark:hover:bg-primary-300"
             target="_blank"
             rel="noopener noreferrer"
           >

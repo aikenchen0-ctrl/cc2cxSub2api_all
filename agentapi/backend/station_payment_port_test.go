@@ -131,6 +131,9 @@ func TestPaymentPortEarlyWebhookReplayAndCrossTenantIsolation(t *testing.T) {
 	if err = server.store.SaveStationPaymentSettings("agent-test", settings); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = server.store.db.Exec(`UPDATE station_payment_settings SET balance_recharge_multiplier=1.25 WHERE agent_id=?`, "agent-test"); err != nil {
+		t.Fatal(err)
+	}
 	_, err = server.store.CreateStationProvider("agent-test", StationPaymentProvider{ProviderKey: "easypay", Name: "Mine", Enabled: true, PaymentMode: "qrcode", SupportedTypes: []string{"alipay"}, Config: map[string]string{"pid": "1001", "pkey": "mine-secret", "apiBase": gateway.URL}})
 	if err != nil {
 		t.Fatal(err)

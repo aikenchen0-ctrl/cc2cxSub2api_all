@@ -99,7 +99,7 @@ func TestPaymentCheckoutUsesSessionIdentityAndMainSiteLedger(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
 				"methods":    map[string]any{"alipay": map[string]any{"currency": "CNY", "display_name": "支付宝", "single_min": 10, "single_max": 1000, "fee_rate": 2, "available": true, "provider_secret": "must-not-leak"}},
 				"global_min": 10, "global_max": 1000, "plans": []any{}, "balance_disabled": false,
-				"balance_recharge_multiplier": 1, "subscription_usd_to_cny_rate": 7.2, "recharge_fee_rate": 2,
+				"subscription_usd_to_cny_rate": 7.2, "recharge_fee_rate": 2,
 				"help_text": "help", "help_image_url": "", "stripe_publishable_key": "pk_test_public",
 				"alipay_force_qrcode": false, "alipay_mobile_precreate_deep_link": false,
 				"admin_key": "must-not-leak",

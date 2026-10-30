@@ -7,8 +7,58 @@ describe('instance branding', () => {
     vi.restoreAllMocks()
     document.head.querySelectorAll('link[rel~="icon"]').forEach((item) => item.remove())
     document.title = ''
+    applyPageTitle('')
     applyBranding('AgentAPI', '/logo.svg')
     applyHomeSettings({})
+  })
+
+  it('falls back to the session-bound tenant when public settings cannot resolve a shared host', async () => {
+    vi.spyOn(agentAPI, 'getPublicSettings').mockRejectedValue({ status: 421, message: 'tenant not found' })
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+      agent: {
+        agent_id: 'agent-a',
+        domain: '',
+        name: '内部标识',
+        site_name: '会话站点',
+        site_logo: '/session.svg',
+        doc_url: 'https://docs.session.example.com/',
+        contact_info: 'session@example.com',
+        site_subtitle: '会话副标题',
+        compact_home_enabled: true,
+        home_content: '<h1>会话首页</h1>',
+        status: 'active',
+        billing_mode: 'user_upstream',
+        main_balance_cents: 0,
+        billing_status: 'ok',
+        wallet_available_cents: 0,
+        wallet_allocated_cents: 0,
+      },
+      authenticated: true,
+      is_agent_admin: true,
+    })
+
+    applyPageTitle('系统设置')
+    await loadBranding()
+
+    expect(siteName.value).toBe('会话站点')
+    expect(siteLogo.value).toBe('/session.svg')
+    expect(siteDocURL.value).toBe('https://docs.session.example.com/')
+    expect(siteContactInfo.value).toBe('session@example.com')
+    expect(siteSubtitle.value).toBe('会话副标题')
+    expect(compactHomeEnabled.value).toBe(true)
+    expect(homeContent.value).toBe('<h1>会话首页</h1>')
+    expect(document.title).toBe('系统设置 · 会话站点')
+  })
+
+  it('keeps the safe default branding when neither public settings nor tenant context resolves', async () => {
+    applyBranding('旧站点', '/old.svg')
+    vi.spyOn(agentAPI, 'getPublicSettings').mockRejectedValue({ status: 421, message: 'tenant not found' })
+    vi.spyOn(agentAPI, 'getContext').mockRejectedValue({ status: 421, message: 'tenant not found' })
+
+    await loadBranding()
+
+    expect(siteName.value).toBe('AgentAPI')
+    expect(siteLogo.value).toBe('/logo.svg')
   })
 
   it('loads the current instance title and favicon from same-origin settings', async () => {

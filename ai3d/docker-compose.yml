@@ -17,7 +17,9 @@ services:
       SUB2API_RELAY_BASE_URL: ${SUB2API_RELAY_BASE_URL:-http://sub2api:8080/v1}
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET:?SUB2API_SSO_SECRET is required}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL:?SUB2API_APP_CREDENTIAL is required}
-      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-5.5}
+      # Managed text/vision model. gpt-5.5 stopped being schedulable upstream
+      # (429/403/502), so the managed default follows the other satellites.
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-gpt-6-astra}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       AI3D_SSO_CALLBACK_URL: ${AI3D_SSO_CALLBACK_URL:-http://localhost:5174/api/auth/sso/callback}
       AI3D_AUTH_DB: ${AI3D_AUTH_DB:-.auth/sessions.json}

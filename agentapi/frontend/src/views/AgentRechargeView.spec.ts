@@ -48,7 +48,6 @@ const checkout: AgentCheckoutInfo = {
     price: 20, currency: 'USD', validity_days: 1, validity_unit: 'month', features: ['高并发'], product_name: 'Pro',
   }],
   balance_disabled: false,
-  balance_recharge_multiplier: 1,
   subscription_usd_to_cny_rate: 7.2,
   recharge_fee_rate: 2,
   help_text: '支付帮助',
@@ -295,6 +294,21 @@ describe('AgentRechargeView', () => {
 
     expect(wrapper.get('[role="alert"]').text()).toContain('加载支付配置失败')
     expect(wrapper.text()).toContain('支付配置暂不可用')
+    wrapper.unmount()
+  })
+
+  it('explains when the station owner has not opened online charging', async () => {
+    vi.mocked(agentAPI.payment.checkoutInfo).mockResolvedValueOnce({
+      ...checkout,
+      methods: {},
+      plans: [],
+      balance_disabled: true,
+      charging_enabled: false,
+    })
+    const { wrapper } = await mountView()
+
+    expect(wrapper.text()).toContain('站长尚未开启在线收款')
+    expect(wrapper.text()).not.toContain('当前没有可用支付方式')
     wrapper.unmount()
   })
 

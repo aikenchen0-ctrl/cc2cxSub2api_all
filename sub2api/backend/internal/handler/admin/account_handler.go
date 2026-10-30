@@ -68,11 +68,21 @@ type AccountHandler struct {
 	modelRefreshJobs        *accountModelRefreshJobStore
 	upstreamAuditJobs       *upstreamAuditJobStore
 	cfg                     *config.Config
+	// modelCatalogSync overrides the live upstream model-list fetch used by the
+	// bulk "refresh models" job. Production leaves it nil so the job reuses the
+	// same AccountTestService path as the editor's "sync upstream models" button.
+	modelCatalogSync func(context.Context, *service.Account) (*service.UpstreamModelCatalog, error)
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
 func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamBillingProbeService) {
 	h.upstreamBillingProbe = probe
+}
+
+// SetModelCatalogSync overrides the live upstream model-list fetch. It exists for
+// tests and for deployments that inject an alternative catalog source.
+func (h *AccountHandler) SetModelCatalogSync(sync func(context.Context, *service.Account) (*service.UpstreamModelCatalog, error)) {
+	h.modelCatalogSync = sync
 }
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {

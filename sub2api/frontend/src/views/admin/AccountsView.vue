@@ -500,7 +500,8 @@
             completed: modelRefreshJob.completed,
             total: modelRefreshJob.total,
             succeeded: modelRefreshJob.succeeded,
-            failed: modelRefreshJob.failed
+            failed: modelRefreshJob.failed,
+            skipped: modelRefreshJob.skipped
           }) }}
         </div>
         <div class="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
@@ -517,7 +518,7 @@
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ item.account_name }}</div>
               <div class="truncate text-xs text-gray-500 dark:text-gray-400">
-                {{ item.upstream_url || t('admin.accounts.refreshModelsUnknownUpstream') }}
+                {{ item.message || item.upstream_url || t('admin.accounts.refreshModelsUnknownUpstream') }}
               </div>
             </div>
             <span class="shrink-0 text-sm font-medium" :class="modelRefreshStatusClass(item.status)">
@@ -2589,15 +2590,17 @@ const modelRefreshStatusLabel = (status: AccountModelRefreshStatus): string => {
     pending: 'admin.accounts.refreshModelsPending',
     refreshing: 'admin.accounts.refreshModelsRefreshing',
     success: 'admin.accounts.refreshModelsSuccess',
-    failed: 'admin.accounts.refreshModelsFailed'
+    failed: 'admin.accounts.refreshModelsFailed',
+    skipped: 'admin.accounts.refreshModelsSkipped'
   }
   return t(keys[status])
 }
 
-const modelRefreshStatusIcon = (status: AccountModelRefreshStatus): 'clock' | 'refresh' | 'checkCircle' | 'xCircle' => {
+const modelRefreshStatusIcon = (status: AccountModelRefreshStatus): 'clock' | 'refresh' | 'checkCircle' | 'xCircle' | 'ban' => {
   if (status === 'refreshing') return 'refresh'
   if (status === 'success') return 'checkCircle'
   if (status === 'failed') return 'xCircle'
+  if (status === 'skipped') return 'ban'
   return 'clock'
 }
 
@@ -2605,6 +2608,7 @@ const modelRefreshStatusClass = (status: AccountModelRefreshStatus): string => {
   if (status === 'refreshing') return 'text-blue-600 dark:text-blue-300'
   if (status === 'success') return 'text-emerald-600 dark:text-emerald-300'
   if (status === 'failed') return 'text-rose-600 dark:text-rose-300'
+  if (status === 'skipped') return 'text-amber-600 dark:text-amber-300'
   return 'text-gray-400 dark:text-gray-500'
 }
 

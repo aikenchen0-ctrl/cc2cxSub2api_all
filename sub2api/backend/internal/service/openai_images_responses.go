@@ -1018,6 +1018,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		Detail:             upstreamDetail,
 	})
 	if shouldFailover {
+		applyMediaSameAccountRetryPolicy(account, failoverErr, !shouldDisable)
 		return nil, failoverErr
 	}
 
@@ -1374,11 +1375,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		// 由 handler 自然换账号 failover（switchCount 上限保护），既提高成功率又不无谓
 		// 消耗其它账号配额。
 		setOpsUpstreamError(c, http.StatusBadGateway, "upstream did not return image output", summarizeOpenAIImagesNoOutputBody(body))
-		return OpenAIUsage{}, 0, nil, &UpstreamFailoverError{
-			StatusCode:             http.StatusBadGateway,
-			ResponseBody:           body,
-			RetryableOnSameAccount: true,
-		}
+		return OpenAIUsage{}, 0, nil, newMediaEmptyOutputFailoverError(http.StatusBadGateway, body)
 	}
 	if strings.TrimSpace(firstMeta.Model) == "" {
 		firstMeta.Model = strings.TrimSpace(fallbackModel)
@@ -1862,20 +1859,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
-		safeErr := sanitizeUpstreamErrorMessage(err.Error())
-		setOpsUpstreamError(c, 0, safeErr, "")
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			ProxyID:            opsUpstreamProxyID(account),
-			ProxyName:          opsUpstreamProxyName(account),
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: 0,
-			UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
-			Kind:               "request_error",
-			Message:            safeErr,
-		})
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+		return nil, s.handleOpenAIUpstreamTransportError(upstreamCtx, c, account, err, false)
 	}
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
@@ -2100,7 +2084,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthResponseError(
 		}
 		responseBody := []byte(fmt.Sprintf(`{"error":{"type":"upstream_error","code":%q,"message":%q}}`, code, message))
 		shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, statusCode, headers, responseBody, requestedModel)
-		return s.newOpenAIAccountFailoverError(
+		failoverErr := s.newOpenAIAccountFailoverError(
 			account,
 			statusCode,
 			headers,
@@ -2109,6 +2093,8 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthResponseError(
 			shouldDisable,
 			!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode),
 		)
+		applyMediaSameAccountRetryPolicy(account, failoverErr, !shouldDisable)
+		return failoverErr
 	}
 	var upstreamErr *OpenAIImagesUpstreamError
 	if !errors.As(err, &upstreamErr) {
@@ -2173,7 +2159,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthResponseError(
 		return err
 	}
 	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, upstreamErr.StatusCode, headers, responseBody, requestedModel)
-	return s.newOpenAIAccountFailoverError(
+	failoverErr := s.newOpenAIAccountFailoverError(
 		account,
 		upstreamErr.StatusCode,
 		headers,
@@ -2182,4 +2168,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthResponseError(
 		shouldDisable,
 		!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(upstreamErr.StatusCode),
 	)
+	applyMediaSameAccountRetryPolicy(account, failoverErr, !shouldDisable)
+	return failoverErr
 }

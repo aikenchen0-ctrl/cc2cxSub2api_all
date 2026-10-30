@@ -19,6 +19,7 @@ import {
   paymentFee,
   paymentCurrencyDigits,
   shouldOpenPaymentWindow,
+  openPaymentTab,
 } from '@/agent/paymentFlow'
 import {
   classifyWechatPaymentResult,
@@ -76,6 +77,7 @@ const feeAmount = computed(() => currentBaseAmount.value > 0
   : 0)
 const totalAmount = computed(() => currentBaseAmount.value + feeAmount.value)
 const hasBalance = computed(() => Boolean(checkout.value && !checkout.value.balance_disabled))
+const chargingDisabled = computed(() => checkout.value?.charging_enabled === false)
 const hasSubscriptions = computed(() => (checkout.value?.plans.length || 0) > 0)
 const safePayURL = computed(() => safeExternalURL(payment.value?.pay_url))
 const paymentPending = computed(() => Boolean(payment.value?.out_trade_no))
@@ -119,9 +121,9 @@ function methodLabel(type: string, displayName?: string): string {
 }
 
 function methodTone(type: string): string {
-  if (type.startsWith('alipay')) return 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300'
+  if (type.startsWith('alipay')) return 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
   if (type.startsWith('wxpay')) return 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-  if (type === 'stripe') return 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+  if (type === 'stripe') return 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
   return 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
 }
 
@@ -292,9 +294,7 @@ async function submit(forceResume = false): Promise<void> {
         saveRecovery(result)
       }
       if (payURL && shouldOpenPaymentWindow(result, isMobile, forceQR, mobilePrecreate)) {
-        const popup = window.open(payURL, 'agentapiPayment', 'width=520,height=720')
-        if (popup) popup.opener = null
-        else window.location.assign(payURL)
+        if (!openPaymentTab(payURL)) window.location.assign(payURL)
       }
       await router.push({
         path: '/payment/qrcode',
@@ -307,8 +307,7 @@ async function submit(forceResume = false): Promise<void> {
     startPolling()
     const payURL = safeExternalURL(result.pay_url)
     if (!result.qr_code && payURL) {
-      const popup = window.open(payURL, 'agentapiPayment', 'width=520,height=720,noopener,noreferrer')
-      if (!popup) window.location.assign(payURL)
+      if (!openPaymentTab(payURL)) window.location.assign(payURL)
     }
   } catch (reason) {
     error.value = errorMessage(reason, '创建支付订单失败，请稍后重试。')
@@ -468,9 +467,9 @@ onBeforeUnmount(stopPolling)
         <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500 dark:text-dark-400">付款进入本站站长配置的渠道。支付确认后，额度记入你在本站的账户。</p>
       </div>
       <div class="flex items-center gap-3">
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
-          <p class="text-[11px] text-emerald-700/70 dark:text-emerald-300/70">可用余额</p>
-          <p class="text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ balance || '暂不可用' }}</p>
+        <div class="rounded-xl border border-primary-200 bg-primary-50 px-4 py-2 text-right dark:border-primary-500/25 dark:bg-primary-500/10">
+          <p class="text-[11px] text-primary-700/70 dark:text-primary-300/70">站内可用余额</p>
+          <p class="text-lg font-bold text-primary-700 dark:text-primary-300">{{ balance || '暂不可用' }}</p>
         </div>
         <button class="btn btn-secondary" type="button" :disabled="loading" aria-label="刷新支付配置" @click="load">
           <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
@@ -507,7 +506,7 @@ onBeforeUnmount(stopPolling)
               <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700"><p class="text-xs text-gray-400">应付金额</p><p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ formatMoney(payment.pay_amount, payment.currency || currency) }}</p></div>
               <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700"><p class="text-xs text-gray-400">订单号</p><p class="mt-1 break-all font-mono text-sm font-semibold text-gray-800 dark:text-dark-100">{{ payment.out_trade_no || payment.order_id }}</p></div>
             </div>
-            <div class="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">支付完成后页面会自动确认订单。你也可以点击“我已完成支付”立即验单；到账结果以订单状态为准。</div>
+            <div class="rounded-xl bg-primary-50 p-4 text-sm leading-6 text-primary-800 dark:bg-primary-500/10 dark:text-primary-200">支付完成后页面会自动确认订单。你也可以点击“我已完成支付”立即验单；到账结果以订单状态为准。</div>
             <div class="flex flex-wrap gap-3">
               <button class="btn btn-primary" type="button" :disabled="verifying || !paymentPending" @click="verifyPayment(true)"><Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在确认…' : '我已完成支付' }}</button>
               <button class="btn btn-secondary" type="button" @click="resetPayment">返回重新选择</button>
@@ -536,7 +535,8 @@ onBeforeUnmount(stopPolling)
                 </AgentInput>
               </div>
               <p v-if="amountError" class="mt-2 text-sm text-red-600 dark:text-red-300">{{ amountError }}</p>
-              <p v-else class="mt-2 text-xs text-gray-400">充值倍率：{{ checkout.balance_recharge_multiplier || 1 }}×；最终余额由订单到账结果决定。</p>
+              <p v-else class="mt-2 text-xs text-gray-400">充值金额全额入账；支付手续费按所选渠道另计。</p>
+              <p class="mt-1 text-xs text-gray-400">模型计费倍率：{{ checkout.model_rate_multiplier || 1 }}×；实际扣费以主站用量和本站结算记录为准。</p>
             </template>
 
             <template v-else-if="activeTab === 'subscription'">
@@ -558,6 +558,7 @@ onBeforeUnmount(stopPolling)
                   <Icon :name="methodIcon(type)" size="lg" class="shrink-0" /><span class="min-w-0"><span class="block truncate text-sm font-semibold">{{ methodLabel(type, item.display_name) }}</span><span v-if="item.fee_rate > 0" class="mt-1 block text-[11px] opacity-70">手续费 {{ item.fee_rate }}%</span></span>
                 </button>
               </div>
+              <p v-else-if="chargingDisabled" class="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">站长尚未开启在线收款，暂不可充值。请联系站长。</p>
               <p v-else class="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">当前没有可用支付方式。</p>
             </div>
           </section>

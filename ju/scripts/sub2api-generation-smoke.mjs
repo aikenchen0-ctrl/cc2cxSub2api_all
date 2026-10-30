@@ -56,7 +56,7 @@ if (inspectOnly) {
 }
 const catalog = await json("/api/model-catalog");
 const channel = catalog.channels.find((item) => item.id === "sub2api-relay");
-const models = { text: "gpt-5.5", video: "minimax_h3_b99_001" };
+const models = { text: "gpt-6-astra", video: "minimax_h3_b99_001" };
 for (const [mode, id] of Object.entries(models)) {
   assert(channel?.models.some((item) => item.modelKey === id && item.capability === mode && item.available), `Unavailable ${mode} model`);
 }

@@ -56,7 +56,7 @@ onMounted(async () => {
         </p>
       </div>
 
-      <div v-if="!checking" role="status" class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-left text-sm leading-6 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+      <div v-if="!checking" role="status" class="rounded-xl border border-primary-200 bg-primary-50 p-4 text-left text-sm leading-6 text-primary-800 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200">
         <div class="flex gap-3">
           <Icon name="shield" size="md" class="mt-0.5 shrink-0" />
           <p>浏览器只保留本站的 HttpOnly 会话；OAuth 凭据、应用凭据、管理员 Key、SuperKey 与用户令牌都不会进入前端。</p>

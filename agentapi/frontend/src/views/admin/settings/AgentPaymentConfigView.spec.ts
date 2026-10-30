@@ -18,7 +18,7 @@ const enabledOnly = [
   '最低金额',
   '最高金额',
   '每日限额',
-  '余额充值倍率',
+  '模型计费倍率',
   '订阅 CNY 换算汇率',
   '充值手续费率',
   '订单超时时间',
@@ -44,7 +44,7 @@ function disabledSettings(): StationBillingSettings {
     max_pending_orders: 3,
     enabled_payment_types: [],
     balance_disabled: false,
-    balance_recharge_multiplier: 1,
+    model_rate_multiplier: 1,
     subscription_usd_to_cny_rate: 0,
     recharge_fee_rate: 0,
     load_balance_strategy: 'round-robin',
@@ -153,6 +153,44 @@ describe('支付配置', () => {
     expect(wrapper.text()).not.toContain('Webhook 密钥')
     expect(wrapper.text()).not.toContain('收银台地址')
     expect(wrapper.text()).not.toContain('checkout_url')
+    wrapper.unmount()
+  })
+
+  it('saves the payment master switch immediately and offers activation after a provider is enabled', async () => {
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+      agent: {
+        agent_id: 'agent-a', domain: 'a.example', name: 'A', site_name: 'A', status: 'active',
+        billing_mode: 'user_upstream', main_balance_cents: 0, billing_status: 'ok', wallet_available_cents: 0, wallet_allocated_cents: 0,
+      },
+      authenticated: true,
+      is_agent_admin: true,
+    } as Awaited<ReturnType<typeof agentAPI.getContext>>)
+    vi.spyOn(agentAPI.billing, 'settings').mockResolvedValue({
+      ...disabledSettings(),
+      enabled_payment_types: ['alipay'],
+    })
+    const alipayProvider = { ...provider(), provider_key: 'alipay', name: '本站支付宝', supported_types: ['alipay'] }
+    vi.spyOn(agentAPI.billing, 'providers').mockResolvedValue({ items: [alipayProvider] })
+    const save = vi.spyOn(agentAPI.billing, 'saveSettings').mockImplementation(async payload => payload)
+    vi.spyOn(agentAPI.billing, 'updateProvider').mockResolvedValue(provider())
+
+    const wrapper = mount(AgentPaymentConfigView, {
+      global: { stubs: { Teleport: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('支付渠道已配置，但站点收款尚未开启')
+    const activate = wrapper.findAll('button').find(button => button.text() === '立即开启收款')
+    expect(activate).toBeDefined()
+    await activate!.trigger('click')
+    await flushPromises()
+
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({
+      enabled: true,
+      enabled_payment_types: ['alipay'],
+    }))
+    expect(wrapper.find('[role="switch"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.text()).toContain('支付已开启并保存')
     wrapper.unmount()
   })
 })

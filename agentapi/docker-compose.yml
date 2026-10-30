@@ -26,6 +26,12 @@ services:
       AGENTAPI_WEB_DIR: /app/web
       AGENTAPI_DATABASE_PATH: /app/data/agentapi.db
       AGENTAPI_SHARED_HOSTS: ${AGENTAPI_SHARED_HOSTS:-localhost,127.0.0.1}
+      # Optional exact station-domain bindings, for example
+      # agentapi.cc2.cx=agt_95b3bd2700964a009877ccfea6103451.
+      AGENTAPI_ENTRY_TENANTS: ${AGENTAPI_ENTRY_TENANTS:-}
+      # Must match Sub2API's email_verify_enabled setting. The main site is the
+      # authority that sends and consumes the one-time code.
+      AGENT_EMAIL_VERIFY_ENABLED: ${AGENT_EMAIL_VERIFY_ENABLED:-false}
       # Shared mode must win over stale values that may still exist in an old
       # backend/.env. These variables are only for an explicit one-off legacy
       # migration run and must not bind the normal Compose service to one tenant.

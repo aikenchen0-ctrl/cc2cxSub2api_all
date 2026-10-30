@@ -18,6 +18,11 @@ async function setup(availability: 'enabled' | 'disabled' | 'error' = 'enabled',
   else settings.mockResolvedValue({ registration_enabled: availability === 'enabled', email_verify_enabled: emailVerifyEnabled, site_name: 'AgentAPI', site_logo: '' })
   const pinia = createPinia()
   setActivePinia(pinia)
+  vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+    agent: { agent_id: 'agent-1', name: 'Agent', site_name: 'Agent Site', site_logo: '/logo.svg' },
+    authenticated: true,
+    is_agent_admin: false,
+  } as Awaited<ReturnType<typeof agentAPI.getContext>>)
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/register', component: AgentRegisterView },
     { path: '/email-verify', component: { template: '<div>Email verify</div>' } },

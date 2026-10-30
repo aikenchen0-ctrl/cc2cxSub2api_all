@@ -15,21 +15,21 @@ const iconClass: Record<AgentToastType, string> = {
   success: 'text-emerald-500',
   error: 'text-red-500',
   warning: 'text-amber-500',
-  info: 'text-blue-500',
+  info: 'text-primary-500',
 }
 
 const borderClass: Record<AgentToastType, string> = {
   success: 'border-emerald-500',
   error: 'border-red-500',
   warning: 'border-amber-500',
-  info: 'border-blue-500',
+  info: 'border-primary-500',
 }
 
 const progressClass: Record<AgentToastType, string> = {
   success: 'bg-emerald-500',
   error: 'bg-red-500',
   warning: 'bg-amber-500',
-  info: 'bg-blue-500',
+  info: 'bg-primary-500',
 }
 </script>
 

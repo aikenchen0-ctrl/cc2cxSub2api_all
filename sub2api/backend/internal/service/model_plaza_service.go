@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 // PlazaOfficialPricing 模型广场展示用的官方参考价（USD per token），与计费同源：
@@ -23,6 +26,8 @@ type PlazaOfficialPricing struct {
 type PlazaModel struct {
 	Name            string
 	Platform        string
+	Manufacturer    string
+	Capability      string
 	Pricing         *ChannelModelPricing
 	OfficialPricing *PlazaOfficialPricing
 	// LongContextBasis 多档时的计价基准（整单 / 仅超出部分），单档为空。
@@ -34,8 +39,8 @@ type PlazaModel struct {
 // PlazaGroup 模型广场中以分组为顶层的条目。
 //
 // 与 AvailableGroupRef 相比多了 Description 与 Models；Models 来自该分组关联渠道的
-// 支持模型（普通分组按分组平台隔离，Composite 分组展开关联渠道已配置的
-// 具体平台），与「可用渠道」页口径一致。
+// 支持模型、分组级价格卡、以及分组绑定账号的模型映射，因此无论部署使用
+// 「渠道绑定分组」还是「账号直挂分组」，广场都能列出中转站实际支持的模型。
 type PlazaGroup struct {
 	ID                 int64
 	Name               string
@@ -52,6 +57,9 @@ type PlazaGroup struct {
 	// = 档位价 × ImageRateMultiplier，不乘分组/用户专属倍率（与计费口径一致）。
 	ImageRateIndependent bool
 	ImageRateMultiplier  float64
+	// 视频独立倍率与图片独立倍率分别配置，开启时覆盖分组/用户专属倍率。
+	VideoRateIndependent bool
+	VideoRateMultiplier  float64
 	// LongContextPricingEnabled 分组是否按上下文长度应用阶梯价；关闭时模型展示的是最低档。
 	LongContextPricingEnabled bool
 	Models                    []PlazaModel
@@ -59,44 +67,63 @@ type PlazaGroup struct {
 
 // ModelPlazaService 聚合模型广场数据。
 //
-// 模型枚举来自渠道配置；token 模型的展示单价与阶梯由 BillingService 的阶梯表
-// 查询给出（与扣费走同一条解析链与计费函数），图片/按次模型沿用渠道/分组档位价。
+// 模型枚举来自三处：渠道配置、分组级价格卡、分组绑定账号的模型映射；
+// token 模型的展示单价与阶梯由 BillingService 的阶梯表查询给出（与扣费走同一条
+// 解析链与计费函数），图片/按次模型沿用渠道/分组档位价。
 type ModelPlazaService struct {
 	channelRepo    ChannelRepository
 	groupRepo      GroupRepository
 	pricingService *PricingService
 	billingService *BillingService
 	resolver       *ModelPricingResolver
+	accountRepo    AccountRepository
 }
 
 // NewModelPlazaService 创建模型广场服务。
+//
+// accountRepo 为可选参数：传入时会把「账号直挂分组」的模型映射也纳入枚举，
+// 覆盖从未配置 channel_model_pricing 的历史部署。
 func NewModelPlazaService(
 	channelRepo ChannelRepository,
 	groupRepo GroupRepository,
 	pricingService *PricingService,
 	billingService *BillingService,
 	resolver *ModelPricingResolver,
+	accountRepos ...AccountRepository,
 ) *ModelPlazaService {
+	var accountRepo AccountRepository
+	if len(accountRepos) > 0 {
+		accountRepo = accountRepos[0]
+	}
 	return &ModelPlazaService{
 		channelRepo:    channelRepo,
 		groupRepo:      groupRepo,
 		pricingService: pricingService,
 		billingService: billingService,
 		resolver:       resolver,
+		accountRepo:    accountRepo,
 	}
+}
+
+// plazaConcretePlatforms 是组合分组展开账号模型时遍历的具体平台集合，
+// 与 isConcreteRequestPlatform 的判定保持一致。
+var plazaConcretePlatforms = []string{
+	"anthropic", "openai", "gemini", "antigravity", "grok",
+	"kimi", "zhipu", "deepseek", "minimax", "opencode_go",
 }
 
 // ListGroups 返回模型广场数据：每个活跃分组附带其可用模型与定价。
 //
 // 模型枚举口径与 ListAvailable 一致（Active 渠道、SupportedModels ∪ 全局定价回落、
-// 平台隔离），仅把顶层从渠道换成分组：
+// 平台隔离），并把顶层从渠道换成分组：
 //   - 渠道按 lower(name) 排序后遍历，保证同名模型去重结果确定；
 //   - 同分组同名模型「先见者胜」，仅当已存条目无定价而新条目有定价时升级替换；
+//   - 分组级价格卡（groups.model_pricing）也是模型声明，覆盖从未配置渠道定价的部署；
+//   - 分组绑定账号的模型映射（含平台默认模型）同样纳入，覆盖账号直挂分组的历史部署；
 //   - token 模型的单价与阶梯按实收口径合成（见 ResolveContextPricingSchedule），
 //     图片计费模型的档位价按实收口径合成（见 plazaImageDisplayPricing）；
-//   - 每个模型附带官方参考价（查不到为 nil）；
-//   - 只返回 Models 非空的分组；分组按 RateMultiplier 升序（同倍率按名称），
-//     组内模型按名称排序。
+//   - 每个模型附带厂家、功能归类与官方参考价（查不到为 nil）；
+//   - 分组按 RateMultiplier 升序（同倍率按名称），组内模型按名称排序。
 //
 // 可见性过滤（专属分组）不在此层做，由 handler 按登录态裁剪。
 func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error) {
@@ -132,6 +159,8 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 			IsExclusive:               g.IsExclusive,
 			ImageRateIndependent:      g.ImageRateIndependent,
 			ImageRateMultiplier:       g.ImageRateMultiplier,
+			VideoRateIndependent:      g.VideoRateIndependent,
+			VideoRateMultiplier:       g.VideoRateMultiplier,
 			LongContextPricingEnabled: g.LongContextPricingEnabled,
 		}
 		groupEnt[g.ID] = g
@@ -144,6 +173,34 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 	}
 	// modelIdx[groupID][platform+modelName] = index into byGroup[groupID].Models
 	modelIdx := make(map[int64]map[modelKey]int, len(groups))
+	addModel := func(pg *PlazaGroup, gid int64, m SupportedModel) {
+		if pg == nil || strings.TrimSpace(m.Name) == "" {
+			return
+		}
+		if pg.Platform == PlatformComposite {
+			if !isConcreteRequestPlatform(m.Platform) {
+				return
+			}
+		} else if m.Platform != pg.Platform {
+			return
+		}
+		idx := modelIdx[gid]
+		if idx == nil {
+			idx = make(map[modelKey]int)
+			modelIdx[gid] = idx
+		}
+		key := modelKey{platform: m.Platform, name: strings.ToLower(m.Name)}
+		if at, seen := idx[key]; seen {
+			// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
+			if pg.Models[at].Pricing == nil && m.Pricing != nil {
+				pg.Models[at].Pricing = m.Pricing
+			}
+			return
+		}
+		idx[key] = len(pg.Models)
+		pg.Models = append(pg.Models, PlazaModel{Name: m.Name, Platform: m.Platform, Pricing: m.Pricing})
+	}
+
 	for i := range channels {
 		ch := &channels[i]
 		if ch.Status != StatusActive {
@@ -158,34 +215,60 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 			if !ok {
 				continue
 			}
-			idx := modelIdx[gid]
-			if idx == nil {
-				idx = make(map[modelKey]int, len(supported))
-				modelIdx[gid] = idx
-			}
 			for j := range supported {
-				m := supported[j]
-				if pg.Platform == PlatformComposite {
-					if !isConcreteRequestPlatform(m.Platform) {
+				addModel(pg, gid, supported[j])
+			}
+		}
+	}
+
+	// 分组级价格卡同样是模型声明，覆盖从未写入 channel_model_pricing 的部署。
+	for gid, pg := range byGroup {
+		g := groupEnt[gid]
+		for i := range g.ModelPricing {
+			p := g.ModelPricing[i]
+			platform := p.Platform
+			if platform == "" {
+				platform = g.Platform
+			}
+			for _, name := range p.Models {
+				if strings.Contains(name, "*") {
+					continue
+				}
+				cp := p.Clone()
+				cp.Models = []string{name}
+				addModel(pg, gid, SupportedModel{Name: name, Platform: platform, Pricing: &cp})
+			}
+		}
+	}
+
+	// 历史部署把账号直接绑定到分组。把账号的模型映射（无映射时用平台默认模型）
+	// 也纳入枚举，广场才能反映真实的调度面。
+	if s.accountRepo != nil {
+		for gid, pg := range byGroup {
+			g := groupEnt[gid]
+			platforms := []string{g.Platform}
+			if g.Platform == PlatformComposite {
+				platforms = plazaConcretePlatforms
+			}
+			accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, &gid, platforms, false)
+			if err != nil {
+				continue
+			}
+			for i := range accounts {
+				mapping := accounts[i].GetModelMapping()
+				if len(mapping) == 0 {
+					mapping = defaultPlazaModelMapping(accounts[i].Platform)
+				}
+				platform := accounts[i].Platform
+				if g.Platform != PlatformComposite {
+					platform = g.Platform
+				}
+				for name := range mapping {
+					if strings.Contains(name, "*") {
 						continue
 					}
-				} else if m.Platform != pg.Platform {
-					continue
+					addModel(pg, gid, SupportedModel{Name: name, Platform: platform, Pricing: plazaMediaPricing(name, g)})
 				}
-				key := modelKey{platform: m.Platform, name: m.Name}
-				if at, seen := idx[key]; seen {
-					// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
-					if pg.Models[at].Pricing == nil && m.Pricing != nil {
-						pg.Models[at].Pricing = m.Pricing
-					}
-					continue
-				}
-				idx[key] = len(pg.Models)
-				pg.Models = append(pg.Models, PlazaModel{
-					Name:     m.Name,
-					Platform: m.Platform,
-					Pricing:  m.Pricing,
-				})
 			}
 		}
 	}
@@ -194,6 +277,7 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 	out := make([]PlazaGroup, 0, len(order))
 	for _, gid := range order {
 		pg := byGroup[gid]
+		// 没有任何可枚举模型的分组不出现在广场：空价目卡对用户没有信息量。
 		if len(pg.Models) == 0 {
 			continue
 		}
@@ -206,6 +290,8 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 		g := groupEnt[gid]
 		for j := range pg.Models {
 			s.fillDisplayPricing(ctx, &pg.Models[j], g)
+			pg.Models[j].Manufacturer = plazaManufacturer(pg.Models[j].Name, pg.Models[j].Platform)
+			pg.Models[j].Capability = plazaCapability(pg.Models[j])
 			pg.Models[j].OfficialPricing = s.lookupOfficialPricing(ctx, pg.Models[j].Name, officialMemo)
 		}
 		out = append(out, *pg)
@@ -220,10 +306,153 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 	return out, nil
 }
 
+// plazaManufacturer 由模型名推断厂家，未命中时回退到分组平台的展示名。
+func plazaManufacturer(model, platform string) string {
+	name := strings.ToLower(model)
+	for _, provider := range []struct {
+		label   string
+		needles []string
+	}{
+		{"[OI]", []string{"gpt-", "chatgpt", "dall-e", "whisper", "text-embedding-"}},
+		{"Gemini", []string{"gemini", "imagen", "veo"}},
+		{"DeepSeek", []string{"deepseek"}},
+		{"Anthropic", []string{"claude"}},
+		{"Grok", []string{"grok"}},
+		{"Kimi", []string{"kimi", "moonshot"}},
+		{"智谱 GLM", []string{"glm-", "cogview", "cogvideo"}},
+		{"MiniMax", []string{"minimax", "abab", "hailuo"}},
+		{"阿里 Qwen", []string{"qwen", "wanx", "wan-", "qwen"}},
+		{"字节豆包", []string{"doubao", "seedance", "seedream"}},
+		{"Meta", []string{"llama"}},
+		{"Cohere", []string{"command-r", "command-a"}},
+	} {
+		for _, needle := range provider.needles {
+			if strings.Contains(name, needle) {
+				return provider.label
+			}
+		}
+	}
+	return plazaPlatformDisplayName(platform)
+}
+
+// plazaPlatformDisplayName 平台展示名，仅用于厂家推断的兜底分支。
+func plazaPlatformDisplayName(platform string) string {
+	switch platform {
+	case "anthropic":
+		return "Anthropic"
+	case "openai":
+		return "[OI]"
+	case "gemini":
+		return "Gemini"
+	case "antigravity":
+		return "Antigravity"
+	case "grok":
+		return "Grok"
+	case "kimi":
+		return "Kimi"
+	case "zhipu":
+		return "智谱 GLM"
+	case "deepseek":
+		return "DeepSeek"
+	case "minimax":
+		return "MiniMax"
+	case "opencode_go":
+		return "OpenCode"
+	}
+	return platform
+}
+
+// plazaCapability 由模型名与计费模式推断文本/图片/视频归类，供广场的功能筛选使用。
+func plazaCapability(m PlazaModel) string {
+	name := strings.ToLower(m.Name)
+	if strings.Contains(name, "video") || strings.HasPrefix(name, "sora") || strings.HasPrefix(name, "veo") ||
+		strings.Contains(name, "seedance") || strings.Contains(name, "cogvideo") || strings.Contains(name, "hailuo") {
+		return "video"
+	}
+	if strings.Contains(name, "image") || strings.Contains(name, "imagen") || strings.Contains(name, "dall-e") ||
+		strings.Contains(name, "cogview") || strings.Contains(name, "seedream") {
+		return "image"
+	}
+	switch m.PricingAsBillingMode() {
+	case BillingModeImage:
+		return "image"
+	case BillingModeVideo:
+		return "video"
+	default:
+		return "text"
+	}
+}
+
+// PricingAsBillingMode 返回模型生效的计费模式；未配置时按 token 计费。
+func (m PlazaModel) PricingAsBillingMode() BillingMode {
+	if m.Pricing == nil || m.Pricing.BillingMode == "" {
+		return BillingModeToken
+	}
+	return m.Pricing.BillingMode
+}
+
+// defaultPlazaModelMapping 账号未配置模型映射时使用的平台默认模型。
+func defaultPlazaModelMapping(platform string) map[string]string {
+	models := make(map[string]string)
+	switch platform {
+	case "openai":
+		for _, name := range openai.DefaultModelIDs() {
+			models[name] = name
+		}
+	case "grok":
+		for name, target := range xai.DefaultModelMapping() {
+			models[name] = target
+		}
+	}
+	return models
+}
+
+// plazaMediaPricing 为账号枚举出的图片/视频模型合成分组档位价。
+func plazaMediaPricing(model string, g *Group) *ChannelModelPricing {
+	if g == nil {
+		return nil
+	}
+	lower := strings.ToLower(model)
+	if strings.Contains(lower, "video") {
+		p := &ChannelModelPricing{BillingMode: BillingModeVideo}
+		for _, tier := range []struct {
+			label string
+			value *float64
+		}{
+			{"480p", g.VideoPrice480P}, {"720p", g.VideoPrice720P}, {"1080p", g.VideoPrice1080P},
+		} {
+			if tier.value != nil {
+				v := *tier.value
+				p.Intervals = append(p.Intervals, PricingInterval{TierLabel: tier.label, PerRequestPrice: &v})
+			}
+		}
+		return p
+	}
+	if strings.Contains(lower, "image") || strings.Contains(lower, "imagine") {
+		p := &ChannelModelPricing{BillingMode: BillingModeImage}
+		for _, tier := range []struct {
+			label string
+			value *float64
+		}{
+			{"1K", g.ImagePrice1K}, {"2K", g.ImagePrice2K}, {"4K", g.ImagePrice4K},
+		} {
+			if tier.value != nil {
+				v := *tier.value
+				p.Intervals = append(p.Intervals, PricingInterval{TierLabel: tier.label, PerRequestPrice: &v})
+			}
+		}
+		return p
+	}
+	return nil
+}
+
 // fillDisplayPricing 把模型的展示定价换成实收口径：
 // token 模型取计费阶梯表（单价与档位均由真实计费函数得出），
 // 图片/按次模型（或阶梯表不可用时）沿用渠道定价与分组图片档位价。
 func (s *ModelPlazaService) fillDisplayPricing(ctx context.Context, m *PlazaModel, g *Group) {
+	if groupPricing := matchGroupModelPricing(g, m.Name); groupPricing != nil {
+		m.Pricing = groupPricing
+	}
 	if s.billingService != nil && s.resolver != nil {
 		sched, err := s.billingService.ResolveContextPricingSchedule(ctx, s.resolver, ContextPricingScheduleInput{
 			Model:    m.Name,

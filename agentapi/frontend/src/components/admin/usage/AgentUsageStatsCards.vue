@@ -1,7 +1,7 @@
 <template>
   <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <div class="card flex items-center gap-3 p-4">
-      <div class="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/30">
+      <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30">
         <Icon name="document" size="md" />
       </div>
       <div>
@@ -34,12 +34,12 @@
     </div>
 
     <div class="card flex items-center gap-3 p-4">
-      <div class="rounded-lg bg-green-100 p-2 text-green-600 dark:bg-green-900/30">
+      <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
         <Icon name="dollar" size="md" />
       </div>
       <div class="min-w-0 flex-1">
         <p class="text-xs font-medium text-gray-500">已报告实际费用</p>
-        <p class="text-xl font-bold text-green-600">{{ reportedActual > 0 ? formatUSD(stats.actual_cost_usd_nanos) : '无数据' }}</p>
+        <p class="text-xl font-bold text-primary-700 dark:text-primary-300">{{ reportedActual > 0 ? formatUSD(stats.actual_cost_usd_nanos) : '无数据' }}</p>
         <p class="text-xs text-gray-400">
           标准费用 {{ stats.measured ? formatUSD(stats.standard_cost_usd_nanos) : '无数据' }}
           <span v-if="stats.missing_actual"> · {{ stats.missing_actual }} 条待报告</span>
@@ -48,7 +48,7 @@
     </div>
 
     <div class="card flex items-center gap-3 p-4">
-      <div class="rounded-lg bg-purple-100 p-2 text-purple-600 dark:bg-purple-900/30">
+      <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30">
         <Icon name="chart" size="md" />
       </div>
       <div>

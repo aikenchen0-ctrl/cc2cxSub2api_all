@@ -18,6 +18,7 @@ import (
 
 func TestSub2APIOnlineAgentUsesAllowlistedRelay(t *testing.T) {
 	svc, db := newSub2APIIntegrationTestService(t)
+	t.Setenv("SUB2API_RELAY_MODELS", "gpt-5.6-sol")
 	svc.coordinator = platform.NewCoordinatorWithRedis(nil, "agent-relay-test")
 	if err := db.AutoMigrate(&model.SystemSetting{}); err != nil {
 		t.Fatal(err)
@@ -106,7 +107,7 @@ func TestSub2APIRelayPrivateHostUsesAllowlistNotDesktopMode(t *testing.T) {
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	input := providerConfig{ChannelID: sub2APIRelayChannelID, Model: "gpt-5.6-sol"}
+	input := providerConfig{ChannelID: sub2APIRelayChannelID, Model: "gpt-6-astra"}
 	if _, err := svc.resolveProviderConfig(input); err == nil {
 		t.Fatal("desktop-only mode must reject the container relay")
 	}
@@ -118,7 +119,7 @@ func TestSub2APIRelayPrivateHostUsesAllowlistNotDesktopMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allowlisted relay must resolve: %v", err)
 	}
-	if resolved.AllowLocalChannel || resolved.Model != "gpt-5.6-sol" || resolved.ChannelID != sub2APIRelayChannelID {
+	if resolved.AllowLocalChannel || resolved.Model != "gpt-6-astra" || resolved.ChannelID != sub2APIRelayChannelID {
 		t.Fatal("relay must preserve its public model and server channel identity")
 	}
 	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "192.168.50.11")
@@ -132,7 +133,7 @@ func TestSub2APIBootstrapPersistsSyntheticLegacyPriceTier(t *testing.T) {
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.6-sol")
+	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-6-astra")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +232,7 @@ func TestSub2APIBootstrapPreservesOperatorPricing(t *testing.T) {
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-5.6-sol")
+	item, err := svc.repo.ChannelModelByKey(sub2APIRelayChannelID, "gpt-6-astra")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +322,7 @@ func TestSub2APIBootstrapRejectsInvalidConfigBeforeWriting(t *testing.T) {
 	for _, test := range []struct{ name, env, value string }{
 		{"gateway", "SUB2API_RELAY_BASE_URL", "http://sub2api:8080/api/v1"},
 		{"missing app credential", "SUB2API_APP_CREDENTIAL", ""},
-		{"ambiguous capability", "SUB2API_RELAY_IMAGE_MODELS", "models/gpt-5.6-sol"},
+		{"ambiguous capability", "SUB2API_RELAY_IMAGE_MODELS", "models/gpt-6-astra"},
 		{"empty normalized name", "SUB2API_RELAY_MODELS", "models/"},
 		{"name too long", "SUB2API_RELAY_MODELS", strings.Repeat("m", 121)},
 		{"unsupported video", "SUB2API_RELAY_VIDEO_MODELS", "indextts2-v1"},
@@ -349,7 +350,7 @@ func TestSub2APIBootstrapZeroPriceAllowsEmptyWallet(t *testing.T) {
 	if err := svc.EnsureSub2APIRelayChannel(); err != nil {
 		t.Fatal(err)
 	}
-	order, err := svc.newBillingOrder("new-sso-user", "", "sub2api-zero-price-test", sub2APIRelayChannelID, "gpt-5.6-sol", "text", "text_generation", 1, tokenBillingEstimate{})
+	order, err := svc.newBillingOrder("new-sso-user", "", "sub2api-zero-price-test", sub2APIRelayChannelID, "gpt-6-astra", "text", "text_generation", 1, tokenBillingEstimate{})
 	if err != nil {
 		t.Fatal(err)
 	}

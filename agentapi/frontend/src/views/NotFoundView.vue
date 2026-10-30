@@ -9,6 +9,6 @@ const router = useRouter()
     <p class="text-7xl font-bold text-primary-600">404</p>
     <h1 class="mt-4 text-2xl font-semibold">页面不存在</h1>
     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">找不到你要访问的 AgentAPI 页面。</p>
-    <button class="mt-6 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white" type="button" @click="router.replace('/home')">返回首页</button>
+    <button class="mt-6 rounded-lg bg-primary-400 px-4 py-2 text-sm font-medium text-accent-950 transition hover:bg-primary-300 dark:text-dark-950" type="button" @click="router.replace('/home')">返回首页</button>
   </main>
 </template>

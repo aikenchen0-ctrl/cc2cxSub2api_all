@@ -26,6 +26,10 @@
               <Icon name="eye" size="sm" />
               {{ t('common.view') }}
             </button>
+            <button v-if="canQueryOrder(row)" :disabled="orderQueryingIds.has(row.id)" @click="handleQueryOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-cyan-600 hover:bg-cyan-50 disabled:opacity-60 dark:text-cyan-400 dark:hover:bg-cyan-900/20">
+              <Icon name="refresh" size="sm" :class="orderQueryingIds.has(row.id) ? 'animate-spin' : ''" />
+              {{ t('payment.admin.queryOrder') }}
+            </button>
             <button v-if="row.status === 'PENDING'" @click="handleCancelOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
               <Icon name="x" size="sm" />
               {{ t('payment.orders.cancel') }}
@@ -94,6 +98,24 @@
             </div>
           </div>
         </div>
+        <!-- Upstream order query -->
+        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.queryOrderResult') }}</p>
+            <button :disabled="orderQueryingIds.has(selectedOrder.id)" @click="handleQueryOrder(selectedOrder)" class="btn btn-secondary">
+              <Icon name="refresh" size="sm" :class="orderQueryingIds.has(selectedOrder.id) ? 'animate-spin' : ''" />
+              {{ t('payment.admin.queryOrder') }}
+            </button>
+          </div>
+          <div v-if="selectedOrderQuery" class="mt-3 grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-800">
+            <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.providerKey') }}</p><p class="font-medium text-gray-900 dark:text-white">{{ selectedOrderQuery.provider_key }}</p></div>
+            <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.upstreamStatus') }}</p><p class="font-medium text-gray-900 dark:text-white">{{ selectedOrderQuery.upstream_status }}</p></div>
+            <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.upstreamTradeNo') }}</p><p class="break-all font-mono text-gray-900 dark:text-white">{{ selectedOrderQuery.upstream_trade_no || '-' }}</p></div>
+            <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.upstreamAmount') }}</p><p class="font-medium text-gray-900 dark:text-white">{{ selectedOrderQuery.upstream_amount.toFixed(2) }}</p></div>
+            <div class="col-span-2"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.queryRef') }}</p><p class="break-all font-mono text-gray-900 dark:text-white">{{ selectedOrderQuery.query_ref }}</p></div>
+            <div v-if="selectedOrderQuery.fulfillment_error" class="col-span-2 text-red-600 dark:text-red-400">{{ selectedOrderQuery.fulfillment_error }}</div>
+          </div>
+        </div>
         <!-- Audit Logs -->
         <div v-if="orderAuditLogs.length > 0" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.auditLogs') }}</p>
@@ -119,7 +141,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { adminPaymentAPI } from '@/api/admin/payment'
+import { adminPaymentAPI, type AdminOrderQueryResult } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatOrderDateTime } from '@/components/payment/orderUtils'
 import type { PaymentOrder } from '@/types/payment'
@@ -156,6 +178,8 @@ const refundSubmitting = ref(false)
 const refundRequireForce = ref(false)
 const refundWarning = ref('')
 const refundQueryingIds = ref(new Set<number>())
+const orderQueryingIds = ref(new Set<number>())
+const selectedOrderQuery = ref<AdminOrderQueryResult | null>(null)
 const orderAuditLogs = ref<AuditLog[]>([])
 const creditedAmountSymbol = currencySymbol('USD')
 
@@ -217,6 +241,7 @@ const orderTypeFilterOptions = computed(() => [
 
 async function showOrderDetail(order: PaymentOrder) {
   selectedOrder.value = order
+  selectedOrderQuery.value = null
   orderAuditLogs.value = []
   showDetailDialog.value = true
   try {
@@ -225,6 +250,47 @@ async function showOrderDetail(order: PaymentOrder) {
     if (data.order) selectedOrder.value = data.order as PaymentOrder
     orderAuditLogs.value = ((data.auditLogs || data.audit_logs || []) as unknown) as AuditLog[]
   } catch (_err: unknown) { /* keep cached order data */ }
+}
+
+function canQueryOrder(order: PaymentOrder): boolean {
+  return ![
+    'REFUND_REQUESTED',
+    'REFUNDING',
+    'REFUND_PENDING',
+    'PARTIALLY_REFUNDED',
+    'REFUNDED',
+    'REFUND_FAILED',
+  ].includes(order.status)
+}
+
+async function handleQueryOrder(order: PaymentOrder) {
+  orderQueryingIds.value = new Set(orderQueryingIds.value).add(order.id)
+  try {
+    const res = await adminPaymentAPI.queryOrder(order.id)
+    const result = res.data
+    if (selectedOrder.value?.id === order.id) {
+      selectedOrder.value = result.order
+      selectedOrderQuery.value = result
+    }
+    const index = orders.value.findIndex((item) => item.id === order.id)
+    if (index >= 0) orders.value[index] = result.order
+
+    if (result.fulfillment_error) {
+      appStore.showWarning(t('payment.admin.queryOrderFulfillmentFailed', { error: result.fulfillment_error }))
+    } else if (result.recovered || result.upstream_status === 'paid') {
+      appStore.showSuccess(t('payment.admin.queryOrderRecovered'))
+    } else if (result.upstream_status === 'pending') {
+      appStore.showInfo(t('payment.admin.queryOrderPending'))
+    } else {
+      appStore.showWarning(t('payment.admin.queryOrderOther', { status: result.upstream_status }))
+    }
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    const next = new Set(orderQueryingIds.value)
+    next.delete(order.id)
+    orderQueryingIds.value = next
+  }
 }
 
 async function handleCancelOrder(order: PaymentOrder) {

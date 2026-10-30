@@ -27,7 +27,7 @@ const (
 	checkPaidResultAlreadyPaid = "already_paid"
 	checkPaidResultCancelled   = "cancelled"
 
-	pendingPaymentReconcileLimit = 20
+	pendingPaymentReconcileLimit = 50
 )
 
 type checkPaidOptions struct {
@@ -150,17 +150,7 @@ func (s *PaymentService) reconcilePaid(ctx context.Context, o *dbent.PaymentOrde
 }
 
 func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.PaymentOrder, opts checkPaidOptions) string {
-	prov, err := s.getOrderProvider(ctx, o)
-	if err != nil {
-		return ""
-	}
-	queryRef := paymentOrderQueryReference(o, prov)
-	if queryRef == "" {
-		return ""
-	}
-	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
-	resp, err := prov.QueryOrder(ctx, queryRef)
-	finishProviderCall()
+	prov, queryRef, resp, err := s.queryOrderUpstream(ctx, o)
 	if err != nil {
 		slog.Warn("query upstream failed", "orderID", o.ID, "error", err)
 		return ""
@@ -180,19 +170,7 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 			}
 			resp = retriedResp
 		}
-		notificationTradeNo := o.PaymentTradeNo
-		if upstreamTradeNo := strings.TrimSpace(resp.TradeNo); paymentOrderShouldPersistUpstreamTradeNo(queryRef, upstreamTradeNo, notificationTradeNo) {
-			if _, updateErr := s.entClient.PaymentOrder.Update().
-				Where(paymentorder.IDEQ(o.ID)).
-				SetPaymentTradeNo(upstreamTradeNo).
-				Save(ctx); updateErr != nil {
-				slog.Error("persist upstream trade no during checkPaid failed", "orderID", o.ID, "tradeNo", upstreamTradeNo, "error", updateErr)
-			} else {
-				o.PaymentTradeNo = upstreamTradeNo
-			}
-			notificationTradeNo = upstreamTradeNo
-		}
-		if err := s.HandlePaymentNotification(ctx, &payment.PaymentNotification{TradeNo: notificationTradeNo, OrderID: o.OutTradeNo, Amount: resp.Amount, Status: payment.ProviderStatusSuccess, Metadata: resp.Metadata}, prov.ProviderKey()); err != nil {
+		if err := s.applyPaidQueryResult(ctx, o, prov, queryRef, resp); err != nil {
 			slog.Error("fulfillment failed during checkPaid", "orderID", o.ID, "error", err)
 			// Still return already_paid — order was paid, fulfillment can be retried
 		}
@@ -207,6 +185,53 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 		finishProviderCall()
 	}
 	return ""
+}
+
+// queryOrderUpstream loads the order's original provider instance and asks the
+// upstream for the current payment status. Both automatic reconciliation and
+// manual admin queries use this path so they cannot diverge on which provider
+// instance or query reference is used.
+func (s *PaymentService) queryOrderUpstream(ctx context.Context, o *dbent.PaymentOrder) (payment.Provider, string, *payment.QueryOrderResponse, error) {
+	prov, err := s.getOrderProvider(ctx, o)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	queryRef := paymentOrderQueryReference(o, prov)
+	if queryRef == "" {
+		return prov, "", nil, fmt.Errorf("order %d has no upstream query reference", o.ID)
+	}
+	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
+	resp, err := prov.QueryOrder(ctx, queryRef)
+	finishProviderCall()
+	if err != nil {
+		return prov, queryRef, nil, err
+	}
+	if resp == nil {
+		return prov, queryRef, nil, fmt.Errorf("order %d upstream query returned an empty response", o.ID)
+	}
+	return prov, queryRef, resp, nil
+}
+
+func (s *PaymentService) applyPaidQueryResult(ctx context.Context, o *dbent.PaymentOrder, prov payment.Provider, queryRef string, resp *payment.QueryOrderResponse) error {
+	notificationTradeNo := o.PaymentTradeNo
+	if upstreamTradeNo := strings.TrimSpace(resp.TradeNo); paymentOrderShouldPersistUpstreamTradeNo(queryRef, upstreamTradeNo, notificationTradeNo) {
+		if _, updateErr := s.entClient.PaymentOrder.Update().
+			Where(paymentorder.IDEQ(o.ID)).
+			SetPaymentTradeNo(upstreamTradeNo).
+			Save(ctx); updateErr != nil {
+			slog.Error("persist upstream trade no during checkPaid failed", "orderID", o.ID, "tradeNo", upstreamTradeNo, "error", updateErr)
+		} else {
+			o.PaymentTradeNo = upstreamTradeNo
+		}
+		notificationTradeNo = upstreamTradeNo
+	}
+	return s.HandlePaymentNotification(ctx, &payment.PaymentNotification{
+		TradeNo:  notificationTradeNo,
+		OrderID:  o.OutTradeNo,
+		Amount:   resp.Amount,
+		Status:   payment.ProviderStatusSuccess,
+		Metadata: resp.Metadata,
+	}, prov.ProviderKey())
 }
 
 func requeryPaidOrderOnce(ctx context.Context, prov payment.Provider, queryRef string) (*payment.QueryOrderResponse, bool) {
@@ -289,8 +314,9 @@ func (s *PaymentService) VerifyOrderByOutTradeNo(ctx context.Context, outTradeNo
 	if o.UserID != userID {
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
-	// Only verify orders that are still pending or recently expired
-	if o.Status == OrderStatusPending || o.Status == OrderStatusExpired {
+	// Recover any order that may still need payment confirmation. Completed and
+	// refunded orders no longer need an upstream lookup.
+	if paymentOrderAllowsActiveVerification(o.Status) {
 		result := s.reconcilePaid(ctx, o)
 		if result == checkPaidResultAlreadyPaid {
 			// Reload order to get updated status
@@ -303,8 +329,112 @@ func (s *PaymentService) VerifyOrderByOutTradeNo(ctx context.Context, outTradeNo
 	return o, nil
 }
 
-// ReconcilePendingPaymentOrders actively checks recent pending Alipay and WeChat
-// orders so missed provider notifications do not wait until order expiry to fulfill.
+// AdminOrderQueryResult exposes a single order's locally persisted state along
+// with the latest upstream status returned by an explicit admin query.
+type AdminOrderQueryResult struct {
+	Order            *dbent.PaymentOrder
+	ProviderKey      string
+	QueryRef         string
+	UpstreamStatus   string
+	UpstreamTradeNo  string
+	UpstreamAmount   float64
+	UpstreamPaidAt   string
+	AmountValid      bool
+	Recovered        bool
+	FulfillmentError string
+}
+
+// AdminQueryOrder actively queries the order's upstream provider (for example
+// EasyPay/Fuiou) and applies a paid result immediately. This lets an operator
+// recover a delayed callback without waiting for the next reconcile cycle.
+func (s *PaymentService) AdminQueryOrder(ctx context.Context, orderID int64) (*AdminOrderQueryResult, error) {
+	o, err := s.entClient.PaymentOrder.Get(ctx, orderID)
+	if err != nil {
+		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+
+	beforeStatus := o.Status
+	prov, queryRef, resp, err := s.queryOrderUpstream(ctx, o)
+	if err != nil {
+		s.writeAuditLog(ctx, o.ID, "ORDER_UPSTREAM_QUERY_FAILED", "admin", map[string]any{
+			"queryRef": queryRef,
+			"error":    err.Error(),
+		})
+		return nil, infraerrors.ServiceUnavailable("ORDER_QUERY_FAILED", "failed to query payment provider").WithCause(err)
+	}
+
+	result := &AdminOrderQueryResult{
+		ProviderKey:     prov.ProviderKey(),
+		QueryRef:        queryRef,
+		UpstreamStatus:  resp.Status,
+		UpstreamTradeNo: strings.TrimSpace(resp.TradeNo),
+		UpstreamAmount:  resp.Amount,
+		UpstreamPaidAt:  resp.PaidAt,
+		AmountValid:     isValidProviderAmount(resp.Amount),
+	}
+	if resp.Status == payment.ProviderStatusPaid && paymentOrderAllowsActiveVerification(beforeStatus) {
+		if !result.AmountValid {
+			result.FulfillmentError = "invalid paid amount from provider"
+			s.writeAuditLog(ctx, o.ID, "PAYMENT_INVALID_AMOUNT", prov.ProviderKey(), map[string]any{
+				"expected": o.PayAmount,
+				"paid":     resp.Amount,
+				"tradeNo":  resp.TradeNo,
+				"queryRef": queryRef,
+			})
+		} else if err := s.applyPaidQueryResult(ctx, o, prov, queryRef, resp); err != nil {
+			result.FulfillmentError = err.Error()
+			slog.Error("fulfillment failed during admin query", "orderID", o.ID, "error", err)
+		}
+	}
+
+	reloaded, err := s.entClient.PaymentOrder.Get(ctx, o.ID)
+	if err != nil {
+		return nil, fmt.Errorf("reload order: %w", err)
+	}
+	result.Order = reloaded
+	result.Recovered = !paymentOrderHasSettledPayment(beforeStatus) && paymentOrderHasSettledPayment(reloaded.Status)
+
+	detail := map[string]any{
+		"upstreamStatus": resp.Status,
+		"tradeNo":        result.UpstreamTradeNo,
+		"amount":         resp.Amount,
+		"queryRef":       queryRef,
+		"recovered":      result.Recovered,
+	}
+	if result.FulfillmentError != "" {
+		detail["fulfillmentError"] = result.FulfillmentError
+	}
+	s.writeAuditLog(ctx, o.ID, "ORDER_UPSTREAM_QUERY", "admin", detail)
+	return result, nil
+}
+
+func paymentOrderHasSettledPayment(status string) bool {
+	switch status {
+	case OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+func paymentOrderAllowsActiveVerification(status string) bool {
+	switch status {
+	case OrderStatusCompleted,
+		OrderStatusRefundRequested,
+		OrderStatusRefunding,
+		OrderStatusRefundPending,
+		OrderStatusPartiallyRefunded,
+		OrderStatusRefunded,
+		OrderStatusRefundFailed:
+		return false
+	default:
+		return true
+	}
+}
+
+// ReconcilePendingPaymentOrders actively checks recent pending Alipay, WeChat
+// and EasyPay/Fuiou orders so missed provider notifications do not wait until
+// order expiry to fulfill.
 func (s *PaymentService) ReconcilePendingPaymentOrders(ctx context.Context) (int, error) {
 	now := time.Now()
 	orders, err := s.entClient.PaymentOrder.Query().
@@ -320,6 +450,10 @@ func (s *PaymentService) ReconcilePendingPaymentOrders(ctx context.Context) (int
 				paymentorder.PaymentTypeHasPrefix(payment.TypeAlipay+"_"),
 				paymentorder.ProviderKeyEQ(payment.TypeAlipay),
 				paymentorder.ProviderKeyHasPrefix(payment.TypeAlipay+"_"),
+				paymentorder.PaymentTypeEQ(payment.TypeEasyPay),
+				paymentorder.PaymentTypeHasPrefix(payment.TypeEasyPay+"_"),
+				paymentorder.ProviderKeyEQ(payment.TypeEasyPay),
+				paymentorder.ProviderKeyHasPrefix(payment.TypeEasyPay+"_"),
 			),
 		).
 		Order(dbent.Asc(paymentorder.FieldCreatedAt)).

@@ -384,6 +384,9 @@ func TestRequestAgentSharedHostUsesSessionDespiteLegacyDomainMapping(t *testing.
 		if err := store.UpsertAgent(cfg); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.UpsertUser(cfg.AgentID, cfg.OwnerMainUserID, cfg.OwnerMainUserID+"@example.test", cfg.AgentName+" Owner"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := store.UpsertUser("agent-target", "owner-target", "owner-target@example.test", "Target Owner"); err != nil {
 		t.Fatal(err)
@@ -406,6 +409,50 @@ func TestRequestAgentSharedHostUsesSessionDespiteLegacyDomainMapping(t *testing.
 	resolved, err := server.requestAgent(request)
 	if err != nil || resolved.ID != "agent-target" {
 		t.Fatalf("shared host did not resolve trusted session tenant: agent=%+v err=%v", resolved, err)
+	}
+}
+
+func TestRequestAgentExplicitEntryTenantBeatsLegacyDomainClaim(t *testing.T) {
+	store, err := OpenStore(":memory:", "tenant-entry-host-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	legacy := tenantTestConfig("agent-legacy", "owner-legacy", "Legacy")
+	legacy.AgentDomain = "agentapi.example.test"
+	target := tenantTestConfig("agent-target", "owner-target", "Target")
+	for _, cfg := range []Config{legacy, target} {
+		if err := store.UpsertAgent(cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.UpsertUser("agent-legacy", "owner-legacy", "owner-legacy@example.test", "Legacy Owner"); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{
+		cfg: Config{
+			CookieName:   "agentapi_session",
+			SharedHosts:  []string{"agentapi.example.test"},
+			EntryTenants: map[string]string{"agentapi.example.test": "agent-target"},
+		},
+		store: store,
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://agentapi.example.test/api/v1/settings/public", nil)
+	resolved, err := server.requestAgent(request)
+	if err != nil || resolved.ID != "agent-target" {
+		t.Fatalf("explicit entry tenant did not win over legacy domain: agent=%+v err=%v", resolved, err)
+	}
+
+	otherSession, err := store.CreateTenantSession("agent-legacy", "owner-legacy", tenantRoleOwner, []byte(`{"id":"owner-legacy"}`), "", "", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.AddCookie(&http.Cookie{Name: server.cfg.CookieName, Value: otherSession})
+	resolved, err = server.requestAgent(request)
+	if err != nil || resolved.ID != "agent-legacy" {
+		t.Fatalf("existing session must remain authoritative: agent=%+v err=%v", resolved, err)
 	}
 }
 

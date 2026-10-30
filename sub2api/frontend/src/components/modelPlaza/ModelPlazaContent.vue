@@ -33,16 +33,19 @@
       {{ t('modelPlaza.loadFailed') }}
     </div>
     <template v-else>
-      <!-- 筛选区:平台 → 分组 → 倍率 -->
+      <!-- 筛选区:厂家 → 功能 → 分组 → 倍率 -->
       <PlazaFilterBar
         :platforms="platforms"
+        :capabilities="capabilities"
         :groups="groupOptions"
         :rates="rates"
         :platform="selectedPlatform"
+        :capability="selectedCapability"
         :group-id="selectedGroupId"
         :rate="selectedRate"
         :search="searchQuery"
         @update:platform="selectedPlatform = $event"
+        @update:capability="selectedCapability = $event"
         @update:group-id="selectedGroupId = $event"
         @update:rate="selectedRate = $event"
         @update:search="searchQuery = $event"
@@ -72,6 +75,7 @@ import PlazaFilterBar from './PlazaFilterBar.vue'
 import PlazaGroupSection from './PlazaGroupSection.vue'
 import type { ModelPlazaGroup, ModelPlazaResponse } from '@/api/modelPlaza'
 import { useAuthStore } from '@/stores/auth'
+import { platformLabel } from '@/utils/platformColors'
 
 const props = defineProps<{
   response: ModelPlazaResponse | null
@@ -86,6 +90,7 @@ const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
 const selectedPlatform = ref<string>('all')
+const selectedCapability = ref<'all' | 'text' | 'image' | 'video'>('all')
 const selectedGroupId = ref<number | 'all'>('all')
 const selectedRate = ref<number | 'all'>('all')
 const searchQuery = ref('')
@@ -103,8 +108,49 @@ function effectiveRate(g: ModelPlazaGroup): number {
   return g.user_rate_multiplier ?? g.rate_multiplier
 }
 
+const capabilities: Array<'text' | 'image' | 'video'> = ['text', 'image', 'video']
+
+/** 模型名 → 厂家；后端已给出 manufacturer，旧响应按模型名派生。 */
+function manufacturerOf(model: { name: string; platform: string; manufacturer?: string }): string {
+  if (model.manufacturer) return model.manufacturer
+  const value = model.name.toLowerCase()
+  for (const [label, needles] of [
+    ['[OI]', ['gpt-', 'chatgpt', 'dall-e', 'whisper', 'text-embedding-']],
+    ['Gemini', ['gemini', 'imagen', 'veo']],
+    ['DeepSeek', ['deepseek']],
+    ['Anthropic', ['claude']],
+    ['Grok', ['grok']],
+    ['Kimi', ['kimi', 'moonshot']],
+    ['智谱 GLM', ['glm-', 'cogview', 'cogvideo']],
+    ['MiniMax', ['minimax', 'abab', 'hailuo']],
+    ['阿里 Qwen', ['qwen', 'wanx', 'wan-']],
+    ['字节豆包', ['doubao', 'seedance', 'seedream']],
+    ['Meta', ['llama']],
+    ['Cohere', ['command-r', 'command-a']],
+  ] as const) {
+    if (needles.some((needle) => value.includes(needle))) return label
+  }
+  return platformLabel(model.platform)
+}
+
+/** 模型名与计费模式共同决定文本/图片/视频筛选；后端已给出 capability 时以它为准。 */
+function capabilityOf(model: {
+  name: string
+  capability?: 'text' | 'image' | 'video'
+  pricing: { billing_mode?: string } | null
+}): 'text' | 'image' | 'video' {
+  if (model.capability) return model.capability
+  const value = model.name.toLowerCase()
+  if (value.includes('video') || value.startsWith('sora') || value.startsWith('veo') || value.includes('seedance') || value.includes('cogvideo') || value.includes('hailuo')) return 'video'
+  if (value.includes('image') || value.includes('imagen') || value.includes('dall-e') || value.includes('cogview') || value.includes('seedream')) return 'image'
+  if (model.pricing?.billing_mode === 'image') return 'image'
+  if (model.pricing?.billing_mode === 'video') return 'video'
+  return 'text'
+}
+
+/** 数据中出现的厂家(去重排序后)，供一级筛选使用。 */
 const platforms = computed(() =>
-  [...new Set((props.response?.groups ?? []).map((g) => g.platform).filter(Boolean))].sort()
+  [...new Set((props.response?.groups ?? []).flatMap((g) => g.models.map(manufacturerOf)))].sort()
 )
 
 const groupOptions = computed(() =>
@@ -112,7 +158,9 @@ const groupOptions = computed(() =>
     id: g.id,
     name: g.name,
     platform: g.platform,
-    rate: effectiveRate(g)
+    rate: effectiveRate(g),
+    manufacturers: [...new Set(g.models.map(manufacturerOf))],
+    capabilities: [...new Set(g.models.map(capabilityOf))]
   }))
 )
 
@@ -128,10 +176,29 @@ watch(rates, (list) => {
   }
 })
 
+watch(platforms, (list) => {
+  if (selectedPlatform.value !== 'all' && !list.includes(selectedPlatform.value)) selectedPlatform.value = 'all'
+})
+
+watch(groupOptions, (list) => {
+  if (selectedGroupId.value !== 'all' && !list.some((g) => g.id === selectedGroupId.value)) {
+    selectedGroupId.value = 'all'
+  }
+})
+
 const filteredGroups = computed(() => {
   let groups = props.response?.groups ?? []
   if (selectedPlatform.value !== 'all') {
-    groups = groups.filter((g) => g.platform === selectedPlatform.value)
+    groups = groups.map((g) => ({
+      ...g,
+      models: g.models.filter((m) => manufacturerOf(m) === selectedPlatform.value)
+    })).filter((g) => g.models.length > 0)
+  }
+  if (selectedCapability.value !== 'all') {
+    groups = groups.map((g) => ({
+      ...g,
+      models: g.models.filter((m) => capabilityOf(m) === selectedCapability.value)
+    })).filter((g) => g.models.length > 0)
   }
   if (selectedGroupId.value !== 'all') {
     groups = groups.filter((g) => g.id === selectedGroupId.value)

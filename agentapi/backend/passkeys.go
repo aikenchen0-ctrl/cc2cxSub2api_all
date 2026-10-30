@@ -106,7 +106,7 @@ func (s *Server) authPasskeyLoginFinish(w http.ResponseWriter, r *http.Request, 
 		s.writeMainError(w, requestID, err)
 		return
 	}
-	s.establishSession(w, r, requestID, auth, false)
+	s.completeLogin(w, r, requestID, auth, false)
 }
 
 func (s *Server) handleAgentPasskeys(w http.ResponseWriter, r *http.Request, requestID string) {

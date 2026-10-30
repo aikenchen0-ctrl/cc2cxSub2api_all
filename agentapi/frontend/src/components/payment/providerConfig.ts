@@ -126,10 +126,14 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
     { key: 'cidAlipay', label: '', sensitive: false, optional: true },
     { key: 'cidWxpay', label: '', sensitive: false, optional: true },
   ],
+  // Alipay needs two different keys: the app private key that signs our
+  // requests and the Alipay public key that verifies theirs. Labelling the
+  // verification key just "公钥" is how an app public key ended up pasted
+  // there and every callback failed verification.
   alipay: [
     { key: 'appId', label: 'App ID', sensitive: false },
-    { key: 'privateKey', label: '', sensitive: true },
-    { key: 'publicKey', label: '', sensitive: true },
+    { key: 'privateKey', label: '应用私钥（由应用私钥生成，用于签名）', sensitive: true },
+    { key: 'publicKey', label: '支付宝公钥（用于验签，不是应用公钥）', sensitive: true },
   ],
   wxpay: [
     { key: 'appId', label: 'App ID', sensitive: false },

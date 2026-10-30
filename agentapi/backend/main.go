@@ -287,6 +287,9 @@ func (s *Server) allowedHost(rawHost string) bool {
 	if _, err := s.store.AgentByDomain(host); err == nil {
 		return true
 	}
+	if _, entryMapped := s.entryTenantID(host); entryMapped {
+		return true
+	}
 	for _, sharedHost := range s.cfg.SharedHosts {
 		if host == sharedHost {
 			return true
@@ -340,6 +343,7 @@ func (s *Server) reconcilePendingInBackground(parent context.Context) {
 		s.reconcilePaidRechargeOrdersForTenant(ctx, agent)
 		s.reconcileStaleVideoTasksForTenant(ctx, agent.ID)
 		s.reconcileStaleImageTasksForTenant(ctx, agent.ID)
+		s.reconcilePendingStationOrders(ctx, agent.ID)
 	}
 }
 
@@ -610,6 +614,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request, requestID st
 			return
 		}
 		s.authPasswordRecoveryConfig(w, r, requestID)
+	case "/api/v1/auth/login-options":
+		if r.Method != http.MethodGet {
+			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
+			return
+		}
+		s.authLoginOptions(w, r, requestID)
 	case "/api/v1/auth/main-site/login":
 		if r.Method != http.MethodGet {
 			s.writeError(w, http.StatusMethodNotAllowed, requestID, "METHOD_NOT_ALLOWED", "method not allowed")
@@ -655,6 +665,27 @@ func (s *Server) authMainSiteLogin(w http.ResponseWriter, r *http.Request, reque
 	query.Set("next", safeSSONext(r.URL.Query().Get("next")))
 	base.RawQuery = query.Encode()
 	http.Redirect(w, r, base.String(), http.StatusFound)
+}
+
+// authLoginOptions tells the public login page which authentication path the
+// current host actually supports. A shared entry resolves its tenant from the
+// signed ticket issued after the main-site password check, so both password
+// and main-site SSO login remain available.
+func (s *Server) authLoginOptions(w http.ResponseWriter, r *http.Request, requestID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	_, entryMapped := s.entryTenantID(r.Host)
+	sharedEntry := strings.TrimSpace(s.cfg.AgentID) == "" && s.isSharedHost(r.Host) && !entryMapped
+	agent, err := s.requestAgent(r)
+	tenantReady := err == nil && agent.Status == "active" && !sharedEntry
+	_, ssoEnabled := publicMainOrigin(s.cfg.PublicMainURL)
+	passwordLoginEnabled := tenantReady || sharedEntry && ssoEnabled && len(strings.TrimSpace(s.cfg.SSOSecret)) >= 32
+	s.writeData(w, http.StatusOK, requestID, map[string]any{
+		"shared_runtime":         sharedEntry,
+		"tenant_resolved":        tenantReady,
+		"password_login_enabled": passwordLoginEnabled,
+		"main_site_sso_enabled":  ssoEnabled,
+		"registration_enabled":   tenantReady && s.cfg.MainAdminAPIKey != "",
+	})
 }
 
 func publicMainOrigin(raw string) (*url.URL, bool) {
@@ -1005,6 +1036,14 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request, requestID 
 	}
 	userID := mainUserIDFromJSON(createdUser)
 	createdEmail, displayName, _ := userJSONFields(createdUser)
+	if s.cfg.AgentID == "" && userID != "" && strings.TrimSpace(agent.OwnerMainUserID) != userID {
+		if err := s.main.EnsureAgentTenantMember(r.Context(), agent.ID, userID); err != nil {
+			s.recordTenantAudit(agent.ID, "system", agent.ID, "membership.bind", "main_user", userID, requestID, "failed", "main-site tenant membership failed")
+			s.writeError(w, 503, requestID, "USER_MAPPING_FAILED", "main user created but station membership could not be saved; sign in to retry or contact the site administrator")
+			return
+		}
+		s.recordTenantAudit(agent.ID, "agent_user", userID, "membership.bind", "main_user", userID, requestID, "success", "")
+	}
 	if affCode != "" {
 		if bindErr := s.main.BindAffiliateCode(r.Context(), userID, affCode); bindErr != nil {
 			// Account creation is authoritative and cannot be rolled back from this
@@ -1037,7 +1076,7 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request, requestID 
 		s.writeError(w, 502, requestID, "UPSTREAM_IDENTITY_MISMATCH", "created account does not match the authenticated user")
 		return
 	}
-	s.establishSession(w, r, requestID, auth, false)
+	s.establishSession(w, r, requestID, auth, false, false)
 }
 
 func (s *Server) authSendVerifyCode(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -1114,7 +1153,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request, requestID str
 		})
 		return
 	}
-	s.establishSession(w, r, requestID, auth, false)
+	s.completeLogin(w, r, requestID, auth, false)
 }
 
 func (s *Server) authLogin2FA(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -1131,7 +1170,115 @@ func (s *Server) authLogin2FA(w http.ResponseWriter, r *http.Request, requestID 
 		s.writeMainError(w, requestID, err)
 		return
 	}
-	s.establishSession(w, r, requestID, auth, false)
+	s.completeLogin(w, r, requestID, auth, false)
+}
+
+func (s *Server) completeLogin(w http.ResponseWriter, r *http.Request, requestID string, auth MainAuthResult, createMapping bool) {
+	if strings.TrimSpace(s.cfg.AgentID) == "" && s.isSharedHost(r.Host) {
+		if _, entryMapped := s.entryTenantID(r.Host); !entryMapped {
+			s.establishSharedSession(w, r, requestID, auth)
+			return
+		}
+	}
+	s.establishSession(w, r, requestID, auth, createMapping, true)
+}
+
+// establishSharedSession turns a successful main-site login into a tenant
+// session. The main-site SSO endpoint creates or reuses the caller's tenant and
+// signs the authoritative tenant claims; AgentAPI never guesses a tenant from
+// the shared host or from browser-supplied fields.
+func (s *Server) establishSharedSession(w http.ResponseWriter, r *http.Request, requestID string, auth MainAuthResult) {
+	if strings.TrimSpace(auth.AccessToken) == "" {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_AUTH_INVALID", "main site did not return an access token")
+		return
+	}
+	userJSON := append(json.RawMessage(nil), auth.User...)
+	if len(userJSON) == 0 || string(userJSON) == "null" || mainUserIDFromJSON(userJSON) == "" {
+		current, err := s.main.CurrentUser(r.Context(), auth.AccessToken)
+		if err != nil {
+			s.writeMainError(w, requestID, err)
+			return
+		}
+		userJSON = current
+	}
+	mainUserID := mainUserIDFromJSON(userJSON)
+	if mainUserID == "" {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_USER_INVALID", "main site user id is missing")
+		return
+	}
+
+	redirectURL, err := s.main.IntegrationSSOStart(r.Context(), auth.AccessToken, s.cfg.SatelliteSlug, "/dashboard")
+	if err != nil {
+		s.writeMainError(w, requestID, err)
+		return
+	}
+	target, err := url.Parse(redirectURL)
+	if err != nil {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_SSO_INVALID", "main site returned an invalid satellite SSO URL")
+		return
+	}
+	secret := strings.TrimSpace(s.cfg.SSOSecret)
+	if len(secret) < 32 {
+		s.writeError(w, http.StatusServiceUnavailable, requestID, "SSO_NOT_CONFIGURED", "SSO is not configured")
+		return
+	}
+	ticket, err := verifySSOTicket(target.Query().Get("ticket"), secret, s.cfg.SSOAudience, time.Now().UTC())
+	if err != nil {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_SSO_INVALID", "main site returned an invalid satellite ticket")
+		return
+	}
+	if ticket.Subject != mainUserID || ticket.AgentID == "" {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_SSO_IDENTITY_MISMATCH", "satellite ticket does not belong to the authenticated user")
+		return
+	}
+	agent, role, resolveErr := s.resolveSSOTicketAgent(r, ticket)
+	if resolveErr != nil {
+		status := http.StatusMisdirectedRequest
+		reason := "TENANT_NOT_FOUND"
+		if errors.Is(resolveErr, errSSOTenantForbidden) {
+			status = http.StatusForbidden
+			reason = "SSO_TENANT_FORBIDDEN"
+		}
+		s.writeError(w, status, requestID, reason, resolveErr.Error())
+		return
+	}
+	if err := s.store.ConsumeSSOTicket(ticket.JTI, ticket.ExpiresAt); err != nil {
+		status := http.StatusInternalServerError
+		reason := "SSO_TICKET_CONSUME_FAILED"
+		if errors.Is(err, errIdempotencyConflict) {
+			status = http.StatusConflict
+			reason = "SSO_TICKET_REPLAYED"
+		}
+		s.writeError(w, status, requestID, reason, "SSO ticket has already been used or cannot be consumed")
+		return
+	}
+	userJSON, err = ticketUserJSON(ticket)
+	if err != nil {
+		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_SSO_INVALID", "satellite ticket identity is invalid")
+		return
+	}
+	email, displayName, _ := userJSONFields(userJSON)
+	mappedUser, mapErr := s.store.User(agent.ID, mainUserID)
+	if mapErr != nil && !errors.Is(mapErr, errNotFound) {
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load agent user mapping")
+		return
+	}
+	if mapErr == nil && mappedUser.Status != "active" {
+		s.writeError(w, http.StatusForbidden, requestID, "AGENT_USER_DISABLED", "agent user is disabled")
+		return
+	}
+	if _, err := s.store.UpsertUser(agent.ID, mainUserID, email, displayName); err != nil {
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to create agent user mapping")
+		return
+	}
+	expiresAt := time.Now().UTC().Add(sessionTTL)
+	sessionID, err := s.store.CreateTenantSession(agent.ID, mainUserID, role, userJSON, auth.AccessToken, auth.RefreshToken, expiresAt)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, requestID, "SESSION_CREATE_FAILED", "failed to create session")
+		return
+	}
+	s.setSessionCookie(w, sessionID, expiresAt)
+	s.writeData(w, http.StatusOK, requestID, s.browserAuthResponseForTenant(userJSON, mainUserID, agent))
 }
 
 func (s *Server) authForgotPassword(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -1226,7 +1373,7 @@ func (s *Server) authResetPassword(w http.ResponseWriter, r *http.Request, reque
 	s.writeData(w, http.StatusOK, requestID, map[string]any{"message": message})
 }
 
-func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, requestID string, auth MainAuthResult, createMapping bool) {
+func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, requestID string, auth MainAuthResult, createMapping, ensureMembership bool) {
 	agent, resolveErr := s.requestAgent(r)
 	if resolveErr != nil || agent.Status != "active" {
 		s.writeError(w, http.StatusMisdirectedRequest, requestID, "TENANT_NOT_FOUND", "request host is not assigned to an active agent")
@@ -1249,6 +1396,12 @@ func (s *Server) establishSession(w http.ResponseWriter, r *http.Request, reques
 	if mainUserID == "" {
 		s.writeError(w, http.StatusBadGateway, requestID, "UPSTREAM_USER_INVALID", "main site user id is missing")
 		return
+	}
+	if ensureMembership && s.cfg.AgentID == "" && strings.TrimSpace(agent.OwnerMainUserID) != mainUserID {
+		if err := s.main.EnsureAgentTenantMember(r.Context(), agent.ID, mainUserID); err != nil {
+			s.writeError(w, 503, requestID, "USER_MAPPING_FAILED", "station membership is temporarily unavailable; retry sign in later")
+			return
+		}
 	}
 	email, displayName, _ := userJSONFields(userJSON)
 	mappedUser, mapErr := s.store.User(agent.ID, mainUserID)
@@ -1530,9 +1683,20 @@ func (s *Server) handleAgentContext(w http.ResponseWriter, r *http.Request, requ
 	if session, user, ok := s.loadSession(r); ok {
 		// The user who clicked one-click open is this session. Read that same
 		// main-site user with the administrator key; do not substitute another ID.
-		if balance, frozen, ok := s.lookupDisplayBalance(r.Context(), session.MainUserID); ok {
+		// Station billing spends the local wallet, so that is the balance a user
+		// can actually use here. Showing only the main-site balance made every
+		// completed recharge look lost.
+		if localCents, walletErr := s.store.UserWalletCents(session.AgentID, session.MainUserID); walletErr == nil && s.stationBillingPolicy(session.AgentID).BillLocalWallet {
+			user.BalanceCents = localCents
+			user.FrozenBalanceCents = 0
+			result["balance_source"] = "station_wallet"
+			if balance, _, ok := s.lookupDisplayBalance(r.Context(), session.MainUserID); ok {
+				user.MainBalanceCents = balance
+			}
+		} else if balance, frozen, ok := s.lookupDisplayBalance(r.Context(), session.MainUserID); ok {
 			user.BalanceCents = balance
 			user.FrozenBalanceCents = frozen
+			result["balance_source"] = "main_site"
 		} else {
 			result["balance_error"] = "Sub2API user balance is temporarily unavailable"
 		}
@@ -2159,6 +2323,12 @@ func validateBrandingText(value, field string, maxLength int) error {
 func validateBrandLogo(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
+		return nil
+	}
+	if strings.HasPrefix(value, "data:") {
+		if _, _, err := decodeLogoDataURL(value); err != nil {
+			return fmt.Errorf("site_logo %s", err.Error())
+		}
 		return nil
 	}
 	if len(value) > 2048 {
@@ -2830,7 +3000,8 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 	billingUserID := proxyUserID
 	payerID := ""
 	commission := 0.0
-	if s.stationBillingEnabled(agentID) {
+	billingPolicy := s.stationBillingPolicy(agentID)
+	if billingPolicy.BillLocalWallet {
 		payerID = s.tenantOwnerMainUserID(agent)
 		if payerID != "" && payerID != proxyUserID {
 			billingUserID = payerID
@@ -2928,7 +3099,7 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 		return
 	}
 	before := mainBalance.Balance
-	settlement, created, err := s.store.PrepareDirectSettlement(agentID, proxyUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents)
+	settlement, created, err := s.store.PrepareDirectSettlement(agentID, proxyUserID, billingUserID, chargeID, chargeID, s.cfg.MaxRequestCostCents, billingPolicy)
 	if err != nil {
 		if errors.Is(err, errIdempotencyConflict) {
 			s.writeError(w, http.StatusConflict, requestID, "IDEMPOTENCY_CONFLICT", "request id is already associated with a different settlement")
@@ -3032,9 +3203,6 @@ func (s *Server) handleModelRelay(w http.ResponseWriter, r *http.Request, reques
 			slog.Error("main request succeeded; local usage sync failed", "request_id", chargeID, "error", err)
 			copyResponse(w, status, headers, responseBody)
 			return
-		}
-		if err := s.store.DebitUserUsage(agentID, proxyUserID, actual, chargeID); err != nil {
-			slog.Error("recorded main usage but local user balance was not debited", "request_id", chargeID, "error", err)
 		}
 		copyResponse(w, status, headers, responseBody)
 		return

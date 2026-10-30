@@ -33,12 +33,12 @@ const { isLoading } = useAgentNavigationLoadingState()
 .navigation-progress-bar {
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent 0%, #60a5fa 20%, #2563eb 50%, #60a5fa 80%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, #e2c273 20%, #b3872c 50%, #e2c273 80%, transparent 100%);
   animation: agent-progress-slide 1.5s ease-in-out infinite;
 }
 
 :global(.dark) .navigation-progress-bar {
-  background: linear-gradient(90deg, transparent 0%, #2563eb 20%, #60a5fa 50%, #2563eb 80%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, #b3872c 20%, #e2c273 50%, #b3872c 80%, transparent 100%);
 }
 
 @keyframes agent-progress-slide {

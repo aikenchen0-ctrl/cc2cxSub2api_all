@@ -18,6 +18,14 @@
       <OrderTable :orders="orders" :loading="loading">
         <template #actions="{ row }">
           <div class="flex items-center gap-2">
+            <button @click="openDetail(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-dark-600">
+              <Icon name="eye" size="sm" />
+              <span>{{ t('common.view') }}</span>
+            </button>
+            <button v-if="canQueryStatus(row)" :disabled="queryingIds.has(row.id)" @click="handleQueryStatus(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-cyan-600 hover:bg-cyan-50 disabled:opacity-60 dark:text-cyan-400 dark:hover:bg-cyan-900/20">
+              <Icon name="refresh" size="sm" :class="queryingIds.has(row.id) ? 'animate-spin' : ''" />
+              <span>{{ t('payment.orders.queryStatus') }}</span>
+            </button>
             <button v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
               <Icon name="x" size="sm" />
               <span>{{ t('payment.orders.cancel') }}</span>
@@ -40,6 +48,32 @@
         @update:pageSize="handlePageSizeChange"
       />
     </div>
+
+    <!-- Order Detail Dialog -->
+    <BaseDialog :show="!!detailTarget" :title="t('payment.orders.detail')" width="wide" @close="detailTarget = null">
+      <div v-if="detailTarget" class="grid grid-cols-2 gap-4">
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ detailTarget.id }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="break-all text-sm font-medium text-gray-900 dark:text-white">{{ detailTarget.out_trade_no }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.status') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.status.' + detailTarget.status.toLowerCase(), detailTarget.status) }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + detailTarget.payment_type, detailTarget.payment_type) }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">${{ detailTarget.amount.toFixed(2) }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ detailTarget.pay_amount.toFixed(2) }}</p></div>
+        <div v-if="detailTarget.payment_trade_no"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentTradeNo') }}</p><p class="break-all font-mono text-sm text-gray-700 dark:text-gray-300">{{ detailTarget.payment_trade_no }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.createdAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(detailTarget.created_at) }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.expiresAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(detailTarget.expires_at) }}</p></div>
+        <div v-if="detailTarget.paid_at"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paidAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(detailTarget.paid_at) }}</p></div>
+        <div v-if="detailTarget.completed_at"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.completedAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(detailTarget.completed_at) }}</p></div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button class="btn btn-secondary" @click="detailTarget = null">{{ t('common.close') }}</button>
+          <button v-if="detailTarget && canQueryStatus(detailTarget)" :disabled="queryingIds.has(detailTarget.id)" class="btn btn-primary" @click="queryDetailStatus">
+            <Icon name="refresh" size="sm" :class="queryingIds.has(detailTarget.id) ? 'animate-spin' : ''" />
+            {{ t('payment.orders.queryStatus') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
 
     <!-- Cancel Confirm Dialog -->
     <BaseDialog :show="!!cancelTargetId" :title="t('payment.orders.cancel')" width="narrow" @close="cancelTargetId = null">
@@ -87,6 +121,7 @@ import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
+import { formatOrderDateTime } from '@/components/payment/orderUtils'
 import type { PaymentOrder } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -105,6 +140,8 @@ const orders = ref<PaymentOrder[]>([])
 const refundEligibleProviders = ref<Set<string>>(new Set())
 const currentFilter = ref('')
 const cancelTargetId = ref<number | null>(null)
+const detailTarget = ref<PaymentOrder | null>(null)
+const queryingIds = ref(new Set<number>())
 const refundTarget = ref<PaymentOrder | null>(null)
 const refundReason = ref('')
 const pagination = reactive({ page: 1, page_size: 20, total: 0 })
@@ -136,6 +173,46 @@ async function fetchOrders() {
 
 function handlePageChange(page: number) { pagination.page = page; fetchOrders() }
 function handlePageSizeChange(size: number) { pagination.page_size = size; pagination.page = 1; fetchOrders() }
+
+function formatDateTime(dateStr: string): string { return formatOrderDateTime(dateStr) }
+
+function openDetail(order: PaymentOrder) { detailTarget.value = order }
+
+function canQueryStatus(order: PaymentOrder | null | undefined): boolean {
+  if (!order) return false
+  return ['PENDING', 'PAID', 'RECHARGING', 'EXPIRED', 'FAILED', 'CANCELLED'].includes(order.status)
+}
+
+function queryDetailStatus() {
+  if (detailTarget.value) void handleQueryStatus(detailTarget.value)
+}
+
+async function handleQueryStatus(order: PaymentOrder) {
+  queryingIds.value = new Set(queryingIds.value).add(order.id)
+  try {
+    const res = await paymentAPI.verifyOrder(order.out_trade_no)
+    const updated = res.data
+    if (detailTarget.value?.id === order.id) detailTarget.value = updated
+    const index = orders.value.findIndex((item) => item.id === order.id)
+    if (index >= 0) orders.value[index] = updated
+
+    if (updated.status === 'COMPLETED') {
+      appStore.showSuccess(t('payment.orders.queryStatusPaid'))
+    } else if (['PAID', 'RECHARGING'].includes(updated.status)) {
+      appStore.showInfo(t('payment.orders.queryStatusProcessing'))
+    } else if (updated.status === 'PENDING') {
+      appStore.showInfo(t('payment.orders.queryStatusPending'))
+    } else {
+      appStore.showWarning(t('payment.orders.queryStatusOther', { status: updated.status }))
+    }
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    const next = new Set(queryingIds.value)
+    next.delete(order.id)
+    queryingIds.value = next
+  }
+}
 
 function handleCancel(orderId: number) { cancelTargetId.value = orderId }
 

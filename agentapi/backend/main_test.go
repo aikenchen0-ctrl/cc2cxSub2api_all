@@ -102,6 +102,148 @@ func TestHealthDoesNotExposeProcessTenant(t *testing.T) {
 	}
 }
 
+func testSharedServer(t *testing.T, upstream *httptest.Server) *Server {
+	t.Helper()
+	cfg := Config{
+		Addr:                ":0",
+		DatabasePath:        ":memory:",
+		MainAPIBaseURL:      upstream.URL + "/api/v1",
+		MainAdminAPIKey:     "test-main-admin-key",
+		AppCredential:       "app-secret",
+		SatelliteSlug:       "agentapi",
+		SSOSecret:           "test-sso-secret-0123456789abcdef",
+		SSOAudience:         "agentapi",
+		SessionSecret:       "session-secret",
+		CookieName:          "agentapi_session",
+		AgentID:             "",
+		SharedHosts:         []string{"shared.example"},
+		PublicMainURL:       "http://localhost:18080",
+		BillingMode:         "user_upstream",
+		MaxRequestCostCents: 100,
+		MainRequestTimeout:  10 * time.Second,
+	}
+	store, err := OpenStore(":memory:", cfg.SessionSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{cfg: cfg, store: store, main: NewMainClient(cfg), webDir: ""}
+	t.Cleanup(func() { _ = store.Close() })
+	return s
+}
+
+func TestLoginOptionsKeepPasswordLoginOnSharedHost(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testSharedServer(t, upstream)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "http://shared.example/api/v1/auth/login-options", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login options status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			SharedRuntime        bool `json:"shared_runtime"`
+			PasswordLoginEnabled bool `json:"password_login_enabled"`
+			MainSiteSSOEnabled   bool `json:"main_site_sso_enabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Data.SharedRuntime || !payload.Data.PasswordLoginEnabled || !payload.Data.MainSiteSSOEnabled {
+		t.Fatalf("unexpected shared login options: %+v body=%s", payload.Data, recorder.Body.String())
+	}
+}
+
+func TestLoginOptionsKeepPasswordLoginForTenantHost(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "http://agent.local/api/v1/auth/login-options", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login options status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			SharedRuntime        bool `json:"shared_runtime"`
+			PasswordLoginEnabled bool `json:"password_login_enabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Data.SharedRuntime || !payload.Data.PasswordLoginEnabled {
+		t.Fatalf("unexpected tenant login options: %+v body=%s", payload.Data, recorder.Body.String())
+	}
+}
+
+func TestPasswordLoginOnSharedHostUsesMainSSOToSelectTenant(t *testing.T) {
+	const agentID = "agt_22222222222222222222222222222222"
+	var server *Server
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/auth/login":
+			if r.Method != http.MethodPost {
+				t.Fatalf("login method=%s", r.Method)
+			}
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
+				"access_token": "main-access-secret", "refresh_token": "main-refresh-secret", "expires_in": 3600,
+				"token_type": "Bearer", "user": map[string]any{"id": 42, "email": "vip@qq.com", "username": "VIP"},
+			}))
+		case "/api/v1/auth/integrations/agentapi/start":
+			if got := r.Header.Get("Authorization"); got != "Bearer main-access-secret" {
+				t.Fatalf("SSO start authorization=%q", got)
+			}
+			if got := r.Header.Get("Accept"); !strings.Contains(got, "application/json") {
+				t.Fatalf("SSO start accept=%q", got)
+			}
+			if got := r.URL.Query().Get("next"); got != "/dashboard" {
+				t.Fatalf("SSO start next=%q", got)
+			}
+			ticket := makeSharedAgentSSOTicket(t, server, "42", agentID, tenantRoleOwner, "VIP Station", "password-shared")
+			_ = json.NewEncoder(w).Encode(envelope(map[string]any{
+				"redirect_url": "http://localhost:18081/api/v1/auth/sso/callback?ticket=" + url.QueryEscape(ticket),
+			}))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	server = testSharedServer(t, upstream)
+	request := httptest.NewRequest(http.MethodPost, "http://shared.example/api/v1/auth/login", strings.NewReader(`{"email":"vip@qq.com","password":"secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("shared password login status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "main-access-secret") || strings.Contains(recorder.Body.String(), "main-refresh-secret") {
+		t.Fatalf("main credentials leaked: %s", recorder.Body.String())
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].Name != "agentapi_session" {
+		t.Fatalf("unexpected shared session cookie: %#v", cookies)
+	}
+	session, err := server.store.LoadSession(cookies[0].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.AgentID != agentID || session.MainUserID != "42" || session.Role != tenantRoleOwner {
+		t.Fatalf("unexpected shared session: %+v", session)
+	}
+	if session.AccessToken != "main-access-secret" || session.RefreshToken != "main-refresh-secret" {
+		t.Fatal("main credentials were not retained only in the server-side session")
+	}
+	agent, err := server.store.Agent(agentID)
+	if err != nil || agent.OwnerMainUserID != "42" || agent.SiteName != "VIP Station" || agent.Status != "active" {
+		t.Fatalf("shared tenant was not created from main SSO: agent=%+v err=%v", agent, err)
+	}
+	if user, err := server.store.User(agentID, "42"); err != nil || user.Email != "42@example.com" || user.Status != "active" {
+		t.Fatalf("shared tenant user mapping is invalid: user=%+v err=%v", user, err)
+	}
+}
+
 func TestSharedAgentSSOCreatesTenantAndOwnerSession(t *testing.T) {
 	upstream := httptest.NewServer(http.NotFoundHandler())
 	defer upstream.Close()
@@ -1562,6 +1704,60 @@ func TestSettlementReconcileStoresMainUsageSnapshot(t *testing.T) {
 	item := usage[0]
 	if item.Source != "sub2api_user_usage" || item.UsageID != "701" || item.ActualCents != 12 || item.Model != "claude-sonnet" || item.InputTokens != 80 || item.OutputTokens != 20 || item.CacheReadTokens != 10 || item.CacheReadCostNanos != 19 {
 		t.Fatalf("reconciler lost authoritative usage fields: %+v", item)
+	}
+}
+
+func TestStationModelRateMultiplierAppliesToRelayedUsage(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/sub2api/balance":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": "sub2api.user_balance", "balance": 9.0})
+		case "/v1/sub2api/usage":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": []map[string]any{{
+				"id": 702, "request_id": "rate-relay", "model": "gpt-5.5", "actual_cost": 0.20, "total_cost": 0.20,
+				"input_tokens": 100, "output_tokens": 10,
+			}}}})
+		case "/v1/chat/completions":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ok"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+	server := testServer(t, upstream)
+	server.cfg.MainUsageAPI = true
+	server.main = NewMainClient(server.cfg)
+	settings := defaultStationPaymentSettings()
+	settings.Enabled = true
+	settings.ModelRateMultiplier = 2
+	if err := server.store.SaveStationPaymentSettings(server.cfg.AgentID, settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.store.CreditAgent(server.cfg.AgentID, 1000, "seed-rate-relay", "seed", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.store.Allocate(server.cfg.AgentID, "42", 1000, "allocate-rate-relay", "order", "test"); err != nil {
+		t.Fatal(err)
+	}
+	_, key, err := server.store.CreateAPIKey(server.cfg.AgentID, "42", "rate-relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","messages":[]}`))
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Idempotency-Key", "rate-relay")
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("relay status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	usage, err := server.store.Usage(server.cfg.AgentID, "42", 10)
+	if err != nil || len(usage) != 1 || usage[0].ActualCents != 20 || usage[0].ChargedCents != 40 || usage[0].StationRateMultiplier != 2 {
+		t.Fatalf("unexpected usage: %+v err=%v", usage, err)
+	}
+	user, err := server.store.User(server.cfg.AgentID, "42")
+	if err != nil || user.BalanceCents != 960 {
+		t.Fatalf("station balance was not charged at the configured rate: user=%+v err=%v", user, err)
 	}
 }
 

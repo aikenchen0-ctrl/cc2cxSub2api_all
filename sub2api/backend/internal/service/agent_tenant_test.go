@@ -7,8 +7,10 @@ import (
 )
 
 type agentTenantRepoStub struct {
-	tenant *AgentSharedTenant
-	calls  int
+	tenant   *AgentSharedTenant
+	members  map[int64]*AgentSharedTenant
+	calls    int
+	memCalls int
 }
 
 func (r *agentTenantRepoStub) EnsureSharedTenant(_ context.Context, tenant AgentSharedTenant) (*AgentSharedTenant, error) {
@@ -21,6 +23,31 @@ func (r *agentTenantRepoStub) EnsureSharedTenant(_ context.Context, tenant Agent
 	}
 	copy := *r.tenant
 	return &copy, nil
+}
+
+func (r *agentTenantRepoStub) EnsureSharedTenantMember(_ context.Context, agentID string, mainUserID int64) (*AgentSharedTenant, error) {
+	r.memCalls++
+	if r.members == nil {
+		r.members = make(map[int64]*AgentSharedTenant)
+	}
+	if member := r.members[mainUserID]; member != nil {
+		copy := *member
+		return &copy, nil
+	}
+	copy := AgentSharedTenant{
+		AgentID: agentID, OwnerMainUserID: 1, DisplayName: "Station",
+		BrandName: "Station", Status: "active", Role: "member",
+	}
+	r.members[mainUserID] = &copy
+	return &copy, nil
+}
+
+func (r *agentTenantRepoStub) FindActiveSharedTenantMembership(_ context.Context, mainUserID int64) (*AgentSharedTenant, error) {
+	if member := r.members[mainUserID]; member != nil {
+		copy := *member
+		return &copy, nil
+	}
+	return nil, ErrAgentTenantNotFound
 }
 
 func TestEnsureSharedTenantIsIdempotentPerOwner(t *testing.T) {
@@ -49,5 +76,40 @@ func TestEnsureSharedTenantRejectsInvalidOwnerAndUnsafeName(t *testing.T) {
 	}
 	if _, err := svc.EnsureSharedTenant(context.Background(), 1, "unsafe\nname"); err != ErrAgentTenantInvalid {
 		t.Fatalf("unsafe display name error = %v", err)
+	}
+}
+
+func TestResolveSharedTenantKeepsExistingMemberInStation(t *testing.T) {
+	repo := &agentTenantRepoStub{members: map[int64]*AgentSharedTenant{
+		43: {
+			AgentID: "agt_11111111111111111111111111111111", OwnerMainUserID: 42,
+			DisplayName: "Station", BrandName: "Station", Status: "active", Role: "member",
+		},
+	}}
+	tenant, err := NewAgentTenantService(repo).ResolveSharedTenant(context.Background(), 43, "Member")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenant.AgentID != "agt_11111111111111111111111111111111" || tenant.Role != "member" || tenant.OwnerMainUserID != 42 {
+		t.Fatalf("member was redirected into a new tenant: %+v", tenant)
+	}
+	if repo.calls != 0 {
+		t.Fatal("member resolution created a new tenant")
+	}
+}
+
+func TestEnsureSharedTenantMemberRejectsUnsafeIdentity(t *testing.T) {
+	svc := NewAgentTenantService(&agentTenantRepoStub{})
+	for _, test := range []struct {
+		agentID string
+		userID  int64
+	}{
+		{"", 43},
+		{"agt_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", 43},
+		{"agt_11111111111111111111111111111111", 0},
+	} {
+		if _, err := svc.EnsureSharedTenantMember(context.Background(), test.agentID, test.userID); err != ErrAgentTenantInvalid {
+			t.Fatalf("unsafe identity %+v error = %v", test, err)
+		}
 	}
 }

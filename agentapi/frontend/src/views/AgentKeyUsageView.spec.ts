@@ -24,7 +24,7 @@ describe('AgentKeyUsageView', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const wrapper = render()
     await wrapper.get('input[placeholder="sk-..."]').setValue('sk-secret-value')
-    await wrapper.get('button.bg-primary-600').trigger('click')
+    await wrapper.get('button.bg-primary-400').trigger('click')
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, options] = fetchMock.mock.calls[0]
@@ -54,7 +54,7 @@ describe('AgentKeyUsageView', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'AgentAPI API key is invalid or revoked' }), { status: 401 }))
     const wrapper = render()
     await wrapper.get('input[placeholder="sk-..."]').setValue('sk-bad')
-    await wrapper.get('button.bg-primary-600').trigger('click')
+    await wrapper.get('button.bg-primary-400').trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('invalid or revoked')
     expect(wrapper.text()).not.toContain('账户余额')

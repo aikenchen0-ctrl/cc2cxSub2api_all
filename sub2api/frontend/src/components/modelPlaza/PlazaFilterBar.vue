@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-3">
-    <!-- 一级:平台 -->
+    <!-- 一级:厂家 -->
     <div class="flex items-start gap-2">
-      <span class="w-10 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
-        {{ t('modelPlaza.filters.platformLabel') }}
+      <span class="w-16 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
+        {{ t('modelPlaza.filters.manufacturerLabel') }}
       </span>
       <div class="flex flex-wrap items-center gap-2">
         <button
@@ -16,15 +16,38 @@
           :disabled="p !== 'all' && !platformEnabled(p)"
           @click="$emit('update:platform', p)"
         >
-          <PlatformIcon v-if="p !== 'all'" :platform="p as GroupPlatform" size="xs" />
           {{ p === 'all' ? t('modelPlaza.filters.all') : p }}
         </button>
       </div>
     </div>
 
-    <!-- 二级:分组(按所属平台着色,当前组合下无结果的置灰) -->
+    <!-- 二级:功能 -->
     <div class="flex items-start gap-2">
-      <span class="w-10 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
+      <span class="w-16 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
+        {{ t('modelPlaza.filters.capabilityLabel') }}
+      </span>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium transition" :class="chipClass(capability === 'all')" @click="$emit('update:capability', 'all')">
+          {{ t('modelPlaza.filters.all') }}
+        </button>
+        <button
+          v-for="c in capabilities"
+          :key="`capability-${c}`"
+          type="button"
+          class="rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
+          :class="capability === c ? 'chip-tinted-active' : 'chip-tinted'"
+          :style="{ '--chip-accent': capabilityAccent(c) }"
+          :disabled="!capabilityEnabled(c)"
+          @click="$emit('update:capability', c)"
+        >
+          {{ t(`modelPlaza.filters.${c}`) }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 三级:分组(按所属平台着色,当前组合下无结果的置灰) -->
+    <div class="flex items-start gap-2">
+      <span class="w-16 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
         {{ t('modelPlaza.filters.groupLabel') }}
       </span>
       <div class="flex flex-wrap items-center gap-2">
@@ -51,9 +74,9 @@
       </div>
     </div>
 
-    <!-- 三级:倍率(当前组合下不存在的置灰) -->
+    <!-- 四级:倍率(当前组合下不存在的置灰) -->
     <div class="flex items-start gap-2">
-      <span class="w-10 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
+      <span class="w-16 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
         {{ t('modelPlaza.filters.rateLabel') }}
       </span>
       <div class="flex flex-wrap items-center gap-2">
@@ -79,9 +102,9 @@
       </div>
     </div>
 
-    <!-- 四级:模型名搜索(纯前端过滤) -->
+    <!-- 五级:模型名搜索(纯前端过滤) -->
     <div class="flex flex-wrap items-start gap-2">
-      <span class="w-10 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
+      <span class="w-16 shrink-0 pt-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-dark-500">
         {{ t('modelPlaza.filters.modelLabel') }}
       </span>
       <div class="relative w-full sm:w-72">
@@ -113,18 +136,25 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { platformAccentColor } from '@/utils/platformColors'
-import type { GroupPlatform } from '@/types'
 
 const props = defineProps<{
-  /** 数据中出现的平台(去重排序后)。 */
+  /** 数据中出现的厂家(去重排序后)。 */
   platforms: string[]
   /** 全量分组(含平台与生效倍率),三个维度的置灰联动由此推导。 */
-  groups: Array<{ id: number; name: string; platform: string; rate: number }>
+  groups: Array<{
+    id: number
+    name: string
+    platform: string
+    rate: number
+    manufacturers: string[]
+    capabilities: Array<'text' | 'image' | 'video'>
+  }>
   /** 全量生效倍率去重升序。 */
   rates: number[]
+  capabilities: Array<'text' | 'image' | 'video'>
   platform: string
+  capability: 'all' | 'text' | 'image' | 'video'
   groupId: number | 'all'
   rate: number | 'all'
   /** 模型名搜索词(纯前端过滤)。 */
@@ -135,28 +165,46 @@ defineEmits<{
   'update:platform': [value: string]
   'update:groupId': [value: number | 'all']
   'update:rate': [value: number | 'all']
+  'update:capability': [value: 'all' | 'text' | 'image' | 'video']
   'update:search': [value: string]
 }>()
 
 const { t } = useI18n()
 
 /**
- * 三个维度互为约束(faceted):某选项可点 ⟺ 在「其他两维」当前选择下仍有分组命中。
+ * 四个维度互为约束(faceted):某选项可点 ⟺ 在「其他维」当前选择下仍有分组命中。
  * 「全部」永远可点,作为解除本维约束的出口;可点项组合恒有结果,无需选择修正。
  */
 function platformEnabled(p: string): boolean {
   return props.groups.some(
     (g) =>
-      g.platform === p &&
+      g.manufacturers.includes(p) &&
+      (props.groupId === 'all' || g.id === props.groupId) &&
+      (props.rate === 'all' || g.rate === props.rate) &&
+      (props.capability === 'all' || g.capabilities.includes(props.capability))
+  )
+}
+
+function capabilityEnabled(c: 'text' | 'image' | 'video'): boolean {
+  return props.groups.some(
+    (g) =>
+      g.capabilities.includes(c) &&
+      (props.platform === 'all' || g.manufacturers.includes(props.platform)) &&
       (props.groupId === 'all' || g.id === props.groupId) &&
       (props.rate === 'all' || g.rate === props.rate)
   )
 }
 
-function groupEnabled(g: { platform: string; rate: number }): boolean {
+function groupEnabled(g: {
+  id: number
+  rate: number
+  manufacturers: string[]
+  capabilities: Array<'text' | 'image' | 'video'>
+}): boolean {
   return (
-    (props.platform === 'all' || g.platform === props.platform) &&
-    (props.rate === 'all' || g.rate === props.rate)
+    (props.rate === 'all' || g.rate === props.rate) &&
+    (props.platform === 'all' || g.manufacturers.includes(props.platform)) &&
+    (props.capability === 'all' || g.capabilities.includes(props.capability))
   )
 }
 
@@ -164,9 +212,19 @@ function rateEnabled(r: number): boolean {
   return props.groups.some(
     (g) =>
       g.rate === r &&
-      (props.platform === 'all' || g.platform === props.platform) &&
-      (props.groupId === 'all' || g.id === props.groupId)
+      (props.platform === 'all' || g.manufacturers.includes(props.platform)) &&
+      (props.groupId === 'all' || g.id === props.groupId) &&
+      (props.capability === 'all' || g.capabilities.includes(props.capability))
   )
+}
+
+/** 功能 chip 的配色:文本用品牌青,图片/视频沿用平台色板里的对应色。 */
+function capabilityAccent(c: 'text' | 'image' | 'video'): string {
+  switch (c) {
+    case 'image': return platformAccentColor('gemini')
+    case 'video': return platformAccentColor('grok')
+    default: return platformAccentColor('anthropic')
+  }
 }
 
 function chipClass(active: boolean): string {

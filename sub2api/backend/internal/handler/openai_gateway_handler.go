@@ -3358,6 +3358,19 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", message, streamStarted)
 		return
 	}
+	if failoverErr.Reason == service.MediaVideoCreateAmbiguousReason {
+		status := failoverErr.ClientStatusCode
+		if status <= 0 {
+			status = http.StatusBadGateway
+		}
+		message := strings.TrimSpace(failoverErr.ClientMessage)
+		if message == "" {
+			message = service.MediaVideoCreateAmbiguousClientMessage
+		}
+		service.SetOpsUpstreamError(c, status, message, "")
+		h.handleStreamingAwareError(c, status, "upstream_error", message, streamStarted)
+		return
+	}
 	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
 	if failoverErr.IsCredentialFailure() {
 		status, message := credentialFailoverClientResponse(failoverErr)

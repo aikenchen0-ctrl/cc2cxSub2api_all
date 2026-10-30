@@ -135,6 +135,10 @@ export interface AgentBalanceSnapshot {
   balance_cents: number
   frozen_balance_cents: number
   source: string
+  /** Balance of the station wallet that actually pays for model usage. */
+  station_balance_cents?: number
+  /** Main-site balance, shown for reference only. */
+  main_balance_cents?: number
 }
 
 export interface AgentBalanceHistoryItem {
@@ -143,6 +147,8 @@ export interface AgentBalanceHistoryItem {
   status: string
   created_at?: string
   used_at?: string
+  note?: string
+  balance_after?: number
 }
 
 export interface AgentBalanceHistoryPage {
@@ -183,7 +189,7 @@ export interface StationBillingSettings {
   max_pending_orders: number
   enabled_payment_types: string[]
   balance_disabled: boolean
-  balance_recharge_multiplier: number
+  model_rate_multiplier: number
   subscription_usd_to_cny_rate: number
   recharge_fee_rate: number
   load_balance_strategy: string
@@ -553,7 +559,8 @@ export interface AgentCheckoutInfo {
   global_max: number
   plans: AgentCheckoutPlan[]
   balance_disabled: boolean
-  balance_recharge_multiplier: number
+  charging_enabled?: boolean
+  model_rate_multiplier: number
   subscription_usd_to_cny_rate: number
   recharge_fee_rate: number
   help_text: string
@@ -614,6 +621,8 @@ export interface AgentUsageView {
   billing_main_user_id: string
   reserved_cents: number
   actual_cents: number
+  charged_cents: number
+  station_rate_multiplier: number
   settlement_status: string
   model?: string
   usage_source?: string
@@ -727,6 +736,8 @@ export interface SettlementView {
   model?: string
   reserved_cents: number
   actual_cents: number
+  charged_cents: number
+  station_rate_multiplier: number
   status: string
   error?: string
   usage_id?: string
@@ -787,6 +798,14 @@ export interface LoginResponse {
   temp_token?: string
 }
 
+export interface LoginOptions {
+  shared_runtime: boolean
+  tenant_resolved: boolean
+  password_login_enabled: boolean
+  main_site_sso_enabled: boolean
+  registration_enabled: boolean
+}
+
 export interface AuthenticatedResponse {
   access_token: ''
   refresh_token: ''
@@ -797,6 +816,7 @@ export interface AuthenticatedResponse {
 
 export const agentAPI = {
   auth: {
+    loginOptions: async () => (await agentClient.get<LoginOptions>('/auth/login-options')).data,
     login: async (email: string, password: string) =>
       (await agentClient.post<LoginResponse>('/auth/login', { email, password })).data,
     login2FA: async (tempToken: string, totpCode: string) =>

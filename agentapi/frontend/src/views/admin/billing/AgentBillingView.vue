@@ -154,7 +154,7 @@ onMounted(() => void load())
         <label class="text-sm">订单超时（分钟）<AgentInput v-model="settings.order_timeout_minutes" class="mt-1" /></label>
         <label class="text-sm">最多待支付订单<AgentInput v-model="settings.max_pending_orders" class="mt-1" /></label>
         <label class="text-sm">充值手续费率（%）<AgentInput v-model="settings.recharge_fee_rate" class="mt-1" /></label>
-        <label class="text-sm">余额到账倍率<AgentInput v-model="settings.balance_recharge_multiplier" class="mt-1" /></label>
+        <label class="text-sm">模型计费倍率<AgentInput v-model="settings.model_rate_multiplier" class="mt-1" /></label>
         <label class="text-sm">订阅美元兑人民币<AgentInput v-model="settings.subscription_usd_to_cny_rate" class="mt-1" /></label>
         <label class="text-sm">渠道分配<select v-model="settings.load_balance_strategy" class="input mt-1"><option value="round-robin">轮询</option><option value="weighted">按排序</option></select></label>
         <label class="text-sm">商品名前缀<AgentInput v-model="settings.product_name_prefix" class="mt-1" /></label>

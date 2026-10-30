@@ -176,8 +176,9 @@ func TestOpenAIGatewayHandlerResponses_AstraProBoth403NoDowngrade(t *testing.T) 
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
 }
 
-// passthrough -> non-passthrough drops only the encrypted *input* reasoning item;
-// the official top-level reasoning.mode/effort survive verbatim.
+// passthrough -> non-passthrough drops only the provider-specific encrypted
+// input reasoning state; the portable summary and official top-level
+// reasoning.mode/effort survive verbatim.
 func TestDeriveOpenAIForwardAttemptBody_AstraCrossModeKeepsTopLevelReasoningMode(t *testing.T) {
 	h := &OpenAIGatewayHandler{}
 	canonical := []byte(`{"model":"gpt-6-astra","stream":false,"reasoning":{"mode":"pro","effort":"max"},"input":[` +
@@ -196,7 +197,10 @@ func TestDeriveOpenAIForwardAttemptBody_AstraCrossModeKeepsTopLevelReasoningMode
 	require.Equal(t, "max", gjson.GetBytes(firstBody, "reasoning.effort").String())
 
 	secondBody := h.deriveOpenAIForwardAttemptBody(nil, canonical, bedrock, state)
-	require.Equal(t, 0, reasoningItemCount(t, secondBody), "cross-mode attempt drops the encrypted input reasoning item")
+	require.Equal(t, 1, reasoningItemCount(t, secondBody), "cross-mode attempt keeps the portable input reasoning item")
+	require.False(t, gjson.GetBytes(secondBody, "input.1.encrypted_content").Exists(), "encrypted input reasoning content must not cross modes")
+	require.False(t, gjson.GetBytes(secondBody, "input.1.id").Exists(), "provider reasoning id must not cross modes")
+	require.Equal(t, "thinking", gjson.GetBytes(secondBody, "input.1.summary.0.text").String(), "portable reasoning summary must survive")
 	require.Equal(t, "pro", gjson.GetBytes(secondBody, "reasoning.mode").String(), "mode=pro must survive cross-mode sanitization")
 	require.Equal(t, "max", gjson.GetBytes(secondBody, "reasoning.effort").String(), "effort=max must survive cross-mode sanitization")
 	require.Equal(t, "gpt-6-astra", gjson.GetBytes(secondBody, "model").String())

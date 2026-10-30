@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,6 +13,8 @@ import (
 )
 
 const maxLogoUploadBytes = 1 << 20
+const maxLogoEncodedBytes = ((maxLogoUploadBytes + 2) / 3) * 4
+const maxLogoDataURLBytes = maxLogoEncodedBytes + 64
 
 var logoAgentIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,80}$`)
 
@@ -44,26 +48,9 @@ func (s *Server) handleBrandLogoUpload(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_LOGO", "logo upload must be an image of at most 1 MB")
 		return
 	}
-	ext, contentType, ok := detectLogoType(data)
+	_, contentType, ok := detectLogoType(data)
 	if !ok {
 		s.writeError(w, http.StatusBadRequest, requestID, "INVALID_LOGO", "logo must be a PNG, JPEG, WEBP, or GIF image")
-		return
-	}
-	dir := filepath.Join(filepath.Dir(s.cfg.DatabasePath), "logos")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		s.writeError(w, http.StatusInternalServerError, requestID, "LOGO_STORE_FAILED", "failed to store logo")
-		return
-	}
-	name := tenant.AgentID + ext
-	target := filepath.Join(dir, name)
-	temp := target + ".tmp"
-	if err := os.WriteFile(temp, data, 0o644); err != nil {
-		s.writeError(w, http.StatusInternalServerError, requestID, "LOGO_STORE_FAILED", "failed to store logo")
-		return
-	}
-	if err := os.Rename(temp, target); err != nil {
-		_ = os.Remove(temp)
-		s.writeError(w, http.StatusInternalServerError, requestID, "LOGO_STORE_FAILED", "failed to store logo")
 		return
 	}
 	current, err := s.store.Agent(tenant.AgentID)
@@ -71,13 +58,12 @@ func (s *Server) handleBrandLogoUpload(w http.ResponseWriter, r *http.Request, r
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to load tenant configuration")
 		return
 	}
-	logoPath := "/branding/logos/" + name
-	updated, err := s.store.UpdateBranding(tenant.AgentID, current.Name, current.SiteName, logoPath, current.DocURL, current.ContactInfo, current.APIBaseURL, current.AgentHomeSettings)
+	logo := logoDataURL(data, contentType)
+	updated, err := s.store.UpdateBranding(tenant.AgentID, current.Name, current.SiteName, logo, current.DocURL, current.ContactInfo, current.APIBaseURL, current.AgentHomeSettings)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "failed to save uploaded logo")
 		return
 	}
-	_ = contentType
 	s.writeData(w, http.StatusOK, requestID, agentBrandingData(updated))
 }
 
@@ -124,4 +110,52 @@ func detectLogoType(data []byte) (string, string, bool) {
 	default:
 		return "", "", false
 	}
+}
+
+func logoDataURL(data []byte, contentType string) string {
+	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+func decodeLogoDataURL(value string) ([]byte, string, error) {
+	if len(value) > maxLogoDataURLBytes {
+		return nil, "", fmt.Errorf("embedded logo must be at most 1 MB")
+	}
+	if !strings.HasPrefix(value, "data:image/") {
+		return nil, "", fmt.Errorf("embedded logo must be a supported image data URL")
+	}
+	comma := strings.IndexByte(value, ',')
+	if comma < 0 {
+		return nil, "", fmt.Errorf("embedded logo data URL is malformed")
+	}
+	metadata := value[len("data:"):comma]
+	if !strings.HasSuffix(metadata, ";base64") {
+		return nil, "", fmt.Errorf("embedded logo must use base64 encoding")
+	}
+	contentType := strings.TrimSuffix(metadata, ";base64")
+	switch contentType {
+	case "image/png", "image/jpeg", "image/webp", "image/gif":
+	default:
+		return nil, "", fmt.Errorf("embedded logo must be PNG, JPEG, WEBP, or GIF")
+	}
+	encoded := value[comma+1:]
+	if encoded == "" {
+		return nil, "", fmt.Errorf("embedded logo data URL is malformed")
+	}
+	for _, r := range encoded {
+		if r < 0x20 || r == 0x7f {
+			return nil, "", fmt.Errorf("embedded logo data URL is malformed")
+		}
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, "", fmt.Errorf("embedded logo base64 is invalid")
+	}
+	if len(data) == 0 || len(data) > maxLogoUploadBytes {
+		return nil, "", fmt.Errorf("embedded logo must be an image of at most 1 MB")
+	}
+	_, detectedType, ok := detectLogoType(data)
+	if !ok || detectedType != contentType {
+		return nil, "", fmt.Errorf("embedded logo content does not match its image type")
+	}
+	return data, contentType, nil
 }

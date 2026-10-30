@@ -69,17 +69,24 @@ func TestStationBillingConfigAndOrdersAreIsolated(t *testing.T) {
 	if checkout.Code != http.StatusOK || !strings.Contains(checkout.Body.String(), "alipay") || strings.Contains(checkout.Body.String(), "secret-a") || strings.Contains(checkout.Body.String(), "pkey") {
 		t.Fatalf("checkout status=%d body=%s", checkout.Code, checkout.Body.String())
 	}
+	if _, err := server.store.db.Exec(`UPDATE station_payment_settings SET balance_recharge_multiplier=1.25 WHERE agent_id=?`, "agent-a"); err != nil {
+		t.Fatal(err)
+	}
 	created := stationRequest(server, memberA, http.MethodPost, "/api/v1/agent/payment/orders", `{"amount":20,"payment_type":"alipay","order_type":"balance","main_user_id":"owner-b"}`)
 	if created.Code != http.StatusCreated || !strings.Contains(created.Body.String(), "pay.example") || strings.Contains(created.Body.String(), "secret-a") {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body.String())
 	}
 	var payload struct {
 		Data struct {
-			OutTradeNo string `json:"out_trade_no"`
+			OutTradeNo string  `json:"out_trade_no"`
+			Amount     float64 `json:"amount"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(created.Body.Bytes(), &payload); err != nil || payload.Data.OutTradeNo == "" {
 		t.Fatalf("order response: %s", created.Body.String())
+	}
+	if !nearAmount(payload.Data.Amount, 20) {
+		t.Fatalf("balance order credited %v instead of the paid amount: %s", payload.Data.Amount, created.Body.String())
 	}
 	foreignVerify := stationRequest(server, ownerB, http.MethodPost, "/api/v1/agent/payment/orders/verify", `{"out_trade_no":"`+payload.Data.OutTradeNo+`"}`)
 	if foreignVerify.Code != http.StatusNotFound {

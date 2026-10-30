@@ -225,6 +225,61 @@ func trimOpenAIEncryptedReasoningItems(reqBody map[string]any) bool {
 }
 
 func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep bool) {
+	return sanitizeEncryptedReasoningInputItemWithOptions(item, false)
+}
+
+func openAIReasoningMapHasPortableContent(item map[string]any, stripProviderID bool) bool {
+	// Same-provider replay may keep the reasoning id as a valid skeleton after
+	// the invalid ciphertext is removed; cross-provider replay deletes that id
+	// and must not forward an id-less empty shell.
+	if !stripProviderID {
+		if id, ok := item["id"].(string); ok && strings.TrimSpace(id) != "" {
+			return true
+		}
+	}
+	if summary, ok := item["summary"]; ok {
+		switch v := summary.(type) {
+		case []any:
+			if len(v) > 0 {
+				return true
+			}
+		case string:
+			if strings.TrimSpace(v) != "" {
+				return true
+			}
+		}
+	}
+	if content, ok := item["content"]; ok && content != nil {
+		switch v := content.(type) {
+		case []any:
+			if len(v) > 0 {
+				return true
+			}
+		case string:
+			if strings.TrimSpace(v) != "" {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	// Preserve opaque provider extensions rather than treating an unfamiliar
+	// reasoning item as an empty skeleton.
+	for key := range item {
+		switch key {
+		case "type", "summary", "content", "encrypted_content", "id", "call_id", "status":
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizeEncryptedReasoningInputItemWithOptions strips account/session-bound
+// encrypted reasoning state while keeping portable context (summary, visible
+// content and tool pairing). stripProviderID is used for cross-provider failover,
+// where the upstream reasoning id itself is not portable.
+func sanitizeEncryptedReasoningInputItemWithOptions(item any, stripProviderID bool) (next any, changed bool, keep bool) {
 	inputItem, ok := item.(map[string]any)
 	if !ok {
 		return item, false, true
@@ -246,6 +301,12 @@ func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep
 		delete(inputItem, "encrypted_content")
 		changed = true
 	}
+	if stripProviderID {
+		if _, has := inputItem["id"]; has {
+			delete(inputItem, "id")
+			changed = true
+		}
+	}
 
 	// xAI 422: "content": null 导致 untagged enum 反序列化失败
 	if v, has := inputItem["content"]; has && v == nil {
@@ -256,24 +317,24 @@ func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep
 	if !changed {
 		return item, false, true
 	}
-	if len(inputItem) == 1 {
+	if !openAIReasoningMapHasPortableContent(inputItem, stripProviderID) {
 		return nil, true, false
 	}
 	return inputItem, true, true
 }
 
 // SanitizeOpenAICrossModeFailoverReasoning derives a failover attempt body from
-// the canonical request body by dropping provider-specific encrypted reasoning
-// input items in full (encrypted_content plus the coupled id/summary shape).
+// the canonical request body by stripping provider-specific encrypted reasoning
+// state while preserving portable context (summary/content and pairing).
 //
 // This is the proactive counterpart to the reactive same-account
 // invalid_encrypted_content recovery in Forward: when a failover switches from an
 // OpenAI passthrough account (which forwards upstream-native encrypted reasoning,
 // e.g. Kiro) to a non-passthrough account (e.g. Bedrock Mantle) that rejects the
-// provider-specific reasoning IDs/shape, the whole reasoning item must go before
-// the request reaches the new upstream. Unlike trimOpenAIEncryptedReasoningItems,
-// which only strips the encrypted_content / null-content fields while preserving
-// the reasoning item's id and summary, this drops the entire item.
+// provider-specific reasoning IDs/shape, the encrypted_content and provider id
+// must go before the request reaches the new upstream. Unlike the old whole-item
+// drop, summary/visible content is retained so a failover does not erase context
+// merely because the ciphertext could not move.
 //
 // The input slice is treated as immutable and is never mutated; a distinct slice
 // is returned only when changed is true.
@@ -288,7 +349,7 @@ func SanitizeOpenAICrossModeFailoverReasoning(body []byte) (sanitized []byte, ch
 	if err := decodeOpenAIJSONUseNumber(body, &decoded); err != nil {
 		return body, false, fmt.Errorf("decode cross-mode failover body: %w", err)
 	}
-	if !dropOpenAIEncryptedReasoningInputItems(decoded) {
+	if !stripOpenAICrossModeEncryptedReasoningInputItems(decoded) {
 		return body, false, nil
 	}
 	out, marshalErr := marshalOpenAIUpstreamJSON(decoded)
@@ -298,12 +359,10 @@ func SanitizeOpenAICrossModeFailoverReasoning(body []byte) (sanitized []byte, ch
 	return out, true, nil
 }
 
-// dropOpenAIEncryptedReasoningInputItems removes reasoning input items that carry
-// provider-specific encrypted_content in full — including their coupled id and
-// summary — and reports whether anything changed. Contrast with
-// trimOpenAIEncryptedReasoningItems, which only strips fields while keeping the
-// reasoning item skeleton.
-func dropOpenAIEncryptedReasoningInputItems(reqBody map[string]any) bool {
+// stripOpenAICrossModeEncryptedReasoningInputItems strips provider-specific
+// encrypted_content and reasoning ids while preserving portable summary/content.
+// Items that become empty skeletons are dropped.
+func stripOpenAICrossModeEncryptedReasoningInputItems(reqBody map[string]any) bool {
 	if len(reqBody) == 0 {
 		return false
 	}
@@ -316,11 +375,14 @@ func dropOpenAIEncryptedReasoningInputItems(reqBody map[string]any) bool {
 		filtered := input[:0]
 		changed := false
 		for _, item := range input {
-			if isOpenAIEncryptedReasoningInputItem(item) {
+			nextItem, itemChanged, keep := sanitizeEncryptedReasoningInputItemWithOptions(item, true)
+			if itemChanged {
 				changed = true
+			}
+			if !keep {
 				continue
 			}
-			filtered = append(filtered, item)
+			filtered = append(filtered, nextItem)
 		}
 		if !changed {
 			return false
@@ -335,11 +397,19 @@ func dropOpenAIEncryptedReasoningInputItems(reqBody map[string]any) bool {
 		filtered := input[:0]
 		changed := false
 		for _, item := range input {
-			if isOpenAIEncryptedReasoningInputItem(item) {
+			nextItem, itemChanged, keep := sanitizeEncryptedReasoningInputItemWithOptions(item, true)
+			if itemChanged {
 				changed = true
+			}
+			if !keep {
 				continue
 			}
-			filtered = append(filtered, item)
+			nextMap, ok := nextItem.(map[string]any)
+			if !ok {
+				filtered = append(filtered, item)
+				continue
+			}
+			filtered = append(filtered, nextMap)
 		}
 		if !changed {
 			return false
@@ -351,26 +421,23 @@ func dropOpenAIEncryptedReasoningInputItems(reqBody map[string]any) bool {
 		reqBody["input"] = filtered
 		return true
 	case map[string]any:
-		if isOpenAIEncryptedReasoningInputItem(input) {
+		nextItem, itemChanged, keep := sanitizeEncryptedReasoningInputItemWithOptions(input, true)
+		if !itemChanged {
+			return false
+		}
+		if !keep {
 			delete(reqBody, "input")
 			return true
 		}
-		return false
+		nextMap, ok := nextItem.(map[string]any)
+		if !ok {
+			return false
+		}
+		reqBody["input"] = nextMap
+		return true
 	default:
 		return false
 	}
-}
-
-func isOpenAIEncryptedReasoningInputItem(item any) bool {
-	inputItem, ok := item.(map[string]any)
-	if !ok {
-		return false
-	}
-	if itemType, _ := inputItem["type"].(string); strings.TrimSpace(itemType) != "reasoning" {
-		return false
-	}
-	_, has := inputItem["encrypted_content"]
-	return has
 }
 
 // IsOpenAIResponsesCompactPath reports whether the request targets the legacy
@@ -558,15 +625,16 @@ func normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body []byte, knownStoreFalse
 		typ := strings.TrimSpace(item.Get("type").String())
 		id := strings.TrimSpace(item.Get("id").String())
 		encrypted := item.Get("encrypted_content")
-		if (typ == "reasoning" && (encrypted.Type != gjson.String || strings.TrimSpace(encrypted.Str) == "")) ||
-			(typ == "item_reference" && strings.HasPrefix(id, "rs_")) {
+		if typ == "item_reference" && strings.HasPrefix(id, "rs_") {
 			changed = true
 			return true
 		}
+		normalizeReasoningCipher := typ == "reasoning" &&
+			(encrypted.Type != gjson.String || strings.TrimSpace(encrypted.Str) == "")
 		stripID := typ == "reasoning" && strings.HasPrefix(id, "rs_")
 		addSummary := typ == "reasoning" && item.Get("summary").Type == gjson.Null
 		stripCallID := shouldStripOpenAIResponsesNonPairCallID(typ) && item.Get("call_id").Exists()
-		if !stripID && !addSummary && !stripCallID {
+		if !normalizeReasoningCipher && !stripID && !addSummary && !stripCallID {
 			items = append(items, item.Raw)
 			return true
 		}
@@ -575,14 +643,14 @@ func normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body []byte, knownStoreFalse
 			itemErr = err
 			return false
 		}
-		if stripID {
-			delete(decoded, "id")
+		itemChanged, keep := normalizeOpenAIStoreFalseReasoningItem(decoded)
+		if !itemChanged {
+			items = append(items, item.Raw)
+			return true
 		}
-		if addSummary {
-			decoded["summary"] = []any{}
-		}
-		if stripCallID {
-			delete(decoded, "call_id")
+		changed = true
+		if !keep {
+			return true
 		}
 		encoded, err := marshalOpenAIUpstreamJSON(decoded)
 		if err != nil {
@@ -590,7 +658,6 @@ func normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body []byte, knownStoreFalse
 			return false
 		}
 		items = append(items, string(encoded))
-		changed = true
 		return true
 	})
 	if fallback {
@@ -603,6 +670,55 @@ func normalizeOpenAIAPIKeyStoreFalseReasoningReplay(body []byte, knownStoreFalse
 		return body, false, nil
 	}
 	return replaceOpenAIRawInput(body, input, items), true, nil
+}
+
+// normalizeOpenAIStoreFalseReasoningItem removes only fields that cannot be
+// replayed by an API-key store=false request. Visible summary/content and tool
+// pairing are portable and must survive; an item is dropped only when nothing
+// meaningful remains after removing the remote ciphertext and server id.
+func normalizeOpenAIStoreFalseReasoningItem(item map[string]any) (changed bool, keep bool) {
+	typ := strings.TrimSpace(firstNonEmptyString(item["type"]))
+	id := strings.TrimSpace(firstNonEmptyString(item["id"]))
+
+	hasPacketCipher := false
+	switch typ {
+	case "reasoning":
+		if raw, exists := item["encrypted_content"]; exists {
+			if encrypted, ok := raw.(string); ok && strings.TrimSpace(encrypted) != "" {
+				hasPacketCipher = true
+			} else {
+				delete(item, "encrypted_content")
+				changed = true
+			}
+		}
+		if strings.HasPrefix(id, "rs_") {
+			delete(item, "id")
+			changed = true
+		}
+		if content, exists := item["content"]; exists && content == nil {
+			delete(item, "content")
+			changed = true
+		}
+		if summary, exists := item["summary"]; !exists || summary == nil {
+			item["summary"] = []any{}
+			changed = true
+		}
+		if !hasPacketCipher && !openAIReasoningMapHasPortableContent(item, true) {
+			return true, false
+		}
+	case "item_reference":
+		if strings.HasPrefix(id, "rs_") {
+			return true, false
+		}
+	}
+
+	if shouldStripOpenAIResponsesNonPairCallID(typ) {
+		if _, exists := item["call_id"]; exists {
+			delete(item, "call_id")
+			changed = true
+		}
+	}
+	return changed, true
 }
 
 // Preserve the decoder's handling of unusual or duplicate-key input objects.
@@ -631,34 +747,12 @@ func normalizeOpenAIAPIKeyStoreFalseReasoningReplayDecoded(body []byte, knownSto
 			filtered = append(filtered, rawItem)
 			continue
 		}
-		typ := strings.TrimSpace(firstNonEmptyString(item["type"]))
-		id := strings.TrimSpace(firstNonEmptyString(item["id"]))
-		switch typ {
-		case "reasoning":
-			encryptedContent, hasEncryptedContent := item["encrypted_content"].(string)
-			if !hasEncryptedContent || strings.TrimSpace(encryptedContent) == "" {
-				changed = true
-				continue
-			}
-			if strings.HasPrefix(id, "rs_") {
-				delete(item, "id")
-				changed = true
-			}
-			if summary, ok := item["summary"]; !ok || summary == nil {
-				item["summary"] = []any{}
-				changed = true
-			}
-		case "item_reference":
-			if strings.HasPrefix(id, "rs_") {
-				changed = true
-				continue
-			}
+		itemChanged, keep := normalizeOpenAIStoreFalseReasoningItem(item)
+		if itemChanged {
+			changed = true
 		}
-		if shouldStripOpenAIResponsesNonPairCallID(typ) {
-			if _, hasCallID := item["call_id"]; hasCallID {
-				delete(item, "call_id")
-				changed = true
-			}
+		if !keep {
+			continue
 		}
 		filtered = append(filtered, item)
 	}

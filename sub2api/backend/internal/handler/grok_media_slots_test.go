@@ -397,6 +397,77 @@ func TestGrokMediaVideoLookupOwnerIsolation(t *testing.T) {
 	}
 }
 
+func TestGrokMediaVideoLookupOnlyRetriesSameAccount(t *testing.T) {
+	t.Run("transient then success", func(t *testing.T) {
+		h, slots, bindings, upstream := newGrokMediaSlotHandler(t, false, false)
+		var accountIDs []int64
+		upstream.call = func(_ *http.Request, id int64) (*http.Response, error) {
+			accountIDs = append(accountIDs, id)
+			if len(accountIDs) == 1 {
+				return &http.Response{
+					StatusCode: http.StatusBadGateway,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"temporary upstream failure"}}`)),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"request_id":"task","status":"pending"}`)),
+			}, nil
+		}
+
+		c, w := grokMediaSlotContext(context.Background(), false)
+		h.GrokVideoStatus(c)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, []int64{1, 1}, accountIDs)
+		require.Zero(t, bindings.writes)
+		slots.assertReleased(t)
+	})
+
+	t.Run("retry exhausted never crosses accounts", func(t *testing.T) {
+		h, slots, bindings, upstream := newGrokMediaSlotHandler(t, false, false)
+		var accountIDs []int64
+		upstream.call = func(_ *http.Request, id int64) (*http.Response, error) {
+			accountIDs = append(accountIDs, id)
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"temporary upstream failure"}}`)),
+			}, nil
+		}
+
+		c, w := grokMediaSlotContext(context.Background(), false)
+		h.GrokVideoStatus(c)
+
+		require.Equal(t, http.StatusBadGateway, w.Code)
+		require.Equal(t, []int64{1, 1}, accountIDs)
+		require.Zero(t, bindings.writes)
+		slots.assertReleased(t)
+	})
+}
+
+func TestGrokMediaVideoCreateTransportErrorDoesNotReplay(t *testing.T) {
+	h, slots, _, upstream := newGrokMediaSlotHandler(t, false, false)
+	h.grokMediaEligibilityProber = grokMediaSlotProber(func(context.Context, int64) (bool, string, error) {
+		return true, "eligible", nil
+	})
+	var accountIDs []int64
+	upstream.call = func(_ *http.Request, id int64) (*http.Response, error) {
+		accountIDs = append(accountIDs, id)
+		return nil, errors.New("connection reset after request send")
+	}
+
+	c, w := grokMediaSlotContext(context.Background(), true)
+	h.GrokVideoGeneration(c)
+
+	require.Equal(t, http.StatusBadGateway, w.Code)
+	require.Equal(t, []int64{1}, accountIDs, "ambiguous video create must not be replayed or switched")
+	require.Contains(t, w.Body.String(), "Video creation status is unknown")
+	slots.assertReleased(t)
+}
+
 func TestGrokMediaVideoCompletionStillClaimsBillingOnce(t *testing.T) {
 	h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false)
 	c, _ := grokMediaSlotContext(context.Background(), false)

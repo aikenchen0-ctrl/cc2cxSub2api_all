@@ -61,8 +61,9 @@ const apiBaseUrl = computed({ get: () => props.apiBaseUrl, set: value => emit('u
 const siteSubtitle = computed({ get: () => props.siteSubtitle, set: value => emit('update:siteSubtitle', value) })
 const compactHomeEnabled = computed({ get: () => props.compactHomeEnabled, set: value => emit('update:compactHomeEnabled', value) })
 const homeContent = computed({ get: () => props.homeContent, set: value => emit('update:homeContent', value) })
-const previewName = computed(() => agentName.value.trim() || siteName.value.trim() || 'AgentAPI')
+const previewName = computed(() => siteName.value.trim() || 'AgentAPI')
 const previewInitial = computed(() => previewName.value.slice(0, 1).toUpperCase())
+const logoIsDataURL = computed(() => siteLogo.value.startsWith('data:image/'))
 
 watch(() => props.siteLogo, () => { logoFailed.value = false })
 
@@ -71,6 +72,10 @@ function chooseLogo(event: Event): void {
   if (!file) return
   emit('uploadLogo', file)
   if (logoInput.value) logoInput.value.value = ''
+}
+
+function removeEmbeddedLogo(): void {
+  siteLogo.value = ''
 }
 </script>
 
@@ -101,21 +106,27 @@ function chooseLogo(event: Event): void {
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">品牌信息</h2>
           <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">自定义本站的名称和 Logo。修改只应用于当前站点。</p>
+          <p v-if="!domain" class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            当前是共享入口，匿名访客无法唯一确定要展示哪个站点；登录后会按当前会话显示本站品牌。若需要匿名访问也看到本站品牌，请为站点配置独立域名。
+          </p>
         </div>
 
         <div class="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <form class="space-y-5" @submit.prevent="emit('save')">
             <div class="grid gap-5 md:grid-cols-2">
-              <div>
-                <label for="agent-name" class="input-label">站点名称</label>
-                <AgentInput id="agent-name" v-model="agentName" class="mt-2" maxlength="100" type="text" placeholder="用于站长后台识别" />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">用于站点管理页面和本站记录。</p>
-              </div>
-              <div>
+              <div class="md:col-span-2">
                 <label for="site-name" class="input-label">站点名称</label>
-                <AgentInput id="site-name" v-model="siteName" class="mt-2" maxlength="160" type="text" placeholder="显示在首页、侧栏和浏览器标题中" />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">保存后会立即应用到本站公开页面和登录界面。</p>
+                <AgentInput id="site-name" v-model="siteName" class="mt-2" maxlength="160" type="text" placeholder="例如：德雄专属" />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">应用于首页、侧栏、Header、登录页和浏览器标题；保存后立即更新。</p>
               </div>
+              <details class="rounded-lg border border-gray-200 px-4 py-3 dark:border-dark-600 md:col-span-2">
+                <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-dark-200">高级：后台备注名称</summary>
+                <div class="pt-4">
+                  <label for="agent-name" class="input-label">后台备注名称（选填）</label>
+                  <AgentInput id="agent-name" v-model="agentName" class="mt-2" maxlength="100" type="text" placeholder="留空则自动使用站点名称" />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">仅用于站长后台识别和本站记录，不显示给访客；留空时会自动使用上面的站点名称。</p>
+                </div>
+              </details>
             </div>
 
             <div>
@@ -124,8 +135,14 @@ function chooseLogo(event: Event): void {
                 <input id="site-logo-file" ref="logoInput" class="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-700" type="file" accept="image/png,image/jpeg,image/webp,image/gif" :disabled="saving" @change="chooseLogo">
               </div>
               <p class="mt-1.5 text-xs text-gray-500 dark:text-dark-400">支持 PNG、JPEG、WEBP、GIF，最大 1 MB。上传后立即应用到本站。</p>
-              <label for="site-logo" class="input-label mt-4 block">或填写 Logo 网址</label>
-              <AgentInput id="site-logo" v-model="siteLogo" class="mt-2 font-mono text-sm" maxlength="2048" type="text" placeholder="/logo.svg 或 https://…" />
+              <div v-if="logoIsDataURL" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                <span>图片已内嵌为 Base64，并存入当前站点数据库。</span>
+                <button type="button" class="font-medium underline underline-offset-2" @click="removeEmbeddedLogo">移除 Logo</button>
+              </div>
+              <template v-else>
+                <label for="site-logo" class="input-label mt-4 block">或填写 Logo 网址</label>
+                <AgentInput id="site-logo" v-model="siteLogo" class="mt-2 font-mono text-sm" maxlength="2048" type="text" placeholder="/logo.svg 或 https://…" />
+              </template>
             </div>
 
             <div>
@@ -178,9 +195,10 @@ function chooseLogo(event: Event): void {
             <div class="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800">
               <div class="flex items-center gap-3">
                 <img v-if="siteLogo && !logoFailed" :src="siteLogo" alt="站点 Logo 预览" class="h-10 w-10 rounded-lg object-contain" @error="logoFailed = true">
-                <div v-else class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600 font-semibold text-white">{{ previewInitial }}</div>
+                <div v-else class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-400 font-semibold text-accent-950 dark:text-dark-950">{{ previewInitial }}</div>
                 <div class="min-w-0">
                   <p class="truncate font-semibold text-gray-900 dark:text-white">{{ previewName }}</p>
+                  <p v-if="siteSubtitle.trim()" class="truncate text-xs text-gray-500 dark:text-dark-400">{{ siteSubtitle }}</p>
                   <p class="truncate text-xs text-gray-500 dark:text-dark-400">{{ domain || '站点域名待配置' }}</p>
                 </div>
               </div>
@@ -216,7 +234,7 @@ function chooseLogo(event: Event): void {
 .settings-tab::before {
   content: "";
   @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity;
-  background: linear-gradient(135deg, rgb(240 253 250 / 0.95), rgb(204 251 241 / 0.75));
+  background: linear-gradient(135deg, rgb(253 251 243 / 0.95), rgb(250 243 221 / 0.8));
 }
 .settings-tab:hover::before,
 .settings-tab:focus-visible::before { opacity: 1; }
@@ -233,7 +251,7 @@ function chooseLogo(event: Event): void {
   height: 2px;
   border-radius: 9999px;
   content: "";
-  background: linear-gradient(90deg, #14b8a6, #0d9488);
+  background: linear-gradient(90deg, #d4ad5a, #b3872c);
 }
 .settings-tab-icon { @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors dark:text-dark-400; }
 .settings-tab:hover .settings-tab-icon { @apply text-primary-600 dark:text-primary-300; }
@@ -246,6 +264,6 @@ function chooseLogo(event: Event): void {
   box-shadow: 0 16px 36px rgb(0 0 0 / 0.28), 0 1px 0 rgb(255 255 255 / 0.06) inset;
 }
 .dark .settings-tab::before {
-  background: linear-gradient(135deg, rgb(19 78 74 / 0.45), rgb(15 23 42 / 0.8));
+  background: linear-gradient(135deg, rgb(95 71 30 / 0.35), rgb(25 22 18 / 0.85));
 }
 </style>

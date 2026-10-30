@@ -60,24 +60,24 @@ const peakRateText = computed(() => {
 })
 
 const badgeClass = computed(() => {
-  if (props.exclusive) return 'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300'
+  if (props.exclusive) return 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
   const subscription = isSubscription.value
   const classes: Record<string, [string, string]> = {
-    anthropic: ['bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400', 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'],
-    openai: ['bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'],
-    gemini: ['bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400', 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'],
-    antigravity: ['bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400', 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'],
+    anthropic: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    openai: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    gemini: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    antigravity: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
     grok: ['bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200', 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'],
-    kimi: ['bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400', 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'],
-    zhipu: ['bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400', 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'],
-    deepseek: ['bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400', 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'],
-    minimax: ['bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400', 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'],
-    composite: ['bg-cyan-50 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-300', 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300'],
+    kimi: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    zhipu: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    deepseek: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    minimax: ['bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'],
+    composite: ['bg-primary-50 text-primary-800 dark:bg-primary-900/20 dark:text-primary-300', 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300'],
   }
   const tone = classes[normalizedPlatform.value]
   if (tone) return tone[subscription ? 1 : 0]
   return subscription
-    ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
     : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-200'
 })
 
@@ -107,7 +107,7 @@ const labelClass = computed(() => {
       </template>
       <template v-else>{{ labelText }}</template>
     </span>
-    <span v-if="hasPeakRate" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :title="peakRateText">
+    <span v-if="hasPeakRate" class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300" :title="peakRateText">
       {{ peakRateText }}
     </span>
   </span>

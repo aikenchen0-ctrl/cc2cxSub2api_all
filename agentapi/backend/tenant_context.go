@@ -83,6 +83,20 @@ func (s *Server) isSharedHost(rawHost string) bool {
 	return false
 }
 
+// entryTenantID resolves a station's exact public host from server-side
+// deployment configuration. This is deliberately separate from the legacy
+// agent_config.domain row so an old single-tenant claim on a shared host cannot
+// silently take over traffic.
+func (s *Server) entryTenantID(rawHost string) (string, bool) {
+	host, ok := normalizeTenantHost(rawHost)
+	if !ok || len(s.cfg.EntryTenants) == 0 {
+		return "", false
+	}
+	agentID, ok := s.cfg.EntryTenants[host]
+	agentID = strings.TrimSpace(agentID)
+	return agentID, ok && agentID != ""
+}
+
 // requestAgent resolves a request to a tenant using only server-bound state:
 // an AgentAPI session or an exact persisted host mapping. An explicitly
 // configured AGENT_ID may provide single-tenant migration compatibility, but
@@ -95,6 +109,17 @@ func (s *Server) requestAgent(r *http.Request) (AgentView, error) {
 	}
 
 	host, hostOK := normalizeTenantHost(r.Host)
+	if hostOK {
+		if entryAgentID, mapped := s.entryTenantID(r.Host); mapped {
+			// An existing session remains authoritative. This keeps already
+			// signed-in tenants working while an entry host is assigned to the
+			// station that owns new registrations on that domain.
+			if sessionAgentID != "" {
+				return s.store.Agent(sessionAgentID)
+			}
+			return s.store.Agent(entryAgentID)
+		}
+	}
 	if hostOK && !s.isSharedHost(r.Host) {
 		if agent, err := s.store.AgentByDomain(host); err == nil {
 			if sessionAgentID != "" && sessionAgentID != agent.ID {

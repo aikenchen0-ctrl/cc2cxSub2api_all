@@ -90,6 +90,9 @@ func RegisterAuthRoutes(
 		auth.POST("/satellite/:slug/verify-registration-email", rateLimiter.LimitWithOptions("satellite-verify-registration-email", 10, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.SatelliteVerifyRegistrationEmail)
+		auth.POST("/satellite/:slug/agent-membership", rateLimiter.LimitWithOptions("satellite-agent-membership", 30, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.SatelliteAgentMembership)
 		auth.GET("/oauth/linuxdo/start", h.Auth.LinuxDoOAuthStart)
 		auth.POST("/oauth/linuxdo/start", rateLimiter.LimitWithOptions("oauth-linuxdo-start", 20, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

@@ -22,10 +22,11 @@ Sub2API 已登录用户
   → 所有数据访问按 agent_id 隔离
 ```
 
+- 共享入口支持两种登录方式：主站 SSO，以及主站邮箱密码。密码登录由 AgentAPI 服务端向主站验证，再调用既有卫星 SSO 启动接口取得签名 ticket，最后建立本站 3 天 HttpOnly 租户 Session；密码、主站 JWT、SuperKey 和运行时凭据都不进入浏览器。
 - 开站是创建租户记录，不是部署新容器。
 - 站长是当前租户管理员，不是 Sub2API 管理员。
 - 浏览器不接触 SuperKey、主站 JWT、应用凭据或管理员 Key。
-- 模型请求的收费方式见 [收费模块.md](收费模块.md)。默认按当前用户的主站账户扣费；站长开通本站支付后，代码还会按站长账户再扣一笔。
+- 模型请求的收费方式见 [收费模块.md](收费模块.md)。默认按当前用户的主站账户扣费；站长开通本站支付后，主站从站长账户结算实际费用，用户本站余额按“实际费用 × 模型计费倍率”扣减。
 - 新签发的 `sk-*` 只在 AgentAPI 认证，数据库只保存哈希，完整 Key 仅创建时返回一次；历史 `sk-agent-*` 继续兼容，`sk-super-*` 永远不能作为本站 Key。
 - 自定义域名和品牌是租户配置，不代表独立运行实例。
 
@@ -34,6 +35,10 @@ Sub2API 已登录用户
 截至 2026-09-30，后端已经具备第一批共享多租户核心：同一数据库可保存多个站点，Session 和 Agent Key 固定所属租户，模型转发按凭证租户结算，公开品牌及登录入口可按数据库 Host 映射选择租户，并对跨租户 Session、伪造 query/header 和重复域名建立拒绝与测试。视频、图片任务和结算也已验证可在不同租户复用相同 `task_id` / `request_id`，读取及更新不会串站。主站“一键开分站”代码已改为按已登录用户幂等创建或返回逻辑租户及 owner 成员关系，再通过既有卫星 SSO 票据传递签名的 `agent_id + role + agent_name`；AgentAPI 严格校验这些字段、创建缺失租户并建立 3 天会话，已有租户的 owner 不允许被后续票据或重启改写。上述非核心模块的前端、客户端和专属服务端入口均已删除并建立 `404` 回归测试；AgentAPI 不再注册租户内容页或法律协议 API。
 
 当前共享运行时已经在本地完成一套真实部署与联调：Sub2API 的 `246/247` 迁移已执行并登记，旧 provisioning 表已删除；主站“一键开分站”到 AgentAPI SSO、同一用户重复开站幂等、两个站长获得不同 `agent_id`、共享容器数不变、个人 Key 和列表跨租户隔离、未知 Host 返回 `421` 均已实测通过。迁移另在临时 PostgreSQL 16 中覆盖历史 owner 收敛、已删除用户跳过、旧表/函数删除和失败回滚。AgentAPI 内部及主站的逐站 provision/runtime-control 代码、凭据和管理界面均已退休。
+
+2026-10-27 已补齐共享入口邮箱密码登录：服务端先验证主站密码，再以主站 access token 调用 `GET /api/v1/auth/integrations/agentapi/start` 换取签名 ticket，校验 ticket 的用户与登录用户一致后建立租户 Session。主站 SSO 继续保留；登录页按 `registration_enabled` 隐藏注册入口，关闭注册时提示用户先在主站注册。同日 17:27 已将包含该链路和白金主题的 `cc2cx/agentapi:20261027-1727` 发布到 `https://agentapi.cc2.cx`；公网 `/api/v1/auth/login-options` 返回 `password_login_enabled=true`，并使用一次性主站账号完成真实邮箱密码登录 200 验证。
+
+2026-10-28 已支持站长域名直接注册：`AGENTAPI_ENTRY_TENANTS` 将精确 Host 绑定到逻辑租户，未登录访问该域名时解析为该站长站点；注册先在主站创建普通用户，再通过带卫星应用凭据的 `/api/v1/auth/satellite/agentapi/agent-membership` 写入 `agent_shared_tenant_members`，本站写入 `agent_users` 后签发 `member` 会话。注册用户不会成为 owner，主站 SSO 也会优先进入已加入的租户，而不是为成员新建一个站。
 
 当前 AgentAPI Compose 仍是单副本 SQLite。收费行为以 [收费模块.md](收费模块.md) 为准。
 
@@ -83,6 +88,8 @@ pnpm build
 - `MAIN_API_URL`：Sub2API 主站 API Origin。
 - `LINK`：主站公开 Origin，用于充值跳转。
 - `AGENTAPI_SHARED_HOSTS`：共享代理站公共入口的精确 Host 白名单，逗号分隔；不得填写协议、路径或通配符。数据库中已认领的租户自定义域名会单独放行。共享模式缺少该配置时服务拒绝启动。
+- `AGENTAPI_ENTRY_TENANTS`：可选的站长域名绑定，格式为 `host=agt_...`，多个用逗号分隔。显式绑定优先于历史单租户 `agent_config.domain`，但已登录 Session 仍以自身租户为准。未登录访问绑定域名时用于品牌、登录和注册归属。
+- `AGENT_EMAIL_VERIFY_ENABLED`：必须与主站 `email_verify_enabled` 一致。主站未配置 SMTP 或关闭邮箱验证时保持 `false`，否则注册入口会出现但提交会被 `EMAIL_VERIFY_REQUIRED` 拦截。
 - `MAIN_MODEL_URL` / `SUB2API_RELAY_BASE_URL`：模型网关地址。
 - `SUB2API_APP_CREDENTIAL`：服务端卫星应用凭据。
 - `SUB2API_SSO_SECRET`：与 Sub2API 一致的 SSO Secret。
@@ -149,4 +156,5 @@ pnpm build
 
 ## 文档导航
 
+- [接手文档.md](接手文档.md)：界面体系、主题规范、验证方式与交接约束。
 - [收费模块.md](收费模块.md)：按当前代码整理的收费说明。

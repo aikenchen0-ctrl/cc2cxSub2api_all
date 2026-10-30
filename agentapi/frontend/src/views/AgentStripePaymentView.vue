@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
 <template>
   <main class="mx-auto max-w-lg space-y-5 py-4">
     <section v-if="loading" class="card flex min-h-72 items-center justify-center">
-      <span class="h-9 w-9 animate-spin rounded-full border-4 border-indigo-500/20 border-t-indigo-500"></span>
+      <span class="h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span>
     </section>
     <section v-else-if="initError" class="card p-8 text-center">
       <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="xl" /></span>
@@ -186,10 +186,10 @@ onBeforeUnmount(() => {
     </section>
     <template v-else>
       <section class="card overflow-hidden">
-        <div class="bg-gradient-to-br from-[#635bff] to-[#4f46e5] px-6 py-6 text-center text-white">
-          <p class="text-sm font-medium text-indigo-100">订单应付金额</p>
+        <div class="bg-gradient-to-br from-primary-300 via-primary-400 to-primary-500 px-6 py-6 text-center text-accent-950">
+          <p class="text-sm font-medium text-accent-800">订单应付金额</p>
           <p class="mt-1 text-3xl font-bold">{{ formattedAmount }}</p>
-          <p class="mt-2 break-all font-mono text-xs text-indigo-200">{{ snapshot?.outTradeNo }}</p>
+          <p class="mt-2 break-all font-mono text-xs text-accent-700">{{ snapshot?.outTradeNo }}</p>
         </div>
       </section>
 
@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
       </section>
 
       <section v-else-if="redirecting" class="card p-10 text-center">
-        <span class="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-sky-500/20 border-t-sky-500"></span>
+        <span class="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span>
         <p class="mt-4 text-sm text-gray-500 dark:text-dark-400">正在打开支付宝支付页面…</p>
       </section>
 

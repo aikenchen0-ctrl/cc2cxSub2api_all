@@ -82,6 +82,13 @@ export default {
     columnSettings: 'Column Settings',
     columnAlwaysVisible: 'This column is always visible',
     createKey: 'Create API Key',
+    desktopDownloads: {
+      imageVideo: 'Image & Video',
+      ccLaunch: 'CC-Launch',
+      confirmTitle: 'Download Windows Client',
+      confirmMessage: 'Download the Windows client installer for "{name}"?',
+      download: 'Download'
+    },
     editKey: 'Edit API Key',
     bulkEdit: {
       title: 'Bulk Edit',
@@ -643,9 +650,13 @@ export default {
     empty: 'No groups to display',
     loadFailed: 'Failed to load model plaza',
     noSearchResult: 'No matching models',
-    anonymousHint: 'Sign in to see your exclusive groups and personal rates',
+    anonymousHint: 'All groups and currently supported models are listed publicly',
     filters: {
-      platformLabel: 'Platform',
+      manufacturerLabel: 'Provider',
+      capabilityLabel: 'Capability',
+      text: 'Text',
+      image: 'Image',
+      video: 'Video',
       groupLabel: 'Group',
       rateLabel: 'Rate',
       modelLabel: 'Model',

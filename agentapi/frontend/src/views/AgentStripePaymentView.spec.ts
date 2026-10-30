@@ -25,7 +25,7 @@ vi.mock('@stripe/stripe-js/pure', () => ({ loadStripe: stripeMocks.loadStripe })
 
 const checkout: AgentCheckoutInfo = {
   methods: {}, global_min: 0, global_max: 0, plans: [], balance_disabled: false,
-  balance_recharge_multiplier: 1, subscription_usd_to_cny_rate: 7.2, recharge_fee_rate: 0,
+  subscription_usd_to_cny_rate: 7.2, recharge_fee_rate: 0,
   help_text: '', help_image_url: '', stripe_publishable_key: 'pk_test_public',
   alipay_force_qrcode: false, alipay_mobile_precreate_deep_link: false,
 }

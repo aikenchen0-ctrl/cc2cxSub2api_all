@@ -21,7 +21,7 @@ describe('AgentOrdersView', () => {
     await flushPromises()
     expect(agentAPI.billing.orders).toHaveBeenCalledWith(1, 20, '')
     expect(wrapper.text()).toContain('本站订单')
-    await wrapper.get('button.text-purple-600').trigger('click')
+    await wrapper.get('button.text-primary-600').trigger('click')
     await flushPromises()
     document.body.querySelector<HTMLButtonElement>('[data-testid="confirm-refund"]')!.click()
     await flushPromises()
@@ -52,7 +52,7 @@ describe('AgentOrdersView', () => {
   it('submits refund through the mapped order API then reloads', async () => {
     const wrapper = mount(AgentOrdersView, { attachTo: document.body, global: { stubs: { DataTable: { props: ['data'], template: '<div><slot name="cell-actions" v-for="row in data" :row="row" /></div>' }, AgentPagination: true, Icon: true } } })
     await flushPromises()
-    await wrapper.get('button.text-purple-600').trigger('click')
+    await wrapper.get('button.text-primary-600').trigger('click')
     await flushPromises()
     const textarea = document.body.querySelector<HTMLTextAreaElement>('#refund-reason')!
     textarea.value = 'duplicate charge'; textarea.dispatchEvent(new Event('input'))

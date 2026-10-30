@@ -237,6 +237,28 @@ func TestLoadConfigRequiresValidSharedRuntimeHosts(t *testing.T) {
 	})
 }
 
+func TestParseEntryTenantsNormalizesExactStationBindings(t *testing.T) {
+	entries, err := parseEntryTenants(" AgentAPI.CC2.CX:443=agt_95b3bd2700964a009877ccfea6103451 , second.example=agt_11111111111111111111111111111111 ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 ||
+		entries["agentapi.cc2.cx"] != "agt_95b3bd2700964a009877ccfea6103451" ||
+		entries["second.example"] != "agt_11111111111111111111111111111111" {
+		t.Fatalf("unexpected entry tenants: %#v", entries)
+	}
+	for _, raw := range []string{
+		"agentapi.cc2.cx",
+		"https://agentapi.cc2.cx=agt_95b3bd2700964a009877ccfea6103451",
+		"agentapi.cc2.cx=agt_invalid",
+		"agentapi.cc2.cx=agt_95b3bd2700964a009877ccfea6103451,agentapi.cc2.cx=agt_11111111111111111111111111111111",
+	} {
+		if _, err := parseEntryTenants(raw); err == nil {
+			t.Fatalf("unsafe entry tenants accepted: %q", raw)
+		}
+	}
+}
+
 func TestLoadConfigRejectsIncompleteSharedRuntimeSecrets(t *testing.T) {
 	base := map[string]string{
 		"AGENT_ID":                     "",

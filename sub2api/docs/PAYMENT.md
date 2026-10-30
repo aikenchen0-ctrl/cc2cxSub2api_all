@@ -257,8 +257,9 @@ User selects amount and payment method
 ### Timeout and Fallback
 
 - Before marking an order as expired, the background job queries the upstream payment status first
-- If the user has actually paid but the callback was delayed, the system will reconcile automatically
-- The background job runs every 60 seconds to check for timed-out orders
+- If the user has actually paid but the callback was delayed (including EasyPay / Fuiou upstreams), the system reconciles the order automatically
+- The background job reconciles and checks timeouts every 60 seconds, querying up to 50 pending orders per cycle
+- Administrators can use **Query Order** on a single order to query the upstream immediately and fulfil it; users can also check a pending order from **My Orders**
 
 ---
 

@@ -42,8 +42,20 @@ export const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 export const OPENAI_API_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
 // Keep the standalone vision default aligned with the public satellite model
 // catalogue.  Managed deployments use SUB2API_RELAY_MODEL, while local mode
-// should still exercise the same public model name by default.
-export const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-5.5'
+// should still exercise the same public model name by default.  gpt-5.5 is no
+// longer schedulable upstream, so the default moved to gpt-6-astra.
+export const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-6-astra'
+
+// Public catalogue model used for managed satellite calls. gpt-5.5 is no
+// longer schedulable upstream, so the managed default follows the model the
+// other satellites (aicut / aiexcel / aihuoke) already use.
+export const DEFAULT_SUB2API_RELAY_MODEL = 'gpt-6-astra'
+
+// Read lazily so tests and a restarted container can override the env var
+// without re-importing this module.
+export function managedRelayModel() {
+  return String(process.env.SUB2API_RELAY_MODEL || '').trim() || DEFAULT_SUB2API_RELAY_MODEL
+}
 export const LOCAL_MODEL_DIR = path.resolve(PROJECT_ROOT, process.env.LOCAL_MODEL_DIR || '.generated-models')
 export const LOG_DIR = path.resolve(PROJECT_ROOT, process.env.LOG_DIR || '.logs')
 export const LOG_FILE = path.resolve(LOG_DIR, process.env.LOG_FILE || '3d-model-studio-api.log')

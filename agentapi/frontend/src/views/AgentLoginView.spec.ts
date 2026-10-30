@@ -8,9 +8,22 @@ import AgentLoginView from './AgentLoginView.vue'
 import { agentPasskeyAPI } from '@/agent/passkeys'
 
 const success: LoginResponse = { access_token: '', refresh_token: '', expires_in: 259200, token_type: 'Cookie', user: { id: '43', agent_admin: false } }
-async function setup() {
+async function setup(options: Record<string, boolean> = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  vi.spyOn(agentAPI.auth, 'loginOptions').mockResolvedValue({
+    shared_runtime: false,
+    tenant_resolved: true,
+    password_login_enabled: true,
+    main_site_sso_enabled: true,
+    registration_enabled: true,
+    ...options,
+  })
+  vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+    agent: { agent_id: 'agent-1', name: 'Agent', site_name: 'Agent Site', site_logo: '/logo.svg' },
+    authenticated: true,
+    is_agent_admin: false,
+  } as Awaited<ReturnType<typeof agentAPI.getContext>>)
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/login', component: AgentLoginView },
     { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
@@ -20,8 +33,11 @@ async function setup() {
   await router.push('/login')
   await router.isReady()
   const wrapper = mount(AgentLoginView, { global: { plugins: [pinia, router] } })
-  await wrapper.get('input[type="email"]').setValue('user@example.com')
-  await wrapper.get('input[type="password"]').setValue('password123')
+  await flushPromises()
+  if (options.password_login_enabled !== false) {
+    await wrapper.get('input[type="email"]').setValue('user@example.com')
+    await wrapper.get('input[type="password"]').setValue('password123')
+  }
   return { wrapper, router, session: useAgentSession() }
 }
 
@@ -35,6 +51,24 @@ describe('AgentLoginView', () => {
     expect(link.attributes('href')).toBe('/api/v1/auth/main-site/login?next=%2Fusage%3Fpage%3D2')
     expect(link.attributes('href')).not.toContain('key=')
     expect(link.attributes('href')).not.toContain('token=')
+    wrapper.unmount()
+  })
+  it('keeps email and password login available on a shared entry host', async () => {
+    const { wrapper } = await setup({ shared_runtime: true, password_login_enabled: true, tenant_resolved: false, registration_enabled: false })
+    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
+    expect(wrapper.find('input[type="password"]').exists()).toBe(true)
+    const link = wrapper.get('[data-testid="main-site-login"]')
+    expect(link.attributes('href')).toBe('/api/v1/auth/main-site/login?next=%2Fdashboard')
+    expect(link.classes()).toContain('btn-secondary')
+    expect(wrapper.text()).toContain('邮箱和密码与主站一致')
+    expect(wrapper.text()).toContain('使用主站账号 SSO 登录')
+    expect(wrapper.text()).not.toContain('立即注册')
+    wrapper.unmount()
+  })
+  it('explains when main-site SSO is unavailable on a shared host', async () => {
+    const { wrapper } = await setup({ shared_runtime: true, password_login_enabled: false, tenant_resolved: false, main_site_sso_enabled: false })
+    expect(wrapper.find('[data-testid="main-site-login"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('主站登录未配置')
     wrapper.unmount()
   })
   it('shows passkey login only for a supported configured Agent origin', async () => {

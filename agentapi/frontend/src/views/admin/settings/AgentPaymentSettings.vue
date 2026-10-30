@@ -50,6 +50,12 @@ const enabledProviderKeyOptions = computed(() => {
   return providerKeyOptions.value.filter(opt => enabled.includes(opt.value))
 })
 const hasAnyPaymentTypeEnabled = computed(() => form.value.payment_enabled_types.length > 0)
+const hasReadyProvider = computed(() => providers.value.some(provider =>
+  provider.enabled && form.value.payment_enabled_types.includes(provider.provider_key),
+))
+const canActivatePayments = computed(() =>
+  !form.value.payment_enabled && hasAnyPaymentTypeEnabled.value && hasReadyProvider.value,
+)
 const loadBalanceOptions = computed(() => [
   { value: 'round-robin', label: t('admin.settings.payment.strategyRoundRobin') },
   { value: 'least-amount', label: t('admin.settings.payment.strategyLeastAmount') },
@@ -75,7 +81,7 @@ function emptyForm() {
     payment_min_amount: 1,
     payment_max_amount: 10000,
     payment_daily_limit: 0,
-    payment_balance_recharge_multiplier: 1,
+    payment_model_rate_multiplier: 1,
     payment_subscription_usd_to_cny_rate: 0,
     payment_recharge_fee_rate: 0,
     payment_order_timeout_minutes: 30,
@@ -114,7 +120,7 @@ function applySettings(settings: StationBillingSettings): void {
     payment_min_amount: settings.min_amount,
     payment_max_amount: settings.max_amount,
     payment_daily_limit: settings.daily_limit,
-    payment_balance_recharge_multiplier: settings.balance_recharge_multiplier,
+    payment_model_rate_multiplier: settings.model_rate_multiplier || 1,
     payment_subscription_usd_to_cny_rate: settings.subscription_usd_to_cny_rate,
     payment_recharge_fee_rate: settings.recharge_fee_rate,
     payment_order_timeout_minutes: settings.order_timeout_minutes,
@@ -148,7 +154,7 @@ function toPayload(): StationBillingSettings {
     max_pending_orders: Number(current.payment_max_pending_orders),
     enabled_payment_types: current.payment_enabled_types,
     balance_disabled: current.payment_balance_disabled,
-    balance_recharge_multiplier: Number(current.payment_balance_recharge_multiplier),
+    model_rate_multiplier: Number(current.payment_model_rate_multiplier) || 1,
     subscription_usd_to_cny_rate: Number(current.payment_subscription_usd_to_cny_rate) || 0,
     recharge_fee_rate: Number(current.payment_recharge_fee_rate) || 0,
     load_balance_strategy: current.payment_load_balance_strategy,
@@ -237,19 +243,34 @@ async function loadProviders(): Promise<void> {
   }
 }
 
-async function saveSettings(): Promise<void> {
-  if (loading.value || loadFailed.value || saving.value) return
+async function saveSettings(successNotice = '支付配置已保存'): Promise<boolean> {
+  if (loading.value || loadFailed.value || saving.value) return false
   saving.value = true
   error.value = ''
   notice.value = ''
   try {
     applySettings(await agentAPI.billing.saveSettings(toPayload()))
-    notice.value = '支付配置已保存'
+    notice.value = successNotice
+    return true
   } catch (cause) {
     error.value = errorMessage(cause, '保存支付配置失败')
+    return false
   } finally {
     saving.value = false
   }
+}
+
+async function setPaymentEnabled(next: boolean): Promise<void> {
+  if (loading.value || loadFailed.value || saving.value) return
+  if (next && !hasReadyProvider.value) {
+    error.value = '请先添加并启用与所选支付方式匹配的服务商。'
+    return
+  }
+  const previous = form.value.payment_enabled
+  if (previous === next) return
+  form.value.payment_enabled = next
+  const saved = await saveSettings(next ? '支付已开启并保存' : '支付已关闭并保存')
+  if (!saved) form.value.payment_enabled = previous
 }
 
 function togglePaymentType(type: string): void {
@@ -306,7 +327,12 @@ async function handleSaveProvider(payload: Partial<ProviderInstance>): Promise<v
     else await agentAPI.billing.createProvider(payload as ProviderInstance)
     showProviderDialog.value = false
     await loadProviders()
-    await saveSettings()
+    const saved = await saveSettings('支付渠道已保存')
+    if (saved && !form.value.payment_enabled) {
+      notice.value = hasReadyProvider.value && hasAnyPaymentTypeEnabled.value
+        ? '支付渠道已保存，但站点收款尚未开启。点击“立即开启收款”后用户才能付款。'
+        : '支付渠道已保存；请选择支付方式并打开“启用支付”开关后再开放收款。'
+    }
   } catch (cause) {
     error.value = errorMessage(cause, '保存服务商失败')
   } finally {
@@ -402,7 +428,7 @@ onMounted(() => void load())
   <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ error }}</p>
   <p v-if="notice" role="status" class="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ notice }}</p>
   <button v-if="loadFailed" type="button" class="btn btn-secondary" @click="load">重新加载</button>
-  <form class="space-y-6" novalidate @submit.prevent="saveSettings">
+  <form class="space-y-6" novalidate @submit.prevent="saveSettings()">
     <fieldset :disabled="loading || loadFailed || saving" class="contents">
         <div  class="space-y-6">
           <!-- Payment System Settings -->
@@ -449,11 +475,15 @@ onMounted(() => void load())
                     {{ t("admin.settings.payment.enabledHint") }}
                   </p>
                 </div>
-                <Toggle v-model="form.payment_enabled" />
+                <Toggle :model-value="form.payment_enabled" @update:model-value="setPaymentEnabled" />
               </div>
-              <p v-if="!form.payment_enabled" role="status" class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                当前未开放收款。可先填写以下设置并添加服务商；保存配置不会自动启用支付。
-              </p>
+              <div v-if="!form.payment_enabled" role="status" class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                <p v-if="canActivatePayments">支付渠道已配置，但站点收款尚未开启。用户现在打开充值页会看到暂无可用支付方式。</p>
+                <p v-else>当前未开放收款。可先填写以下设置并添加服务商；切换上方开关会立即保存并生效。</p>
+                <button v-if="canActivatePayments" type="button" class="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-60" :disabled="saving" @click="setPaymentEnabled(true)">
+                  {{ saving ? '正在开启…' : '立即开启收款' }}
+                </button>
+              </div>
               <div class="space-y-4" data-testid="payment-settings-fields">
                 <!-- Row 1: Product name -->
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -555,12 +585,12 @@ onMounted(() => void load())
                   </div>
                   <div>
                     <label class="input-label">{{
-                      t("admin.settings.payment.balanceRechargeMultiplier")
+                      t("admin.settings.payment.modelRateMultiplier")
                     }}</label>
                     <input
-                      :value="form.payment_balance_recharge_multiplier || ''"
+                      :value="form.payment_model_rate_multiplier || ''"
                       @input="
-                        form.payment_balance_recharge_multiplier =
+                        form.payment_model_rate_multiplier =
                           parseFloat(
                             ($event.target as HTMLInputElement).value,
                           ) || 1
@@ -568,12 +598,13 @@ onMounted(() => void load())
                       type="number"
                       step="0.01"
                       min="0.01"
+                      max="1000"
                       class="input"
                     />
                     <p class="mt-0.5 text-xs text-gray-400">
                       {{
                         t(
-                          "admin.settings.payment.balanceRechargeMultiplierHint",
+                          "admin.settings.payment.modelRateMultiplierHint",
                         )
                       }}
                     </p>
@@ -581,10 +612,9 @@ onMounted(() => void load())
                       class="mt-1 text-xs font-medium text-primary-600 dark:text-primary-400"
                     >
                       {{
-                        t("admin.settings.payment.balanceRechargePreview", {
-                          usd: (
-                            Number(form.payment_balance_recharge_multiplier) ||
-                            1
+                        t("admin.settings.payment.modelRateMultiplierPreview", {
+                          rate: (
+                            Number(form.payment_model_rate_multiplier) || 1
                           ).toFixed(2),
                         })
                       }}
@@ -715,7 +745,7 @@ onMounted(() => void load())
                         :class="[
                           'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
                           form.payment_cancel_rate_limit_enabled
-                            ? 'bg-primary-500'
+                            ? 'bg-primary-400'
                             : 'bg-gray-300 dark:bg-dark-600',
                         ]"
                         @click="
@@ -805,7 +835,7 @@ onMounted(() => void load())
                         :class="[
                           'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
                           form.payment_alipay_force_qrcode
-                            ? 'bg-primary-500'
+                            ? 'bg-primary-400'
                             : 'bg-gray-300 dark:bg-dark-600',
                         ]"
                         @click="
@@ -837,7 +867,7 @@ onMounted(() => void load())
                         :class="[
                           'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
                           form.payment_alipay_mobile_precreate_deep_link
-                            ? 'bg-primary-500'
+                            ? 'bg-primary-400'
                             : 'bg-gray-300 dark:bg-dark-600',
                         ]"
                         @click="
@@ -874,7 +904,7 @@ onMounted(() => void load())
                       :class="[
                         'rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
                         isPaymentTypeEnabled(pt.value)
-                          ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
+                          ? 'border-primary-500 bg-primary-400 text-accent-950 shadow-sm'
                           : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:border-dark-500',
                       ]"
                     >

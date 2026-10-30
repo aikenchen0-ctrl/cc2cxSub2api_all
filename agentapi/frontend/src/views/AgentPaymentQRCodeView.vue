@@ -172,7 +172,7 @@ onBeforeUnmount(cleanup)
         <p class="mt-2 break-all font-mono text-xs text-gray-400">{{ snapshot.outTradeNo }}</p>
         <button v-if="canLaunchAlipay && !terminal" class="btn btn-primary mt-5 w-full" type="button" @click="alipayLauncher?.launch()">打开支付宝付款</button>
         <p v-if="alipayLaunchState === 'fallback'" class="mt-3 text-sm text-gray-500">未能唤起支付宝，可长按保存二维码，或在系统浏览器打开后重试。</p>
-        <a v-if="payURL && !terminal" class="btn btn-primary mt-5 w-full" :href="payURL" target="_blank" rel="noopener noreferrer">打开支付窗口</a>
+        <a v-if="payURL && !terminal" class="btn btn-primary mt-5 w-full" :href="payURL" target="_blank" rel="noopener noreferrer">在新标签页打开支付页</a>
         <button class="btn btn-primary mt-3 w-full" type="button" :disabled="verifying || terminal" @click="verify(true)">
           <Icon name="refresh" size="sm" :class="['mr-2', verifying ? 'animate-spin' : '']" />{{ verifying ? '正在确认…' : '我已完成支付' }}
         </button>

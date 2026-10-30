@@ -93,7 +93,7 @@ function settlementLabel(value: string): string {
 
     <template #table>
       <DataTable
-        :columns='[{"key":"request_id","label":"请求编号"},{"key":"user","label":"归属用户"},{"key":"model","label":"模型"},{"key":"cost","label":"实际费用"},{"key":"status","label":"同步状态"},{"key":"updated_at","label":"更新时间"},{"key":"error","label":"说明"}]'
+        :columns='[{"key":"request_id","label":"请求编号"},{"key":"user","label":"归属用户"},{"key":"model","label":"模型"},{"key":"cost","label":"上游费用"},{"key":"charged","label":"用户扣费"},{"key":"status","label":"同步状态"},{"key":"updated_at","label":"更新时间"},{"key":"error","label":"说明"}]'
         :data="filteredItems"
         :loading="loading"
         row-key="request_id"
@@ -107,6 +107,7 @@ function settlementLabel(value: string): string {
         </template>
         <template #cell-model="{ row: item }"><span class="font-mono text-xs">{{ item.model || '—' }}</span></template>
         <template #cell-cost="{ row: item }"><span :class="item.status === 'pending' ? 'text-gray-400' : 'font-medium text-gray-900 dark:text-white'">{{ item.status === 'pending' ? '待确认' : formatMoney(item.actual_cents) }}</span></template>
+        <template #cell-charged="{ row: item }"><span :class="item.status === 'pending' ? 'text-gray-400' : 'font-medium text-gray-900 dark:text-white'">{{ item.status === 'pending' ? '待确认' : formatMoney(item.charged_cents || item.actual_cents) }}<span v-if="item.station_rate_multiplier" class="ml-1 text-xs text-gray-400">×{{ item.station_rate_multiplier }}</span></span></template>
         <template #cell-status="{ row: item }"><AgentStatusBadge :status="item.status" :label="settlementLabel(item.status)" /></template>
         <template #cell-updated_at="{ row: item }"><span class="whitespace-nowrap text-gray-500 dark:text-dark-400">{{ formatTime(item.updated_at || item.created_at) }}</span></template>
         <template #cell-error="{ row: item }"><span class="max-w-xs whitespace-normal text-sm text-gray-500 dark:text-dark-400">{{ errorMessage({ message: item.error }, item.status === 'pending' ? '等待用量记录' : '—') }}</span></template>

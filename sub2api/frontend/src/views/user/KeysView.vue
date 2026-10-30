@@ -48,7 +48,25 @@
       </template>
 
       <template #actions>
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            class="btn btn-secondary whitespace-nowrap"
+            data-test="download-image-video-client"
+            @click="requestWindowsDownload(WINDOWS_DESKTOP_CLIENTS.imageVideo)"
+          >
+            <Icon name="sparkles" size="md" class="mr-2" />
+            {{ t('keys.desktopDownloads.imageVideo') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary whitespace-nowrap"
+            data-test="download-cc-launch-client"
+            @click="requestWindowsDownload(WINDOWS_DESKTOP_CLIENTS.ccLaunch)"
+          >
+            <Icon name="terminal" size="md" class="mr-2" />
+            {{ t('keys.desktopDownloads.ccLaunch') }}
+          </button>
           <button
             @click="loadApiKeys"
             :disabled="loading"
@@ -1069,6 +1087,17 @@
       @cancel="showResetRateLimitDialog = false"
     />
 
+    <!-- Windows Desktop Client Download Confirmation Dialog -->
+    <ConfirmDialog
+      :show="!!desktopDownloadPrompt"
+      :title="t('keys.desktopDownloads.confirmTitle')"
+      :message="t('keys.desktopDownloads.confirmMessage', { name: desktopDownloadPrompt?.name || '' })"
+      :confirm-text="t('keys.desktopDownloads.download')"
+      :cancel-text="t('common.cancel')"
+      @confirm="confirmWindowsDownload"
+      @cancel="desktopDownloadPrompt = null"
+    />
+
     <!-- Use Key Modal -->
     <UseKeyModal
       :show="showUseKeyModal"
@@ -1234,6 +1263,11 @@ import {
   buildCcSwitchImportDeeplink,
   type CcSwitchClientType
 } from '@/utils/ccswitchImport'
+import {
+  WINDOWS_DESKTOP_CLIENTS,
+  downloadWindowsDesktopClient,
+  type WindowsDesktopClientDownload
+} from '@/utils/desktop-downloads'
 
 // Helper to format date for datetime-local input
 const formatDateTimeLocal = (isoDate: string): string => {
@@ -1401,6 +1435,7 @@ const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
 const showCcsClientSelect = ref(false)
+const desktopDownloadPrompt = ref<{ name: string; url: string } | null>(null)
 const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
@@ -1410,6 +1445,17 @@ const publicSettings = ref<PublicSettings | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const columnDropdownRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<{ top?: number; bottom?: number; left: number } | null>(null)
+
+const requestWindowsDownload = (download: WindowsDesktopClientDownload) => {
+  desktopDownloadPrompt.value = { name: t(download.labelKey), url: download.url }
+}
+
+const confirmWindowsDownload = () => {
+  const prompt = desktopDownloadPrompt.value
+  if (!prompt) return
+  downloadWindowsDesktopClient(prompt.url)
+  desktopDownloadPrompt.value = null
+}
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
 let abortController: AbortController | null = null
 

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -9,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -18,12 +18,24 @@ import (
 
 const accountModelRefreshPageSize = 500
 
+const (
+	accountModelRefreshStatusPending    = "pending"
+	accountModelRefreshStatusRefreshing = "refreshing"
+	accountModelRefreshStatusSuccess    = "success"
+	accountModelRefreshStatusFailed     = "failed"
+	// accountModelRefreshStatusSkipped marks accounts the manual flow cannot be
+	// applied to (credential shadows, OpenAI passthrough). They are left untouched.
+	accountModelRefreshStatusSkipped = "skipped"
+)
+
 type accountModelRefreshItem struct {
 	AccountID   int64  `json:"account_id"`
 	AccountName string `json:"account_name"`
 	UpstreamURL string `json:"upstream_url"`
 	Status      string `json:"status"`
 	ModelCount  int    `json:"model_count,omitempty"`
+	// Message explains a skip or carries the safe upstream failure reason.
+	Message string `json:"message,omitempty"`
 }
 
 type accountModelRefreshJob struct {
@@ -33,6 +45,7 @@ type accountModelRefreshJob struct {
 	Completed   int                       `json:"completed"`
 	Succeeded   int                       `json:"succeeded"`
 	Failed      int                       `json:"failed"`
+	Skipped     int                       `json:"skipped"`
 	StartedAt   time.Time                 `json:"started_at"`
 	CompletedAt *time.Time                `json:"completed_at,omitempty"`
 	Items       []accountModelRefreshItem `json:"items"`
@@ -86,7 +99,7 @@ func (s *accountModelRefreshJobStore) create(accounts []service.Account) *accoun
 			AccountID:   account.ID,
 			AccountName: account.Name,
 			UpstreamURL: accountModelRefreshUpstreamURL(account),
-			Status:      "pending",
+			Status:      accountModelRefreshStatusPending,
 		})
 	}
 	s.mu.Lock()
@@ -97,7 +110,7 @@ func (s *accountModelRefreshJobStore) create(accounts []service.Account) *accoun
 	return copyJob
 }
 
-func (s *accountModelRefreshJobStore) setItemStatus(jobID string, index int, status string, modelCount int) {
+func (s *accountModelRefreshJobStore) setItemStatus(jobID string, index int, status string, modelCount int, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	job := s.jobs[jobID]
@@ -107,16 +120,22 @@ func (s *accountModelRefreshJobStore) setItemStatus(jobID string, index int, sta
 	previous := job.Items[index].Status
 	job.Items[index].Status = status
 	job.Items[index].ModelCount = modelCount
-	if previous == "success" || previous == "failed" {
+	job.Items[index].Message = message
+	if previous == accountModelRefreshStatusSuccess ||
+		previous == accountModelRefreshStatusFailed ||
+		previous == accountModelRefreshStatusSkipped {
 		return
 	}
-	if status == "success" || status == "failed" {
+	switch status {
+	case accountModelRefreshStatusSuccess:
 		job.Completed++
-		if status == "success" {
-			job.Succeeded++
-		} else {
-			job.Failed++
-		}
+		job.Succeeded++
+	case accountModelRefreshStatusFailed:
+		job.Completed++
+		job.Failed++
+	case accountModelRefreshStatusSkipped:
+		job.Completed++
+		job.Skipped++
 	}
 }
 
@@ -138,7 +157,7 @@ func (s *accountModelRefreshJobStore) finish(jobID string) {
 // StartModelRefreshJob starts a server-owned background job. The request may end
 // and the browser may close the progress dialog without cancelling the refresh.
 func (h *AccountHandler) StartModelRefreshJob(c *gin.Context) {
-	if h.adminService == nil || h.modelRefreshJobs == nil {
+	if h.adminService == nil || h.modelRefreshJobs == nil || !h.canSyncUpstreamModels() {
 		response.InternalError(c, "Account model refresh service is not configured")
 		return
 	}
@@ -186,11 +205,14 @@ func (h *AccountHandler) listAllAccountsForModelRefresh(ctx context.Context) ([]
 	return accounts, nil
 }
 
+// runModelRefreshJob replaces each account's model whitelist with the model list
+// the upstream actually reports. It is the batch form of the manual sequence
+// "Edit -> Clear all models -> Sync upstream supported models -> Save".
 func (h *AccountHandler) runModelRefreshJob(jobID string, accounts []service.Account) {
 	defer h.modelRefreshJobs.finish(jobID)
 	for index := range accounts {
 		accountSummary := &accounts[index]
-		h.modelRefreshJobs.setItemStatus(jobID, index, "refreshing", 0)
+		h.modelRefreshJobs.setItemStatus(jobID, index, accountModelRefreshStatusRefreshing, 0, "")
 
 		// Reload each account immediately before syncing. This mirrors the single-account
 		// edit flow and avoids using a stale list snapshot for credentials, proxy, headers,
@@ -198,55 +220,164 @@ func (h *AccountHandler) runModelRefreshJob(jobID string, accounts []service.Acc
 		account, err := h.adminService.GetAccount(context.Background(), accountSummary.ID)
 		if err != nil || account == nil {
 			slog.Warn("account_model_refresh_load_failed", "account_id", accountSummary.ID, "error", err)
-			h.modelRefreshJobs.setItemStatus(jobID, index, "failed", 0)
+			h.modelRefreshJobs.setItemStatus(jobID, index, accountModelRefreshStatusFailed, 0, "failed to load account")
 			continue
 		}
 
-		// Match Edit -> fillRelated -> Update: add the shared built-in catalog,
-		// preserving custom aliases and every unrelated credential field.
-		credentials := cloneAccountCredentialsForModelRefresh(account.Credentials)
-		mapping := make(map[string]any)
-		switch existing := credentials["model_mapping"].(type) {
-		case map[string]any:
-			for key, value := range existing {
-				mapping[key] = value
-			}
-		case map[string]string:
-			for key, value := range existing {
-				mapping[key] = value
-			}
+		count, skipReason, err := h.refreshAccountModelsFromUpstream(account)
+		switch {
+		case skipReason != "":
+			h.modelRefreshJobs.setItemStatus(jobID, index, accountModelRefreshStatusSkipped, 0, skipReason)
+		case err != nil:
+			slog.Warn("account_model_refresh_upstream_failed", "account_id", account.ID, "error", err)
+			h.modelRefreshJobs.setItemStatus(jobID, index, accountModelRefreshStatusFailed, 0, safeAccountModelRefreshError(err))
+		default:
+			h.modelRefreshJobs.setItemStatus(jobID, index, accountModelRefreshStatusSuccess, count, "")
 		}
-		// Preserve legacy Antigravity whitelist entries when migrating to mappings.
-		if account.Platform == "antigravity" && credentials["model_mapping"] == nil {
-			if legacy, ok := credentials["model_whitelist"].([]any); ok {
-				for _, value := range legacy {
-					if model, ok := value.(string); ok && strings.TrimSpace(model) != "" {
-						model = strings.TrimSpace(model)
-						mapping[model] = model
-					}
-				}
-			}
-		}
-		if account.Platform == "antigravity" {
-			delete(credentials, "model_whitelist")
-		}
-		for _, model := range modelcatalog.ForPlatform(account.Platform) {
-			if _, exists := mapping[model]; !exists {
-				mapping[model] = model
-			}
-		}
-		if len(mapping) == 0 {
-			h.modelRefreshJobs.setItemStatus(jobID, index, "failed", 0)
-			continue
-		}
-		credentials["model_mapping"] = mapping
-		if _, err := h.adminService.UpdateAccount(context.Background(), account.ID, &service.UpdateAccountInput{Credentials: credentials}); err != nil {
-			slog.Warn("account_model_refresh_save_failed", "account_id", account.ID, "error", err)
-			h.modelRefreshJobs.setItemStatus(jobID, index, "failed", 0)
-			continue
-		}
-		h.modelRefreshJobs.setItemStatus(jobID, index, "success", len(mapping))
 	}
+}
+
+// refreshAccountModelsFromUpstream performs, for one account, the same steps an
+// admin would repeat by hand: clear the whitelist, sync the upstream model list,
+// then save.
+//
+// "Clear all models" in the editor empties the whitelist list only; custom
+// aliases (request model != upstream model) live in the mapping tab and survive
+// that button. This function reproduces that exactly:
+//   - identity entries (model -> itself) are discarded and rebuilt from upstream;
+//   - custom aliases are kept, and win over an identity entry with the same key,
+//     matching how the editor merges both lists on save;
+//   - every other credential field is written back unchanged.
+//
+// When the upstream call fails the account is left untouched, which is what
+// happens when the editor is closed without saving.
+func (h *AccountHandler) refreshAccountModelsFromUpstream(account *service.Account) (int, string, error) {
+	if account.IsCredentialShadow() {
+		return 0, "shadow account: models follow the parent account", nil
+	}
+	if account.IsOpenAIPassthroughEnabled() {
+		return 0, "OpenAI passthrough enabled: model restriction is not used", nil
+	}
+
+	catalog, err := h.syncUpstreamModelCatalog(context.Background(), account)
+	if err != nil {
+		return 0, "", err
+	}
+	if catalog == nil {
+		return 0, "", errors.New("upstream returned no model catalog")
+	}
+
+	upstreamModels := make([]string, 0, len(catalog.Models))
+	for _, model := range catalog.Models {
+		model = strings.TrimSpace(model)
+		// The editor's whitelist writer skips wildcard entries; mirror that so a
+		// synced list can never turn into a "model -> pattern" rewrite.
+		if model == "" || strings.Contains(model, "*") {
+			continue
+		}
+		upstreamModels = append(upstreamModels, model)
+	}
+	upstreamModels = dedupeAccountModelNames(upstreamModels)
+	if len(upstreamModels) == 0 {
+		return 0, "", errors.New("upstream returned no supported models")
+	}
+
+	mapping := make(map[string]any, len(upstreamModels))
+	for key, value := range accountModelCustomAliases(account.Credentials["model_mapping"]) {
+		mapping[key] = value
+	}
+	for _, model := range upstreamModels {
+		if _, hasAlias := mapping[model]; hasAlias {
+			// A custom alias for this exact request model wins, as it does in the editor.
+			continue
+		}
+		mapping[model] = model
+	}
+
+	credentials := cloneAccountCredentialsForModelRefresh(account.Credentials)
+	credentials["model_mapping"] = mapping
+	if account.Platform == service.PlatformAntigravity {
+		// The editor drops the retired whitelist field once it saves a mapping.
+		delete(credentials, "model_whitelist")
+	}
+
+	if _, err := h.adminService.UpdateAccount(context.Background(), account.ID, &service.UpdateAccountInput{Credentials: credentials}); err != nil {
+		return 0, "", err
+	}
+	return len(mapping), "", nil
+}
+
+func (h *AccountHandler) canSyncUpstreamModels() bool {
+	return h.accountTestService != nil || h.modelCatalogSync != nil
+}
+
+// syncUpstreamModelCatalog fetches an account's live upstream model list and
+// persists capability metadata, exactly like the editor's sync button.
+func (h *AccountHandler) syncUpstreamModelCatalog(ctx context.Context, account *service.Account) (*service.UpstreamModelCatalog, error) {
+	if h.modelCatalogSync != nil {
+		return h.modelCatalogSync(ctx, account)
+	}
+	if h.accountTestService == nil {
+		return nil, errors.New("account test service is not configured")
+	}
+	return h.accountTestService.SyncUpstreamModelCatalog(ctx, account)
+}
+
+func safeAccountModelRefreshError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var syncErr *service.UpstreamModelSyncError
+	if errors.As(err, &syncErr) {
+		return syncErr.SafeMessage()
+	}
+	slog.Warn("account_model_refresh_error", "error", err)
+	return "failed to refresh models from upstream"
+}
+
+// accountModelCustomAliases returns the entries of a stored model_mapping whose
+// value differs from the key, i.e. the mappings the editor keeps in its mapping tab.
+func accountModelCustomAliases(raw any) map[string]string {
+	aliases := make(map[string]string)
+	add := func(key, value string) {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" || key == value || strings.Contains(value, "*") {
+			return
+		}
+		aliases[key] = value
+	}
+	switch mapping := raw.(type) {
+	case map[string]any:
+		for key, value := range mapping {
+			if text, ok := value.(string); ok {
+				add(key, text)
+			}
+		}
+	case map[string]string:
+		for key, value := range mapping {
+			add(key, value)
+		}
+	}
+	return aliases
+}
+
+func dedupeAccountModelNames(models []string) []string {
+	seen := make(map[string]struct{}, len(models))
+	result := make([]string, 0, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		key := strings.ToLower(model)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, model)
+	}
+	return result
 }
 
 func cloneAccountCredentialsForModelRefresh(source map[string]any) map[string]any {

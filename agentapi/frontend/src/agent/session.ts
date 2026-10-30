@@ -4,6 +4,7 @@ import { agentAPI, type AgentUser, type LoginResponse } from './api'
 import { agentPasskeyAPI } from './passkeys'
 import { errorMessage } from './client'
 import { AGENT_PAYMENT_RECOVERY_KEY } from './paymentFlow'
+import { loadBranding, loadSessionBranding } from './branding'
 
 function validUser(value: unknown): value is AgentUser {
   if (!value || typeof value !== 'object') return false
@@ -49,6 +50,7 @@ export const useAgentSession = defineStore('agent-session', () => {
       const response = await agentAPI.auth.login(email, password)
       if (version !== identityVersion) throw new Error('会话已变更，请重新登录。')
       user.value = !response.requires_2fa && validUser(response.user) ? response.user : null
+      if (user.value) void loadSessionBranding(() => version === identityVersion)
       return response
     } finally {
       if (version === identityVersion) busy.value = false
@@ -66,6 +68,7 @@ export const useAgentSession = defineStore('agent-session', () => {
         throw new Error('登录响应缺少有效用户信息，请重新登录。')
       }
       user.value = response.user
+      void loadSessionBranding(() => version === identityVersion)
       return response.user
     } finally {
       if (version === identityVersion) busy.value = false
@@ -83,6 +86,7 @@ export const useAgentSession = defineStore('agent-session', () => {
         throw new Error('登录响应缺少有效用户信息，请重新登录。')
       }
       user.value = response.user
+      void loadSessionBranding(() => version === identityVersion)
       return response.user
     } finally {
       if (version === identityVersion) busy.value = false
@@ -98,6 +102,7 @@ export const useAgentSession = defineStore('agent-session', () => {
         : await agentAPI.auth.register(email, password, username, affiliateCode)
       if (version !== identityVersion) throw new Error('会话已变更，请重新登录。')
       user.value = !response.requires_2fa && validUser(response.user) ? response.user : null
+      if (user.value) void loadSessionBranding(() => version === identityVersion)
       return response
     } finally {
       if (version === identityVersion) busy.value = false
@@ -119,6 +124,7 @@ export const useAgentSession = defineStore('agent-session', () => {
   async function logout(): Promise<void> {
     clear()
     await agentAPI.auth.logout()
+    void loadBranding()
   }
 
   function clear(): void {

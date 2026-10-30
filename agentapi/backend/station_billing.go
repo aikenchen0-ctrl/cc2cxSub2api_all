@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -33,7 +34,7 @@ type StationPaymentSettings struct {
 	MaxPendingOrders              int      `json:"max_pending_orders"`
 	EnabledTypes                  []string `json:"enabled_payment_types"`
 	BalanceDisabled               bool     `json:"balance_disabled"`
-	BalanceRechargeMultiplier     float64  `json:"balance_recharge_multiplier"`
+	ModelRateMultiplier           float64  `json:"model_rate_multiplier"`
 	SubscriptionUSDToCNYRate      float64  `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate               float64  `json:"recharge_fee_rate"`
 	LoadBalanceStrategy           string   `json:"load_balance_strategy"`
@@ -117,7 +118,7 @@ var stationSensitiveConfigKeys = map[string]bool{
 func defaultStationPaymentSettings() StationPaymentSettings {
 	return StationPaymentSettings{
 		MinAmount: 1, MaxAmount: 10000, OrderTimeoutMin: 30, MaxPendingOrders: 3,
-		EnabledTypes: []string{}, BalanceRechargeMultiplier: 1, LoadBalanceStrategy: "round-robin",
+		EnabledTypes: []string{}, ModelRateMultiplier: 1, LoadBalanceStrategy: "round-robin",
 		CancelRateLimitMax: 10, CancelRateLimitWindow: 1, CancelRateLimitUnit: "day",
 		CancelRateLimitMode: "rolling", VisibleMethodAlipayEnabled: true, VisibleMethodWxpayEnabled: true,
 	}
@@ -128,13 +129,13 @@ func (s *Store) StationPaymentSettings(agentID string) (StationPaymentSettings, 
 	var enabled, balanceDisabled, cancelEnabled, alipayQR, alipayDeep, alipayVisible, wxpayVisible int
 	var types string
 	err := s.db.QueryRow(`SELECT enabled, min_amount, max_amount, daily_limit, order_timeout_minutes, max_pending_orders,
-		enabled_payment_types, balance_disabled, balance_recharge_multiplier, subscription_usd_to_cny_rate, recharge_fee_rate,
+		enabled_payment_types, balance_disabled, model_rate_multiplier, subscription_usd_to_cny_rate, recharge_fee_rate,
 		load_balance_strategy, product_name_prefix, product_name_suffix, help_image_url, help_text,
 		cancel_rate_limit_enabled, cancel_rate_limit_max, cancel_rate_limit_window, cancel_rate_limit_unit, cancel_rate_limit_window_mode,
 		alipay_force_qrcode, alipay_mobile_precreate_deep_link, visible_alipay_source, visible_wxpay_source, visible_alipay_enabled, visible_wxpay_enabled
 		FROM station_payment_settings WHERE agent_id=?`, strings.TrimSpace(agentID)).Scan(
 		&enabled, &settings.MinAmount, &settings.MaxAmount, &settings.DailyLimit, &settings.OrderTimeoutMin, &settings.MaxPendingOrders,
-		&types, &balanceDisabled, &settings.BalanceRechargeMultiplier, &settings.SubscriptionUSDToCNYRate, &settings.RechargeFeeRate,
+		&types, &balanceDisabled, &settings.ModelRateMultiplier, &settings.SubscriptionUSDToCNYRate, &settings.RechargeFeeRate,
 		&settings.LoadBalanceStrategy, &settings.ProductNamePrefix, &settings.ProductNameSuffix, &settings.HelpImageURL, &settings.HelpText,
 		&cancelEnabled, &settings.CancelRateLimitMax, &settings.CancelRateLimitWindow, &settings.CancelRateLimitUnit, &settings.CancelRateLimitMode,
 		&alipayQR, &alipayDeep, &settings.VisibleMethodAlipaySource, &settings.VisibleMethodWxpaySource, &alipayVisible, &wxpayVisible,
@@ -165,7 +166,7 @@ func (s *Store) SaveStationPaymentSettings(agentID string, settings StationPayme
 	now := s.clock().UTC().Unix()
 	_, err = tx.Exec(`INSERT INTO station_payment_settings (
 		agent_id, enabled, min_amount, max_amount, daily_limit, order_timeout_minutes, max_pending_orders,
-		enabled_payment_types, balance_disabled, balance_recharge_multiplier, subscription_usd_to_cny_rate, recharge_fee_rate,
+		enabled_payment_types, balance_disabled, model_rate_multiplier, subscription_usd_to_cny_rate, recharge_fee_rate,
 		load_balance_strategy, product_name_prefix, product_name_suffix, help_image_url, help_text,
 		cancel_rate_limit_enabled, cancel_rate_limit_max, cancel_rate_limit_window, cancel_rate_limit_unit, cancel_rate_limit_window_mode,
 		alipay_force_qrcode, alipay_mobile_precreate_deep_link, visible_alipay_source, visible_wxpay_source, visible_alipay_enabled, visible_wxpay_enabled, updated_at
@@ -174,7 +175,8 @@ func (s *Store) SaveStationPaymentSettings(agentID string, settings StationPayme
 		enabled=excluded.enabled, min_amount=excluded.min_amount, max_amount=excluded.max_amount, daily_limit=excluded.daily_limit,
 		order_timeout_minutes=excluded.order_timeout_minutes, max_pending_orders=excluded.max_pending_orders,
 		enabled_payment_types=excluded.enabled_payment_types, balance_disabled=excluded.balance_disabled,
-		balance_recharge_multiplier=excluded.balance_recharge_multiplier, subscription_usd_to_cny_rate=excluded.subscription_usd_to_cny_rate,
+		model_rate_multiplier=excluded.model_rate_multiplier,
+		subscription_usd_to_cny_rate=excluded.subscription_usd_to_cny_rate,
 		recharge_fee_rate=excluded.recharge_fee_rate, load_balance_strategy=excluded.load_balance_strategy,
 		product_name_prefix=excluded.product_name_prefix, product_name_suffix=excluded.product_name_suffix,
 		help_image_url=excluded.help_image_url, help_text=excluded.help_text,
@@ -185,7 +187,7 @@ func (s *Store) SaveStationPaymentSettings(agentID string, settings StationPayme
 		visible_wxpay_source=excluded.visible_wxpay_source, visible_alipay_enabled=excluded.visible_alipay_enabled,
 		visible_wxpay_enabled=excluded.visible_wxpay_enabled, updated_at=excluded.updated_at`,
 		strings.TrimSpace(agentID), boolInt(settings.Enabled), settings.MinAmount, settings.MaxAmount, settings.DailyLimit, settings.OrderTimeoutMin, settings.MaxPendingOrders,
-		strings.Join(settings.EnabledTypes, ","), boolInt(settings.BalanceDisabled), settings.BalanceRechargeMultiplier, settings.SubscriptionUSDToCNYRate, settings.RechargeFeeRate,
+		strings.Join(settings.EnabledTypes, ","), boolInt(settings.BalanceDisabled), settings.ModelRateMultiplier, settings.SubscriptionUSDToCNYRate, settings.RechargeFeeRate,
 		settings.LoadBalanceStrategy, settings.ProductNamePrefix, settings.ProductNameSuffix, settings.HelpImageURL, settings.HelpText,
 		boolInt(settings.CancelRateLimitEnabled), settings.CancelRateLimitMax, settings.CancelRateLimitWindow, settings.CancelRateLimitUnit, settings.CancelRateLimitMode,
 		boolInt(settings.AlipayForceQRCode), boolInt(settings.AlipayMobilePrecreateDeepLink), settings.VisibleMethodAlipaySource, settings.VisibleMethodWxpaySource,
@@ -739,8 +741,11 @@ func validateStationSettings(settings *StationPaymentSettings) error {
 	if settings.MaxPendingOrders < 1 || settings.MaxPendingOrders > 100 {
 		return fmt.Errorf("max pending orders must be between 1 and 100")
 	}
-	if settings.BalanceRechargeMultiplier <= 0 || settings.BalanceRechargeMultiplier > 1000 {
-		return fmt.Errorf("balance recharge multiplier must be greater than 0 and at most 1000")
+	if settings.ModelRateMultiplier == 0 {
+		settings.ModelRateMultiplier = 1
+	}
+	if settings.ModelRateMultiplier < 0 || settings.ModelRateMultiplier > 1000 {
+		return fmt.Errorf("model rate multiplier must be greater than 0 and at most 1000")
 	}
 	if settings.RechargeFeeRate < 0 || settings.RechargeFeeRate > 100 {
 		return fmt.Errorf("fee rate must be between 0 and 100")
@@ -1203,9 +1208,10 @@ func (s *Server) stationCheckoutInfo(agentID string) (AgentCheckoutInfo, error) 
 	}
 	info := AgentCheckoutInfo{
 		Methods: map[string]AgentPaymentMethodLimit{}, GlobalMin: settings.MinAmount, GlobalMax: settings.MaxAmount,
-		Plans: []AgentCheckoutPlan{}, BalanceDisabled: settings.BalanceDisabled || !settings.Enabled,
-		BalanceRechargeMultiplier: settings.BalanceRechargeMultiplier, SubscriptionUSDToCNYRate: settings.SubscriptionUSDToCNYRate,
-		RechargeFeeRate: settings.RechargeFeeRate, HelpText: settings.HelpText, HelpImageURL: settings.HelpImageURL,
+		Plans: []AgentCheckoutPlan{}, BalanceDisabled: settings.BalanceDisabled || !settings.Enabled, ChargingEnabled: settings.Enabled,
+		ModelRateMultiplier:      settings.ModelRateMultiplier,
+		SubscriptionUSDToCNYRate: settings.SubscriptionUSDToCNYRate,
+		RechargeFeeRate:          settings.RechargeFeeRate, HelpText: settings.HelpText, HelpImageURL: settings.HelpImageURL,
 		AlipayForceQRCode: settings.AlipayForceQRCode, AlipayMobilePrecreateDeepLink: settings.AlipayMobilePrecreateDeepLink,
 	}
 	if !settings.Enabled {
@@ -1282,7 +1288,18 @@ func (s *Server) stationCheckoutInfo(agentID string) (AgentCheckoutInfo, error) 
 }
 
 func methodLimitFromProvider(provider StationPaymentProvider, paymentType string, settings StationPaymentSettings) AgentPaymentMethodLimit {
-	limit := AgentPaymentMethodLimit{Currency: "CNY", DisplayName: paymentType, Available: true, SingleMin: 0, SingleMax: 0, DailyLimit: 0, FeeRate: settings.RechargeFeeRate}
+	displayName := paymentType
+	switch paymentType {
+	case "alipay":
+		displayName = "支付宝"
+	case "wxpay":
+		displayName = "微信支付"
+	case "stripe":
+		displayName = "Stripe"
+	case "airwallex":
+		displayName = "Airwallex"
+	}
+	limit := AgentPaymentMethodLimit{Currency: "CNY", DisplayName: displayName, Available: true, SingleMin: 0, SingleMax: 0, DailyLimit: 0, FeeRate: settings.RechargeFeeRate}
 	if provider.ProviderKey == "stripe" || provider.ProviderKey == "airwallex" {
 		if currency, err := payment.NormalizePaymentCurrency(provider.Config["currency"]); err == nil {
 			limit.Currency = currency
@@ -1402,9 +1419,6 @@ func (s *Server) createStationCheckoutOrder(w http.ResponseWriter, r *http.Reque
 		OutTradeNo: orderNo, Amount: amount, PayAmount: payAmount, FeeRate: feeRate, Currency: limit.Currency,
 		PaymentType: request.PaymentType, ProviderInstanceID: strconv.FormatInt(provider.ID, 10), OrderType: request.OrderType,
 		PlanID: planID, Status: "PENDING",
-	}
-	if request.OrderType == "balance" {
-		order.Amount = math.Round(amount*settings.BalanceRechargeMultiplier*100) / 100
 	}
 	prefix := settings.ProductNamePrefix
 	if prefix == "" {
@@ -1620,6 +1634,18 @@ func (s *Server) handleStationBillingWebhook(w http.ResponseWriter, r *http.Requ
 		break
 	}
 	if note == nil || (note.Status != payment.ProviderStatusSuccess && note.Status != payment.NotificationStatusSuccess && note.Status != payment.ProviderStatusPaid) {
+		// A rejected callback must not strand a real payment. Before answering
+		// the provider, ask the provider itself whether this order was paid.
+		if orderNo := stationOrderIDFromRaw(raw); orderNo != "" {
+			if _, settled := s.reconcileStationOrder(r.Context(), agentID, orderNo, "webhook-rejected"); settled {
+				slog.Info("station order recovered after rejected notification", "agent_id", agentID, "provider", providerKey, "out_trade_no", orderNo, "remote", clientIP(r))
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				_, _ = io.WriteString(w, "success")
+				return
+			}
+		}
+		slog.Warn("station payment notification rejected", "agent_id", agentID, "provider", providerKey, "remote", clientIP(r), "request_id", requestID, "body_bytes", len(raw))
 		s.writeError(w, http.StatusUnauthorized, requestID, "PAYMENT_SIGNATURE_INVALID", "payment notification was not accepted")
 		return
 	}
@@ -1628,19 +1654,16 @@ func (s *Server) handleStationBillingWebhook(w http.ResponseWriter, r *http.Requ
 		s.writeError(w, http.StatusBadRequest, requestID, "PAYMENT_NOTIFICATION_MISMATCH", "payment notification does not match the order")
 		return
 	}
-	completed, _, err := s.store.CompleteStationOrder(agentID, note.OrderID, note.TradeNo)
-	if err != nil {
-		s.writeError(w, http.StatusConflict, requestID, "ORDER_STATE_CONFLICT", "station order could not be completed")
-		return
-	}
-	// CreditUserRecharge is idempotent. Repeat it even when the order was already
-	// completed, so a retry can recover a previous wallet write failure.
-	{
-		cents := int64(math.Round(completed.Amount * 100))
-		if err := s.store.CreditUserRecharge(agentID, completed.MainUserID, cents, completed.OutTradeNo); err != nil {
-			s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "payment was received but station credit failed")
+	// Complete and credit through the helper shared with the reconciliation
+	// path. CreditUserRecharge is idempotent, so a retry can recover an earlier
+	// wallet write failure.
+	if _, err := s.settleStationOrder(agentID, note.OrderID, note.TradeNo); err != nil {
+		if errors.Is(err, errNotFound) || errors.Is(err, errRechargeStateConflict) {
+			s.writeError(w, http.StatusConflict, requestID, "ORDER_STATE_CONFLICT", "station order could not be completed")
 			return
 		}
+		s.writeError(w, http.StatusInternalServerError, requestID, "STORE_ERROR", "payment was received but station credit failed")
+		return
 	}
 	if providerKey == "easypay" || providerKey == "alipay" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1689,4 +1712,16 @@ func splitStationID(value string) (int64, string, bool) {
 func (s *Server) stationBillingEnabled(agentID string) bool {
 	settings, err := s.store.StationPaymentSettings(agentID)
 	return err == nil && settings.Enabled
+}
+
+func (s *Server) stationBillingPolicy(agentID string) StationBillingPolicy {
+	settings, err := s.store.StationPaymentSettings(agentID)
+	if err != nil || !settings.Enabled {
+		return StationBillingPolicy{RateMultiplier: 1}
+	}
+	rate := settings.ModelRateMultiplier
+	if rate <= 0 {
+		rate = 1
+	}
+	return StationBillingPolicy{RateMultiplier: rate, BillLocalWallet: true}
 }

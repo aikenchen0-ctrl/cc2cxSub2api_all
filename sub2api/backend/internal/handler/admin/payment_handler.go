@@ -116,6 +116,46 @@ func (h *PaymentHandler) RetryFulfillment(c *gin.Context) {
 	response.Success(c, gin.H{"message": "fulfillment retried"})
 }
 
+type AdminOrderQueryResponse struct {
+	Order            *AdminPaymentOrderResult `json:"order"`
+	ProviderKey      string                   `json:"provider_key"`
+	QueryRef         string                   `json:"query_ref"`
+	UpstreamStatus   string                   `json:"upstream_status"`
+	UpstreamTradeNo  string                   `json:"upstream_trade_no,omitempty"`
+	UpstreamAmount   float64                  `json:"upstream_amount"`
+	UpstreamPaidAt   string                   `json:"upstream_paid_at,omitempty"`
+	AmountValid      bool                     `json:"amount_valid"`
+	Recovered        bool                     `json:"recovered"`
+	FulfillmentError string                   `json:"fulfillment_error,omitempty"`
+}
+
+// QueryOrder actively asks the upstream payment provider for the order status
+// and immediately applies a paid result. It is safe to call repeatedly.
+// POST /api/v1/admin/payment/orders/:id/query
+func (h *PaymentHandler) QueryOrder(c *gin.Context) {
+	orderID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	result, err := h.paymentService.AdminQueryOrder(c.Request.Context(), orderID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, AdminOrderQueryResponse{
+		Order:            sanitizeAdminPaymentOrderForResponse(result.Order),
+		ProviderKey:      result.ProviderKey,
+		QueryRef:         result.QueryRef,
+		UpstreamStatus:   result.UpstreamStatus,
+		UpstreamTradeNo:  result.UpstreamTradeNo,
+		UpstreamAmount:   result.UpstreamAmount,
+		UpstreamPaidAt:   result.UpstreamPaidAt,
+		AmountValid:      result.AmountValid,
+		Recovered:        result.Recovered,
+		FulfillmentError: result.FulfillmentError,
+	})
+}
+
 type AdminPaymentOrderResult struct {
 	ID                  int64      `json:"id"`
 	UserID              int64      `json:"user_id"`

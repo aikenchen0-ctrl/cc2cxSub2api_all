@@ -101,6 +101,11 @@ type SatelliteVerifyRegistrationEmailRequest struct {
 	VerifyCode string `json:"verify_code" binding:"required"`
 }
 
+type SatelliteAgentMembershipRequest struct {
+	AgentID    string `json:"agent_id" binding:"required"`
+	MainUserID int64  `json:"main_user_id" binding:"required"`
+}
+
 // LoginRequest represents the login request payload
 type LoginRequest struct {
 	Email                 string `json:"email" binding:"required,email"`
@@ -302,6 +307,39 @@ func (h *AuthHandler) SatelliteVerifyRegistrationEmail(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"verified": true})
+}
+
+// SatelliteAgentMembership records that a user created through a station
+// domain belongs to that station. The satellite credential is the only
+// authority accepted here; the browser cannot choose an owner or role.
+func (h *AuthHandler) SatelliteAgentMembership(c *gin.Context) {
+	app, ok := authenticateSatelliteApplication(c)
+	if !ok {
+		return
+	}
+	if app.Slug != "agentapi" {
+		response.Error(c, http.StatusForbidden, "AgentAPI tenant membership is unavailable for this satellite")
+		return
+	}
+	if h == nil || h.agentTenantSvc == nil {
+		response.Error(c, http.StatusServiceUnavailable, "AgentAPI tenant registry is unavailable")
+		return
+	}
+	var req SatelliteAgentMembershipRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	member, err := h.agentTenantSvc.EnsureSharedTenantMember(c.Request.Context(), req.AgentID, req.MainUserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"agent_id":     member.AgentID,
+		"main_user_id": req.MainUserID,
+		"role":         member.Role,
+	})
 }
 
 // Login handles user login

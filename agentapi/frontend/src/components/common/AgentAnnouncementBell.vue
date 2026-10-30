@@ -92,7 +92,7 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
     <BaseDialog :show="open" title="站内公告" width="wide" :z-index="100" close-on-click-outside @close="open = false">
       <div class="mb-4 flex items-center justify-between gap-3" aria-label="站内公告列表">
         <div class="flex items-center gap-3">
-          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white"><Icon name="bell" /></span>
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-400 text-accent-950"><Icon name="bell" /></span>
           <p class="text-sm text-gray-500">{{ unreadCount ? `${unreadCount} 条未读` : '已全部阅读' }}</p>
         </div>
         <button v-if="unreadCount" class="btn btn-secondary text-xs" :disabled="loading" @click="markAllRead">全部已读</button>
@@ -101,7 +101,7 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
       <div class="max-h-[65vh] overflow-y-auto rounded-xl border border-gray-100 dark:border-dark-700">
         <p v-if="loading" class="p-10 text-center text-sm text-gray-500">正在加载公告…</p>
         <button v-for="item in items" v-else :key="item.id" class="relative flex w-full items-center gap-4 border-b border-gray-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700/50" :class="{ 'bg-primary-50/60 dark:bg-primary-950/20': !item.read_at }" @click="showDetail(item)">
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" :class="item.read_at ? 'bg-gray-100 text-gray-400 dark:bg-dark-700' : 'bg-primary-600 text-white'"><Icon :name="item.read_at ? 'check' : 'bell'" /></span>
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" :class="item.read_at ? 'bg-gray-100 text-gray-400 dark:bg-dark-700' : 'bg-primary-400 text-accent-950'"><Icon :name="item.read_at ? 'check' : 'bell'" /></span>
           <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{{ item.title }}</span><span class="mt-1 block text-xs text-gray-500">{{ formatTime(item.created_at) }}</span></span>
           <span v-if="!item.read_at" class="h-2 w-2 rounded-full bg-primary-500"></span>
           <Icon name="chevronRight" class="text-gray-400" />

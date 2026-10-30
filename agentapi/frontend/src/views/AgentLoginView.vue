@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentSession } from '@/agent/session'
 import { errorMessage } from '@/agent/client'
+import { agentAPI } from '@/agent/api'
 import Icon from '@/components/icons/Icon.vue'
 import { agentPasskeyAPI } from '@/agent/passkeys'
 import AgentInput from '@/components/common/AgentInput.vue'
@@ -21,6 +22,11 @@ const passwordError = ref('')
 const totpError = ref('')
 const showPassword = ref(false)
 const passkeyEnabled = ref(false)
+const passwordLoginEnabled = ref(true)
+const mainSiteSSOEnabled = ref(true)
+const sharedRuntime = ref(false)
+const registrationEnabled = ref(false)
+const loginOptionsLoaded = ref(false)
 const passwordChanged = route.query.passwordChanged === '1'
 const mainSiteLoginURL = computed(() => {
   const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//')
@@ -30,6 +36,18 @@ const mainSiteLoginURL = computed(() => {
 })
 
 onMounted(async () => {
+  try {
+    const options = await agentAPI.auth.loginOptions()
+    passwordLoginEnabled.value = options.password_login_enabled === true
+    mainSiteSSOEnabled.value = options.main_site_sso_enabled === true
+    sharedRuntime.value = options.shared_runtime === true
+    registrationEnabled.value = options.registration_enabled === true
+  } catch {
+    // Keep the single-tenant password form available if the hint endpoint is
+    // temporarily unavailable.
+  } finally {
+    loginOptionsLoaded.value = true
+  }
   if (!agentPasskeyAPI.isSupported()) return
   try {
     const config = await agentPasskeyAPI.config()
@@ -97,14 +115,24 @@ async function submit(): Promise<void> {
     <section class="space-y-6">
       <div class="text-center">
         <div v-if="tempToken" class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300"><Icon name="shield" size="lg" /></div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ tempToken ? '双重验证' : '欢迎回来' }}</h1>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ tempToken ? '输入验证器中显示的动态代码' : '登录当前代理站账户以继续' }}</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ tempToken ? '双重验证' : passwordLoginEnabled ? '欢迎回来' : '使用主站账号登录' }}</h1>
+        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ tempToken ? '输入验证器中显示的动态代码' : passwordLoginEnabled ? sharedRuntime ? '使用主站邮箱和密码登录，系统会自动进入你的代理站。' : '登录当前代理站账户以继续' : '当前为共享代理站，请使用主站账号登录；首次登录会自动创建你的代理站。' }}</p>
       </div>
 
       <div v-if="passwordChanged" role="status" class="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"><Icon name="checkCircle" size="sm" class="mt-0.5 shrink-0" />密码已修改，请使用新密码登录。</div>
       <div v-if="error" role="alert" class="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="sm" class="mt-0.5 shrink-0" />{{ error }}</div>
+      <div v-if="!loginOptionsLoaded" role="status" class="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-900/60 dark:text-dark-400"><span class="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-primary-500"></span>正在加载登录方式…</div>
+      <div v-else-if="!passwordLoginEnabled && !tempToken" class="flex gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200">
+        <Icon name="shield" size="md" class="mt-0.5 shrink-0" />
+        <p>共享代理站不支持单独使用邮箱密码登录。请使用主站账号登录，首次登录会自动创建你的代理站。</p>
+      </div>
+      <div v-else-if="loginOptionsLoaded && sharedRuntime && passwordLoginEnabled && !tempToken" class="flex gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200">
+        <Icon name="shield" size="md" class="mt-0.5 shrink-0" />
+        <p>共享代理站：邮箱和密码与主站一致；首次登录会自动创建并进入你的代理站。</p>
+      </div>
+      <div v-if="loginOptionsLoaded && !mainSiteSSOEnabled && !passwordLoginEnabled && !tempToken" role="alert" class="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="sm" class="mt-0.5 shrink-0" />主站登录未配置，请联系管理员。</div>
 
-      <form class="space-y-5" novalidate @submit.prevent="submit">
+      <form v-if="loginOptionsLoaded && (passwordLoginEnabled || tempToken)" class="space-y-5" novalidate @submit.prevent="submit">
         <template v-if="!tempToken">
           <div>
             <label for="agent-login-email" class="input-label">邮箱地址</label>
@@ -136,24 +164,25 @@ async function submit(): Promise<void> {
         </button>
       </form>
 
-      <template v-if="!tempToken">
-        <button v-if="passkeyEnabled" data-testid="passkey-login" type="button" class="btn btn-secondary w-full" :disabled="session.busy" @click="loginWithPasskey">
+      <template v-if="loginOptionsLoaded && !tempToken">
+        <button v-if="passkeyEnabled && passwordLoginEnabled" data-testid="passkey-login" type="button" class="btn btn-secondary w-full" :disabled="session.busy" @click="loginWithPasskey">
           <Icon name="key" size="md" class="mr-2" />
           使用 Passkey 登录
         </button>
-        <div class="flex items-center gap-3" aria-hidden="true">
+        <div v-if="passwordLoginEnabled" class="flex items-center gap-3" aria-hidden="true">
           <span class="h-px flex-1 bg-gray-200 dark:bg-dark-700"></span>
           <span class="text-xs text-gray-400 dark:text-dark-500">或</span>
           <span class="h-px flex-1 bg-gray-200 dark:bg-dark-700"></span>
         </div>
-        <a data-testid="main-site-login" class="btn btn-secondary w-full" :href="mainSiteLoginURL">
+        <a v-if="mainSiteSSOEnabled" data-testid="main-site-login" :class="passwordLoginEnabled ? 'btn btn-secondary w-full' : 'btn btn-primary w-full'" :href="mainSiteLoginURL">
           <Icon name="externalLink" size="md" class="mr-2" />
-          使用账号登录
+          {{ passwordLoginEnabled ? '使用主站账号 SSO 登录' : '使用主站账号登录' }}
         </a>
       </template>
 
       <div class="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/60 dark:text-dark-400">浏览器仅保存本站 HttpOnly 会话；应用凭据与运行时控制凭据始终安全保留在服务端。</div>
-      <p class="text-center text-sm text-gray-500">还没有账号？ <RouterLink class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400" to="/register">立即注册</RouterLink></p>
+      <p v-if="loginOptionsLoaded && registrationEnabled" class="text-center text-sm text-gray-500">还没有账号？ <RouterLink class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400" to="/register">立即注册</RouterLink></p>
+      <p v-else-if="loginOptionsLoaded && sharedRuntime" class="text-center text-sm text-gray-500">没有主站账号？请先在主站完成注册，再回来登录。</p>
     </section>
   </main>
 </template>

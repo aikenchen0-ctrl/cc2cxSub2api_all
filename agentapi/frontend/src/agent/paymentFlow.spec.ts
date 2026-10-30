@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentPaymentCreateResult } from './api'
 import {
   createAgentPaymentRecovery,
@@ -6,6 +6,7 @@ import {
   safePaymentURL,
   paymentFee,
   shouldOpenPaymentWindow,
+  openPaymentTab,
 } from './paymentFlow'
 
 const result: AgentPaymentCreateResult = {
@@ -82,5 +83,25 @@ describe('agent payment recovery', () => {
     expect(safePaymentURL('/checkout', 'https://agent.example')).toBe('https://agent.example/checkout')
     expect(safePaymentURL('javascript:alert(1)', 'https://agent.example')).toBe('')
     expect(safePaymentURL('data:text/html,bad', 'https://agent.example')).toBe('')
+  })
+})
+
+describe('openPaymentTab', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('opens the payment page as a tab without window features', () => {
+    const tab = { opener: window } as unknown as Window
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab)
+    expect(openPaymentTab('https://pay.example/checkout')).toBe(true)
+    // 只传 '_blank'：带 features 会被浏览器当作弹窗新窗口。
+    expect(open).toHaveBeenCalledWith('https://pay.example/checkout', '_blank')
+    expect(open.mock.calls[0]).toHaveLength(2)
+    expect(tab.opener).toBeNull()
+  })
+
+  it('reports a blocked tab so callers can fall back', () => {
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    expect(openPaymentTab('https://pay.example/checkout')).toBe(false)
+    expect(openPaymentTab('')).toBe(false)
   })
 })

@@ -82,6 +82,13 @@ export default {
     columnSettings: '列设置',
     columnAlwaysVisible: '该列固定显示，不可隐藏',
     createKey: '创建密钥',
+    desktopDownloads: {
+      imageVideo: 'SKILL',
+      ccLaunch: '一键安装skill',
+      confirmTitle: '下载 Windows 客户端',
+      confirmMessage: '是否下载“{name}”Windows 客户端安装程序？',
+      download: '下载'
+    },
     editKey: '编辑密钥',
     bulkEdit: {
       title: '批量编辑',
@@ -648,9 +655,13 @@ export default {
     empty: '暂无可展示的分组',
     loadFailed: '加载模型广场失败',
     noSearchResult: '没有匹配的模型',
-    anonymousHint: '登录后可查看你的专属分组与专属倍率',
+    anonymousHint: '模型广场公开展示所有分组和当前支持的模型',
     filters: {
-      platformLabel: '平台',
+      manufacturerLabel: '厂家',
+      capabilityLabel: '功能',
+      text: '文本',
+      image: '图片',
+      video: '视频',
       groupLabel: '分组',
       rateLabel: '倍率',
       modelLabel: '模型',

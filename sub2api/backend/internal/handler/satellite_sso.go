@@ -66,12 +66,13 @@ func (h *AuthHandler) startSatelliteSSO(c *gin.Context, slug string) {
 			response.Error(c, http.StatusServiceUnavailable, "agentapi tenant registry is unavailable")
 			return
 		}
-		sharedTenant, err = h.agentTenantSvc.EnsureSharedTenant(c.Request.Context(), subject.UserID, user.Username)
+		sharedTenant, err = h.agentTenantSvc.ResolveSharedTenant(c.Request.Context(), subject.UserID, user.Username)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
-		if sharedTenant == nil || sharedTenant.Status != "active" || sharedTenant.Role != "owner" {
+		if sharedTenant == nil || sharedTenant.Status != "active" ||
+			(sharedTenant.Role != "owner" && sharedTenant.Role != "member") {
 			response.Forbidden(c, "AgentAPI tenant is not active")
 			return
 		}

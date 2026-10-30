@@ -116,7 +116,7 @@ onMounted(() => void load())
       </div>
 
       <p v-if="settlementsError" role="alert" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ settlementsError }}</p>
-      <p v-if="notice" role="status" class="rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">{{ notice }}</p>
+      <p v-if="notice" role="status" class="rounded-lg bg-primary-50 p-4 text-sm text-primary-700 dark:bg-primary-950/40 dark:text-primary-300">{{ notice }}</p>
 
       <AgentSettlementsPanel
         :items="settlements"

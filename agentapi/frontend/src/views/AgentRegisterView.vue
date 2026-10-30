@@ -124,7 +124,7 @@ async function submit(): Promise<void> {
         <button type="button" class="mt-2 font-medium text-primary-600 hover:underline" @click="loadAvailability">重新检查</button>
       </div>
 
-      <div v-if="availability === 'enabled' && emailVerifyEnabled && !tempToken" class="flex gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm leading-5 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+      <div v-if="availability === 'enabled' && emailVerifyEnabled && !tempToken" class="flex gap-2 rounded-xl border border-primary-200 bg-primary-50 p-3 text-sm leading-5 text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200">
         <Icon name="mail" size="sm" class="mt-0.5 shrink-0" />提交后将向该邮箱发送验证码，验证成功后才会创建账号。
       </div>
 

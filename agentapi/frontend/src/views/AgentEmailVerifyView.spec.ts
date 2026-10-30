@@ -20,6 +20,11 @@ async function setup(withPending = true) {
   if (withPending) sessionStorage.setItem('agent_register_data', JSON.stringify(pending))
   const pinia = createPinia()
   setActivePinia(pinia)
+  vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+    agent: { agent_id: 'agent-1', name: 'Agent', site_name: 'Agent Site', site_logo: '/logo.svg' },
+    authenticated: true,
+    is_agent_admin: false,
+  } as Awaited<ReturnType<typeof agentAPI.getContext>>)
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/email-verify', component: AgentEmailVerifyView },
     { path: '/register', component: { template: '<div>Register</div>' } },

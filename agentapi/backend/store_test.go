@@ -692,6 +692,41 @@ func TestFinalizeSettlementAtomicallyRefundsUnusedReservation(t *testing.T) {
 	}
 }
 
+func TestStationModelRateMultiplierUsesSnapshotAndChargesOnce(t *testing.T) {
+	store := testStore(t)
+	if err := store.Allocate("agent-test", "42", 1000, "rate-alloc", "order", "test"); err != nil {
+		t.Fatal(err)
+	}
+	policy := StationBillingPolicy{RateMultiplier: 1.25, BillLocalWallet: true}
+	record, created, err := store.PrepareDirectSettlement("agent-test", "42", "owner", "rate-request", "usage-rate", 100, policy)
+	if err != nil || !created || record.StationRateMultiplier != 1.25 || !record.BillLocalWallet {
+		t.Fatalf("prepare settlement: record=%+v created=%v err=%v", record, created, err)
+	}
+	if err := store.FinalizeSettlement("agent-test", "rate-request", "usage-rate", "confirmed", 100, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinalizeSettlement("agent-test", "rate-request", "usage-rate", "confirmed", 100, ""); err != nil {
+		t.Fatalf("idempotent finalization: %v", err)
+	}
+	settled, err := store.Settlement("agent-test", "rate-request")
+	if err != nil || settled.ActualCents != 100 || settled.ChargedCents != 125 || settled.StationRateMultiplier != 1.25 {
+		t.Fatalf("unexpected settlement: %+v err=%v", settled, err)
+	}
+	user, err := store.User("agent-test", "42")
+	if err != nil || user.BalanceCents != 875 {
+		t.Fatalf("station multiplier was not charged exactly once: user=%+v err=%v", user, err)
+	}
+}
+
+func TestStationChargeRoundsUpToOneCent(t *testing.T) {
+	if got := stationChargeCents(1, 1.255); got != 2 {
+		t.Fatalf("station charge=%d, want 2", got)
+	}
+	if got := stationChargeCents(100, 1); got != 100 {
+		t.Fatalf("identity station charge=%d, want 100", got)
+	}
+}
+
 func TestSettlementRefundUsesActualLocalDebitNotIdentityEquality(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {

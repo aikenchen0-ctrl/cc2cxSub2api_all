@@ -32,6 +32,7 @@ type Config struct {
 	CookieName                  string
 	CookieSecure                bool
 	SharedHosts                 []string
+	EntryTenants                map[string]string
 	AgentID                     string
 	AgentDomain                 string
 	AgentName                   string
@@ -153,6 +154,11 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	cfg.SharedHosts = sharedHosts
+	entryTenants, err := parseEntryTenants(os.Getenv("AGENTAPI_ENTRY_TENANTS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.EntryTenants = entryTenants
 	if cfg.SatelliteSlug != "agentapi" {
 		return Config{}, fmt.Errorf("SUB2API_SATELLITE must be the registered slug agentapi")
 	}
@@ -225,6 +231,40 @@ func parseSharedHosts(raw string) ([]string, error) {
 		hosts = append(hosts, host)
 	}
 	return hosts, nil
+}
+
+// parseEntryTenants binds an exact public station host to a logical tenant.
+// The mapping is deployment configuration, not a browser-selected tenant. It
+// is needed when a shared entry host is also one station owner's public domain.
+func parseEntryTenants(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	entries := make(map[string]string)
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		hostRaw, agentID, found := strings.Cut(item, "=")
+		if !found {
+			return nil, fmt.Errorf("AGENTAPI_ENTRY_TENANTS entries must use host=agent_id")
+		}
+		host, ok := normalizeTenantHost(hostRaw)
+		if !ok {
+			return nil, fmt.Errorf("AGENTAPI_ENTRY_TENANTS contains an invalid host")
+		}
+		agentID = strings.TrimSpace(agentID)
+		if !validSharedAgentID(agentID) {
+			return nil, fmt.Errorf("AGENTAPI_ENTRY_TENANTS contains an invalid agent id")
+		}
+		if _, duplicate := entries[host]; duplicate {
+			return nil, fmt.Errorf("AGENTAPI_ENTRY_TENANTS contains a duplicate host")
+		}
+		entries[host] = agentID
+	}
+	return entries, nil
 }
 
 func normalizeAPIBase(value string) string {

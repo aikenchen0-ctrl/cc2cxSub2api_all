@@ -13,6 +13,7 @@ import (
 var (
 	ErrAgentTenantInvalid       = infraerrors.BadRequest("AGENT_TENANT_INVALID", "invalid AgentAPI tenant request")
 	ErrAgentTenantOwnerNotFound = infraerrors.NotFound("AGENT_OWNER_NOT_FOUND", "owner user not found")
+	ErrAgentTenantNotFound      = infraerrors.NotFound("AGENT_TENANT_NOT_FOUND", "AgentAPI tenant not found")
 )
 
 // AgentSharedTenant is the main-site source of truth for one logical tenant in
@@ -32,6 +33,8 @@ type AgentSharedTenant struct {
 // single shared AgentAPI deployment.
 type AgentTenantRepository interface {
 	EnsureSharedTenant(ctx context.Context, tenant AgentSharedTenant) (*AgentSharedTenant, error)
+	EnsureSharedTenantMember(ctx context.Context, agentID string, mainUserID int64) (*AgentSharedTenant, error)
+	FindActiveSharedTenantMembership(ctx context.Context, mainUserID int64) (*AgentSharedTenant, error)
 }
 
 // AgentTenantService owns shared-tenant creation and lookup. It does not
@@ -71,4 +74,43 @@ func (s *AgentTenantService) EnsureSharedTenant(ctx context.Context, ownerMainUs
 		Status:          "active",
 		Role:            "owner",
 	})
+}
+
+// ResolveSharedTenant enters the caller's existing tenant before creating a new
+// one. Users registered through a station domain are members, not owners, and
+// must keep landing in that station when they use main-site SSO.
+func (s *AgentTenantService) ResolveSharedTenant(ctx context.Context, mainUserID int64, displayName string) (*AgentSharedTenant, error) {
+	if s == nil || s.repo == nil {
+		return nil, errors.New("AgentAPI tenant repository is unavailable")
+	}
+	if mainUserID <= 0 {
+		return nil, ErrAgentTenantInvalid
+	}
+	existing, err := s.repo.FindActiveSharedTenantMembership(ctx, mainUserID)
+	if err == nil && existing != nil {
+		return existing, nil
+	}
+	if err != nil && !errors.Is(err, ErrAgentTenantNotFound) {
+		return nil, err
+	}
+	return s.EnsureSharedTenant(ctx, mainUserID, displayName)
+}
+
+// EnsureSharedTenantMember binds an existing active main-site user to a tenant
+// as a member. The repository keeps an existing owner role intact and never
+// accepts a caller-supplied role.
+func (s *AgentTenantService) EnsureSharedTenantMember(ctx context.Context, agentID string, mainUserID int64) (*AgentSharedTenant, error) {
+	if s == nil || s.repo == nil {
+		return nil, errors.New("AgentAPI tenant repository is unavailable")
+	}
+	agentID = strings.TrimSpace(agentID)
+	if len(agentID) != 36 || !strings.HasPrefix(agentID, "agt_") || mainUserID <= 0 {
+		return nil, ErrAgentTenantInvalid
+	}
+	for _, value := range agentID[4:] {
+		if value < '0' || value > '9' && (value < 'a' || value > 'f') {
+			return nil, ErrAgentTenantInvalid
+		}
+	}
+	return s.repo.EnsureSharedTenantMember(ctx, agentID, mainUserID)
 }

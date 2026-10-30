@@ -101,24 +101,30 @@ onMounted(load)
 
 <template>
   <main class="mx-auto max-w-6xl space-y-6 p-6">
-    <header class="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <p class="text-sm text-slate-500">{{ context?.agent.site_name || 'AgentAPI' }}</p>
-        <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">总览</h1>
-        <p class="mt-1 text-sm text-slate-500">余额、模型费用和请求记录会在本站控制台统一展示。</p>
-      </div>
-      <div class="flex gap-2">
-        <RouterLink to="/purchase" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">充值</RouterLink>
-        <button class="rounded-lg border px-4 py-2 text-sm" type="button" @click="refreshDashboard">刷新</button>
+    <header class="relative overflow-hidden rounded-2xl border border-primary-200/70 bg-white/85 p-5 shadow-card backdrop-blur-xl dark:border-primary-500/15 dark:bg-dark-900/70 sm:p-6">
+      <div class="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-primary-300/25 blur-3xl dark:bg-primary-500/10"></div>
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent"></div>
+      <div class="relative flex flex-wrap items-end justify-between gap-5">
+        <div class="max-w-2xl">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary-700 dark:text-primary-300">Site overview</p>
+          <h1 class="mt-2 text-2xl font-bold tracking-tight text-accent-950 dark:text-white">欢迎回来</h1>
+          <p class="mt-2 text-sm leading-6 text-accent-600 dark:text-dark-300">
+            {{ context?.agent.site_name || 'AgentAPI' }} · 余额、模型费用与请求记录都集中在这里。
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <RouterLink to="/purchase" class="btn btn-primary">充值</RouterLink>
+          <button class="btn btn-secondary" type="button" @click="refreshDashboard">刷新</button>
+        </div>
       </div>
     </header>
 
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
-    <p v-if="loading" class="text-sm text-slate-500">正在加载…</p>
+    <p v-if="loading" class="text-sm text-accent-500 dark:text-dark-400">正在加载…</p>
 
     <section v-if="context" class="grid grid-cols-1 gap-6 md:grid-cols-3">
       <StatCard v-if="context.user" title="可用余额" :value="context.balance_error ? '暂不可用' : money(context.user.balance_cents)" :icon="balanceIcon" />
-      <StatCard title="代理站" :value="context.agent.site_name" :icon="siteIcon" icon-variant="success" />
+      <StatCard title="代理站" :value="context.agent.site_name" :icon="siteIcon" icon-variant="primary" />
       <StatCard title="计费方式" value="账户余额计费" :icon="billingIcon" icon-variant="warning" />
     </section>
     <p v-if="context?.balance_error" class="text-sm text-amber-600">余额读取失败，请刷新重试。</p>
@@ -127,32 +133,35 @@ onMounted(load)
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <section v-if="context" class="overflow-hidden rounded-xl border bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b p-5 dark:border-slate-700">
+        <section v-if="context" class="card overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-accent-200/70 px-5 py-4 dark:border-dark-700">
             <div>
-              <h2 class="font-semibold">最近用量</h2>
-              <p class="mt-1 text-sm text-slate-500">AgentAPI 最近记录的 5 次请求。</p>
+              <h2 class="font-semibold text-accent-950 dark:text-white">最近用量</h2>
+              <p class="mt-1 text-sm text-accent-500 dark:text-dark-400">AgentAPI 最近记录的 5 次请求。</p>
             </div>
-            <RouterLink to="/usage" class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">查看全部用量</RouterLink>
+            <RouterLink to="/usage" class="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">查看全部用量</RouterLink>
           </div>
           <p v-if="usageError" class="m-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ usageError }}</p>
-          <p v-else-if="usageLoading" class="p-5 text-sm text-slate-500">正在加载最近用量…</p>
-          <p v-else-if="recentUsage.length === 0" class="p-5 text-sm text-slate-500">暂无模型请求记录，最近的请求会显示在这里。</p>
-          <div v-else class="divide-y dark:divide-slate-700">
+          <p v-else-if="usageLoading" class="p-5 text-sm text-accent-500 dark:text-dark-400">正在加载最近用量…</p>
+          <div v-else-if="recentUsage.length === 0" class="flex min-h-44 flex-col items-center justify-center px-5 py-8 text-center">
+            <span class="flex h-11 w-11 items-center justify-center rounded-full border border-primary-200 bg-primary-50 text-primary-600 dark:border-primary-500/20 dark:bg-primary-500/10 dark:text-primary-300"><Icon name="clock" size="lg" /></span>
+            <p class="mt-3 text-sm text-accent-500 dark:text-dark-400">暂无模型请求记录，最近的请求会显示在这里。</p>
+          </div>
+          <div v-else class="divide-y divide-accent-100 dark:divide-dark-800">
             <article v-for="item in recentUsage" :key="item.request_id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-medium">{{ item.model || '未知模型' }}</span>
+                  <span class="font-medium text-accent-950 dark:text-white">{{ item.model || '未知模型' }}</span>
                   <AgentStatusBadge :status="item.settlement_status" :label="statusLabel(item.settlement_status)" />
                 </div>
-                <p class="mt-1 truncate font-mono text-xs text-slate-500" :title="item.request_id">{{ item.request_id }}</p>
-                <p class="mt-1 text-xs text-slate-500">{{ date(item.created_at) }}<span v-if="item.inbound_endpoint"> · {{ item.inbound_endpoint }}</span></p>
-                <p v-if="isAuthoritativeAgentUsageSource(item.usage_source)" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                <p class="mt-1 truncate font-mono text-xs text-accent-400" :title="item.request_id">{{ item.request_id }}</p>
+                <p class="mt-1 text-xs text-accent-500 dark:text-dark-400">{{ date(item.created_at) }}<span v-if="item.inbound_endpoint"> · {{ item.inbound_endpoint }}</span></p>
+                <p v-if="isAuthoritativeAgentUsageSource(item.usage_source)" class="mt-1 text-xs text-accent-600 dark:text-accent-300">
                   输入 {{ item.input_tokens.toLocaleString('zh-CN') }} · 输出 {{ item.output_tokens.toLocaleString('zh-CN') }}
                 </p>
-                <p class="mt-1 text-xs text-slate-500">{{ sub2ApiUsageLabel(item) }}</p>
+                <p class="mt-1 text-xs text-accent-500 dark:text-dark-400">{{ sub2ApiUsageLabel(item) }}</p>
               </div>
-              <p class="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{{ settlementLabel(item) }}</p>
+              <p class="shrink-0 text-sm font-medium text-accent-700 dark:text-accent-200">{{ settlementLabel(item) }}</p>
             </article>
           </div>
         </section>
@@ -161,11 +170,14 @@ onMounted(load)
         <UserDashboardQuickActions />
       </div>
     </div>
-    <section class="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <h2 class="font-semibold">计费说明</h2>
-      <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-        本站会统一维护你的站点归属、API Key 和请求记录。余额、用量与扣费由系统核算；暂时无法确认的单次用量会保持待核对状态，不会重复收费。
-      </p>
+    <section class="card flex gap-4 p-5">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300"><Icon name="shield" size="lg" /></span>
+      <div>
+        <h2 class="font-semibold text-accent-950 dark:text-white">计费说明</h2>
+        <p class="mt-2 text-sm leading-6 text-accent-600 dark:text-accent-300">
+          本站会统一维护你的站点归属、API Key 和请求记录。余额、用量与扣费由系统核算；暂时无法确认的单次用量会保持待核对状态，不会重复收费。
+        </p>
+      </div>
     </section>
   </main>
 </template>

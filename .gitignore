@@ -42,6 +42,7 @@
 **/temp/
 **/logs/
 **/*.log
+**/.backups/
 
 # IDE, OS, and editor files
 **/.idea/

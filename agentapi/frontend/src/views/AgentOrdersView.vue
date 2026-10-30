@@ -122,7 +122,7 @@ onMounted(() => { void load(); void loadEligibility() })
         <template #cell-order_type="{ value }">{{ value === 'subscription' ? '订阅' : '余额充值' }}</template>
         <template #cell-status="{ value }"><AgentStatusBadge :status="value" :label="statusLabel[value] || value" /></template>
         <template #cell-created_at="{ value }"><span class="text-xs text-gray-500">{{ date(value) }}</span></template>
-        <template #cell-actions="{ row }"><div class="flex flex-wrap gap-2"><button v-if="row.status === 'PENDING'" class="text-xs font-medium text-amber-600" @click="cancelTarget = row">取消</button><button v-if="canRefund(row)" class="text-xs font-medium text-purple-600" @click="openRefund(row)">{{ admin ? (['REFUNDING', 'REFUND_PENDING'].includes(row.status) ? '查询退款' : '执行退款') : '申请退款' }}</button><span v-if="row.status !== 'PENDING' && !canRefund(row)" class="text-xs text-gray-400">—</span></div></template>
+        <template #cell-actions="{ row }"><div class="flex flex-wrap gap-2"><button v-if="row.status === 'PENDING'" class="text-xs font-medium text-amber-600" @click="cancelTarget = row">取消</button><button v-if="canRefund(row)" class="text-xs font-medium text-primary-600" @click="openRefund(row)">{{ admin ? (['REFUNDING', 'REFUND_PENDING'].includes(row.status) ? '查询退款' : '执行退款') : '申请退款' }}</button><span v-if="row.status !== 'PENDING' && !canRefund(row)" class="text-xs text-gray-400">—</span></div></template>
       </DataTable>
       <AgentPagination v-if="hasOrders" :total="total" :page="page" :page-size="pageSize" item-label="笔订单" @update:page="changePage" @update:page-size="changePageSize" />
     </div>

@@ -638,7 +638,7 @@ export async function syncUpstreamModels(id: number): Promise<SyncUpstreamModels
   return data
 }
 
-export type AccountModelRefreshStatus = 'pending' | 'refreshing' | 'success' | 'failed'
+export type AccountModelRefreshStatus = 'pending' | 'refreshing' | 'success' | 'failed' | 'skipped'
 
 export interface AccountModelRefreshItem {
   account_id: number
@@ -646,6 +646,8 @@ export interface AccountModelRefreshItem {
   upstream_url: string
   status: AccountModelRefreshStatus
   model_count?: number
+  /** Skip reason or the safe upstream failure message. */
+  message?: string
 }
 
 export interface AccountModelRefreshJob {
@@ -655,6 +657,7 @@ export interface AccountModelRefreshJob {
   completed: number
   succeeded: number
   failed: number
+  skipped: number
   started_at: string
   completed_at?: string
   items: AccountModelRefreshItem[]

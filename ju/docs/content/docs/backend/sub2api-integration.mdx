@@ -1,15 +1,15 @@
 ---
 title: Sub2API 免配置接入
-description: SSO、后端共享 Super Key 与 Docker 部署边界
+description: SSO、服务端应用凭据与 Docker 部署边界
 ---
 
 # Sub2API 免配置接入
 
 ## 目标与边界
 
-用户已经登录 Sub2API 后，点击左侧「智能剧场」，通过三天内有效的一次性 HMAC 票据建立影策会话，进入 `/projects`。用户不填写渠道地址、API Key 或模型配置。SSO 仅解决用户身份，模型调用使用管理员预置的后端共享 Super Key。
+用户已经登录 Sub2API 后，点击左侧「智能剧场」，通过三天内有效的一次性 HMAC 票据建立影策会话，进入 `/projects`。用户不填写渠道地址、API Key 或模型配置。SSO 仅解决用户身份；模型调用由影策后端使用卫星应用凭据 `SUB2API_APP_CREDENTIAL` 发起，并通过 `X-Sub2API-On-Behalf-Of` 绑定当前会话的 Sub2API 用户 ID。
 
-共享 Key 的调用统一记到 **Key 拥有者** 的 Sub2API 账户，不等于按每个 SSO 用户的 Sub2API 余额计费。影策内的用户、项目、任务、资源仍按用户隔离。管理员应设置共享账户额度、并发、上游分组和可用模型；不要将 Super Key 交给浏览器或放入跳转 URL。
+卫星应用凭据不是 SuperKey，也不是任何用户的 API Key。托管渠道 `sub2api-relay` 只接受服务端应用凭据；配置阶段若缺少 `SUB2API_APP_CREDENTIAL` 会直接失败关闭，不会退化为共享 Key。因此每次调用的额度都记在当前 SSO 用户自己的 Sub2API 账户上，由该用户的余额决定可用量，而不是记到某个固定 Key 拥有者名下。影策内的用户、项目、任务、资源同样按用户隔离。凭据只存在于后端进程环境和加密存储的渠道字段中，不进入浏览器、跳转 URL、日志或持久化任务正文。
 
 本次 SSO 加固使用数据库版本 11：新增一次性票据摘要、短期交换和撤销记录，并为本地会话记录 SSO subject 与签发时间。既有数据库保持 `CANVAS_AUTO_MIGRATE=false`，部署前备份并显式执行 `go run ./cmd/migrate-schema up` 和 `go run ./cmd/migrate-schema verify`，连接参数沿用实际部署配置。不要将旧文档中的“无需结构升级”用于本版本。
 
@@ -46,7 +46,7 @@ JU_SSO_CALLBACK_URL=https://ju.example.com/api/auth/sso/callback
 SUB2API_SSO_SECRET=<与Sub2API相同的密钥>
 SUB2API_RELAY_BASE_URL=http://sub2api:8080/v1
 SUB2API_APP_CREDENTIAL=<服务端卫星应用凭据>
-SUB2API_RELAY_MODELS=gpt-5.6-sol
+SUB2API_RELAY_MODELS=gpt-6-astra
 SUB2API_RELAY_IMAGE_MODELS=gpt-image-2
 SUB2API_RELAY_VIDEO_MODELS=minimax_h3_z0901,minimax_h3_z0903,minimax_h3_z0902,...
 SUB2API_RELAY_ALLOW_LOCAL=false
@@ -57,19 +57,19 @@ CANVAS_REGISTRATION_ENABLED=false
 CANVAS_CORS_ORIGINS=https://ju.example.com
 ```
 
-文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。AI 导演台默认文本模型为 `gpt-5.6-sol`、默认图片模型为 `gpt-image-2`、默认视频模型为列表首项 `minimax_h3_z0901`。AutoDL 工作流在前端显示中文名称，保存和调用始终使用英文 ID。模型可见不代表上游已开通，必须用 Sub2API 管理员配置的上游权限和响应验证。每次请求仍由当前 Session subject 绑定到 Sub2API 用户，应用凭据和 SuperKey 不进入浏览器。
+文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。AI 导演台默认文本模型为 `gpt-6-astra`、默认图片模型为 `gpt-image-2`、默认视频模型为列表首项 `minimax_h3_z0901`。AutoDL 工作流在前端显示中文名称，保存和调用始终使用英文 ID。模型可见不代表上游已开通，必须用 Sub2API 管理员配置的上游权限和响应验证。每次请求仍由当前 Session subject 绑定到 Sub2API 用户，应用凭据和 SuperKey 不进入浏览器。
 
 当前视频协议为 `sub2api-video-v1`，开放 `docs/卫星公开模型.md` 列出的 16 个 AutoDL 工作流。默认模型 `minimax_h3_z0901` 是无需参考素材的高质量文生视频；每个工作流的参考图片、视频、音频数量、时长和分辨率均由后端能力目录下发。前端显示 AutoDL 中文名称，提交、保存和上游调用只使用精确英文 ID。
 
 文生视频继续兼容 Sub2API 已定义的 `minimax/minimax-h3/minimax_h3` 旧别名。AutoDL 请求通过 `seconds`、`resolution_name`、`input_reference[]`、`video_reference[]`、`audio_reference[]`、`first_frame_url` 和 `last_frame_url` 传递，由 Sub2API 按工作流目录转换为实际输入。图片使用已有 `openai-image` 插件，并要求运营者确认该模型支持此协议。
 
-本方案发布系统渠道目录，部署的功能配置应保持 `frontendModelsEnabled=false`（默认值）。如果已启用独立的前台逻辑模型目录，应由管理员先将其切回系统渠道模式，或另行建立现有逻辑模型和路由；接入过程不会悄悄更改该运营设置。新建模型采用影策本地零价，让新 SSO 用户不必充值第二套钱包；重启保留管理员后来设置的价格和禁用价格状态，上游仍按共享 Key 实际计费。
+本方案发布系统渠道目录，部署的功能配置应保持 `frontendModelsEnabled=false`（默认值）。如果已启用独立的前台逻辑模型目录，应由管理员先将其切回系统渠道模式，或另行建立现有逻辑模型和路由；接入过程不会悄悄更改该运营设置。新建模型采用影策本地零价，让新 SSO 用户不必充值第二套钱包；重启保留管理员后来设置的价格和禁用价格状态，上游仍按该用户自己的 Sub2API 账户实际计费。
 
 网关模型调用路径是 `/v1`，不是 Sub2API 管理 API 的 `/api/v1`。SSO 创建接口仍是 Sub2API 的 `/api/v1/auth/integrations/ju/start`；影策回调是 `/api/auth/sso/callback`。
 
 管理员在后端为普通用户提供系统渠道。视频走现有生成任务，由后端提交、保存上游任务 ID、轮询并存储生成资源；浏览器只读影策任务和资源。避免把视频接入改成浏览器直连上游或将大文件塞入通用 JSON 代理。上游要拉取的参考素材必须有其可访问的受控 URL，本机地址与浏览器 `blob:` 地址不适合云端拉取。
 
-视频创建成功后强制保存上游任务 ID。状态查询或下载发生超时、429、5xx 等暂时错误时，后台继续查询原 ID，不自动重新 POST；自动恢复最多持续 24 小时，之后保留原 ID 供人工查询。下载只使用相同网关的鉴权 `/content`，不直接消费上游返回的临时外链，并校验非空视频响应。素材仍受现有生成文件大小和用户存储配额限制。存在未完成任务时不要切换共享 Key、所属分组或网关地址；Sub2API 的任务所有权绑定依赖原 Key。网关没有取消接口，取消影策任务不保证撤销上游费用。
+视频创建成功后强制保存上游任务 ID。状态查询或下载发生超时、429、5xx 等暂时错误时，后台继续查询原 ID，不自动重新 POST；自动恢复最多持续 24 小时，之后保留原 ID 供人工查询。下载只使用相同网关的鉴权 `/content`，不直接消费上游返回的临时外链，并校验非空视频响应。素材仍受现有生成文件大小和用户存储配额限制。存在未完成任务时不要切换服务端应用凭据、所属分组或网关地址；Sub2API 的任务所有权绑定依赖原凭据。网关没有取消接口，取消影策任务不保证撤销上游费用。
 
 提交前通过现有 `tasks.poll_stage` 条件更新记录提交状态。如果进程在上游接受请求后、保存任务 ID 前退出，恢复时会停止自动重发，并提示人工核对，不承诺自动完成这类结果不确定的任务。这个保守策略避免重复付费，但也可能暂停已记录提交状态、实际尚未发出的请求。正常轮询和人工恢复都校验响应 ID，审计日志不能覆盖已经接受的任务 ID。
 
@@ -120,11 +120,11 @@ Sub2API 自身每次启动都会检查并执行其内嵌迁移，影策的 `CANV
 
 脚本在现有表内创建测试用户、项目和一个仓库内 MP4 素材，只适合隔离测试数据库，不请求付费上游。它覆盖 SSO 回调、HttpOnly 会话、同一身份复用、重复票据拒绝、过期时间限制、外站跳转限制、免配置模型目录、项目/资源用户隔离，以及持久化 MP4 的 206 Range 读取。Nginx 与后端日志还需另查，确保未记录票据查询参数。
 
-隔离 Docker 已通过上述接收端检查、受信/非受信 Origin 检查和数据库结构校验。共享 Super Key 已通过真实模型目录查询、`gpt-5.5` 文本生成和 `minimax_h3_b99_001` 的 5 秒视频生成验证；视频完成创建、轮询、鉴权下载、资源持久化和 206 Range 读取。图片生成及其余两个视频工作流尚未实际调用，模型目录可见不代表生成已通过。worker 重启恢复目前只有模拟上游回归覆盖，未进行真实任务故障注入。
+隔离 Docker 已通过上述接收端检查、受信/非受信 Origin 检查和数据库结构校验。服务端卫星应用凭据已通过真实模型目录查询、`gpt-5.5` 文本生成和 `minimax_h3_b99_001` 的 5 秒视频生成验证；视频完成创建、轮询、鉴权下载、资源持久化和 206 Range 读取。图片生成及其余两个视频工作流尚未实际调用，模型目录可见不代表生成已通过。worker 重启恢复目前只有模拟上游回归覆盖，未进行真实任务故障注入。
 
 ### 真实生成冒烟
 
-`scripts/sub2api-generation-smoke.mjs` 使用相同的隔离部署地址和 SSO secret，另要求显式设置 `SUB2API_SMOKE_PAID=1`。它通过影策系统渠道创建一条短文本和一条 5 秒 B99 文生视频，实际消耗共享账户的上游额度，浏览器或脚本不接收 Super Key。视频完成后检查持久资源和 206 Range 响应。
+`scripts/sub2api-generation-smoke.mjs` 使用相同的隔离部署地址和 SSO secret，另要求显式设置 `SUB2API_SMOKE_PAID=1`。它通过影策系统渠道创建一条短文本和一条 5 秒 B99 文生视频，实际消耗当前测试用户的上游额度，浏览器或脚本不接收服务端凭据。视频完成后检查持久资源和 206 Range 响应。
 
 任务 ID 及测试用户 scope 保存到 Git 忽略的 `.local/sub2api-generation-smoke.json`，不保存票据或密钥。重复运行会读取已有任务，不重复生成。只查看脱敏状态使用 `node scripts/sub2api-generation-smoke.mjs --status`，不需设置付费开关。提交结果不确定时脚本会停止，不能通过删除检查点自动重发；必须先核对任务记录及上游状态。此脚本使用测试票据验证接收端，不替代真实 Sub2API JWT 签发和侧栏点击验收。
 
@@ -146,7 +146,7 @@ Sub2API 自身每次启动都会检查并执行其内嵌迁移，影策的 `CANV
 - [x] 隔离 Docker 中实际文本生成成功；实际文生视频创建、轮询、资源保存和 HTTP 206 Range 读取成功，浏览器播放器交互仍待验收。
 - [ ] 视频等待期间重启 worker 后沿用原上游任务 ID，不重复付费提交。
 - [ ] 两个 SSO 用户无法读取彼此的任务、项目和资源。
-- [ ] 浏览器 URL、响应、持久化配置和日志没有 Super Key；任务正文不保存上游密钥。
+- [ ] 浏览器 URL、响应、持久化配置和日志没有服务端应用凭据；任务正文不保存上游密钥。
 - [ ] 受信 Origin 的 OPTIONS/业务请求有正确凭据响应头，陌生 Origin 被拒绝。
 - [x] 本次隔离影策部署及原镜像 Sub2API 配置重建前后，数据库结构摘要一致；只新增或更新现有表中的记录。
 

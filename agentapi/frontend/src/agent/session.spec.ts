@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentAPI, type AgentUser, type AuthenticatedResponse } from './api'
 import { useAgentSession } from './session'
 import { AGENT_PAYMENT_RECOVERY_KEY } from './paymentFlow'
+import { siteName } from './branding'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -32,6 +33,12 @@ describe('AgentAPI session', () => {
   })
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue({
+      agent: { agent_id: 'station-a', name: 'Station A', site_name: 'Station A Site', site_logo: '/a.svg' },
+      authenticated: true,
+      is_agent_admin: false,
+    } as Awaited<ReturnType<typeof agentAPI.getContext>>)
+    vi.spyOn(agentAPI, 'getPublicSettings').mockResolvedValue({ site_name: 'AgentAPI', site_logo: '/logo.svg' })
   })
 
   afterEach(() => {
@@ -158,6 +165,7 @@ describe('AgentAPI session', () => {
     const session = useAgentSession()
     await session.login('admin@example.com', 'password')
     expect(session.isAgentAdmin).toBe(true)
+    expect(siteName.value).toBe('Station A Site')
 
     await session.logout()
 

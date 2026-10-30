@@ -46,7 +46,7 @@
               :class="[
                 'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                 form.payment_mode === mode.value
-                  ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
+                  ? 'border-primary-500 bg-primary-400 text-accent-950 shadow-sm'
                   : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:border-dark-500',
               ]"
             >{{ mode.label }}</button>
@@ -63,7 +63,7 @@
               :class="[
                 'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                 isTypeSelected(pt.value)
-                  ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
+                  ? 'border-primary-500 bg-primary-400 text-accent-950 shadow-sm'
                   : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:border-dark-500',
               ]"
             >{{ pt.label }}</button>
@@ -231,14 +231,14 @@
         </div>
 
         <!-- 服务商 Webhook 提示 -->
-        <div v-if="providerWebhookUrl" class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800/50 dark:bg-blue-900/20">
-          <p class="text-xs text-blue-700 dark:text-blue-300">
+        <div v-if="providerWebhookUrl" class="mt-3 rounded-lg border border-primary-200 bg-primary-50 p-3 dark:border-primary-800/50 dark:bg-primary-900/20">
+          <p class="text-xs text-primary-700 dark:text-primary-300">
             {{ t(providerWebhookHint) }}
           </p>
-          <code class="mt-1 block break-all rounded bg-blue-100 px-2 py-1 text-xs text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
+          <code class="mt-1 block break-all rounded bg-primary-100 px-2 py-1 text-xs text-primary-800 dark:bg-primary-900/40 dark:text-primary-200">
             {{ providerWebhookUrl }}
           </code>
-          <p v-if="form.provider_key === 'stripe'" class="mt-2 text-xs leading-relaxed text-blue-700 dark:text-blue-300">
+          <p v-if="form.provider_key === 'stripe'" class="mt-2 text-xs leading-relaxed text-primary-700 dark:text-primary-300">
             {{ t('admin.settings.payment.stripeWebhookApiVersionHint', { version: STRIPE_SDK_API_VERSION }) }}
           </p>
         </div>

@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentAdminSettingsView from './AgentAdminSettingsView.vue'
 import { agentAPI } from '@/agent/api'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { applyHomeSettings, compactHomeEnabled, homeContent, siteSubtitle } from '@/agent/branding'
+import { applyBranding, applyHomeSettings, applyPageTitle, compactHomeEnabled, homeContent, siteLogo, siteName, siteSubtitle } from '@/agent/branding'
 
-function createContext() {
+function createContext(domain = 'agent.example.com') {
   return {
     agent: {
-      agent_id: 'agent-1', domain: 'agent.example.com', api_base_url: 'https://agent.example.com/v1', name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: 'https://docs.old.example.com/', contact_info: 'old-support@example.com', status: 'active',
+      agent_id: 'agent-1', domain, api_base_url: 'https://agent.example.com/v1', name: 'Example Agent', site_name: 'Example Site', site_logo: '/old.svg', doc_url: 'https://docs.old.example.com/', contact_info: 'old-support@example.com', status: 'active',
       billing_mode: 'user_upstream', owner_main_user_id: 'owner-1', main_balance_cents: 0, billing_status: 'ok', wallet_available_cents: 0, wallet_allocated_cents: 0,
     },
     authenticated: true,
@@ -38,7 +38,7 @@ describe('AgentAdminSettingsView', () => {
     expect(wrapper.find('[data-testid="payment-panel"]').exists()).toBe(true)
     wrapper.unmount()
   })
-  afterEach(() => { vi.restoreAllMocks(); applyHomeSettings({}) })
+  afterEach(() => { vi.restoreAllMocks(); applyPageTitle(''); applyBranding('AgentAPI', '/logo.svg'); applyHomeSettings({}) })
   beforeEach(() => {
     vi.spyOn(agentAPI, 'paymentConfig').mockResolvedValue({ enabled: false, provider: 'manual', currency: 'CNY', webhook_secret_configured: false, min_amount_cents: 100, max_amount_cents: 1000000, order_ttl_seconds: 1800 })
   })
@@ -56,6 +56,12 @@ describe('AgentAdminSettingsView', () => {
     expect(wrapper.get<HTMLInputElement>('#doc-url').element.value).toBe('https://docs.old.example.com/')
     expect(wrapper.get<HTMLInputElement>('#contact-info').element.value).toBe('old-support@example.com')
     expect(wrapper.get<HTMLInputElement>('#api-base-url').element.value).toBe('https://agent.example.com/v1')
+    expect(wrapper.text()).toContain('站点名称')
+    expect(wrapper.text()).toContain('后台备注名称')
+    expect(wrapper.get('aside').text()).toContain('Example Site')
+    expect(wrapper.get('aside').text()).not.toContain('Example Agent')
+    expect(siteName.value).toBe('Example Site')
+    expect(siteLogo.value).toBe('/old.svg')
 
     await wrapper.get('#agent-name').setValue(' New Agent ')
     await wrapper.get('#site-name').setValue(' New Site ')
@@ -69,6 +75,59 @@ describe('AgentAdminSettingsView', () => {
     expect(update).toHaveBeenCalledWith({ name: 'New Agent', site_name: 'New Site', site_logo: '/new.svg', doc_url: 'https://docs.new.example.com/', contact_info: 'new-support@example.com', api_base_url: 'https://api.new.example.com/v1', site_subtitle: '', compact_home_enabled: false, home_content: '' })
     expect(wrapper.text()).toContain('本站品牌信息已保存')
     expect(wrapper.text()).not.toContain('Admin API Key')
+  })
+
+  it('uses the public site name for branding and falls back to it for the admin note', async () => {
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
+    const update = vi.spyOn(agentAPI, 'updateBranding').mockResolvedValue({
+      name: '德雄专属', site_name: '德雄专属', site_logo: '', doc_url: '', contact_info: '', api_base_url: '', site_subtitle: '新副标题', compact_home_enabled: false, home_content: '',
+    })
+    const wrapper = mount(AgentAdminSettingsView)
+    await flushPromises()
+
+    await wrapper.get('#site-name').setValue(' 德雄专属 ')
+    await wrapper.get('#agent-name').setValue('')
+    await wrapper.get('#site-subtitle').setValue('新副标题')
+    await wrapper.findAll('button').find(button => button.text().includes('保存品牌信息'))!.trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ name: '德雄专属', site_name: '德雄专属', site_subtitle: '新副标题' }))
+    expect(siteName.value).toBe('德雄专属')
+    expect(siteSubtitle.value).toBe('新副标题')
+    expect(wrapper.get('aside').text()).toContain('德雄专属')
+    wrapper.unmount()
+  })
+
+  it('keeps an uploaded base64 logo in settings without showing the raw string', async () => {
+    const logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext())
+    const upload = vi.spyOn(agentAPI, 'uploadLogo').mockResolvedValue({
+      name: 'Example Agent', site_name: 'Example Site', site_logo: logo, doc_url: '', contact_info: '', api_base_url: '', site_subtitle: '', compact_home_enabled: false, home_content: '',
+    })
+    const wrapper = mount(AgentAdminSettingsView)
+    await flushPromises()
+
+    const input = wrapper.get('#site-logo-file')
+    Object.defineProperty(input.element, 'files', { value: [new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'image/png' })] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(upload).toHaveBeenCalledOnce()
+    expect(siteLogo.value).toBe(logo)
+    expect(wrapper.text()).toContain('图片已内嵌为 Base64')
+    expect(wrapper.find('#site-logo').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(logo)
+    wrapper.unmount()
+  })
+
+  it('explains why anonymous shared-host visitors do not see a tenant brand', async () => {
+    vi.spyOn(agentAPI, 'getContext').mockResolvedValue(createContext(''))
+    const wrapper = mount(AgentAdminSettingsView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('当前是共享入口')
+    expect(wrapper.text()).toContain('登录后会按当前会话显示本站品牌')
+    wrapper.unmount()
   })
 
   it('does not mount settings until tenant context succeeds on retry', async () => {

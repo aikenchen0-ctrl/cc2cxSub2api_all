@@ -229,6 +229,31 @@ func (c *MainClient) Login(ctx context.Context, email, password string) (MainAut
 	return decodeAuthResult(data)
 }
 
+// IntegrationSSOStart asks Sub2API to issue a one-time satellite ticket for
+// the already authenticated main-site user. AgentAPI consumes only the signed
+// ticket; the main-site access token never reaches the browser.
+func (c *MainClient) IntegrationSSOStart(ctx context.Context, accessToken, slug, next string) (string, error) {
+	accessToken = strings.TrimSpace(accessToken)
+	slug = strings.TrimSpace(slug)
+	if accessToken == "" || slug == "" {
+		return "", &MainAPIError{Status: http.StatusBadGateway, Code: "UPSTREAM_SSO_INVALID", Message: "main-site SSO requires an authenticated user and satellite slug"}
+	}
+	query := url.Values{}
+	query.Set("next", next)
+	path := "/auth/integrations/" + url.PathEscape(slug) + "/start?" + query.Encode()
+	data, err := c.jsonRequest(ctx, http.MethodGet, path, nil, accessToken)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		RedirectURL string `json:"redirect_url"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil || strings.TrimSpace(result.RedirectURL) == "" {
+		return "", &MainAPIError{Status: http.StatusBadGateway, Code: "UPSTREAM_SSO_INVALID", Message: "main site returned an invalid satellite SSO response"}
+	}
+	return strings.TrimSpace(result.RedirectURL), nil
+}
+
 func (c *MainClient) Register(ctx context.Context, payload map[string]any) (MainAuthResult, error) {
 	data, err := c.jsonRequest(ctx, http.MethodPost, "/auth/register", payload, "")
 	if err != nil {

@@ -54,7 +54,8 @@ type AgentCheckoutInfo struct {
 	GlobalMax                     float64                            `json:"global_max"`
 	Plans                         []AgentCheckoutPlan                `json:"plans"`
 	BalanceDisabled               bool                               `json:"balance_disabled"`
-	BalanceRechargeMultiplier     float64                            `json:"balance_recharge_multiplier"`
+	ChargingEnabled               bool                               `json:"charging_enabled"`
+	ModelRateMultiplier           float64                            `json:"model_rate_multiplier"`
 	SubscriptionUSDToCNYRate      float64                            `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate               float64                            `json:"recharge_fee_rate"`
 	HelpText                      string                             `json:"help_text"`
@@ -286,6 +287,13 @@ func (s *Server) handleAgentPayment(w http.ResponseWriter, r *http.Request, requ
 		if err != nil || stationOrder.MainUserID != session.MainUserID {
 			s.writeError(w, http.StatusNotFound, requestID, "ORDER_NOT_FOUND", "station order was not found")
 			return
+		}
+		// The result page polls this endpoint after the provider redirect. Ask the
+		// provider directly instead of waiting for a callback that may never come.
+		if strings.EqualFold(stationOrder.Status, "PENDING") {
+			if refreshed, settled := s.reconcileStationOrder(r.Context(), tenant.AgentID, stationOrder.OutTradeNo, "result-poll"); settled {
+				stationOrder = refreshed
+			}
 		}
 		s.writeData(w, http.StatusOK, requestID, AgentOrder{
 			ID: stationOrder.ID, Amount: stationOrder.Amount, PayAmount: stationOrder.PayAmount, FeeRate: stationOrder.FeeRate,

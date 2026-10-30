@@ -155,9 +155,9 @@ onMounted(load)
 <template>
   <main class="space-y-6">
     <header>
-      <p class="text-sm text-slate-500">AgentAPI</p>
-      <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">API 密钥</h1>
-      <p class="mt-1 text-sm text-slate-500">调用此代理网关时，请在 <code>Authorization: Bearer</code> 请求头中使用 AgentAPI 密钥。</p>
+      <p class="text-sm text-primary-600 dark:text-primary-400">AgentAPI</p>
+      <h1 class="text-2xl font-semibold text-accent-950 dark:text-white">API 密钥</h1>
+      <p class="mt-1 text-sm text-accent-500 dark:text-dark-400">调用此代理网关时，请在 <code>Authorization: Bearer</code> 请求头中使用 AgentAPI 密钥。</p>
     </header>
 
     <section class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
@@ -176,7 +176,7 @@ onMounted(load)
     </section>
 
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
-    <p v-if="notice" class="rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">{{ notice }}</p>
+    <p v-if="notice" class="rounded-lg bg-primary-50 p-4 text-sm text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">{{ notice }}</p>
 
     <TablePageLayout>
       <template #actions>

@@ -21,7 +21,7 @@
               <td class="max-w-[120px] truncate py-1.5 font-medium text-gray-900 dark:text-white" :title="row.key">{{ row.key }}</td>
               <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">{{ row.requests }} / {{ row.measured }}</td>
               <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">{{ formatTokens(rowTokens(row)) }}</td>
-              <td class="py-1.5 text-right text-green-600 dark:text-green-400">{{ hasActual(row) ? formatUSD(row.actual_cost_usd_nanos) : '无数据' }}</td>
+              <td class="py-1.5 text-right text-primary-700 dark:text-primary-300">{{ hasActual(row) ? formatUSD(row.actual_cost_usd_nanos) : '无数据' }}</td>
               <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">{{ row.measured ? formatUSD(row.standard_cost_usd_nanos) : '无数据' }}</td>
             </tr>
           </tbody>
@@ -37,6 +37,7 @@ import { computed } from 'vue'
 import { ArcElement, Chart as ChartJS, Legend, Tooltip } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 import type { UsageInsights, UsageMetrics } from '@/agent/api'
+import { isDark } from '@/agent/theme'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
@@ -46,12 +47,15 @@ const props = withDefaults(defineProps<{ modelStats: UsageInsights['models']; me
 const emit = defineEmits<{ 'update:metric': [value: Metric] }>()
 const activeClass = 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
 const inactiveClass = 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+const lightPalette = ['#8c681f', '#b3872c', '#c99f37', '#a9822a', '#72541f', '#d4ad5a', '#5f471e', '#ddb85c', '#4a3716', '#e2c273', '#635a4c', '#ead18a']
+const darkPalette = ['#f0dfb2', '#e2c273', '#d4ad5a', '#c99f37', '#b3872c', '#a9822a', '#8c681f', '#72541f', '#fbf1d5', '#ddb85c', '#a99d8a', '#5f471e']
 
 const displayRows = computed(() => [...props.modelStats].sort((a, b) => metricValue(b) - metricValue(a)))
 const chartData = computed(() => {
   const rows = displayRows.value.filter(row => metricValue(row) > 0)
   if (!rows.length) return null
-  return { labels: rows.map(row => row.key), datasets: [{ data: rows.map(metricValue), backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16','#06b6d4','#a855f7'].slice(0, rows.length), borderWidth: 0 }] }
+  const palette = isDark.value ? darkPalette : lightPalette
+  return { labels: rows.map(row => row.key), datasets: [{ data: rows.map(metricValue), backgroundColor: palette.slice(0, rows.length), borderWidth: 0 }] }
 })
 const doughnutOptions = computed(() => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context: any) => { const value = Number(context.raw) || 0; const total = context.dataset.data.reduce((sum: number, item: number) => sum + item, 0); const formatted = props.metric === 'actual_cost' ? formatUSD(value) : formatTokens(value); return `${context.label}: ${formatted} (${total ? ((value / total) * 100).toFixed(1) : '0.0'}%)` } } } } }))
 

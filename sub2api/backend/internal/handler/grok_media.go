@@ -418,10 +418,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					h.handleFailoverExhausted(c, failoverErr, false)
 					return
 				}
-				if endpoint.IsVideoLookupRequest() {
-					h.handleFailoverExhausted(c, failoverErr, false)
-					return
-				}
+				// 视频状态/内容查询绑定创建账号：允许同一账号的短重试，但绝不跨账号。
 				if failoverErr.RetryableOnSameAccount {
 					retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
 					if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
@@ -441,6 +438,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 						}
 						continue
 					}
+				}
+				if endpoint.IsVideoLookupRequest() {
+					h.handleFailoverExhausted(c, failoverErr, false)
+					return
 				}
 				h.gatewayService.RecordOpenAIAccountSwitch()
 				failedAccountIDs[account.ID] = struct{}{}

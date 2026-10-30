@@ -149,7 +149,7 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
               </template>
             </AgentInput>
           </div>
-          <button type="button" :disabled="loading" class="h-12 rounded-xl bg-primary-600 px-7 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60" @click="queryKey">
+          <button type="button" :disabled="loading" class="h-12 rounded-xl bg-primary-400 px-7 text-sm font-medium text-accent-950 transition hover:bg-primary-300 disabled:opacity-60 dark:text-dark-950" @click="queryKey">
             {{ loading ? '查询中…' : '查询' }}
           </button>
         </div>
@@ -159,7 +159,7 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
 
       <template v-if="result">
         <section class="mt-8 flex flex-wrap items-center justify-center gap-2">
-          <button v-for="range in ranges" :key="range.key" type="button" class="rounded-lg border px-3 py-1.5 text-xs font-medium" :class="currentRange === range.key ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-200 bg-white text-gray-600 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-300'" @click="setRange(range.key)">{{ range.label }}</button>
+          <button v-for="range in ranges" :key="range.key" type="button" class="rounded-lg border px-3 py-1.5 text-xs font-medium" :class="currentRange === range.key ? 'border-primary-600 bg-primary-400 text-accent-950' : 'border-gray-200 bg-white text-gray-600 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-300'" @click="setRange(range.key)">{{ range.label }}</button>
           <template v-if="currentRange === 'custom'">
             <AgentDateRangePicker
               v-model:start-date="customStartDate"
@@ -201,7 +201,7 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-dark-800">
             <h2 class="font-semibold">每日用量</h2>
             <div class="flex rounded-lg border border-gray-200 p-0.5 dark:border-dark-700">
-              <button v-for="days in ([7, 30, 90] as const)" :key="days" type="button" class="rounded-md px-3 py-1 text-xs" :class="dailyDays === days ? 'bg-primary-600 text-white' : 'text-gray-500'" @click="setDailyDays(days)">{{ days }} 天</button>
+              <button v-for="days in ([7, 30, 90] as const)" :key="days" type="button" class="rounded-md px-3 py-1 text-xs" :class="dailyDays === days ? 'bg-primary-400 text-accent-950' : 'text-gray-500'" @click="setDailyDays(days)">{{ days }} 天</button>
             </div>
           </div>
           <div class="overflow-x-auto">

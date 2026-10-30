@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { agentAPI, type PasswordRecoveryConfig } from '@/agent/api'
 import { errorMessage } from '@/agent/client'
-import AuthLayout from '@/components/layout/AuthLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import AgentCaptchaChallenge from '@/components/auth/AgentCaptchaChallenge.vue'
 import AgentInput from '@/components/common/AgentInput.vue'
@@ -64,9 +63,8 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <AuthLayout>
-    <main class="w-full">
-      <section class="space-y-6">
+  <main class="w-full">
+    <section class="space-y-6">
         <div class="text-center">
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">找回密码</h1>
           <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">输入注册邮箱，我们会发送一次性重置链接</p>
@@ -93,8 +91,7 @@ async function submit(): Promise<void> {
             <Icon v-else name="mail" size="md" class="mr-2" />{{ busy ? '正在发送…' : '发送重置邮件' }}
           </button>
         </form>
-      </section>
-    </main>
-    <template #footer><p class="text-gray-500 dark:text-dark-400">想起密码了？ <RouterLink to="/login" class="font-medium text-primary-600 dark:text-primary-400">返回登录</RouterLink></p></template>
-  </AuthLayout>
+    </section>
+    <p class="mt-6 text-center text-sm text-gray-500 dark:text-dark-400">想起密码了？ <RouterLink to="/login" class="font-medium text-primary-600 dark:text-primary-400">返回登录</RouterLink></p>
+  </main>
 </template>

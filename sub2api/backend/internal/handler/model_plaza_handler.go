@@ -64,8 +64,12 @@ type modelPlazaTimePricing struct {
 
 // modelPlazaModel 广场模型条目：实收口径展示定价（白名单形态）+ 官方参考价。
 type modelPlazaModel struct {
-	Name            string                     `json:"name"`
-	Platform        string                     `json:"platform"`
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	// Manufacturer 厂家（如 Anthropic / Gemini / Grok），供广场按厂家筛选。
+	Manufacturer string `json:"manufacturer"`
+	// Capability 功能归类："text" | "image" | "video"，供广场按功能筛选。
+	Capability      string                     `json:"capability"`
 	Pricing         *userSupportedModelPricing `json:"pricing"`
 	OfficialPricing *modelPlazaOfficialPricing `json:"official_pricing"`
 	// LongContextBasis 多档时的计价基准："whole_request"（整单按档）| "marginal"（仅超出部分）。
@@ -92,6 +96,9 @@ type modelPlazaGroup struct {
 	// 不取分组/用户专属倍率。
 	ImageRateIndependent bool    `json:"image_rate_independent"`
 	ImageRateMultiplier  float64 `json:"image_rate_multiplier"`
+	// 视频独立倍率：为 true 时视频计费模型的实付倍率取 VideoRateMultiplier。
+	VideoRateIndependent bool    `json:"video_rate_independent"`
+	VideoRateMultiplier  float64 `json:"video_rate_multiplier"`
 	// 分组是否启用长上下文阶梯计费；关闭时模型实付列只展示最低档/基础价。
 	LongContextPricingEnabled bool              `json:"long_context_pricing_enabled"`
 	Models                    []modelPlazaModel `json:"models"`
@@ -129,16 +136,9 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 	}
 
 	// allowedGroups == nil 表示匿名；登录用户恒为非 nil（可能为空集合）。
-	var allowedGroups map[int64]struct{}
-	var restrictPublicGroups bool
 	var userRates map[int64]float64
 	if authed {
-		allowedGroups, restrictPublicGroups, err = h.apiKeyService.GetUserGroupVisibility(c.Request.Context(), subject.UserID)
-		if err != nil {
-			// 可见性数据拿不到时不能静默降级成匿名视图（会错漏专属分组），直接报错。
-			response.ErrorFrom(c, err)
-			return
-		}
+		// Visibility is deliberately not used for this public inventory surface.
 		userRates, err = h.apiKeyService.GetUserGroupRates(c.Request.Context(), subject.UserID)
 		if err != nil {
 			// 专属倍率仅是展示增强，失败降级为分组默认倍率。
@@ -147,8 +147,14 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 		}
 	}
 
-	visible := filterPlazaVisibleGroups(groups, allowedGroups, restrictPublicGroups)
+	// The model plaza is an inventory/catalog surface. It intentionally exposes
+	// every active group; gateway authorization still applies when a request is
+	// routed. User-specific rates remain available for authenticated users.
+	visible := groups
 
+	// 广场可匿名访问，分组文案随请求语言变化，提示中间缓存按语言区分。
+	// 追加而非覆盖：CORS 中间件已为具体来源写入 Vary: Origin。
+	c.Writer.Header().Add("Vary", "Accept-Language")
 	out := make([]modelPlazaGroup, 0, len(visible))
 	for i := range visible {
 		out = append(out, toModelPlazaGroupDTO(&visible[i], userRates))
@@ -188,11 +194,32 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 	models := make([]modelPlazaModel, 0, len(g.Models))
 	for i := range g.Models {
 		m := &g.Models[i]
+		pricing := toUserPricing(m.Pricing)
+		official := toModelPlazaOfficialPricing(m.OfficialPricing)
+		// 图片/视频模型按张、按次或按秒计价，缓存价格对其无意义，不下发避免误导。
+		if pricing != nil && (m.Capability == "image" || m.Capability == "video" ||
+			pricing.BillingMode == string(service.BillingModeImage) || pricing.BillingMode == string(service.BillingModeVideo)) {
+			pricing.CacheWritePrice = nil
+			pricing.CacheWrite1hPrice = nil
+			pricing.CacheReadPrice = nil
+			for j := range pricing.Intervals {
+				pricing.Intervals[j].CacheWritePrice = nil
+				pricing.Intervals[j].CacheWrite1hPrice = nil
+				pricing.Intervals[j].CacheReadPrice = nil
+			}
+			if official != nil {
+				official.CacheWritePrice = nil
+				official.CacheWrite1hPrice = nil
+				official.CacheReadPrice = nil
+			}
+		}
 		models = append(models, modelPlazaModel{
 			Name:             m.Name,
 			Platform:         m.Platform,
-			Pricing:          toUserPricing(m.Pricing),
-			OfficialPricing:  toModelPlazaOfficialPricing(m.OfficialPricing),
+			Manufacturer:     m.Manufacturer,
+			Capability:       m.Capability,
+			Pricing:          pricing,
+			OfficialPricing:  official,
 			LongContextBasis: string(m.LongContextBasis),
 			TimePricing:      toModelPlazaTimePricing(m.TimePricing),
 		})
@@ -211,6 +238,8 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 		IsExclusive:               g.IsExclusive,
 		ImageRateIndependent:      g.ImageRateIndependent,
 		ImageRateMultiplier:       g.ImageRateMultiplier,
+		VideoRateIndependent:      g.VideoRateIndependent,
+		VideoRateMultiplier:       g.VideoRateMultiplier,
 		LongContextPricingEnabled: g.LongContextPricingEnabled,
 		Models:                    models,
 	}

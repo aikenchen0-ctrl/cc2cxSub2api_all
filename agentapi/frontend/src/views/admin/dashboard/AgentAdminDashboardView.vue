@@ -98,7 +98,7 @@ onMounted(() => void load())
       </div>
     </header>
 
-    <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+    <div class="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800 dark:border-primary-900 dark:bg-primary-950/30 dark:text-primary-300">
       余额、实际费用和结算状态由系统统一核算。此页面仅展示当前站点数据，不会越过本站权限边界。
     </div>
 
@@ -122,7 +122,7 @@ onMounted(() => void load())
 
       <section class="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="核心统计">
         <div class="card flex items-center gap-3 p-4">
-          <div class="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"><Icon name="chart" size="md" /></div>
+          <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="chart" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">24 小时请求</p>
             <p class="text-xl font-bold text-gray-900 dark:text-white">{{ (insights?.requests || 0).toLocaleString() }}</p>
@@ -138,18 +138,18 @@ onMounted(() => void load())
           </div>
         </div>
         <div class="card flex items-center gap-3 p-4">
-          <div class="rounded-lg bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"><Icon name="check" size="md" /></div>
+          <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="check" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">已测量请求</p>
             <p class="text-xl font-bold text-gray-900 dark:text-white">{{ (insights?.measured || 0).toLocaleString() }}</p>
-            <p class="text-xs text-emerald-600">不展示租户用户目录</p>
+            <p class="text-xs text-primary-600 dark:text-primary-300">不展示租户用户目录</p>
           </div>
         </div>
         <div class="card flex items-center gap-3 p-4">
-          <div class="rounded-lg bg-green-100 p-2 text-green-600 dark:bg-green-900/30 dark:text-green-400"><Icon name="dollar" size="md" /></div>
+          <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="dollar" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">已报告实际费用</p>
-            <p class="text-xl font-bold text-green-600">{{ actualCostLabel }}</p>
+            <p class="text-xl font-bold text-primary-700 dark:text-primary-300">{{ actualCostLabel }}</p>
             <p class="text-xs text-gray-400">已报告值，不以零值补齐</p>
           </div>
         </div>
@@ -184,20 +184,20 @@ onMounted(() => void load())
           <p class="mt-1 text-xs text-gray-500">快速进入当前站点可管理的核心功能。</p>
         </div>
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <RouterLink to="/admin/users" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-emerald-50 dark:bg-dark-800/50 dark:hover:bg-emerald-900/20">
-            <span class="rounded-lg bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-900/30"><Icon name="dollar" size="md" /></span>
+          <RouterLink to="/admin/users" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-primary-50 dark:bg-dark-800/50 dark:hover:bg-primary-900/20">
+            <span class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="dollar" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">用户管理</span><span class="block text-xs text-gray-500">查看本站登记用户</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
           </RouterLink>
-          <RouterLink to="/admin/payments" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-green-50 dark:bg-dark-800/50 dark:hover:bg-green-900/20">
-            <span class="rounded-lg bg-green-100 p-2 text-green-600 dark:bg-green-900/30"><Icon name="dollar" size="md" /></span>
+          <RouterLink to="/admin/payments" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-primary-50 dark:bg-dark-800/50 dark:hover:bg-primary-900/20">
+            <span class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="dollar" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">支付统计</span><span class="block text-xs text-gray-500">本站成员订单抽样</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
           </RouterLink>
-          <RouterLink to="/admin/usage" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-blue-50 dark:bg-dark-800/50 dark:hover:bg-blue-900/20">
-            <span class="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/30"><Icon name="chartBar" size="md" /></span>
+          <RouterLink to="/admin/usage" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-primary-50 dark:bg-dark-800/50 dark:hover:bg-primary-900/20">
+            <span class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30"><Icon name="chartBar" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">用量同步</span><span class="block text-xs text-gray-500">用量与结算核对</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
           </RouterLink>
-          <RouterLink to="/admin/announcements" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-purple-50 dark:bg-dark-800/50 dark:hover:bg-purple-900/20">
-            <span class="rounded-lg bg-purple-100 p-2 text-purple-600 dark:bg-purple-900/30"><Icon name="bell" size="md" /></span>
+          <RouterLink to="/admin/announcements" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-primary-50 dark:bg-dark-800/50 dark:hover:bg-primary-900/20">
+            <span class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30"><Icon name="bell" size="md" /></span>
             <span class="min-w-0 flex-1"><span class="block text-sm font-medium">公告管理</span><span class="block text-xs text-gray-500">发布本站用户公告</span></span><Icon name="chevronRight" size="sm" class="text-gray-400" />
           </RouterLink>
           <RouterLink to="/admin/settings" class="group flex items-center gap-3 rounded-lg bg-gray-50 p-4 transition-colors hover:bg-amber-50 dark:bg-dark-800/50 dark:hover:bg-amber-900/20">

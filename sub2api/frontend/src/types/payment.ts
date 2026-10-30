@@ -91,6 +91,8 @@ export interface PaymentOrder {
   fee_rate: number
   payment_type: string
   out_trade_no: string
+  payment_trade_no?: string
+  provider_key?: string
   status: OrderStatus
   order_type: OrderType
   created_at: string

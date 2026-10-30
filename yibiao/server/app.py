@@ -827,7 +827,7 @@ async def run_once(background_tasks: BackgroundTasks):
     was_running = app_state.is_running
     owner_subject = _APP_SUBJECT.get()
     if app_state.current_task_running or app_state.manual_run_pending:
-        return {"success": False, "message": "妫€绱㈠姟姝ｅ湪杩愯"}
+        return {"success": False, "message": "检索任务正在运行，请等待本轮完成后再试。"}
     app_state.manual_run_pending = True
     app_state.stop_event.clear()  # 确保stop_event未设置
     

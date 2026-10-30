@@ -8,6 +8,7 @@ import {
   VISION_PROVIDER,
   hasConfiguredSecret,
   hasOutboundProxy,
+  managedRelayModel,
 } from '../config.mjs'
 import { parseDataUrl, sanitizeFileName } from '../http-utils.mjs'
 import { isManaged, relayBaseUrl, satelliteHeaders } from '../auth-sso.mjs'
@@ -22,12 +23,18 @@ const CATEGORY_LABELS = {
   specimen: 'Organic Specimen',
 }
 
+// Managed deployments take the public model name from the relay env; the
+// standalone default comes from config.mjs so both paths share one fallback.
+function managedVisionModel() {
+  return managedRelayModel()
+}
+
 export function getVisionHealth() {
   const managed = isManaged()
   return {
     provider: VISION_PROVIDER,
     configured: VISION_PROVIDER === 'openai' && (managed ? hasConfiguredSecret(process.env.SUB2API_APP_CREDENTIAL) && Boolean(relayBaseUrl()) : hasConfiguredSecret(OPENAI_API_KEY)),
-    model: VISION_PROVIDER === 'openai' ? (managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL) : '',
+    model: VISION_PROVIDER === 'openai' ? (managed ? managedVisionModel() : OPENAI_VISION_MODEL) : '',
     baseUrl: VISION_PROVIDER === 'openai' ? (managed ? relayBaseUrl() : OPENAI_API_BASE) : '',
   }
 }
@@ -55,13 +62,22 @@ export async function analyzeAssetImage(payload = {}) {
   return normalizeVisionInsight(parsed, {
     fileName,
     provider: 'openai',
-    model: managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL,
+    model: managed ? managedVisionModel() : OPENAI_VISION_MODEL,
     raw,
   })
 }
 
 export function normalizeVisionInsight(raw = {}, context = {}) {
-  const categoryId = normalizeCategoryId(raw.categoryId || raw.category || raw.type)
+  // The hint lets an unknown categoryId fall back to what the model actually
+  // described instead of the generic product bucket.
+  const categoryHint = [
+    raw.categoryLabel,
+    raw.objectName || raw.name || raw.title,
+    raw.description || raw.summary,
+    raw.material || raw.materials,
+    Array.isArray(raw.tags) ? raw.tags.join(' ') : raw.tags,
+  ].filter(Boolean).join(' ')
+  const categoryId = normalizeCategoryId(raw.categoryId || raw.category || raw.type, categoryHint)
   const objectName = cleanText(raw.objectName || raw.name || raw.title || context.fileName || 'Uploaded asset', 90)
   const tags = normalizeTags(raw.tags)
 
@@ -102,7 +118,7 @@ export function extractJsonObject(content) {
 async function openAiVisionRequest(imageDataUrl, fileName, subject = '') {
   const managed = isManaged()
   const baseUrl = managed ? relayBaseUrl() : OPENAI_API_BASE
-  const model = managed ? (process.env.SUB2API_RELAY_MODEL || 'gpt-5.5') : OPENAI_VISION_MODEL
+  const model = managed ? managedVisionModel() : OPENAI_VISION_MODEL
   const authHeaders = managed ? satelliteHeaders(subject, { required: true }) : { Authorization: `Bearer ${OPENAI_API_KEY}` }
   let response
   try {
@@ -199,16 +215,39 @@ function unavailableInsight(fileName, message) {
   }
 }
 
-function normalizeCategoryId(value) {
+// Ordered from most specific to most generic; the first match wins.
+const CATEGORY_HINTS = [
+  ['vessel', ['aircraft carrier', 'warship', 'battleship', 'submarine', 'cargo ship', 'sailboat', 'yacht', 'hull', '航母', '军舰', '战舰', '潜艇', '船']],
+  ['aircraft', ['airplane', 'aircraft', 'fighter jet', 'helicopter', 'drone', 'fuselage', 'cockpit', '飞机', '直升机', '无人机']],
+  ['road', ['supercar', 'sports car', 'race car', 'sedan', 'suv', 'pickup truck', 'motorcycle', 'chassis', '跑车', '赛车', '汽车', '摩托']],
+  ['specimen', ['epithelial', 'plant cell', 'cell wall', 'nucleus', 'mitochondria', 'tissue sample', 'biological', 'microscope', '细胞', '细胞核', '组织', '标本']],
+  ['artifact', ['bronze', 'terracotta', 'ritual vessel', 'museum relic', 'archaeological', 'ancient mask', 'patina', '青铜', '文物', '面具', '雕像', '陶']],
+]
+
+function normalizeCategoryId(value, hint = '') {
   const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '-')
   if (CATEGORY_IDS.has(normalized)) return normalized
 
-  if (['car', 'vehicle', 'automobile', 'supercar', 'truck'].includes(normalized)) return 'road'
-  if (['ship', 'carrier', 'warship', 'naval', 'submarine'].includes(normalized)) return 'vessel'
-  if (['plane', 'airplane', 'fighter', 'fighter-jet', 'jet'].includes(normalized)) return 'aircraft'
-  if (['relic', 'museum', 'bronze', 'mask', 'statue'].includes(normalized)) return 'artifact'
-  if (['cell', 'biology', 'organic', 'organism'].includes(normalized)) return 'specimen'
-  return 'product'
+  if (['car', 'vehicle', 'automobile', 'supercar', 'truck', 'sedan', 'suv', 'motorcycle'].includes(normalized)) return 'road'
+  if (['ship', 'carrier', 'warship', 'naval', 'submarine', 'boat', 'yacht'].includes(normalized)) return 'vessel'
+  if (['plane', 'airplane', 'aircraft', 'fighter', 'fighter-jet', 'jet', 'drone', 'helicopter'].includes(normalized)) return 'aircraft'
+  if (['relic', 'museum', 'bronze', 'mask', 'statue', 'pottery', 'artifact'].includes(normalized)) return 'artifact'
+  if (['cell', 'biology', 'biological', 'organic', 'organism', 'specimen', 'tissue'].includes(normalized)) return 'specimen'
+
+  // Vision models occasionally invent a category (for example "platform").
+  // Before collapsing to the generic product bucket, let the model's own
+  // description and tags decide, so a ship or a cell is not mislabelled just
+  // because the categoryId was not in the allowed list.
+  return inferCategoryFromText(hint) || 'product'
+}
+
+function inferCategoryFromText(hint) {
+  const text = String(hint || '').toLowerCase()
+  if (!text) return ''
+  for (const [categoryId, keywords] of CATEGORY_HINTS) {
+    if (keywords.some((keyword) => text.includes(keyword))) return categoryId
+  }
+  return ''
 }
 
 function normalizeTags(tags) {

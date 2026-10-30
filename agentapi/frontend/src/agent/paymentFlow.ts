@@ -138,3 +138,22 @@ export function shouldOpenPaymentWindow(result: AgentPaymentCreateResult, isMobi
   if (alipay && forceQR && !mobilePrecreate) return false
   return result.payment_mode === 'popup' || result.payment_mode === 'redirect' || isMobile || !result.qr_code
 }
+
+/**
+ * 支付页统一用“新标签页”打开。
+ * 注意：window.open 的第三个参数（features）里只要出现 width/height/popup 之类，
+ * Chrome/Edge/Safari/Firefox 都会把它当成独立弹窗（新窗口）而不是标签页。
+ * 这里刻意不传 features，只传 '_blank'，让浏览器按普通链接打开标签页。
+ * 返回值 false 表示被拦截（或浏览器拒绝），调用方应回退到同标签页跳转。
+ */
+export function openPaymentTab(url: string): boolean {
+  if (!url) return false
+  const tab = window.open(url, '_blank')
+  if (!tab) return false
+  try {
+    tab.opener = null
+  } catch {
+    // 跨域句柄可能只读，忽略即可；rel/noopener 语义已由清空 opener 覆盖。
+  }
+  return true
+}

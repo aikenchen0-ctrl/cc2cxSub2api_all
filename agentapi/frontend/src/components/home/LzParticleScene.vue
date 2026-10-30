@@ -93,12 +93,12 @@ onMounted(() => {
       const x = width * 0.5 + baseX * Math.cos(angle) - baseY * Math.sin(angle) + Math.sin(time * 0.00035 + star.phase) * 8
       const y = height * 0.5 + baseX * Math.sin(angle) + baseY * Math.cos(angle) + Math.cos(time * 0.00028 + star.phase) * 6
       context.beginPath()
-      context.fillStyle = index % 9 === 0 ? '#a9d7ff' : '#dce7f5'
+      context.fillStyle = index % 9 === 0 ? '#e2c273' : '#f6f0e2'
       context.globalAlpha = alpha
       context.arc(x, y, star.size, 0, Math.PI * 2)
       context.fill()
     })
-    const palette: Record<LzMode, string> = { AIFX: '#86f3dc', CC2CX: '#bc9cff', OPENAI: '#86b9ff', DEEPSEEK: '#ffb87d' }
+    const palette: Record<LzMode, string> = { AIFX: '#e2c273', CC2CX: '#d4ad5a', OPENAI: '#c99f37', DEEPSEEK: '#b3872c' }
     const mode = props.activeMode
     if (lastMode !== mode) {
       createTextTargets(mode)

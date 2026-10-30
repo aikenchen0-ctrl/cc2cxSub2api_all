@@ -413,6 +413,49 @@ describe('user KeysView column settings', () => {
     wrapper.unmount()
   })
 
+  it('places the Windows client download buttons before refresh', async () => {
+    const wrapper = await mountView()
+    const imageVideoButton = wrapper.get('[data-test="download-image-video-client"]')
+    const ccLaunchButton = wrapper.get('[data-test="download-cc-launch-client"]')
+
+    expect(imageVideoButton.text()).toContain('keys.desktopDownloads.imageVideo')
+    expect(ccLaunchButton.text()).toContain('keys.desktopDownloads.ccLaunch')
+    expect(ccLaunchButton.element.nextElementSibling?.getAttribute('title')).toBe('Refresh')
+    wrapper.unmount()
+  })
+
+  it('downloads the Windows client only after confirmation', async () => {
+    const wrapper = await mountView()
+    let downloadedUrl = ''
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloadedUrl = this.href
+      })
+
+    try {
+      await wrapper.get('[data-test="download-cc-launch-client"]').trigger('click')
+      const dialog = wrapper
+        .findAllComponents({ name: 'ConfirmDialog' })
+        .find((item) => item.props('title') === 'keys.desktopDownloads.confirmTitle')!
+
+      expect(dialog.props('show')).toBe(true)
+      expect(clickSpy).not.toHaveBeenCalled()
+
+      dialog.vm.$emit('confirm')
+      await nextTick()
+
+      expect(downloadedUrl).toBe(
+        'https://github.com/aikenchen0-ctrl/cc2cx/releases/download/v3.20.7/cc-launch_3.20.7_x64-setup.exe'
+      )
+      expect(clickSpy).toHaveBeenCalledOnce()
+      expect(dialog.props('show')).toBe(false)
+    } finally {
+      clickSpy.mockRestore()
+      wrapper.unmount()
+    }
+  })
+
   it('shows a hidden column when toggled and persists the preference', async () => {
     const wrapper = await mountView()
 

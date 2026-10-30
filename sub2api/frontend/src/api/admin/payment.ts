@@ -61,6 +61,19 @@ export interface RefundResult {
   subscription_days_deducted?: number
 }
 
+export interface AdminOrderQueryResult {
+  order: PaymentOrder
+  provider_key: string
+  query_ref: string
+  upstream_status: string
+  upstream_trade_no?: string
+  upstream_amount: number
+  upstream_paid_at?: string
+  amount_valid: boolean
+  recovered: boolean
+  fulfillment_error?: string
+}
+
 export const adminPaymentAPI = {
   // ==================== Config ====================
 
@@ -103,6 +116,11 @@ export const adminPaymentAPI = {
   /** Get a specific order by ID */
   getOrder(id: number) {
     return apiClient.get<PaymentOrder>(`/admin/payment/orders/${id}`)
+  },
+
+  /** Actively query the upstream provider and apply a paid result */
+  queryOrder(id: number) {
+    return apiClient.post<AdminOrderQueryResult>(`/admin/payment/orders/${id}/query`)
   },
 
   /** Cancel an order (admin) */

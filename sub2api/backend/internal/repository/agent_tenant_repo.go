@@ -33,6 +33,14 @@ JOIN agent_shared_tenant_members m
   ON m.agent_id=t.agent_id AND m.main_user_id=t.owner_main_user_id
 WHERE t.owner_main_user_id=$1 AND m.status='active'`
 
+const agentSharedTenantMembershipSelect = `
+SELECT t.agent_id, t.owner_main_user_id, t.display_name, t.brand_name,
+       t.status, m.role, t.created_at, t.updated_at
+FROM agent_shared_tenants t
+JOIN agent_shared_tenant_members m
+  ON m.agent_id=t.agent_id
+WHERE t.agent_id=$1 AND m.main_user_id=$2 AND m.status='active'`
+
 func scanAgentSharedTenant(row agentTenantScanner) (*service.AgentSharedTenant, error) {
 	var tenant service.AgentSharedTenant
 	if err := row.Scan(
@@ -97,4 +105,84 @@ SET role='owner', status='active', updated_at=NOW()`, tenant.OwnerMainUserID); e
 		return nil, fmt.Errorf("commit shared AgentAPI tenant: %w", err)
 	}
 	return created, nil
+}
+
+// EnsureSharedTenantMember is the trusted satellite binding for a user who
+// registered through a station domain. It always creates or reactivates a
+// member; an existing owner row keeps its role.
+func (r *agentTenantRepository) EnsureSharedTenantMember(ctx context.Context, agentID string, mainUserID int64) (*service.AgentSharedTenant, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("AgentAPI tenant database is unavailable")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin shared AgentAPI member binding: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var activeTenant bool
+	if err := tx.QueryRowContext(ctx, `
+SELECT EXISTS (
+    SELECT 1 FROM agent_shared_tenants WHERE agent_id=$1 AND status='active'
+)`, agentID).Scan(&activeTenant); err != nil {
+		return nil, fmt.Errorf("validate shared AgentAPI tenant: %w", err)
+	}
+	if !activeTenant {
+		return nil, service.ErrAgentTenantNotFound
+	}
+	var activeUser bool
+	if err := tx.QueryRowContext(ctx, `
+SELECT EXISTS (
+    SELECT 1 FROM users WHERE id=$1 AND status='active' AND deleted_at IS NULL
+)`, mainUserID).Scan(&activeUser); err != nil {
+		return nil, fmt.Errorf("validate shared AgentAPI member: %w", err)
+	}
+	if !activeUser {
+		return nil, service.ErrAgentTenantOwnerNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO agent_shared_tenant_members (
+    agent_id, main_user_id, role, status, created_at, updated_at
+) VALUES ($1,$2,'member','active',NOW(),NOW())
+ON CONFLICT (agent_id, main_user_id) DO UPDATE
+SET status='active', updated_at=NOW()`, agentID, mainUserID); err != nil {
+		return nil, fmt.Errorf("bind shared AgentAPI member: %w", err)
+	}
+	member, err := scanAgentSharedTenant(tx.QueryRowContext(ctx, agentSharedTenantMembershipSelect, agentID, mainUserID))
+	if err != nil {
+		return nil, fmt.Errorf("read shared AgentAPI member: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit shared AgentAPI member: %w", err)
+	}
+	return member, nil
+}
+
+// FindActiveSharedTenantMembership returns the tenant a user already belongs
+// to. Ownership is preferred so a station owner is never redirected into a
+// station where they are only a member.
+func (r *agentTenantRepository) FindActiveSharedTenantMembership(ctx context.Context, mainUserID int64) (*service.AgentSharedTenant, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("AgentAPI tenant database is unavailable")
+	}
+	var tenant service.AgentSharedTenant
+	err := r.db.QueryRowContext(ctx, `
+SELECT t.agent_id, t.owner_main_user_id, t.display_name, t.brand_name,
+       t.status, m.role, t.created_at, t.updated_at
+FROM agent_shared_tenant_members m
+JOIN agent_shared_tenants t ON t.agent_id=m.agent_id
+WHERE m.main_user_id=$1 AND m.status='active' AND t.status='active'
+ORDER BY CASE WHEN m.role='owner' THEN 0 ELSE 1 END, t.created_at ASC
+LIMIT 1`, mainUserID).Scan(
+		&tenant.AgentID, &tenant.OwnerMainUserID, &tenant.DisplayName,
+		&tenant.BrandName, &tenant.Status, &tenant.Role,
+		&tenant.CreatedAt, &tenant.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrAgentTenantNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read shared AgentAPI membership: %w", err)
+	}
+	return &tenant, nil
 }

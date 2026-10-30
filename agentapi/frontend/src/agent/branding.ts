@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { agentAPI, type AgentHomeSettings, type PublicSettings } from './api'
+import { agentAPI, type AgentContextResponse, type AgentHomeSettings, type AgentView, type PublicSettings } from './api'
 
 export const siteName = ref('AgentAPI')
 export const siteLogo = ref('/logo.svg')
@@ -8,6 +8,7 @@ export const siteContactInfo = ref('')
 export const siteSubtitle = ref('AI API Gateway Platform')
 export const compactHomeEnabled = ref(false)
 export const homeContent = ref('')
+let pageTitle = ''
 
 export function applyHomeSettings(settings: AgentHomeSettings): void {
   siteSubtitle.value = settings.site_subtitle?.trim() || 'AI API Gateway Platform'
@@ -34,6 +35,7 @@ function safePublicURL(value?: string): string {
 
 function safeContactInfo(value?: string): string {
   const normalized = value?.trim() || ''
+  // eslint-disable-next-line no-control-regex -- reject control characters in plain-text contact details.
   return normalized.length <= 300 && !/[\u0000-\u001f\u007f]/.test(normalized) ? normalized : ''
 }
 
@@ -46,10 +48,28 @@ export function applyBranding(name: string, logo?: string, docURL?: string, cont
   icon.rel = 'icon'
   icon.href = absoluteAssetURL(siteLogo.value)
   if (!icon.parentNode) document.head.appendChild(icon)
+  refreshDocumentTitle()
 }
 
-export function applyPageTitle(pageTitle?: string): void {
+function refreshDocumentTitle(): void {
   document.title = pageTitle ? `${pageTitle} · ${siteName.value}` : siteName.value
+}
+
+export function applyPageTitle(nextPageTitle?: string): void {
+  if (nextPageTitle !== undefined) pageTitle = nextPageTitle.trim()
+  refreshDocumentTitle()
+}
+
+// Applying tenant context is safe only after the server has resolved the
+// current session or a persisted custom domain to one tenant.
+export function applyAgentBranding(agent: AgentView): void {
+  applyBranding(agent.site_name || agent.name, agent.site_logo, agent.doc_url, agent.contact_info)
+  applyHomeSettings(agent)
+}
+
+export function resetBranding(): void {
+  applyBranding('AgentAPI', '/logo.svg')
+  applyHomeSettings({})
 }
 
 export async function loadBranding(): Promise<PublicSettings | null> {
@@ -59,7 +79,25 @@ export async function loadBranding(): Promise<PublicSettings | null> {
     applyHomeSettings(settings)
     return settings
   } catch {
-    applyBranding(siteName.value, siteLogo.value, siteDocURL.value, siteContactInfo.value)
+    // Shared AgentAPI hosts cannot resolve an anonymous visitor to a tenant.
+    // A valid session can, so retry through the tenant-bound context endpoint.
+    try {
+      const context = await agentAPI.getContext()
+      applyAgentBranding(context.agent)
+    } catch {
+      resetBranding()
+    }
+    return null
+  }
+}
+
+export async function loadSessionBranding(isCurrent: () => boolean = () => true): Promise<AgentContextResponse | null> {
+  try {
+    const context = await agentAPI.getContext()
+    if (!isCurrent()) return null
+    applyAgentBranding(context.agent)
+    return context
+  } catch {
     return null
   }
 }

@@ -47,6 +47,7 @@ func TestStationPaymentConfigRoundTripAndIsolation(t *testing.T) {
 		"enabled_payment_types":["easypay","alipay"],
 		"balance_disabled":true,
 		"balance_recharge_multiplier":1.25,
+		"model_rate_multiplier":1.35,
 		"subscription_usd_to_cny_rate":7.15,
 		"recharge_fee_rate":2.5,
 		"load_balance_strategy":"least-amount",
@@ -71,9 +72,12 @@ func TestStationPaymentConfigRoundTripAndIsolation(t *testing.T) {
 		t.Fatalf("get status=%d body=%s", got.Code, got.Body.String())
 	}
 	settings := decodeData[StationPaymentSettings](t, got.Body.Bytes())
+	if strings.Contains(got.Body.String(), "balance_recharge_multiplier") {
+		t.Fatalf("deprecated recharge multiplier must not be exposed: %s", got.Body.String())
+	}
 	if !settings.Enabled || !nearAmount(settings.MinAmount, 12.5) || !nearAmount(settings.MaxAmount, 880) || !nearAmount(settings.DailyLimit, 3000) ||
 		settings.OrderTimeoutMin != 45 || settings.MaxPendingOrders != 4 || !settings.BalanceDisabled ||
-		!nearAmount(settings.BalanceRechargeMultiplier, 1.25) || !nearAmount(settings.SubscriptionUSDToCNYRate, 7.15) || !nearAmount(settings.RechargeFeeRate, 2.5) ||
+		!nearAmount(settings.ModelRateMultiplier, 1.35) || !nearAmount(settings.SubscriptionUSDToCNYRate, 7.15) || !nearAmount(settings.RechargeFeeRate, 2.5) ||
 		settings.LoadBalanceStrategy != "least-amount" || settings.ProductNamePrefix != "站长充值" || settings.ProductNameSuffix != "CNY" ||
 		settings.HelpImageURL != "https://cdn.example/help.png" || settings.HelpText != "请使用本站渠道付款" ||
 		!settings.CancelRateLimitEnabled || settings.CancelRateLimitMax != 6 || settings.CancelRateLimitWindow != 2 ||
@@ -304,6 +308,11 @@ func TestStationProviderFamiliesControlCheckoutAndOrderSelection(t *testing.T) {
 				_, _, selectable := selectStationProvider(stored, settings, method)
 				if visible != want || selectable != want {
 					t.Fatalf("%s visible=%v selectable=%v want=%v", method, visible, selectable, want)
+				}
+			}
+			for method, displayName := range map[string]string{"alipay": "支付宝", "wxpay": "微信支付", "stripe": "Stripe"} {
+				if item, ok := checkout.Methods[method]; ok && item.DisplayName != displayName {
+					t.Fatalf("%s display_name=%q want=%q", method, item.DisplayName, displayName)
 				}
 			}
 		})

@@ -20,19 +20,22 @@ describe('AgentHomeView homepage modes', () => {
   })
   function render() {
     wrapper = mount(AgentHomeView, { global: { stubs: {
-      LzParticleScene: true,
       RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
     } } })
     return wrapper
   }
 
-  it('retains the particle home by default and applies the tenant subtitle', () => {
+  it('renders the reference landing page with the tenant brand and subtitle', () => {
     applyHomeSettings({ site_subtitle: '本站模型\n统一接入' })
     const page = render()
-    expect(page.find('.lz-home').exists()).toBe(true)
-    expect(page.get('h1').text()).toBe('本站品牌')
-    expect(page.get('.lz-subtitle').text()).toBe('本站模型\n统一接入')
+    expect(page.find('[data-testid="reference-home"]').exists()).toBe(true)
+    expect(page.get('.brand').text()).toBe('本站品牌')
+    expect(page.get('.lede').text()).toBe('本站模型\n统一接入')
     expect(page.get('img').attributes('src')).toBe('/tenant.svg')
+    expect(page.find('a[href="/register"]').exists()).toBe(true)
+    expect(page.text()).toContain('CCSwitch')
+    expect(page.text()).not.toContain('AICodings')
+    expect(page.find('a[href="https://docs.tenant.example/"]').exists()).toBe(true)
   })
 
   it.each([
@@ -44,7 +47,7 @@ describe('AgentHomeView homepage modes', () => {
     applyHomeSettings({ compact_home_enabled: true, site_subtitle: '独立品牌副标题' })
     const page = render()
     expect(page.find('[data-testid="compact-home"]').exists()).toBe(true)
-    expect(page.find('.lz-home').exists()).toBe(false)
+    expect(page.find('[data-testid="reference-home"]').exists()).toBe(false)
     expect(page.get('main a').attributes('href')).toBe(path)
     expect(page.get('h1').text()).toBe('本站品牌')
     expect(page.text()).toContain('独立品牌副标题')

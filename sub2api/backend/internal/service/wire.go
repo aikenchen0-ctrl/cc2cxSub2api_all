@@ -102,6 +102,21 @@ func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *Batc
 	return &BatchImageModelPricingResolver{Resolver: resolver}
 }
 
+// ProvideModelPlazaService 绑定模型广场的账号仓储依赖。
+// NewModelPlazaService 的 accountRepo 是变长参数（单测可省略），wire 无法注入变长
+// 参数，因此在这里显式展开；生产环境始终注入账号仓储，广场才能枚举「账号直挂分组」
+// 的模型映射。
+func ProvideModelPlazaService(
+	channelRepo ChannelRepository,
+	groupRepo GroupRepository,
+	pricingService *PricingService,
+	billingService *BillingService,
+	resolver *ModelPricingResolver,
+	accountRepo AccountRepository,
+) *ModelPlazaService {
+	return NewModelPlazaService(channelRepo, groupRepo, pricingService, billingService, resolver, accountRepo)
+}
+
 func ProvideBatchImageCleanupService(repo BatchImageRepository, accountRepo AccountRepository, cfg *config.Config) *BatchImageCleanupService {
 	svc := NewBatchImageCleanupService(repo, accountRepo, cfg)
 	svc.Start()
@@ -938,7 +953,7 @@ var ProviderSet = wire.NewSet(
 	NewChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),
 	NewModelPricingResolver,
-	NewModelPlazaService,
+	ProvideModelPlazaService,
 	NewContentModerationService,
 	NewAffiliateService,
 	ProvidePaymentConfigService,

@@ -26,7 +26,7 @@ describe('AgentToggle', () => {
     const toggle = wrapper.get('button')
     expect(toggle.attributes('id')).toBe('feature-toggle')
     expect(toggle.attributes('data-testid')).toBe('feature-toggle')
-    expect(toggle.classes()).toEqual(expect.arrayContaining(['mt-1', 'bg-primary-600']))
+    expect(toggle.classes()).toEqual(expect.arrayContaining(['mt-1', 'bg-primary-400']))
     expect(toggle.attributes('aria-checked')).toBe('true')
   })
 

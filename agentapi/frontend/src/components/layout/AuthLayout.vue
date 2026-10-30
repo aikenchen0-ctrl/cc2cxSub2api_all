@@ -1,5 +1,15 @@
 <template>
   <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+    <button
+      type="button"
+      class="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-primary-200/80 bg-white/75 text-accent-600 shadow-sm backdrop-blur transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 dark:border-primary-500/20 dark:bg-dark-900/75 dark:text-dark-300 dark:hover:bg-primary-500/10 dark:hover:text-primary-300"
+      :title="isDark ? '切换浅色模式' : '切换深色模式'"
+      aria-label="切换主题"
+      @click="toggleTheme"
+    >
+      <Icon :name="isDark ? 'sun' : 'moon'" size="md" />
+    </button>
+
     <!-- Background -->
     <div
       class="absolute inset-0 bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
@@ -20,7 +30,7 @@
 
       <!-- Grid Pattern -->
       <div
-        class="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"
+        class="absolute inset-0 bg-[linear-gradient(rgba(201,159,55,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(201,159,55,0.05)_1px,transparent_1px)] bg-[size:64px_64px]"
       ></div>
     </div>
 
@@ -64,8 +74,9 @@
 
 <script setup lang="ts">
 // Sub2API AuthLayout presentation, with AgentAPI-local branding.
-import { siteName, siteLogo } from '@/agent/branding'
-const siteSubtitle = 'Subscription to API Conversion Platform'
+import { siteLogo, siteName, siteSubtitle } from '@/agent/branding'
+import { isDark, toggleTheme } from '@/agent/theme'
+import Icon from '@/components/icons/Icon.vue'
 const settingsLoaded = true
 const currentYear = new Date().getFullYear()
 </script>

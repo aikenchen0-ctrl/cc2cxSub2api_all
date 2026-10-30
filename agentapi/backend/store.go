@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,7 @@ type AgentUserView struct {
 	Status             string `json:"status"`
 	BalanceCents       int64  `json:"balance_cents"`
 	FrozenBalanceCents int64  `json:"frozen_balance_cents,omitempty"`
+	MainBalanceCents   int64  `json:"main_balance_cents,omitempty"`
 	BalanceError       string `json:"balance_error,omitempty"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
@@ -101,17 +103,19 @@ type ResolvedAgentAPIKey struct {
 }
 
 type AgentUsageView struct {
-	RequestID         string `json:"request_id"`
-	UsageID           string `json:"usage_id,omitempty"`
-	ProxyMainUserID   string `json:"proxy_main_user_id"`
-	BillingMainUserID string `json:"billing_main_user_id"`
-	ReservedCents     int64  `json:"reserved_cents"`
-	ActualCents       int64  `json:"actual_cents"`
-	SettlementStatus  string `json:"settlement_status"`
-	Model             string `json:"model,omitempty"`
-	MainUsageSnapshot `json:",inline"`
-	CreatedAt         string `json:"created_at"`
-	Error             string `json:"error,omitempty"`
+	RequestID             string  `json:"request_id"`
+	UsageID               string  `json:"usage_id,omitempty"`
+	ProxyMainUserID       string  `json:"proxy_main_user_id"`
+	BillingMainUserID     string  `json:"billing_main_user_id"`
+	ReservedCents         int64   `json:"reserved_cents"`
+	ActualCents           int64   `json:"actual_cents"`
+	ChargedCents          int64   `json:"charged_cents"`
+	StationRateMultiplier float64 `json:"station_rate_multiplier"`
+	SettlementStatus      string  `json:"settlement_status"`
+	Model                 string  `json:"model,omitempty"`
+	MainUsageSnapshot     `json:",inline"`
+	CreatedAt             string `json:"created_at"`
+	Error                 string `json:"error,omitempty"`
 }
 
 type RechargeOrder struct {
@@ -209,20 +213,41 @@ type ImageTask struct {
 // local reservation. A settlement is created before the upstream request is
 // sent and is the durable idempotency record for that request.
 type SettlementRecord struct {
-	HasLocalReservation bool
-	ID                  int64
-	AgentID             string
-	ProxyMainUserID     string
-	BillingMainUserID   string
-	RequestID           string
-	UsageID             string
-	ReservedCents       int64
-	ActualCents         int64
-	Status              string
-	Error               string
-	Model               string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	HasLocalReservation   bool
+	ID                    int64
+	AgentID               string
+	ProxyMainUserID       string
+	BillingMainUserID     string
+	RequestID             string
+	UsageID               string
+	ReservedCents         int64
+	ActualCents           int64
+	ChargedCents          int64
+	StationRateMultiplier float64
+	BillLocalWallet       bool
+	Status                string
+	Error                 string
+	Model                 string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+// StationBillingPolicy is snapshotted when a settlement is created. A later
+// price change must not alter a request that is already in flight.
+type StationBillingPolicy struct {
+	RateMultiplier  float64
+	BillLocalWallet bool
+}
+
+func stationBillingPolicy(policies []StationBillingPolicy) StationBillingPolicy {
+	policy := StationBillingPolicy{RateMultiplier: 1}
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	if policy.RateMultiplier <= 0 {
+		policy.RateMultiplier = 1
+	}
+	return policy
 }
 
 func OpenStore(path string, secret string) (*Store, error) {
@@ -527,6 +552,9 @@ func (s *Store) migrate() error {
 			usage_id TEXT NOT NULL,
 			reserved_cents INTEGER NOT NULL,
 			actual_cents INTEGER NOT NULL DEFAULT 0,
+			charged_cents INTEGER NOT NULL DEFAULT 0,
+			station_rate_multiplier REAL NOT NULL DEFAULT 1,
+			bill_local_wallet INTEGER NOT NULL DEFAULT 0,
 			status TEXT NOT NULL DEFAULT 'pending',
 			error TEXT NOT NULL DEFAULT '',
 			model TEXT NOT NULL DEFAULT '',
@@ -694,6 +722,7 @@ func (s *Store) migrate() error {
 			enabled_payment_types TEXT NOT NULL DEFAULT '',
 			balance_disabled INTEGER NOT NULL DEFAULT 0,
 			balance_recharge_multiplier REAL NOT NULL DEFAULT 1,
+			model_rate_multiplier REAL NOT NULL DEFAULT 1,
 			subscription_usd_to_cny_rate REAL NOT NULL DEFAULT 0,
 			recharge_fee_rate REAL NOT NULL DEFAULT 0,
 			load_balance_strategy TEXT NOT NULL DEFAULT 'round-robin',
@@ -825,6 +854,10 @@ func (s *Store) migrate() error {
 		{"settlements", "main_usage_snapshot", "TEXT NOT NULL DEFAULT ''"},
 		{"settlements", "reconcile_sequence", "INTEGER NOT NULL DEFAULT 0"},
 		{"settlements", "agent_api_key_id", "INTEGER NOT NULL DEFAULT 0"},
+		{"settlements", "charged_cents", "INTEGER NOT NULL DEFAULT 0"},
+		{"settlements", "station_rate_multiplier", "REAL NOT NULL DEFAULT 1"},
+		{"settlements", "bill_local_wallet", "INTEGER NOT NULL DEFAULT 0"},
+		{"station_payment_settings", "model_rate_multiplier", "REAL NOT NULL DEFAULT 1"},
 		{"agent_api_keys", "key_ciphertext", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_api_keys", "legacy_key_hash", "TEXT NOT NULL DEFAULT ''"},
 		{"agent_api_keys", "group_id", "INTEGER NOT NULL DEFAULT 0"},
@@ -2503,10 +2536,11 @@ func (s *Store) CreateSettlement(agentID, proxyMainUserID, billingMainUserID, re
 // otherwise exists between a local Consume and settlement INSERT. If the
 // request already exists, it returns the durable record with created=false and
 // never changes wallet state.
-func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64) (SettlementRecord, bool, error) {
+func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64, policies ...StationBillingPolicy) (SettlementRecord, bool, error) {
 	if requestID == "" || usageID == "" || reservedCents <= 0 {
 		return SettlementRecord{}, false, fmt.Errorf("settlement request, usage id and reservation are required")
 	}
+	policy := stationBillingPolicy(policies)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return SettlementRecord{}, false, err
@@ -2514,7 +2548,7 @@ func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, r
 	defer tx.Rollback()
 
 	if record, lookupErr := settlementTx(tx, agentID, requestID); lookupErr == nil {
-		if record.ProxyMainUserID != proxyMainUserID || record.BillingMainUserID != billingMainUserID || record.UsageID != usageID || record.ReservedCents != reservedCents {
+		if record.ProxyMainUserID != proxyMainUserID || record.BillingMainUserID != billingMainUserID || record.UsageID != usageID || record.ReservedCents != reservedCents || record.StationRateMultiplier != policy.RateMultiplier || record.BillLocalWallet != policy.BillLocalWallet {
 			return SettlementRecord{}, false, errIdempotencyConflict
 		}
 		if err := tx.Commit(); err != nil {
@@ -2563,9 +2597,9 @@ func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, r
 
 	now := s.clock().UTC().Unix()
 	if _, err := tx.Exec(`
-		INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', '', ?, ?)
-	`, agentID, proxyMainUserID, billingMainUserID, requestID, usageID, reservedCents, now, now); err != nil {
+		INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, charged_cents, station_rate_multiplier, bill_local_wallet, status, error, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'pending', '', ?, ?)
+	`, agentID, proxyMainUserID, billingMainUserID, requestID, usageID, reservedCents, policy.RateMultiplier, boolInt(policy.BillLocalWallet), now, now); err != nil {
 		return SettlementRecord{}, false, err
 	}
 	record, err := settlementTx(tx, agentID, requestID)
@@ -2581,17 +2615,18 @@ func (s *Store) PrepareSettlement(agentID, proxyMainUserID, billingMainUserID, r
 // PrepareDirectSettlement records request idempotency for user-authoritative
 // billing without consuming AgentAPI's legacy local wallet. Sub2API performs
 // the only real balance check and charge against billingMainUserID.
-func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64) (SettlementRecord, bool, error) {
+func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUserID, requestID, usageID string, reservedCents int64, policies ...StationBillingPolicy) (SettlementRecord, bool, error) {
 	if requestID == "" || usageID == "" || reservedCents <= 0 || strings.TrimSpace(proxyMainUserID) == "" || strings.TrimSpace(billingMainUserID) == "" {
 		return SettlementRecord{}, false, fmt.Errorf("direct settlement requires proxy and billing users")
 	}
+	policy := stationBillingPolicy(policies)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return SettlementRecord{}, false, err
 	}
 	defer tx.Rollback()
 	if record, lookupErr := settlementTx(tx, agentID, requestID); lookupErr == nil {
-		if record.ProxyMainUserID != proxyMainUserID || record.BillingMainUserID != billingMainUserID || record.UsageID != usageID || record.ReservedCents != reservedCents {
+		if record.ProxyMainUserID != proxyMainUserID || record.BillingMainUserID != billingMainUserID || record.UsageID != usageID || record.ReservedCents != reservedCents || record.StationRateMultiplier != policy.RateMultiplier || record.BillLocalWallet != policy.BillLocalWallet {
 			return SettlementRecord{}, false, errIdempotencyConflict
 		}
 		if err := tx.Commit(); err != nil {
@@ -2603,9 +2638,9 @@ func (s *Store) PrepareDirectSettlement(agentID, proxyMainUserID, billingMainUse
 	}
 	now := s.clock().UTC().Unix()
 	if _, err := tx.Exec(`
-		INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', '', ?, ?)
-	`, agentID, proxyMainUserID, billingMainUserID, requestID, usageID, reservedCents, now, now); err != nil {
+		INSERT INTO settlements(agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, charged_cents, station_rate_multiplier, bill_local_wallet, status, error, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'pending', '', ?, ?)
+	`, agentID, proxyMainUserID, billingMainUserID, requestID, usageID, reservedCents, policy.RateMultiplier, boolInt(policy.BillLocalWallet), now, now); err != nil {
 		return SettlementRecord{}, false, err
 	}
 	record, err := settlementTx(tx, agentID, requestID)
@@ -2692,9 +2727,9 @@ func settlementQuery(db interface {
 }, agentID, requestID string) (SettlementRecord, error) {
 	var record SettlementRecord
 	var created, updated int64
-	err := db.QueryRow(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at,
+	err := db.QueryRow(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, charged_cents, station_rate_multiplier, bill_local_wallet, status, error, model, created_at, updated_at,
 		EXISTS(SELECT 1 FROM wallet_ledger l WHERE l.agent_id=settlements.agent_id AND l.kind='consume' AND l.request_id='reserve:' || settlements.request_id)
-		FROM settlements WHERE agent_id=? AND request_id=?`, agentID, requestID).Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation)
+		FROM settlements WHERE agent_id=? AND request_id=?`, agentID, requestID).Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.ChargedCents, &record.StationRateMultiplier, &record.BillLocalWallet, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SettlementRecord{}, errNotFound
 	}
@@ -2765,6 +2800,7 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 	if actualCents < 0 {
 		actualCents = 0
 	}
+	rate := 1.0
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -2774,8 +2810,13 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 	if err != nil {
 		return err
 	}
+	rate = record.StationRateMultiplier
+	if rate <= 0 {
+		rate = 1
+	}
+	chargedCents := stationChargeCents(actualCents, rate)
 	if record.Status != "pending" {
-		if record.Status == status && (usageID == "" || usageID == record.UsageID) && record.ActualCents == actualCents && strings.TrimSpace(settlementError) == record.Error {
+		if record.Status == status && (usageID == "" || usageID == record.UsageID) && record.ActualCents == actualCents && record.ChargedCents == chargedCents && strings.TrimSpace(settlementError) == record.Error {
 			if len(usageSnapshot) == 1 {
 				if err := updateSettlementUsageSnapshot(tx, agentID, requestID, usageSnapshot[0]); err != nil {
 					return err
@@ -2797,7 +2838,7 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 	if hasLocalReservation && (reservedUser != record.ProxyMainUserID || reservedAmount != -record.ReservedCents) {
 		return errIdempotencyConflict
 	}
-	if status != "pending" && actualCents > record.ReservedCents && hasLocalReservation {
+	if status != "pending" && chargedCents > record.ReservedCents && hasLocalReservation {
 		return fmt.Errorf("actual settlement exceeds reservation")
 	}
 	now := s.clock().UTC().Unix()
@@ -2810,13 +2851,19 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 		snapshotJSON = string(encoded)
 		snapshotModel = strings.TrimSpace(usageSnapshot[0].RequestedModel)
 	}
-	if _, err := tx.Exec(`UPDATE settlements SET usage_id=?, status=?, actual_cents=?, error=?, model=CASE WHEN ?<>'' THEN ? ELSE model END, main_usage_snapshot=CASE WHEN ?<>'' THEN ? ELSE main_usage_snapshot END, updated_at=? WHERE agent_id=? AND request_id=? AND status='pending'`, usageID, status, actualCents, strings.TrimSpace(settlementError), snapshotModel, snapshotModel, snapshotJSON, snapshotJSON, now, agentID, requestID); err != nil {
+	if _, err := tx.Exec(`UPDATE settlements SET usage_id=?, status=?, actual_cents=?, charged_cents=?, error=?, model=CASE WHEN ?<>'' THEN ? ELSE model END, main_usage_snapshot=CASE WHEN ?<>'' THEN ? ELSE main_usage_snapshot END, updated_at=? WHERE agent_id=? AND request_id=? AND status='pending'`, usageID, status, actualCents, chargedCents, strings.TrimSpace(settlementError), snapshotModel, snapshotModel, snapshotJSON, snapshotJSON, now, agentID, requestID); err != nil {
 		return err
 	}
 	if status == "pending" {
 		return tx.Commit()
 	}
-	refund := record.ReservedCents - actualCents
+	if status == "confirmed" && record.BillLocalWallet && !hasLocalReservation {
+		if err := debitUserUsageTx(tx, agentID, record.ProxyMainUserID, chargedCents, requestID, rate, now); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	refund := record.ReservedCents - chargedCents
 	if !hasLocalReservation {
 		// Direct user billing never debited the legacy local wallet, so there is
 		// no local reservation to refund.
@@ -2854,6 +2901,53 @@ func (s *Store) FinalizeSettlement(agentID, requestID, usageID, status string, a
 	return tx.Commit()
 }
 
+// stationChargeCents applies the tenant's selling multiplier to the
+// authoritative upstream charge. The rate is snapshotted in the settlement,
+// so changing the setting never rewrites an in-flight request.
+func stationChargeCents(actualCents int64, rate float64) int64 {
+	if actualCents <= 0 || rate <= 0 {
+		return 0
+	}
+	scaled := int64(math.Round(rate * 1_000_000))
+	if scaled <= 0 {
+		scaled = 1
+	}
+	return (actualCents*scaled + 999_999) / 1_000_000
+}
+
+func debitUserUsageTx(tx *sql.Tx, agentID, mainUserID string, cents int64, requestID string, rate float64, now int64) error {
+	if cents <= 0 {
+		return nil
+	}
+	if userID, _, exists, lookupErr := ledgerEntry(tx, agentID, "user_consume", requestID); lookupErr != nil {
+		return lookupErr
+	} else if exists && userID == mainUserID {
+		return nil
+	} else if exists {
+		return errIdempotencyConflict
+	}
+	var balance, version int64
+	err := tx.QueryRow(`SELECT balance_cents, version FROM agent_user_wallets WHERE agent_id=? AND main_user_id=?`, agentID, mainUserID).Scan(&balance, &version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	next := balance - cents
+	if next < 0 {
+		next = 0
+	}
+	if _, err := tx.Exec(`UPDATE agent_user_wallets SET balance_cents=?, version=?, updated_at=? WHERE agent_id=? AND main_user_id=? AND version=?`, next, version+1, now, agentID, mainUserID, version); err != nil {
+		return err
+	}
+	note := fmt.Sprintf("model usage; station rate x%.6g", rate)
+	if _, err := tx.Exec(`INSERT INTO wallet_ledger(agent_id, main_user_id, kind, amount_cents, balance_after_cents, request_id, note, created_at) VALUES (?, ?, 'user_consume', ?, ?, ?, ?, ?)`, agentID, mainUserID, next-balance, next, requestID, note, now); err != nil {
+		return err
+	}
+	return nil
+}
+
 func updateSettlementUsageSnapshot(tx *sql.Tx, agentID, requestID string, snapshot MainUsageSnapshot) error {
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
@@ -2869,7 +2963,7 @@ func (s *Store) PendingSettlements(agentID string, limit int) ([]SettlementRecor
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, status, error, model, created_at, updated_at,
+	rows, err := s.db.Query(`SELECT id, agent_id, proxy_main_user_id, billing_main_user_id, request_id, usage_id, reserved_cents, actual_cents, charged_cents, station_rate_multiplier, bill_local_wallet, status, error, model, created_at, updated_at,
 		EXISTS(SELECT 1 FROM wallet_ledger l WHERE l.agent_id=settlements.agent_id AND l.kind='consume' AND l.request_id='reserve:' || settlements.request_id)
 		FROM settlements WHERE agent_id=? AND status='pending' ORDER BY reconcile_sequence ASC, id ASC LIMIT ?`, agentID, limit)
 	if err != nil {
@@ -2880,7 +2974,7 @@ func (s *Store) PendingSettlements(agentID string, limit int) ([]SettlementRecor
 	for rows.Next() {
 		var record SettlementRecord
 		var created, updated int64
-		if err := rows.Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation); err != nil {
+		if err := rows.Scan(&record.ID, &record.AgentID, &record.ProxyMainUserID, &record.BillingMainUserID, &record.RequestID, &record.UsageID, &record.ReservedCents, &record.ActualCents, &record.ChargedCents, &record.StationRateMultiplier, &record.BillLocalWallet, &record.Status, &record.Error, &record.Model, &created, &updated, &record.HasLocalReservation); err != nil {
 			return nil, err
 		}
 		record.CreatedAt = time.Unix(created, 0).UTC()
@@ -2948,7 +3042,8 @@ func (s *Store) FilteredUsagePage(agentID, mainUserID string, pageSize, offset i
 	}
 	query := `
 		SELECT st.request_id, st.usage_id, st.proxy_main_user_id, st.billing_main_user_id,
-		       st.reserved_cents, st.actual_cents, st.status, st.error, st.model, st.main_usage_snapshot, st.created_at
+		       st.reserved_cents, st.actual_cents, st.charged_cents, st.station_rate_multiplier,
+		       st.status, st.error, st.model, st.main_usage_snapshot, st.created_at
 		FROM settlements st
 	` + filter + ` ORDER BY st.id DESC LIMIT ? OFFSET ?`
 	args := append(append([]any(nil), countArgs...), pageSize, offset)
@@ -2962,7 +3057,7 @@ func (s *Store) FilteredUsagePage(agentID, mainUserID string, pageSize, offset i
 		var item AgentUsageView
 		var snapshotJSON string
 		var created int64
-		if err := rows.Scan(&item.RequestID, &item.UsageID, &item.ProxyMainUserID, &item.BillingMainUserID, &item.ReservedCents, &item.ActualCents, &item.SettlementStatus, &item.Error, &item.Model, &snapshotJSON, &created); err != nil {
+		if err := rows.Scan(&item.RequestID, &item.UsageID, &item.ProxyMainUserID, &item.BillingMainUserID, &item.ReservedCents, &item.ActualCents, &item.ChargedCents, &item.StationRateMultiplier, &item.SettlementStatus, &item.Error, &item.Model, &snapshotJSON, &created); err != nil {
 			return nil, 0, err
 		}
 		if snapshotJSON != "" {
@@ -3229,4 +3324,68 @@ func userJSONFields(data []byte) (email, displayName, role string) {
 		role = raw
 	}
 	return email, displayName, role
+}
+
+// PendingStationOrders returns recent unpaid station orders so the background
+// reconciler can ask the payment provider what really happened to them.
+func (s *Store) PendingStationOrders(agentID string, since int64, limit int) ([]StationPaymentOrder, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.Query(`SELECT id, agent_id, main_user_id, out_trade_no, amount, pay_amount, fee_rate, currency, payment_type, provider_id, order_type, plan_id, status, pay_url, qr_code, created_at, expires_at, paid_at
+		FROM station_payment_orders WHERE agent_id=? AND status='PENDING' AND created_at>=? ORDER BY id DESC LIMIT ?`, strings.TrimSpace(agentID), since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StationPaymentOrder{}
+	for rows.Next() {
+		item, scanErr := scanStationOrder(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// WalletLedgerRow is one entry of the station wallet ledger.
+type WalletLedgerRow struct {
+	Kind              string `json:"kind"`
+	AmountCents       int64  `json:"amount_cents"`
+	BalanceAfterCents int64  `json:"balance_after_cents"`
+	RequestID         string `json:"request_id"`
+	Note              string `json:"note"`
+	CreatedAt         int64  `json:"created_at"`
+}
+
+// UserWalletLedger lists the station wallet movements of a single member.
+func (s *Store) UserWalletLedger(agentID, mainUserID string, limit int) ([]WalletLedgerRow, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.Query(`SELECT kind, amount_cents, balance_after_cents, request_id, note, created_at
+		FROM wallet_ledger WHERE agent_id=? AND main_user_id=? ORDER BY id DESC LIMIT ?`,
+		strings.TrimSpace(agentID), strings.TrimSpace(mainUserID), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WalletLedgerRow{}
+	for rows.Next() {
+		var row WalletLedgerRow
+		if err := rows.Scan(&row.Kind, &row.AmountCents, &row.BalanceAfterCents, &row.RequestID, &row.Note, &row.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+	return items, rows.Err()
+}
+
+// UserWalletRechargedCents is the lifetime recharge total shown on the balance page.
+func (s *Store) UserWalletRechargedCents(agentID, mainUserID string) (int64, error) {
+	var cents int64
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(amount_cents),0) FROM wallet_ledger WHERE agent_id=? AND main_user_id=? AND kind='user_recharge'`,
+		strings.TrimSpace(agentID), strings.TrimSpace(mainUserID)).Scan(&cents)
+	return cents, err
 }

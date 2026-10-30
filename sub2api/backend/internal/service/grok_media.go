@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -47,6 +48,27 @@ func (e GrokMediaEndpoint) IsVideoLookupRequest() bool {
 func (e GrokMediaEndpoint) IsGenerationRequest() bool {
 	switch e {
 	case GrokMediaEndpointImagesGenerations, GrokMediaEndpointImagesEdits, GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAsyncVideoCreateRequest reports whether the request starts a billable
+// asynchronous video task. A transport failure after sending such a request is
+// ambiguous: the upstream may already have created the task.
+func (e GrokMediaEndpoint) IsAsyncVideoCreateRequest() bool {
+	switch e {
+	case GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
+		return true
+	default:
+		return false
+	}
+}
+
+func isGrokMediaTransientClass(class GrokUpstreamFailureClass) bool {
+	switch class {
+	case GrokFailureServer, GrokFailureModelCapacity, GrokFailureEmptyUpstream:
 		return true
 	default:
 		return false
@@ -742,7 +764,18 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+		transportErr := s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+		if endpoint.IsAsyncVideoCreateRequest() {
+			var failoverErr *UpstreamFailoverError
+			if errors.As(transportErr, &failoverErr) {
+				failoverErr.NextAccountAction = NextAccountStop
+				failoverErr.Scope = GatewayFailureScopeRequest
+				failoverErr.Reason = MediaVideoCreateAmbiguousReason
+				failoverErr.ClientStatusCode = http.StatusBadGateway
+				failoverErr.ClientMessage = MediaVideoCreateAmbiguousClientMessage
+			}
+		}
+		return nil, transportErr
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -760,11 +793,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint == GrokMediaEndpointImagesGenerations || endpoint == GrokMediaEndpointImagesEdits {
 		if countOpenAIResponseImageOutputsFromJSONBytes(respBody) <= 0 {
 			setOpsUpstreamError(c, http.StatusBadGateway, "xAI upstream returned no image output", truncateString(string(respBody), 512))
-			return nil, &UpstreamFailoverError{
-				StatusCode:      http.StatusBadGateway,
-				ResponseBody:    respBody,
-				ResponseHeaders: resp.Header.Clone(),
-			}
+			failoverErr := newMediaEmptyOutputFailoverError(http.StatusBadGateway, respBody)
+			failoverErr.ResponseHeaders = resp.Header.Clone()
+			return nil, failoverErr
 		}
 	}
 	if endpoint == GrokMediaEndpointVideoStatus {
@@ -1299,9 +1330,19 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 	requestedModel string,
 ) (*OpenAIForwardResult, error) {
 	body := s.readUpstreamErrorBody(resp)
-	// Reconcile readiness before configurable passthrough branches can return;
-	// otherwise a Grok 429 can remain schedulable.
-	s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
+	decision := classifyGrokUpstreamFailure(resp.StatusCode, body, "")
+	// A single media 5xx/capacity blip is request pressure, not durable account
+	// illness. Keep the quota snapshot, but let the bounded same-account replay
+	// run before parking the account for future requests.
+	if isGrokMediaTransientClass(decision.Class) && !account.IsPoolMode() {
+		if snapshot := parseGrokQuotaSnapshot(resp.Header, resp.StatusCode, time.Now()); snapshot != nil {
+			s.updateGrokUsageSnapshotWithRateLimit(ctx, account, snapshot, false)
+		}
+	} else {
+		// Reconcile readiness before configurable passthrough branches can return;
+		// otherwise a Grok 429 can remain schedulable.
+		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
+	}
 	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(body)))
 	if upstreamMsg == "" {
 		upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
@@ -1385,7 +1426,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 	})
 	if kind == "failover" {
 		retryable, retryDelay, retryDeadline, retryMax := grokSameAccountRetryMetadata(account, resp.StatusCode, body)
-		return nil, &UpstreamFailoverError{
+		failoverErr := &UpstreamFailoverError{
 			StatusCode:               resp.StatusCode,
 			ResponseBody:             body,
 			ResponseHeaders:          resp.Header.Clone(),
@@ -1395,6 +1436,16 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 			SameAccountRetryDeadline: retryDeadline,
 			SameAccountRetryMax:      retryMax,
 		}
+		allowSameAccount := decision.Class != GrokFailureFreeUsage &&
+			decision.Class != GrokFailureBilling &&
+			decision.Class != GrokFailureCompatibility &&
+			decision.Class != GrokFailureAuth
+		applyMediaSameAccountRetryPolicy(account, failoverErr, allowSameAccount)
+		if decision.Class == GrokFailureModelCapacity {
+			// Capacity shedding is scoped to this request/model, not credential health.
+			failoverErr.RequestScopedTransient = true
+		}
+		return nil, failoverErr
 	}
 
 	MarkResponseCommitted(c)

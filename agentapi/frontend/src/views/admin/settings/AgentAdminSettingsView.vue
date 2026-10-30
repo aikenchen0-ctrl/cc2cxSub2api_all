@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { agentAPI, type AgentContextResponse } from '@/agent/api'
-import { applyBranding, applyHomeSettings, applyPageTitle } from '@/agent/branding'
+import { applyAgentBranding, applyBranding, applyHomeSettings, applyPageTitle } from '@/agent/branding'
 import { errorMessage } from '@/agent/locale'
 import AgentSettingsPanel from '@/components/admin/settings/AgentSettingsPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -24,8 +24,8 @@ const brandingHomeContent = ref('')
 
 function applyContext(nextContext: AgentContextResponse): void {
   context.value = nextContext
-  brandingName.value = nextContext.agent.name
-  brandingSiteName.value = nextContext.agent.site_name
+  brandingName.value = nextContext.agent.name || ''
+  brandingSiteName.value = nextContext.agent.site_name || nextContext.agent.name || ''
   brandingLogo.value = nextContext.agent.site_logo || ''
   brandingDocURL.value = nextContext.agent.doc_url || ''
   brandingContactInfo.value = nextContext.agent.contact_info || ''
@@ -33,6 +33,8 @@ function applyContext(nextContext: AgentContextResponse): void {
   brandingSubtitle.value = nextContext.agent.site_subtitle || ''
   brandingCompactHome.value = nextContext.agent.compact_home_enabled === true
   brandingHomeContent.value = nextContext.agent.home_content || ''
+  applyAgentBranding(nextContext.agent)
+  applyPageTitle('系统设置')
 }
 
 async function loadContext(): Promise<void> {
@@ -94,13 +96,20 @@ async function uploadLogo(file: File): Promise<void> {
 
 async function saveBranding(): Promise<void> {
   if (!context.value || saving.value) return
+  const publicSiteName = brandingSiteName.value.trim()
+  const internalName = brandingName.value.trim() || publicSiteName
+  if (!publicSiteName) {
+    error.value = '站点名称不能为空。'
+    notice.value = ''
+    return
+  }
   saving.value = true
   error.value = ''
   notice.value = ''
   try {
     applySavedBranding(await agentAPI.updateBranding({
-      name: brandingName.value.trim(),
-      site_name: brandingSiteName.value.trim(),
+      name: internalName,
+      site_name: publicSiteName,
       site_logo: brandingLogo.value.trim(),
       doc_url: brandingDocURL.value.trim(),
       contact_info: brandingContactInfo.value.trim(),
