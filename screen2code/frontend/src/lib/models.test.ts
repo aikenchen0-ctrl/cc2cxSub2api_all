@@ -30,6 +30,8 @@ describe("getVariantLabel", () => {
     expect(getVariantLabel(FLASH_MIN, ctx)).toEqual({ text: "快速", tone: "fast" });
     expect(getVariantLabel(PRO_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
     expect(getVariantLabel(GPT_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(CodeGenerationModel.GROK_4_7_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
+    expect(getVariantLabel(CodeGenerationModel.GROK_4_7_LOW, ctx)).toBeNull();
     expect(getVariantLabel(GPT_6_ASTRA_HIGH, ctx)).toEqual({ text: "高质量", tone: "max" });
     expect(getVariantLabel(CodeGenerationModel.GPT_6_ASTRA_LOW, ctx)).toBeNull();
     // Flash-high stays unlabelled.

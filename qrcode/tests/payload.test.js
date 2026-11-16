@@ -12,7 +12,7 @@ test("buildResponsesPayload should assemble fixed instructions, chat text, and i
     ]
   });
 
-  assert.equal(payload.model, "gpt-4.1-mini");
+  assert.equal(payload.model, "grok-4.7");
   assert.equal(Array.isArray(payload.input), true);
   assert.equal(payload.input.length, 1);
   assert.equal(payload.input[0].role, "user");

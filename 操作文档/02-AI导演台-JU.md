@@ -24,9 +24,9 @@
 
 ## 3. 模型和版本差异
 
-公开模型目录约定：文本 `gpt-5.6-sol`，图片 `gpt-image-2`，视频默认 AutoDL `minimax_h3_z0901`。
-但当前工作区 `ju/web/src/stores/use-config-store.ts` 的前端 `DEFAULT_TEXT_MODEL` 已改为 `gpt-6-astra`，而 `ju/backend/internal/app/sub2api_integration.go` 的后端无环境变量回退仍为 `gpt-5.6-sol`。
-因此测试必须记录三项：模型选择器显示值、网络请求的公开模型名、服务端实际渠道；不能把文档默认值当作通过证据。
+公开模型目录约定：文本默认 `grok-4.7`，目录仍含 `gpt-6-astra`；图片 `gpt-image-2`，视频默认 AutoDL `minimax_h3_z0901`。
+前后端未设 `SUB2API_RELAY_MODELS` 时都发布 `grok-4.7,gpt-6-astra`，默认选中首项。已保存的旧默认 `gpt-6-astra` 只迁移一次，之后再显式选择 Astra 会保留。
+测试仍要记录三项：模型选择器显示值、网络请求的公开模型名、服务端实际渠道。
 
 视频目录首项是 `minimax_h3_z0901`（H3 文生视频，高质量创意直出），并开放 16 个 AutoDL 工作流。中文显示名是展示值，调用和保存必须保留英文 ID。
 不同工作流的提示词、图片、音频、首尾帧、时长和分辨率约束不同；从当前工作流能力面板确认，不用统一模板代替。

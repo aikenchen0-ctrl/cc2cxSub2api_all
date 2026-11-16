@@ -324,6 +324,17 @@ func GrokMediaVideoRequestSessionHash(requestID string, userID, apiKeyID int64) 
 	return "grok-video:" + DeriveSessionHashFromSeed(ownerSeed)
 }
 
+// grokMediaVideoOwnerCacheKey is the durable ownership key for an async video
+// task. It is separate from the generic OpenAI sticky key so a later text or
+// media selection cannot overwrite task ownership.
+func grokMediaVideoOwnerCacheKey(requestID string, userID, apiKeyID int64) string {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" || userID <= 0 || apiKeyID <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("media:video:owner:v1:%d:%d:%s", userID, apiKeyID, requestID)
+}
+
 func (s *OpenAIGatewayService) BindGrokMediaVideoRequestAccount(
 	ctx context.Context,
 	groupID *int64,
@@ -333,9 +344,8 @@ func (s *OpenAIGatewayService) BindGrokMediaVideoRequestAccount(
 	if s == nil || s.cache == nil {
 		return fmt.Errorf("grok video request binding cache is unavailable")
 	}
-	sessionHash := GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID)
-	cacheKey := s.openAISessionCacheKey(sessionHash)
-	if cacheKey == "" || accountID <= 0 {
+	ownerKey := grokMediaVideoOwnerCacheKey(requestID, userID, apiKeyID)
+	if ownerKey == "" || accountID <= 0 {
 		return fmt.Errorf("grok video request binding is invalid")
 	}
 	// Video jobs may complete well after WS sticky TTL (default 1h). Bind at least
@@ -346,7 +356,19 @@ func (s *OpenAIGatewayService) BindGrokMediaVideoRequestAccount(
 			ttl = sticky
 		}
 	}
-	return s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), cacheKey, accountID, ttl)
+	if err := s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), ownerKey, accountID, ttl); err != nil {
+		return err
+	}
+	// Dual-write the legacy sticky key during rollout so old readers keep
+	// working. The owner key is authoritative for new lookups.
+	legacyKey := s.openAISessionCacheKey(GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID))
+	if legacyKey == "" || legacyKey == ownerKey {
+		return nil
+	}
+	// The durable owner binding already succeeded. A legacy write failure must
+	// not make a successfully created task look unbound.
+	_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), legacyKey, accountID, ttl)
+	return nil
 }
 
 func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccount(
@@ -358,11 +380,25 @@ func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccount(
 	if s == nil || s.cache == nil {
 		return 0, fmt.Errorf("grok video request binding cache is unavailable")
 	}
-	cacheKey := s.openAISessionCacheKey(GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID))
-	if cacheKey == "" {
+	ownerKey := grokMediaVideoOwnerCacheKey(requestID, userID, apiKeyID)
+	if ownerKey == "" {
 		return 0, fmt.Errorf("grok video request binding is invalid")
 	}
-	return s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), cacheKey)
+	accountID, err := s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), ownerKey)
+	if err == nil && accountID > 0 {
+		return accountID, nil
+	}
+	if err != nil && !errors.Is(err, ErrStickySessionNotFound) {
+		return 0, err
+	}
+	// Rollout compatibility: tasks created before the owner key existed only
+	// have the legacy sticky binding. Never fall back to a generic session
+	// selection; this is still the exact request-scoped key.
+	legacyKey := s.openAISessionCacheKey(GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID))
+	if legacyKey == "" {
+		return 0, ErrStickySessionNotFound
+	}
+	return s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), legacyKey)
 }
 
 // SelectGrokMediaVideoRequestAccount only admits the already authenticated
@@ -770,6 +806,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			if errors.As(transportErr, &failoverErr) {
 				failoverErr.NextAccountAction = NextAccountStop
 				failoverErr.Scope = GatewayFailureScopeRequest
+				failoverErr.RequestPhase = UpstreamRequestPhaseSent
 				failoverErr.Reason = MediaVideoCreateAmbiguousReason
 				failoverErr.ClientStatusCode = http.StatusBadGateway
 				failoverErr.ClientMessage = MediaVideoCreateAmbiguousClientMessage
@@ -782,7 +819,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	requestIDHeader := firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))
 	requestModel := requestInfo.Model
 	if resp.StatusCode >= 400 {
-		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, requestIDHeader, requestModel)
+		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, endpoint, requestIDHeader, requestModel)
 	}
 
 	s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, requestModel), account, resp.Header, resp.StatusCode)
@@ -888,7 +925,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		if statusResp.StatusCode < 400 {
 			return nil, fmt.Errorf("grok media status redirect is not allowed")
 		}
-		return s.handleGrokMediaErrorResponse(ctx, statusResp, c, account, statusRequestID, "")
+		return s.handleGrokMediaErrorResponse(ctx, statusResp, c, account, GrokMediaEndpointVideoStatus, statusRequestID, "")
 	}
 	statusBody, err := ReadUpstreamResponseBody(statusResp.Body, s.cfg, c, openAITooLargeError)
 	_ = statusResp.Body.Close()
@@ -964,7 +1001,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		return nil, fmt.Errorf("grok media signed content redirect is not allowed")
 	}
 	if contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
-		return s.handleGrokMediaErrorResponse(ctx, contentResp, c, account, contentRequestID, "")
+		return s.handleGrokMediaErrorResponse(ctx, contentResp, c, account, GrokMediaEndpointVideoContent, contentRequestID, "")
 	}
 
 	if !account.IsAutoDLVideoAccount() {
@@ -1326,6 +1363,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
+	endpoint GrokMediaEndpoint,
 	requestIDHeader string,
 	requestedModel string,
 ) (*OpenAIForwardResult, error) {
@@ -1430,6 +1468,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 			StatusCode:               resp.StatusCode,
 			ResponseBody:             body,
 			ResponseHeaders:          resp.Header.Clone(),
+			RequestPhase:             UpstreamRequestPhaseSent,
 			RetryableOnSameAccount:   retryable,
 			RequestScopedTransient:   retryable && resp.StatusCode == http.StatusTooManyRequests,
 			SameAccountRetryDelay:    retryDelay,
@@ -1441,6 +1480,9 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 			decision.Class != GrokFailureCompatibility &&
 			decision.Class != GrokFailureAuth
 		applyMediaSameAccountRetryPolicy(account, failoverErr, allowSameAccount)
+		if endpoint.IsVideoLookupRequest() {
+			applyVideoLookupSameAccountRetryPolicy(failoverErr, allowSameAccount)
+		}
 		if decision.Class == GrokFailureModelCapacity {
 			// Capacity shedding is scoped to this request/model, not credential health.
 			failoverErr.RequestScopedTransient = true

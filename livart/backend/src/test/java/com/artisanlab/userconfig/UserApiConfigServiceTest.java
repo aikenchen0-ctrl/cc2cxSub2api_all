@@ -174,8 +174,8 @@ class UserApiConfigServiceTest {
         UserApiConfigDtos.Response response = service.getConfig(userId);
         UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
 
-        assertThat(response.chatModel()).isEqualTo("gpt-5.5");
-        assertThat(resolvedConfig.chatModel()).isEqualTo("gpt-5.5");
+        assertThat(response.chatModel()).isEqualTo("grok-4.7");
+        assertThat(resolvedConfig.chatModel()).isEqualTo("grok-4.7");
     }
 
     private static UserApiConfigService service(UserApiConfigMapper mapper, String baseUrl, String apiKey) {

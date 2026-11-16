@@ -1,14 +1,23 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/attemptpolicy"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 const (
-	mediaSameAccountRetryMax    = 1
-	mediaSameAccountRetryDelay  = 500 * time.Millisecond
-	mediaRateLimitMaxRetryDelay = 2 * time.Second
+	mediaSameAccountRetryMax = 1
+	// videoLookupSameAccountRetryMax matches the shared policy: a status poll is
+	// read-only, so two short same-owner repairs are safe and avoid needless
+	// ownership errors when the task's account has a momentary blip.
+	videoLookupSameAccountRetryMax = 2
+	mediaSameAccountRetryDelay     = 500 * time.Millisecond
+	mediaRateLimitMaxRetryDelay    = 2 * time.Second
 )
 
 // MediaVideoCreateAmbiguousReason marks a video-create attempt whose outcome is
@@ -93,13 +102,61 @@ func applyMediaSameAccountRetryPolicy(account *Account, failoverErr *UpstreamFai
 	}
 }
 
+// applyVideoLookupSameAccountRetryPolicy raises only the read-only video lookup
+// budget. It never enables a cross-account query; the handler still pins the
+// owner account. Keeping this separate prevents create/edit/extend requests
+// from inheriting a replay budget.
+func applyVideoLookupSameAccountRetryPolicy(failoverErr *UpstreamFailoverError, allowSameAccount bool) {
+	if failoverErr == nil || !allowSameAccount || !failoverErr.RetryableOnSameAccount {
+		return
+	}
+	switch failoverErr.StatusCode {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound, http.StatusMethodNotAllowed:
+		return
+	}
+	if !isMediaTransientFailure(failoverErr.StatusCode) {
+		return
+	}
+	failoverErr.SameAccountRetryMax = videoLookupSameAccountRetryMax
+	if failoverErr.SameAccountRetryDelay <= 0 {
+		failoverErr.SameAccountRetryDelay = mediaSameAccountRetryDelay
+	}
+}
+
 func newMediaEmptyOutputFailoverError(statusCode int, body []byte) *UpstreamFailoverError {
 	return &UpstreamFailoverError{
 		StatusCode:             statusCode,
 		ResponseBody:           body,
+		RequestPhase:           UpstreamRequestPhaseSent,
 		RetryableOnSameAccount: true,
 		RequestScopedTransient: true,
 		SameAccountRetryMax:    mediaSameAccountRetryMax,
 		SameAccountRetryDelay:  mediaSameAccountRetryDelay,
 	}
+}
+
+// ApplyMediaAccountCooldown persists a policy-requested cooldown for media
+// failures that cannot go through the ordinary scheduler-result path.
+// Request-scoped and non-penalizing decisions never touch account state.
+func (s *OpenAIGatewayService) ApplyMediaAccountCooldown(account *Account, decision attemptpolicy.Decision) bool {
+	if s == nil || account == nil || s.accountRepo == nil {
+		return false
+	}
+	if !decision.PenalizeAccount || decision.Cooldown <= 0 {
+		return false
+	}
+	until := time.Now().Add(decision.Cooldown)
+	if _, written := s.blockAccountSchedulingLocked(account, until, "media_attempt_policy"); written {
+		// The in-memory block already prevents immediate selection; persistence
+		// makes it survive process restarts and other replicas.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, "media_attempt_policy"); err != nil {
+			logger.L().Warn("media_attempt_policy.persist_cooldown_failed",
+				zap.Int64("account_id", account.ID),
+				zap.Error(err))
+		}
+		return true
+	}
+	return false
 }

@@ -43,13 +43,13 @@ export const OPENAI_API_BASE = process.env.OPENAI_API_BASE || 'https://api.opena
 // Keep the standalone vision default aligned with the public satellite model
 // catalogue.  Managed deployments use SUB2API_RELAY_MODEL, while local mode
 // should still exercise the same public model name by default.  gpt-5.5 is no
-// longer schedulable upstream, so the default moved to gpt-6-astra.
-export const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-6-astra'
+// longer schedulable upstream, so the selected default is grok-4.7.
+export const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'grok-4.7'
 
 // Public catalogue model used for managed satellite calls. gpt-5.5 is no
-// longer schedulable upstream, so the managed default follows the model the
-// other satellites (aicut / aiexcel / aihuoke) already use.
-export const DEFAULT_SUB2API_RELAY_MODEL = 'gpt-6-astra'
+// longer schedulable upstream, grok-4.7 is the selected default. Existing names stay available
+// through an explicit SUB2API_RELAY_MODEL override.
+export const DEFAULT_SUB2API_RELAY_MODEL = 'grok-4.7'
 
 // Read lazily so tests and a restarted container can override the env var
 // without re-importing this module.

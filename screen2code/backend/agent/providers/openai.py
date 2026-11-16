@@ -63,6 +63,7 @@ def _get_image_detail_for_model(model: Llm) -> str:
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-6-astra",
+        "grok-4.7",
     }:
         return "original"
     return "high"

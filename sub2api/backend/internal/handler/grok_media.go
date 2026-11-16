@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/attemptpolicy"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -400,6 +401,24 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				policyEndpoint := grokMediaAttemptPolicyEndpoint(endpoint)
+				if endpoint == service.GrokMediaEndpointVideoContent {
+					policyEndpoint = attemptpolicy.EndpointVideoContent
+				}
+				responseStarted := c.Writer.Size() != writerSizeBeforeForward
+				decision := decideMediaAttempt(
+					policyEndpoint,
+					failoverErr,
+					failoverErr.RequestPhase != service.UpstreamRequestPhaseNotSent,
+					responseStarted,
+					sameAccountRetryCount[account.ID],
+				)
+				applyMediaPolicyClientResponse(failoverErr, decision.Decision)
+				logMediaAttemptPolicyDryRun(reqLog, "grok_media", policyEndpoint, failoverErr,
+					failoverErr.RequestPhase != service.UpstreamRequestPhaseNotSent,
+					responseStarted,
+					sameAccountRetryCount[account.ID],
+				)
 				if failoverClientGone(c) {
 					reqLog.Info("grok_media.failover_aborted_client_disconnected",
 						zap.Int64("account_id", account.ID),
@@ -414,16 +433,19 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					h.handleFailoverExhausted(c, failoverErr, true)
 					return
 				}
-				if !failoverErr.ShouldRetryNextAccount() {
+				if decision.Stop || decision.Ambiguous || endpoint.IsVideoLookupRequest() || !failoverErr.ShouldRetryNextAccount() {
 					h.handleFailoverExhausted(c, failoverErr, false)
 					return
 				}
 				// 视频状态/内容查询绑定创建账号：允许同一账号的短重试，但绝不跨账号。
-				if failoverErr.RetryableOnSameAccount {
+				if decision.RepairAllowed {
 					retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
+					if retryLimit > decision.Decision.RepairLimit {
+						retryLimit = decision.Decision.RepairLimit
+					}
 					if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
 						sameAccountRetryCount[account.ID]++
-						retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
+						retryDelay := decision.Decision.RepairDelay
 						reqLog.Warn("grok_media.pool_mode_same_account_retry",
 							zap.Int64("account_id", account.ID),
 							zap.Int("upstream_status", failoverErr.StatusCode),
@@ -431,18 +453,13 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 							zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 							zap.Duration("retry_delay", retryDelay),
 						)
-						select {
-						case <-requestCtx.Done():
+						if !waitForMediaRepair(requestCtx, retryDelay) {
 							return
-						case <-time.After(retryDelay):
 						}
 						continue
 					}
 				}
-				if endpoint.IsVideoLookupRequest() {
-					h.handleFailoverExhausted(c, failoverErr, false)
-					return
-				}
+				h.gatewayService.ApplyMediaAccountCooldown(account, decision.Decision)
 				h.gatewayService.RecordOpenAIAccountSwitch()
 				failedAccountIDs[account.ID] = struct{}{}
 				lastFailoverErr = failoverErr

@@ -16,8 +16,8 @@ import java.util.UUID;
 @Service
 public class UserApiConfigService {
     private static final Set<String> IMAGE_MODELS = Set.of("gpt-image-2");
-    private static final String ONLY_CHAT_MODEL = "gpt-5.5";
-    private static final Set<String> CHAT_MODELS = Set.of("gpt-5.5", "gpt-5.4-mini");
+    private static final String ONLY_CHAT_MODEL = "grok-4.7";
+    private static final Set<String> CHAT_MODELS = Set.of("grok-4.7", "gpt-5.5", "gpt-5.4-mini");
     private static final Set<String> MASKED_API_KEYS = Set.of(
             "",
             "__server_default__",
@@ -38,7 +38,7 @@ public class UserApiConfigService {
             @Value("${artisan.ai.default-base-url:}") String defaultBaseUrl,
             @Value("${artisan.ai.default-api-key:}") String defaultApiKey,
             @Value("${artisan.ai.default-image-model:gpt-image-2}") String defaultImageModel,
-            @Value("${artisan.ai.default-chat-model:gpt-5.5}") String defaultChatModel,
+            @Value("${artisan.ai.default-chat-model:grok-4.7}") String defaultChatModel,
             @Value("${SUB2API_RELAY_BASE_URL:}") String relayBaseUrl,
             @Value("${SUB2API_APP_CREDENTIAL:}") String appCredential
     ) {
@@ -156,7 +156,7 @@ public class UserApiConfigService {
         String chatModel = normalizeModel(
                 normalizeChatModel(defaultChatModel),
                 CHAT_MODELS,
-                "默认对话模型仅支持 gpt-5.5 或 gpt-5.4-mini"
+                "默认对话模型仅支持 grok-4.7、gpt-5.5 或 gpt-5.4-mini"
         );
 
         return new UserApiConfigDtos.ResolvedConfig(

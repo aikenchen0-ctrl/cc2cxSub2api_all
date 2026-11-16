@@ -680,6 +680,24 @@ const (
 	NextAccountStop
 )
 
+// UpstreamRequestPhase records what the local transport knows about whether
+// request bytes crossed the network boundary. It is intentionally separate from
+// GatewayFailureStage: the latter describes the provider's failure stage, while
+// this value decides whether replay could duplicate side effects.
+type UpstreamRequestPhase string
+
+const (
+	// UpstreamRequestPhaseUnknown is the legacy zero value. Callers must not
+	// infer that a request was sent or was not sent from it.
+	UpstreamRequestPhaseUnknown UpstreamRequestPhase = ""
+	// UpstreamRequestPhaseNotSent means connection setup failed before any
+	// request bytes were written.
+	UpstreamRequestPhaseNotSent UpstreamRequestPhase = "not_sent"
+	// UpstreamRequestPhaseSent means request bytes were written, but no
+	// complete terminal response is available.
+	UpstreamRequestPhaseSent UpstreamRequestPhase = "sent"
+)
+
 type GatewayFailureReason string
 
 // UpstreamFailoverError indicates an upstream or credential error that may
@@ -700,6 +718,7 @@ type UpstreamFailoverError struct {
 	Scope                    GatewayFailureScope
 	Reason                   GatewayFailureReason
 	NextAccountAction        NextAccountAction
+	RequestPhase             UpstreamRequestPhase
 	ClientStatusCode         int
 	ClientMessage            string
 }

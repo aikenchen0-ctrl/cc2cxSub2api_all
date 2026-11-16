@@ -27,7 +27,7 @@ for localhost development; production deployments must use HTTPS).
 SUB2API_SSO_SECRET=<same-shared-secret>
 SUB2API_BASE_URL=http://host.docker.internal:18080
 SUB2API_APP_CREDENTIAL=<server-only-app-credential>
-SUB2API_MODEL=gpt-5.5
+SUB2API_MODEL=grok-4.7
 ```
 
 PPT sends the application credential together with the current SSO subject and

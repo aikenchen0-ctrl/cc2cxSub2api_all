@@ -288,6 +288,7 @@ class TestModelPricing:
             "gpt-5.4-2026-03-05",
             "gpt-5.5",
             "gpt-6-astra",
+            "grok-4.7",
             "claude-opus-5",
             "claude-opus-4-8",
             "gemini-3.5-flash",
@@ -304,6 +305,12 @@ class TestModelPricing:
 
         assert abs(usage.cost(pricing) - 1.55) < 1e-9
         assert pricing.cache_write == 12.50
+
+    def test_grok_4_7_uses_grok_4_6_card(self) -> None:
+        pricing = MODEL_PRICING["grok-4.7"]
+        assert pricing.input == 2.00
+        assert pricing.output == 6.00
+        assert pricing.cache_read == 0.50
 
     def test_anthropic_has_cache_write_rate(self) -> None:
         for name in ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-4-6"]:

@@ -4,7 +4,7 @@ package domain
 // SuperKey still routes across groups; these names are the public catalog.
 // Human catalog: docs/卫星公开模型.md
 const (
-	DefaultTextModel  = "gpt-5.5"
+	DefaultTextModel  = "grok-4.7"
 	DefaultImageModel = "gpt-image-2"
 	DefaultVideoModel = "grok-imagine-video-1.5"
 )
@@ -12,6 +12,7 @@ const (
 // SatelliteTextModels are the chat/completions and /v1/responses models
 // already used by connected apps.
 var SatelliteTextModels = []string{
+	"grok-4.7",
 	"gpt-6",
 	"gpt-6-astra",
 	"gpt-5.5",

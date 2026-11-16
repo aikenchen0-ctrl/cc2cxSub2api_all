@@ -70,6 +70,9 @@ func (s *GatewayService) handleUpstreamTransportError(ctx context.Context, c *gi
 	return &UpstreamFailoverError{
 		StatusCode:   http.StatusBadGateway,
 		ResponseBody: gatewayTransportFailoverBody,
+		// A transport failure after dispatch is ambiguous for non-idempotent
+		// media operations. Keep the conservative value for every caller.
+		RequestPhase: UpstreamRequestPhaseSent,
 	}
 }
 

@@ -673,7 +673,16 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			} else if isOpenAIHTTPUpstreamAccessStateError(resp.StatusCode, upstreamMsg, respBody) {
 				failoverErr = newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMsg, retryableOnSameAccount)
 			} else {
-				failoverErr = &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: retryableOnSameAccount}
+				failoverErr = &UpstreamFailoverError{
+					StatusCode:             resp.StatusCode,
+					ResponseBody:           respBody,
+					ResponseHeaders:        resp.Header.Clone(),
+					RequestPhase:           UpstreamRequestPhaseSent,
+					RetryableOnSameAccount: retryableOnSameAccount,
+				}
+			}
+			if failoverErr.ResponseHeaders == nil {
+				failoverErr.ResponseHeaders = resp.Header.Clone()
 			}
 			applyMediaSameAccountRetryPolicy(account, failoverErr, !shouldDisable)
 			return nil, failoverErr

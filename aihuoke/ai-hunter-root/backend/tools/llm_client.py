@@ -303,7 +303,7 @@ class LLMTool:
         if self._managed:
             # Public model name; provider-specific names never leave the app.
             return apply_openai_api_mode(
-                os.getenv("SUB2API_RELAY_MODEL", "gpt-6-astra") or "gpt-6-astra",
+                os.getenv("SUB2API_RELAY_MODEL", "grok-4.7") or "grok-4.7",
                 mode="chat",
                 api_base=relay_base_url(),
             )

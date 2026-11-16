@@ -1185,6 +1185,21 @@ func (r *accountRepository) ListByGroup(ctx context.Context, groupID int64) ([]s
 	return accounts, nil
 }
 
+// ListCatalogModelCandidates 返回分组下用于「模型广场目录」枚举的账号。
+//
+// 与 ListModelAvailabilityCandidates 的差异是本方法完全不按账号状态过滤：不限
+// active/schedulable，也不看限流、过载、临时不可调度与过期窗口。模型广场是「平台支持
+// 哪些模型」的目录面，不是「此刻哪些账号可调度」的调度面；账号处于 error（如上游余额
+// 不足）等状态时，整组模型不应从广场消失，否则只看广场的用户会误判平台没有该模型。
+// 实际调用仍由网关准入与调度判定，这里放宽不改变计费或授权口径。
+func (r *accountRepository) ListCatalogModelCandidates(ctx context.Context, groupID *int64, platforms []string) ([]service.Account, error) {
+	if groupID == nil || len(platforms) == 0 {
+		return []service.Account{}, nil
+	}
+	// status/schedulable 留空即不加对应过滤；只保留「未删除」与平台范围。
+	return r.queryAccountsByGroup(ctx, *groupID, accountGroupQueryOptions{platforms: platforms})
+}
+
 func (r *accountRepository) ListActive(ctx context.Context) ([]service.Account, error) {
 	accounts, err := r.client.Account.Query().
 		Where(dbaccount.StatusEQ(service.StatusActive)).

@@ -17,6 +17,8 @@ export enum CodeGenerationModel {
   GPT_5_5_LOW = "gpt-5.5 (low thinking)",
   GPT_5_5_MEDIUM = "gpt-5.5 (medium thinking)",
   GPT_5_5_HIGH = "gpt-5.5 (high thinking)",
+  GROK_4_7_HIGH = "grok-4.7 (high thinking)",
+  GROK_4_7_LOW = "grok-4.7 (low thinking)",
   GPT_6_ASTRA_LOW = "gpt-6-astra (low thinking)",
   GPT_6_ASTRA_HIGH = "gpt-6-astra (high thinking)",
   GPT_5_6_SOL_NONE = "gpt-5.6-sol (no thinking)",
@@ -62,6 +64,7 @@ const VARIANT_LABELS: Partial<Record<CodeGenerationModel, VariantLabel>> = {
   [CodeGenerationModel.GEMINI_3_FLASH_PREVIEW_MINIMAL]: { text: "快速", tone: "fast" },
   [CodeGenerationModel.GEMINI_3_1_PRO_PREVIEW_HIGH]: { text: "高质量", tone: "max" },
   [CodeGenerationModel.GPT_5_5_HIGH]: { text: "高质量", tone: "max" },
+  [CodeGenerationModel.GROK_4_7_HIGH]: { text: "高质量", tone: "max" },
   [CodeGenerationModel.GPT_6_ASTRA_HIGH]: { text: "高质量", tone: "max" },
   [CodeGenerationModel.GPT_5_6_SOL_MAX]: { text: "高质量", tone: "max" },
 };
@@ -115,6 +118,12 @@ export const CODE_GENERATION_MODEL_DESCRIPTIONS: {
   },
   "gpt-5.5 (high thinking)": {
     name: "GPT 5.5 (高推理)",
+  },
+  "grok-4.7 (high thinking)": {
+    name: "Grok 4.7 (高推理)",
+  },
+  "grok-4.7 (low thinking)": {
+    name: "Grok 4.7 (低推理)",
   },
   "gpt-6-astra (low thinking)": {
     name: "GPT 6 Astra (低推理)",

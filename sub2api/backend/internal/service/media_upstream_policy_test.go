@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/attemptpolicy"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,4 +95,44 @@ func TestGrokMediaEndpointAsyncVideoCreate(t *testing.T) {
 	} {
 		require.False(t, endpoint.IsAsyncVideoCreateRequest(), endpoint)
 	}
+}
+
+func TestApplyVideoLookupSameAccountRetryPolicy(t *testing.T) {
+	transient := &UpstreamFailoverError{
+		StatusCode:             http.StatusServiceUnavailable,
+		RetryableOnSameAccount: true,
+	}
+	applyVideoLookupSameAccountRetryPolicy(transient, true)
+	require.Equal(t, videoLookupSameAccountRetryMax, transient.SameAccountRetryMax)
+	require.Equal(t, mediaSameAccountRetryDelay, transient.SameAccountRetryDelay)
+
+	auth := &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, RetryableOnSameAccount: true}
+	applyVideoLookupSameAccountRetryPolicy(auth, true)
+	require.Zero(t, auth.SameAccountRetryMax)
+
+	disabled := &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, RetryableOnSameAccount: true}
+	applyVideoLookupSameAccountRetryPolicy(disabled, false)
+	require.Zero(t, disabled.SameAccountRetryMax)
+}
+
+func TestApplyMediaAccountCooldownPersistsOnlyAccountPenalties(t *testing.T) {
+	repo := &capacityShedAccountRepoStub{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	account := &Account{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+
+	applied := svc.ApplyMediaAccountCooldown(account, attemptpolicy.Decision{
+		PenalizeAccount: false,
+		Cooldown:        time.Minute,
+	})
+	require.False(t, applied)
+	require.Zero(t, repo.tempUnschedCalls)
+
+	applied = svc.ApplyMediaAccountCooldown(account, attemptpolicy.Decision{
+		PenalizeAccount: true,
+		Cooldown:        30 * time.Second,
+	})
+	require.True(t, applied)
+	require.Equal(t, 1, repo.tempUnschedCalls)
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	svc.ClearAccountSchedulingBlock(account.ID)
 }

@@ -35,7 +35,7 @@ const stacks = process.env.QA_STACKS
   ? process.env.QA_STACKS.split(",").map((stack) => stack.trim() as Stack)
   : defaultStacks;
 
-const defaultModels = [CodeGenerationModel.GPT_6_ASTRA_HIGH];
+const defaultModels = [CodeGenerationModel.GROK_4_7_HIGH];
 const models = process.env.QA_MODELS
   ? process.env.QA_MODELS.split(",").map((model) => model.trim())
   : defaultModels;

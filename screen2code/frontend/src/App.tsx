@@ -40,6 +40,18 @@ import DesignSystemsModal from "./components/settings/DesignSystemsModal";
 import { AiEditCommit, Commit } from "./components/commits/types";
 import { createCommit } from "./components/commits/utils";
 
+function migrateStoredSettings(settings: Settings): Settings {
+  if (settings.textDefaultMigrated) return settings;
+  return {
+    ...settings,
+    codeGenerationModel:
+      settings.codeGenerationModel === CodeGenerationModel.GPT_6_ASTRA_HIGH
+        ? CodeGenerationModel.GROK_4_7_HIGH
+        : settings.codeGenerationModel,
+    textDefaultMigrated: true,
+  };
+}
+
 function App() {
   const {
     // Inputs
@@ -97,12 +109,14 @@ function App() {
       isImageGenerationEnabled: true,
       editorTheme: EditorTheme.COBALT,
       generatedCodeConfig: Stack.HTML_TAILWIND,
-      codeGenerationModel: CodeGenerationModel.GPT_6_ASTRA_HIGH,
+      codeGenerationModel: CodeGenerationModel.GROK_4_7_HIGH,
+      textDefaultMigrated: true,
       selectedDesignSystemId: null,
       // Only relevant for hosted version
       isTermOfServiceAccepted: false,
     },
-    "setting"
+    "setting",
+    migrateStoredSettings
   );
   const [appTheme, setAppTheme] = usePersistedState<AppTheme>(
     AppTheme.SYSTEM,

@@ -112,6 +112,19 @@ var plazaConcretePlatforms = []string{
 	"kimi", "zhipu", "deepseek", "minimax", "opencode_go",
 }
 
+// plazaCatalogAccountLister 是账号仓储的可选能力：按分组枚举「账号直接绑定」的模型映射。
+//
+// 与 AccountRepository.ListModelAvailabilityCandidates 不同，它忽略账号的持久状态与
+// 调度状态（error / disabled / 不可调度 / 过期窗口）。模型广场回答的是「这个中转站支持
+// 哪些模型」，而不是「此刻哪些账号可调度」：账号长期或临时异常不应让整组模型从广场消失，
+// 否则只看广场的用户会误判平台没有该模型而直接放弃。
+//
+// 用可选接口而非扩展 AccountRepository，是为了不牵动网关可用性诊断（那里必须按实时
+// 调度状态判定）与各处测试桩。仓储未实现时回退到 ListModelAvailabilityCandidates。
+type plazaCatalogAccountLister interface {
+	ListCatalogModelCandidates(ctx context.Context, groupID *int64, platforms []string) ([]Account, error)
+}
+
 // ListGroups 返回模型广场数据：每个活跃分组附带其可用模型与定价。
 //
 // 模型枚举口径与 ListAvailable 一致（Active 渠道、SupportedModels ∪ 全局定价回落、
@@ -243,14 +256,24 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 
 	// 历史部署把账号直接绑定到分组。把账号的模型映射（无映射时用平台默认模型）
 	// 也纳入枚举，广场才能反映真实的调度面。
+	//
+	// 这里优先用「目录口径」枚举（忽略账号状态与调度态），仅当仓储未实现该可选能力时
+	// 回退到可用性口径。账号处于 error/不可调度时不应让整组模型从广场消失。
 	if s.accountRepo != nil {
+		catalogLister, _ := s.accountRepo.(plazaCatalogAccountLister)
 		for gid, pg := range byGroup {
 			g := groupEnt[gid]
 			platforms := []string{g.Platform}
 			if g.Platform == PlatformComposite {
 				platforms = plazaConcretePlatforms
 			}
-			accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, &gid, platforms, false)
+			var accounts []Account
+			var err error
+			if catalogLister != nil {
+				accounts, err = catalogLister.ListCatalogModelCandidates(ctx, &gid, platforms)
+			} else {
+				accounts, err = s.accountRepo.ListModelAvailabilityCandidates(ctx, &gid, platforms, false)
+			}
 			if err != nil {
 				continue
 			}

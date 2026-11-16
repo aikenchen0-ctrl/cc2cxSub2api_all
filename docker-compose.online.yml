@@ -10,7 +10,7 @@ services:
     ports: ["127.0.0.1:5199:5199"]
     environment:
       LLM_PROVIDER: ${AICUT_LLM_PROVIDER:-openai}
-      LLM_OPENAI_MODEL: ${AICUT_LLM_MODEL:-gpt-6-astra}
+      LLM_OPENAI_MODEL: ${AICUT_LLM_MODEL:-grok-4.7}
       SUB2API_BASE: http://sub2api:8080
       LINK: https://api.cc2.cx
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
@@ -32,7 +32,7 @@ services:
     environment:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
-      SUB2API_RELAY_MODEL: ${AIEXCEL_RELAY_MODEL:-gpt-6-astra}
+      SUB2API_RELAY_MODEL: ${AIEXCEL_RELAY_MODEL:-grok-4.7}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       LINK: https://api.cc2.cx
       NODE_ENV: production
@@ -53,7 +53,7 @@ services:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
-      SUB2API_RELAY_MODELS: gpt-5.6-sol
+      SUB2API_RELAY_MODELS: grok-4.7,gpt-6-astra
       SUB2API_RELAY_IMAGE_MODELS: gpt-image-2
       SUB2API_RELAY_VIDEO_MODELS: minimax_h3_z0901,minimax_h3_z0903,minimax_h3_z0902,minimax_h3_zm_u24,minimax_h3_zm_u08,minimax_h3_b99_002,minimax_h3_b99_001,minimax_h3_b99_003_12s,wan2.2animate-v4-motion_retargeting,minimax_h3_image_audio_to_video_v2_15s,minimax_h3_lightx2v_v5_15s,minimax_h3_image_audio_to_video_v2,minimax_h3_image_audio_to_video,minimax_h3_lightx2v_v5,minimax_h3_lightx2v_no_pic,minimax_h3_lightx2v
       SUB2API_RELAY_ALLOW_LOCAL: "false"
@@ -145,7 +145,7 @@ services:
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       CORS_ALLOWED_ORIGINS: https://livart.cc2.cx
       LIVART_DEFAULT_API_BASE_URL: https://api.cc2.cx/v1
-      LIVART_DEFAULT_CHAT_MODEL: gpt-5.5
+      LIVART_DEFAULT_CHAT_MODEL: grok-4.7
     networks: [gateway, livart-internal]
 
   qrcode:
@@ -207,6 +207,8 @@ services:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       LINK: https://api.cc2.cx
+      CUSTOM_MODEL: ${CUSTOM_MODEL:-grok-4.7}
+      SUB2API_MODEL: ${SUB2API_MODEL:-grok-4.7}
       PRESENTON_BASE_URL: https://ppt.cc2.cx
     networks: [gateway]
 
@@ -220,6 +222,7 @@ services:
       LINK: https://api.cc2.cx
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-grok-4.7}
       AI3D_SSO_CALLBACK_URL: https://ai3d.cc2.cx/api/auth/sso/callback
     volumes:
       - ai3d_models:/app/.generated-models
@@ -237,6 +240,7 @@ services:
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
+      SUB2API_RELAY_MODEL: ${SUB2API_RELAY_MODEL:-grok-4.7}
       YIBIAO_SSO_CALLBACK_URL: https://yibiao.cc2.cx/api/auth/sso/callback
       YIBIAO_AUTH_DB: /app/server/data/auth.db
     volumes: ["yibiao_data:/app/server/data"]
@@ -254,7 +258,7 @@ services:
       LINK: https://api.cc2.cx
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
       AIHUOKE_SSO_CALLBACK_URL: https://aihuoke.cc2.cx/api/auth/sso/callback
-      SUB2API_RELAY_MODEL: gpt-6-astra
+      SUB2API_RELAY_MODEL: grok-4.7
     volumes: ["aihuoke_data:/app/data"]
     networks: [gateway]
 
@@ -373,6 +377,7 @@ services:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
+      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-grok-4.7,gpt-6-astra}
       CANVAS_CORS_ORIGINS: https://canvas.cc2.cx
     volumes: ["/opt/cc2cxSub2api_260920/canvas/data:/app/data"]
     networks: [gateway]

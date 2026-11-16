@@ -476,12 +476,13 @@ class ModelSelectionStage:
     ) -> List[Llm]:
         """Simple model cycling that scales with num_variants"""
 
-        # Video mode prefers Gemini. Satellite / OpenAI-only traffic uses gpt-6-astra.
+        # Video mode prefers Gemini. Satellite / OpenAI-only traffic uses the
+        # first NUM_VARIANTS_VIDEO entries, so adding models does not widen video.
         if input_mode == "video":
             if gemini_api_key:
                 return list(VIDEO_VARIANT_MODELS)
             if openai_api_key:
-                return list(OPENAI_ONLY_MODELS)
+                return list(OPENAI_ONLY_MODELS[:NUM_VARIANTS_VIDEO])
             raise Exception(
                 "视频模式需要可用的 OpenAI 或 Gemini 接口密钥，请检查设置或服务端配置。"
             )

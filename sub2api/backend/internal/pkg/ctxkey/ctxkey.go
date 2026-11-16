@@ -56,6 +56,10 @@ const (
 	// 用于区分"用错端点"与"端点用对了但账号没能力"。
 	OpenAIImagesEndpoint Key = "ctx_openai_images_endpoint"
 
+	// OpenAIAsyncImagesEndpoint 标识当前执行属于异步图片任务 worker。
+	// 它只影响调度观测和重试预算的归类，不改变上游媒体协议。
+	OpenAIAsyncImagesEndpoint Key = "ctx_openai_async_images_endpoint"
+
 	// Group 认证后的分组信息，由 API Key 认证中间件设置
 	Group Key = "ctx_group"
 

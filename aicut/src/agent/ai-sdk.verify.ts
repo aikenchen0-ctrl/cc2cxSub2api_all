@@ -50,7 +50,7 @@ assert.equal(normalizeLlmProvider('OFox'), 'ofox');
 assert.equal(normalizeLlmProvider('OrcaRouter'), 'orcarouter');
 assert.equal(normalizeLlmProvider('unexpected'), 'openai');
 assert.equal(defaultModelForProvider('anthropic'), 'claude-fable-5');
-assert.equal(defaultModelForProvider('openai'), 'gpt-6-astra');
+assert.equal(defaultModelForProvider('openai'), 'grok-4.7');
 assert.equal(defaultModelForProvider('kimi'), 'kimi-k3');
 assert.equal(defaultModelForProvider('qwen'), 'qwen-plus');
 assert.equal(defaultModelForProvider('glm'), 'glm-5.2');

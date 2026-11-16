@@ -186,7 +186,7 @@ class TestModelSelectionOpenAIOnly:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("input_mode", ["text", "image"])
     async def test_openai_only(self, input_mode):
-        """OpenAI only: GPT 6 Astra high and low, cycling"""
+        """OpenAI only: grok-4.7 high/low, then retained gpt-6-astra variants."""
         models = await self.model_selector.select_models(
             generation_type="create",
             input_mode=input_mode,
@@ -196,8 +196,8 @@ class TestModelSelectionOpenAIOnly:
         )
 
         expected = [
-            Llm.GPT_6_ASTRA_HIGH,
-            Llm.GPT_6_ASTRA_LOW,
+            Llm.GROK_4_7_HIGH,
+            Llm.GROK_4_7_LOW,
             Llm.GPT_6_ASTRA_HIGH,
             Llm.GPT_6_ASTRA_LOW,
         ]
@@ -206,7 +206,7 @@ class TestModelSelectionOpenAIOnly:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("input_mode", ["text", "image"])
     async def test_openai_only_update_uses_two_gpt_6_variants(self, input_mode):
-        """OpenAI-only updates use two GPT 6 Astra variants."""
+        """OpenAI-only updates use the first two variants: grok-4.7 high and low."""
         models = await self.model_selector.select_models(
             generation_type="update",
             input_mode=input_mode,
@@ -215,12 +215,12 @@ class TestModelSelectionOpenAIOnly:
             gemini_api_key=None,
         )
 
-        assert models == [Llm.GPT_6_ASTRA_HIGH, Llm.GPT_6_ASTRA_LOW]
+        assert models == [Llm.GROK_4_7_HIGH, Llm.GROK_4_7_LOW]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("generation_type", ["create", "update"])
     async def test_openai_only_video_uses_gpt_6(self, generation_type):
-        """Satellite / OpenAI-only video input uses two GPT 6 Astra variants."""
+        """Satellite / OpenAI-only video input stays at two grok-4.7 variants."""
         models = await self.model_selector.select_models(
             generation_type=generation_type,
             input_mode="video",
@@ -230,8 +230,8 @@ class TestModelSelectionOpenAIOnly:
         )
 
         expected = [
-            Llm.GPT_6_ASTRA_HIGH,
-            Llm.GPT_6_ASTRA_LOW,
+            Llm.GROK_4_7_HIGH,
+            Llm.GROK_4_7_LOW,
         ]
         assert models == expected
 

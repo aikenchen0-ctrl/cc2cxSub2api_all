@@ -88,6 +88,34 @@ func CompositeRouteSourceFromContext(ctx context.Context) (string, bool) {
 // platform used by sub2api. It intentionally returns false for ambiguous model
 // names so composite groups fail closed instead of guessing.
 func DetectModelPlatform(model string) (string, bool) {
+	return detectModelPlatform(model)
+}
+
+// DetectModelPlatformForCrossGroup resolves the scheduling platform for a
+// request authenticated by a cross-group Super Key (satellite relay or
+// administrative key) that is not bound to a single group. Such a key is
+// documented to pick upstream accounts from every group, so the requested
+// public model name must decide the platform; otherwise the request stays
+// pinned to the OpenAI platform and Grok / CN models (grok-*, deepseek-*,
+// kimi-*, glm-*, minimax-*) can never be scheduled.
+//
+// It returns ("", false) when the model is ambiguous or maps to a platform the
+// OpenAI-compatible scheduler cannot serve (anthropic/gemini), letting the
+// caller keep its existing default.
+func DetectModelPlatformForCrossGroup(model string) (string, bool) {
+	platform, ok := detectModelPlatform(model)
+	if !ok {
+		return "", false
+	}
+	switch platform {
+	case PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
+		return platform, true
+	default:
+		return "", false
+	}
+}
+
+func detectModelPlatform(model string) (string, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	if normalized == "" {
 		return "", false

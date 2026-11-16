@@ -7,8 +7,10 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -27,6 +29,7 @@ const (
 	easypayHTTPTimeout     = 10 * time.Second
 	maxEasypayResponseSize = 1 << 20 // 1MB
 	maxEasypayErrorSummary = 512
+	easypayAmountTolerance = 0.005
 	tradeStatusSuccess     = "TRADE_SUCCESS"
 	signTypeMD5            = "MD5"
 	paymentModePopup       = "popup"
@@ -368,6 +371,133 @@ func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Quer
 	}, nil
 }
 
+// easyPayConfirmResult is the normalized api.php?act=order answer used to
+// confirm a verified notification before fulfillment.
+type easyPayConfirmResult struct {
+	status  string
+	money   string
+	tradeNo string
+}
+
+func (e *EasyPay) queryOrderForConfirm(ctx context.Context, outTradeNo string) (*easyPayConfirmResult, error) {
+	params := map[string]string{
+		"act": "order", "pid": e.config["pid"],
+		"key": e.config["pkey"], "out_trade_no": outTradeNo,
+	}
+	query := url.Values{}
+	for k, v := range params {
+		query.Set(k, v)
+	}
+	body, err := e.post(ctx, e.apiBase()+"/api.php?"+query.Encode(), params)
+	if err != nil {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return nil, fmt.Errorf("easypay query: %w", err)
+	}
+	type easyPayQueryData struct {
+		TradeStatus *string         `json:"trade_status"`
+		Status      json.RawMessage `json:"status"`
+		Money       json.RawMessage `json:"money"`
+		TradeNo     json.RawMessage `json:"trade_no"`
+		OutTradeNo  json.RawMessage `json:"out_trade_no"`
+	}
+	var resp struct {
+		easyPayQueryData
+		Code any              `json:"code"`
+		Msg  string           `json:"msg"`
+		Data easyPayQueryData `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("easypay parse query: %w", err)
+	}
+	if resp.Code != nil && !easyPayResponseCodeIsSuccess(resp.Code) {
+		msg := strings.TrimSpace(resp.Msg)
+		if msg == "" {
+			msg = summarizeEasyPayResponse(body)
+		}
+		return nil, fmt.Errorf("easypay query failed: %s", msg)
+	}
+	if echoed := easyPayJSONScalar(pickEasyPayJSON(resp.OutTradeNo, resp.Data.OutTradeNo)); echoed != "" && echoed != strings.TrimSpace(outTradeNo) {
+		return nil, fmt.Errorf("easypay query out_trade_no mismatch: expected %s, got %s", strings.TrimSpace(outTradeNo), echoed)
+	}
+
+	status := payment.ProviderStatusPending
+	if resp.TradeStatus != nil {
+		if *resp.TradeStatus == tradeStatusSuccess {
+			status = payment.ProviderStatusPaid
+		}
+	} else if resp.Data.TradeStatus != nil {
+		if *resp.Data.TradeStatus == tradeStatusSuccess {
+			status = payment.ProviderStatusPaid
+		}
+	} else if raw := pickEasyPayJSON(resp.Status, resp.Data.Status); raw != nil {
+		if easyPayJSONScalar(raw) == strconv.Itoa(easypayStatusPaid) {
+			status = payment.ProviderStatusPaid
+		}
+	}
+
+	return &easyPayConfirmResult{
+		status:  status,
+		money:   easyPayJSONScalar(pickEasyPayJSON(resp.Money, resp.Data.Money)),
+		tradeNo: easyPayJSONScalar(pickEasyPayJSON(resp.TradeNo, resp.Data.TradeNo)),
+	}, nil
+}
+
+// ConfirmNotification checks a verified success notification against the
+// upstream order before it is fulfilled (paid status, amount, trade_no).
+func (e *EasyPay) ConfirmNotification(ctx context.Context, n *payment.PaymentNotification) error {
+	if n == nil || n.Status != payment.NotificationStatusSuccess {
+		return nil
+	}
+	result, err := e.queryOrderForConfirm(ctx, n.OrderID)
+	if err != nil {
+		return fmt.Errorf("easypay confirm: %w", err)
+	}
+	if result.status != payment.ProviderStatusPaid {
+		return fmt.Errorf("easypay confirm: upstream reports order %s as not paid", n.OrderID)
+	}
+	queriedAmount, err := strconv.ParseFloat(result.money, 64)
+	if err != nil || math.Abs(queriedAmount-n.Amount) > easypayAmountTolerance {
+		return fmt.Errorf("easypay confirm: amount mismatch: notified %v, upstream %q", n.Amount, result.money)
+	}
+	if result.tradeNo != "" {
+		if n.TradeNo != "" && n.TradeNo != result.tradeNo {
+			return fmt.Errorf("easypay confirm: trade_no mismatch: notified %s, upstream %s", n.TradeNo, result.tradeNo)
+		}
+		n.TradeNo = result.tradeNo
+	}
+	return nil
+}
+
+func easyPayJSONScalar(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		return strings.TrimSpace(str)
+	}
+	var num json.Number
+	if err := json.Unmarshal(raw, &num); err == nil {
+		return num.String()
+	}
+	return ""
+}
+
+// pickEasyPayJSON returns the top-level field when present, otherwise the
+// nested data field. JSON null counts as absent.
+func pickEasyPayJSON(top, nested json.RawMessage) json.RawMessage {
+	if len(top) > 0 && string(top) != "null" {
+		return top
+	}
+	if len(nested) > 0 && string(nested) != "null" {
+		return nested
+	}
+	return nil
+}
+
 func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[string]string) (*payment.PaymentNotification, error) {
 	values, err := url.ParseQuery(rawBody)
 	if err != nil {
@@ -376,7 +506,14 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 	// url.ParseQuery already decodes values — no additional decode needed.
 	params := make(map[string]string)
 	for k := range values {
-		params[k] = values.Get(k)
+		if !easyPayNotifyAllowedParams[k] {
+			return nil, fmt.Errorf("unexpected notify param: %s", k)
+		}
+		v := values.Get(k)
+		if k != "name" && strings.ContainsAny(v, "&=") {
+			return nil, fmt.Errorf("invalid notify param value: %s", k)
+		}
+		params[k] = v
 	}
 	sign := params["sign"]
 	if sign == "" {
@@ -384,6 +521,9 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 	}
 	if !easyPayVerifySign(params, e.config["pkey"], sign) {
 		return nil, fmt.Errorf("invalid signature")
+	}
+	if expected, actual := strings.TrimSpace(e.config["pid"]), strings.TrimSpace(params["pid"]); actual != expected {
+		return nil, fmt.Errorf("easypay pid mismatch: expected %s, got %s", expected, actual)
 	}
 	status := payment.ProviderStatusFailed
 	if params["trade_status"] == tradeStatusSuccess {
@@ -600,4 +740,23 @@ func easyPaySign(params map[string]string, pkey string) string {
 
 func easyPayVerifySign(params map[string]string, pkey string, sign string) bool {
 	return hmac.Equal([]byte(easyPaySign(params, pkey)), []byte(sign))
+}
+
+// easyPayNotifyAllowedParams is the exact parameter set a genuine EasyPay
+// async notification carries. Order-creation-only fields (notify_url,
+// return_url, cid, device, clientip, ...) must never appear in a callback:
+// the sign base string concatenates values unescaped, so a signed order URL
+// whose return_url embeds "trade_status=TRADE_SUCCESS" could otherwise be
+// replayed as a forged payment-success notification.
+var easyPayNotifyAllowedParams = map[string]bool{
+	"pid":          true,
+	"trade_no":     true,
+	"out_trade_no": true,
+	"type":         true,
+	"name":         true,
+	"money":        true,
+	"trade_status": true,
+	"param":        true,
+	"sign":         true,
+	"sign_type":    true,
 }

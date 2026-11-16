@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/attemptpolicy"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -298,6 +299,24 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
+					responseStarted := service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward
+					policyEndpoint := attemptpolicy.EndpointImageSync
+					if service.OpenAIAsyncImagesEndpointFromContext(c.Request.Context()) {
+						policyEndpoint = attemptpolicy.EndpointImageAsync
+					}
+					decision := decideMediaAttempt(
+						policyEndpoint,
+						failoverErr,
+						failoverErr.RequestPhase != service.UpstreamRequestPhaseNotSent,
+						responseStarted,
+						sameAccountRetryCount[account.ID],
+					)
+					applyMediaPolicyClientResponse(failoverErr, decision.Decision)
+					logMediaAttemptPolicyDryRun(reqLog, "openai.images", policyEndpoint, failoverErr,
+						failoverErr.RequestPhase != service.UpstreamRequestPhaseNotSent,
+						responseStarted,
+						sameAccountRetryCount[account.ID],
+					)
 					if service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward {
 						reqLog.Warn("openai.images.upstream_failover_skipped_after_flush",
 							zap.Int64("account_id", account.ID),
@@ -313,11 +332,14 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 						)
 						return
 					}
-					if failoverErr.RetryableOnSameAccount {
+					if decision.RepairAllowed {
 						retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
+						if retryLimit > decision.Decision.RepairLimit {
+							retryLimit = decision.Decision.RepairLimit
+						}
 						if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
 							sameAccountRetryCount[account.ID]++
-							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
+							retryDelay := decision.Decision.RepairDelay
 							reqLog.Warn("openai.images.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
 								zap.Int("upstream_status", failoverErr.StatusCode),
@@ -325,14 +347,17 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 								zap.Duration("retry_delay", retryDelay),
 							)
-							select {
-							case <-requestCtx.Done():
+							if !waitForMediaRepair(requestCtx, retryDelay) {
 								return
-							case <-time.After(retryDelay):
 							}
 							continue
 						}
 					}
+					if decision.Stop || !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					h.gatewayService.ApplyMediaAccountCooldown(account, decision.Decision)
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr

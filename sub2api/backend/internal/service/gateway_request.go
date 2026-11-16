@@ -1375,9 +1375,11 @@ func filterThinkingBlocksInternal(body []byte, _ bool) []byte {
 
 			blockType, _ := blockMap["type"].(string)
 
-			if blockType == "thinking" || blockType == "redacted_thinking" {
+			if blockType == "thinking" {
 				// When thinking is enabled and this is an assistant message,
-				// only keep thinking blocks with valid signatures
+				// keep thinking blocks with usable signatures. Otherwise
+				// preserve the reasoning as visible text instead of dropping
+				// it: the upstream rejects the signature, not the content.
 				if thinkingEnabled && role == "assistant" {
 					signature, _ := blockMap["signature"].(string)
 					if signature != "" && signature != antigravity.DummyThoughtSignature {
@@ -1385,14 +1387,34 @@ func filterThinkingBlocksInternal(body []byte, _ bool) []byte {
 						continue
 					}
 				}
+				if thinkingText, ok := blockMap["thinking"].(string); ok && thinkingText != "" {
+					newContent = append(newContent, map[string]any{"type": "text", "text": thinkingText})
+				}
 				filtered = true
 				filteredThisMessage = true
 				continue
 			}
 
-			// Handle blocks without type discriminator but with "thinking" key
+			// redacted_thinking cannot be recovered as plain text.
+			if blockType == "redacted_thinking" {
+				filtered = true
+				filteredThisMessage = true
+				continue
+			}
+
+			// Handle blocks without type discriminator but with "thinking" key.
 			if blockType == "" {
-				if _, hasThinking := blockMap["thinking"]; hasThinking {
+				if rawThinking, hasThinking := blockMap["thinking"]; hasThinking {
+					switch v := rawThinking.(type) {
+					case string:
+						if v != "" {
+							newContent = append(newContent, map[string]any{"type": "text", "text": v})
+						}
+					default:
+						if b, err := json.Marshal(v); err == nil && len(b) > 0 && string(b) != "null" {
+							newContent = append(newContent, map[string]any{"type": "text", "text": string(b)})
+						}
+					}
 					filtered = true
 					filteredThisMessage = true
 					continue

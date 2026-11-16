@@ -31,6 +31,12 @@ Thumbs.db
 dist/
 build/
 
+# Embedded frontend bundle. The Dockerfile copies the freshly built bundle from
+# the frontend-builder stage; a stale copy left in the working tree must not
+# enter the context, otherwise Docker's overlay COPY keeps both chunk sets and
+# the image ships outdated ModelPlaza/other assets alongside the new ones.
+backend/internal/web/dist/
+
 # Node modules (will be installed in container)
 frontend/node_modules/
 node_modules/

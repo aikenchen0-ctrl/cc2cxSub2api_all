@@ -254,7 +254,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
             # mode; the field remains only for legacy local config migration.
             'base_url': '',
             'api_key': '',
-            'model': 'gpt-6-astra'
+            'model': 'grok-4.7'
         },
         'contacts': [],  # 开源版本默认空
         # The satellite image does not ship Chrome/Chromedriver.  HTTP mode
@@ -271,6 +271,11 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
                 default_config.update(saved_config)
         except Exception as e:
             logger.error(f"加载配置失败: {e}")
+
+    ai_config = default_config.get('ai_config')
+    if isinstance(ai_config, dict) and ai_config.get('model') == 'gpt-6-astra':
+        ai_config['model'] = 'grok-4.7'
+        default_config['ai_config'] = ai_config
     
     return default_config
 
@@ -1174,7 +1179,7 @@ async def test_ai():
     managed = is_managed()
     if managed:
         try:
-            guard = AIGuard({'enable': True, 'model': os.getenv('SUB2API_RELAY_MODEL', 'gpt-6-astra')}, log_callback=app_state.add_log)
+            guard = AIGuard({'enable': True, 'model': os.getenv('SUB2API_RELAY_MODEL', 'grok-4.7')}, log_callback=app_state.add_log)
             relevant, reason = guard.check_relevance('自动招标连接测试', '请仅返回相关性判断。', raise_on_error=True)
             return {'success': True, 'message': f'AI测试成功！回复: {reason[:100]}'}
         except SatelliteConfigurationError as e:

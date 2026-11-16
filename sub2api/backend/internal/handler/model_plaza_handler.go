@@ -196,23 +196,10 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 		m := &g.Models[i]
 		pricing := toUserPricing(m.Pricing)
 		official := toModelPlazaOfficialPricing(m.OfficialPricing)
-		// 图片/视频模型按张、按次或按秒计价，缓存价格对其无意义，不下发避免误导。
-		if pricing != nil && (m.Capability == "image" || m.Capability == "video" ||
-			pricing.BillingMode == string(service.BillingModeImage) || pricing.BillingMode == string(service.BillingModeVideo)) {
-			pricing.CacheWritePrice = nil
-			pricing.CacheWrite1hPrice = nil
-			pricing.CacheReadPrice = nil
-			for j := range pricing.Intervals {
-				pricing.Intervals[j].CacheWritePrice = nil
-				pricing.Intervals[j].CacheWrite1hPrice = nil
-				pricing.Intervals[j].CacheReadPrice = nil
-			}
-			if official != nil {
-				official.CacheWritePrice = nil
-				official.CacheWrite1hPrice = nil
-				official.CacheReadPrice = nil
-			}
-		}
+		// 模型广场不展示缓存价格：缓存写/读对普通用户是干扰信息，且图片/视频模型
+		// 按张、按次或按秒计价时缓存价无意义。统一在 DTO 层清空（实付与官方两侧、
+		// 含分级档位），前端不再渲染缓存列。
+		stripPlazaCachePricing(pricing, official)
 		models = append(models, modelPlazaModel{
 			Name:             m.Name,
 			Platform:         m.Platform,
@@ -277,5 +264,37 @@ func toModelPlazaOfficialPricing(p *service.PlazaOfficialPricing) *modelPlazaOff
 		CacheWrite1hPrice: p.CacheWrite1hPrice,
 		CacheReadPrice:    p.CacheReadPrice,
 		Intervals:         toUserPricingIntervals(p.Intervals),
+	}
+}
+
+// stripPlazaCachePricing 清空广场 DTO 中所有缓存价格字段（实付与官方两侧，含分档区间）。
+//
+// 模型广场定位是「有哪些模型、单价多少」的橱窗：缓存写/读属于内部计费细节，对普通用户
+// 只是干扰信息，且图片/视频模型按张、按次或按秒计价时缓存价本就无意义。统一清空后前端
+// 不再渲染缓存列，避免用户误以为平台缺少某些模型。
+func stripPlazaCachePricing(pricing *userSupportedModelPricing, official *modelPlazaOfficialPricing) {
+	if pricing != nil {
+		pricing.CacheWritePrice = nil
+		pricing.CacheWrite1hPrice = nil
+		pricing.CacheReadPrice = nil
+		for i := range pricing.Intervals {
+			pricing.Intervals[i].CacheWritePrice = nil
+			pricing.Intervals[i].CacheWrite1hPrice = nil
+			pricing.Intervals[i].CacheReadPrice = nil
+			pricing.Intervals[i].CacheWriteMultiplier = nil
+			pricing.Intervals[i].CacheReadMultiplier = nil
+		}
+	}
+	if official != nil {
+		official.CacheWritePrice = nil
+		official.CacheWrite1hPrice = nil
+		official.CacheReadPrice = nil
+		for i := range official.Intervals {
+			official.Intervals[i].CacheWritePrice = nil
+			official.Intervals[i].CacheWrite1hPrice = nil
+			official.Intervals[i].CacheReadPrice = nil
+			official.Intervals[i].CacheWriteMultiplier = nil
+			official.Intervals[i].CacheReadMultiplier = nil
+		}
 	}
 }

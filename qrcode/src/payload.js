@@ -1,4 +1,4 @@
-const FIXED_MODEL = "gpt-4.1-mini";
+const FIXED_MODEL = "grok-4.7";
 
 export function buildResponsesPayload({ chatText, imageDataUrls }) {
   const content = [

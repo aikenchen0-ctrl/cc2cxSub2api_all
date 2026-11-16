@@ -270,6 +270,30 @@ async def test_openai_provider_session_uses_gpt_5_6_terra_low_reasoning_effort()
 
 @pytest.mark.parametrize(
     ("model", "effort"),
+    [(Llm.GROK_4_7_LOW, "low"), (Llm.GROK_4_7_HIGH, "high")],
+)
+@pytest.mark.asyncio
+async def test_openai_provider_session_uses_grok_4_7_reasoning_effort(
+    model: Llm,
+    effort: str,
+) -> None:
+    client = _FakeOpenAIClient()
+    session = OpenAIProviderSession(
+        client=client,  # type: ignore[arg-type]
+        model=model,
+        prompt_messages=[{"role": "user", "content": "Build a dashboard."}],
+        tools=_test_tools(),
+    )
+
+    await session.stream_turn(_noop_event_sink)
+
+    first_call = client.responses.calls[0]
+    assert first_call["model"] == "grok-4.7"
+    assert first_call["reasoning"] == {"effort": effort, "summary": "auto"}
+
+
+@pytest.mark.parametrize(
+    ("model", "effort"),
     [(Llm.GPT_6_ASTRA_LOW, "low"), (Llm.GPT_6_ASTRA_HIGH, "high")],
 )
 @pytest.mark.asyncio
@@ -292,7 +316,7 @@ async def test_openai_provider_session_uses_gpt_6_reasoning_effort(
     assert first_call["reasoning"] == {"effort": effort, "summary": "auto"}
 
 
-@pytest.mark.parametrize("model", [Llm.GPT_5_5_HIGH, Llm.GPT_6_ASTRA_LOW, Llm.GPT_6_ASTRA_HIGH])
+@pytest.mark.parametrize("model", [Llm.GPT_5_5_HIGH, Llm.GROK_4_7_HIGH, Llm.GPT_6_ASTRA_LOW, Llm.GPT_6_ASTRA_HIGH])
 @pytest.mark.asyncio
 async def test_openai_provider_session_uses_original_image_detail(model: Llm) -> None:
     client = _FakeOpenAIClient()

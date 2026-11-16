@@ -156,6 +156,10 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	return &UpstreamFailoverError{
 		StatusCode:   http.StatusBadGateway,
 		ResponseBody: openAITransportFailoverBody,
+		// The HTTP round trip failed locally. Unless the error wrapper proves
+		// nothing was sent, assume the request may already be executing upstream
+		// so media create paths never replay it.
+		RequestPhase: UpstreamRequestPhaseSent,
 	}
 }
 

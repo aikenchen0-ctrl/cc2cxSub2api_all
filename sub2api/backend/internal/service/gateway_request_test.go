@@ -386,6 +386,38 @@ func TestFilterThinkingBlocksForRetry_DisablesThinkingAndPreservesAsText(t *test
 	require.Equal(t, "Let me think...", first["text"])
 }
 
+func TestFilterThinkingBlocks_IneligibleSignatureDowngradesToText(t *testing.T) {
+	input := []byte(`{
+		"thinking":{"type":"enabled","budget_tokens":1024},
+		"messages":[
+			{"role":"assistant","content":[
+				{"type":"thinking","thinking":"keep this reasoning","signature":""},
+				{"type":"text","text":"Answer"}
+			]}
+		]
+	}`)
+
+	out := FilterThinkingBlocks(input, "claude-sonnet-4-5")
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(out, &req))
+	messages, ok := req["messages"].([]any)
+	require.True(t, ok)
+	require.Len(t, messages, 1)
+	message, ok := messages[0].(map[string]any)
+	require.True(t, ok)
+	content, ok := message["content"].([]any)
+	require.True(t, ok)
+	require.Len(t, content, 2)
+	first, ok := content[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "text", first["type"])
+	require.Equal(t, "keep this reasoning", first["text"])
+	second, ok := content[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "Answer", second["text"])
+}
+
 func TestFilterThinkingBlocksForRetry_DisablesThinkingEvenWithoutThinkingBlocks(t *testing.T) {
 	input := []byte(`{
 		"model":"claude-3-5-sonnet-20241022",

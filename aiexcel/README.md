@@ -65,7 +65,7 @@ Excel 文件在浏览器中解析和修改，不会上传到业务服务器。AI
 - ExcelJS
 - SheetJS
 - Lucide React
-- Sub2API 文本模型服务（默认 `gpt-6-astra`）
+- Sub2API 文本模型服务（默认 `grok-4.7`）
 
 ## 环境要求
 
@@ -91,9 +91,9 @@ http://localhost:3000
 
 从 Sub2API 左侧的“AI表格”入口打开应用。登录通过短期一次性 SSO 票据完成，模型请求由 AIExcel 服务端转发到 Sub2API，浏览器不会接触 API Key。
 
-AIExcel 使用文本大模型理解需求并生成 JSON 操作计划，默认模型为 `gpt-6-astra`；用户确认后，具体的数据修改和导出在浏览器中执行。
+AIExcel 使用文本大模型理解需求并生成 JSON 操作计划，默认模型为 `grok-4.7`；用户确认后，具体的数据修改和导出在浏览器中执行。
 
-GPT-6 Astra 表格规划使用低推理档以减少等待。AIExcel 直接发送公开模型名 `gpt-6-astra`，由 Sub2API 选择支持该模型的上游账号。
+默认直接发送公开模型名 `grok-4.7`，由 Sub2API 选择支持该模型的上游账号。显式改成 `gpt-6` 系列时仍使用低推理档。
 
 服务端配置 `.env.local`：
 
@@ -101,7 +101,7 @@ GPT-6 Astra 表格规划使用低推理档以减少等待。AIExcel 直接发送
 SUB2API_SSO_SECRET=与 Sub2API 相同的至少 32 位密钥
 SUB2API_RELAY_BASE_URL=http://localhost:18080/v1
 SUB2API_APP_CREDENTIAL=Sub2API 为卫星签发的应用凭据
-SUB2API_RELAY_MODEL=gpt-6-astra
+SUB2API_RELAY_MODEL=grok-4.7
 AIEXCEL_SSO_CALLBACK_URL=http://localhost:4173/api/auth/sso/callback
 ```
 

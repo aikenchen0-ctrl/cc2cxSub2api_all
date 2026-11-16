@@ -17,14 +17,15 @@ description: settings 表中 public 和 private 配置结构说明
 ```json
 {
   "modelChannel": {
-    "availableModels": ["gpt-6-astra", "gpt-image-2"],
+    "availableModels": ["grok-4.7", "gpt-6-astra", "gpt-image-2"],
     "modelCosts": [
+      { "model": "grok-4.7", "credits": 1 },
       { "model": "gpt-6-astra", "credits": 1 },
       { "model": "gpt-image-2", "credits": 10 }
     ],
     "defaultModel": "gpt-image-2",
     "defaultImageModel": "gpt-image-2",
-    "defaultTextModel": "gpt-6-astra",
+    "defaultTextModel": "grok-4.7",
     "systemPrompt": "",
     "allowCustomChannel": true
   },
@@ -86,7 +87,7 @@ description: settings 表中 public 和 private 配置结构说明
       "name": "默认渠道",
       "baseUrl": "https://api.example.com",
       "apiKey": "sk-xxx",
-      "models": ["gpt-6-astra", "gpt-image-2"],
+      "models": ["grok-4.7", "gpt-6-astra", "gpt-image-2"],
       "weight": 1,
       "enabled": true,
       "remark": ""

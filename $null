@@ -1,0 +1,5 @@
+unknown shorthand flag: 'n' in -ne
+
+Usage:  docker image inspect [OPTIONS] IMAGE [IMAGE...]
+
+Run 'docker image inspect --help' for more information

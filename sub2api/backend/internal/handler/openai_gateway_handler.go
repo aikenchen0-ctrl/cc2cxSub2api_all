@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/attemptpolicy"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -254,6 +255,13 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	// Satellite billing resolves the verified satellite slug from the request
+	// context. Usage recording runs on a detached worker context, so the slug
+	// must cross this bridge; otherwise satellite pricing is silently skipped
+	// and the request falls back to model pricing.
+	if satelliteApp, _ := parent.Value(ctxkey.SatelliteApp).(string); strings.TrimSpace(satelliteApp) != "" {
+		base = context.WithValue(base, ctxkey.SatelliteApp, strings.TrimSpace(satelliteApp))
+	}
 	return base
 }
 
@@ -273,6 +281,17 @@ func openAICompatibleRequestPlatform(ctx context.Context, apiKey *service.APIKey
 	}
 	if apiKey != nil && apiKey.Group != nil {
 		return service.NormalizeOpenAICompatiblePlatform(apiKey.Group.Platform)
+	}
+	// 跨分组 Super Key（卫星代调 / 管理密钥）没有绑定分组，其语义是"在全部分组里
+	// 选上游"。此时必须按请求模型推导平台：否则一律回落 openai，grok/国产模型
+	// （grok-*、deepseek-*、kimi-*、glm-*、minimax-*）永远选不到号，日志表现为
+	// "no available OpenAI accounts supporting model: grok-4.7"。
+	if service.SuperKeyCrossGroup(ctx) {
+		if model, ok := ctx.Value(ctxkey.Model).(string); ok {
+			if platform, detected := service.DetectModelPlatformForCrossGroup(model); detected {
+				return platform
+			}
+		}
 	}
 	return service.PlatformOpenAI
 }
@@ -861,6 +880,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					logAttemptPolicyDryRun(reqLog, "openai.responses", attemptPolicyEndpointForResponses(c, body), failoverErr,
+						true, !openAIForwardMayFailover(c, writerSizeBeforeForward, failoverErr), sameAccountRetryCount[account.ID])
 					if failoverClientGone(c) {
 						reqLog.Info("openai.failover_aborted_client_disconnected",
 							zap.Int64("account_id", account.ID),
@@ -1426,6 +1447,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					logAttemptPolicyDryRun(reqLog, "openai_messages", attemptpolicy.EndpointText, failoverErr,
+						true, c.Writer.Size() != writerSizeBeforeForward, sameAccountRetryCount[account.ID])
 					if failoverClientGone(c) {
 						reqLog.Info("openai_messages.failover_aborted_client_disconnected",
 							zap.Int64("account_id", account.ID),

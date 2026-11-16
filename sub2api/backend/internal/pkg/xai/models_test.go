@@ -71,7 +71,11 @@ func TestIsGrokImagineModel(t *testing.T) {
 func TestDefaultModelsIncludesGrok46(t *testing.T) {
 	t.Parallel()
 	ids := DefaultModelIDs()
+	require.Contains(t, ids, "grok-4.7")
 	require.Contains(t, ids, "grok-4.6")
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7"))
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7-latest"))
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7", "grok-4.6"))
 	require.Equal(t, "grok-4.6", ResolveGrokTextResponsesModelID("grok-4.6"))
 	require.Equal(t, "grok-4.6", ResolveGrokTextResponsesModelID("grok-4.6-latest"))
 }

@@ -20,6 +20,46 @@ import (
 
 const openAIWSFallbackReasonInvalidEncryptedContent = "invalid_encrypted_content"
 
+// OpenAIContinuationPlan names the allowed recovery strategies for a rejected
+// continuation body. It is intentionally coarse enough to log and test, while
+// keeping body mutation in one place.
+type OpenAIContinuationPlan string
+
+const (
+	ContinuationReplayExact             OpenAIContinuationPlan = "replay_exact"
+	ContinuationStripRejectedCipherOnly OpenAIContinuationPlan = "strip_rejected_cipher_only"
+	ContinuationStripProviderCipherKeep OpenAIContinuationPlan = "strip_provider_cipher_keep_portable"
+	ContinuationRebuildFromLocalHistory OpenAIContinuationPlan = "rebuild_from_local_history"
+	ContinuationUnsafeAcrossAccount     OpenAIContinuationPlan = "unsafe_across_account"
+)
+
+// PlanOpenAIContinuationRecovery chooses the least destructive recovery. A
+// same-account rejection with an identified cipher can remove only that cipher;
+// a cross-account replay must also drop provider-bound reasoning identity. When
+// neither is provable, callers must not silently delete history.
+func PlanOpenAIContinuationRecovery(body []byte, rejected map[string]struct{}, sameAccount bool) OpenAIContinuationPlan {
+	safety := AnalyzeOpenAIContinuationSafety(body)
+	if !safety.HasEncryptedReasoning {
+		if safety.CanReplayAcrossAccounts {
+			return ContinuationReplayExact
+		}
+		return ContinuationUnsafeAcrossAccount
+	}
+	if !safety.CanRecoverRejectedEncryptedReasoning() {
+		return ContinuationUnsafeAcrossAccount
+	}
+	if sameAccount && len(rejected) > 0 {
+		return ContinuationStripRejectedCipherOnly
+	}
+	if safety.CanReplayAcrossAccounts {
+		return ContinuationStripProviderCipherKeep
+	}
+	if safety.PreviousResponseID != "" {
+		return ContinuationRebuildFromLocalHistory
+	}
+	return ContinuationUnsafeAcrossAccount
+}
+
 // openAIWSIngressSessionHashContextKey 在 gin context 中携带 ingress 会话哈希，
 // 供 HTTP bridge turn 内的 lineage 记录复用同一会话键。
 const openAIWSIngressSessionHashContextKey = "openai_ws_ingress_session_hash"

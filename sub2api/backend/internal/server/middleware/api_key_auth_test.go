@@ -1792,3 +1792,31 @@ func (r *stubUserSubscriptionRepo) IncrementUsage(ctx context.Context, id int64,
 func (r *stubUserSubscriptionRepo) BatchUpdateExpiredStatus(ctx context.Context) (int64, error) {
 	return 0, errors.New("not implemented")
 }
+
+func TestSatelliteAccountRequest(t *testing.T) {
+	for _, path := range []string{
+		"/v1/sub2api/billing",
+		"/v1/sub2api/balance",
+		"/v1/sub2api/usage",
+		"/v1/sub2api/available-channels",
+		"/v1/sub2api/channel-monitors/9/status",
+		"/v1/sub2api/payment/orders",
+		"/v1/sub2api/subscriptions",
+		"/v1/sub2api/affiliate/transfer",
+		"/v1/sub2api/orders/12/cancel",
+		"/v1/sub2api/api-keys",
+		"/v1/sub2api/redeem",
+		"/v1/sub2api/redeem/history",
+		"/v1/sub2api/auth-identities/bind/start",
+	} {
+		require.True(t, satelliteAccountRequest(path), path)
+	}
+	for _, path := range []string{
+		"/v1/messages",
+		"/v1/usage",
+		"/v1/sub2api/api-keys/extra",
+		"/v1/sub2api/billing-extra",
+	} {
+		require.False(t, satelliteAccountRequest(path), path)
+	}
+}

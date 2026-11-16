@@ -138,6 +138,23 @@ func OpenAIImagesEndpointFromContext(ctx context.Context) bool {
 	return ok && enabled
 }
 
+// WithOpenAIAsyncImagesEndpoint 标记请求由异步图片任务 worker 执行。
+func WithOpenAIAsyncImagesEndpoint(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, ctxkey.OpenAIAsyncImagesEndpoint, true)
+}
+
+// OpenAIAsyncImagesEndpointFromContext 报告请求是否来自异步图片任务 worker。
+func OpenAIAsyncImagesEndpointFromContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	enabled, ok := ctx.Value(ctxkey.OpenAIAsyncImagesEndpoint).(bool)
+	return ok && enabled
+}
+
 func resolveFinalAntigravityModelKey(ctx context.Context, account *Account, requestedModel string) string {
 	modelKey := mapAntigravityModel(account, requestedModel)
 	if modelKey == "" {

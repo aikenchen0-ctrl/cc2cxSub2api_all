@@ -92,10 +92,11 @@ Open http://localhost:5173 to use the app.
 
 ### Sub2API single sign-on
 
-Sub2API deployments use the public model `gpt-6-astra` for screenshot and text
+Sub2API deployments use the public model `grok-4.7` for screenshot and text
 code generation, including subsequent edits. Variants retain high and low
-reasoning effort; the API model name is always `gpt-6-astra`. Raw video input is
-not supported by this model and requires frame extraction before generation.
+reasoning effort; the API model name is `grok-4.7`. `gpt-6-astra` remains
+available and is not renamed. Raw video input is not supported and requires
+frame extraction before generation.
 
 The hosted deployment can use Sub2API as its identity provider. Configure the
 same random `SUB2API_SSO_SECRET` (at least 32 characters) in both services,

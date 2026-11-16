@@ -36,6 +36,10 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
     "gpt-6-astra": ModelPricing(
         input=10.00, output=50.00, cache_read=1.00, cache_write=12.50
     ),
+    # grok-4.7 follows the Sub2API Grok 4.6 card until a separate card is published.
+    "grok-4.7": ModelPricing(
+        input=2.00, output=6.00, cache_read=0.50
+    ),
     # --- Anthropic ---
     # Verified against platform.claude.com/docs/en/about-claude/pricing on
     # 2026-07-24. cache_write is the 5-minute cache-write rate (1.25x input).

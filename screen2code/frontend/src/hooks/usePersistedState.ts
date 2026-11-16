@@ -2,11 +2,16 @@ import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 
 type PersistedState<T> = [T, Dispatch<SetStateAction<T>>];
 
-function usePersistedState<T>(defaultValue: T, key: string): PersistedState<T> {
+function usePersistedState<T>(
+  defaultValue: T,
+  key: string,
+  migrate?: (value: T) => T
+): PersistedState<T> {
   const [value, setValue] = useState<T>(() => {
-    const value = window.localStorage.getItem(key);
-
-    return value ? (JSON.parse(value) as T) : defaultValue;
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return defaultValue;
+    const parsed = JSON.parse(stored) as T;
+    return migrate ? migrate(parsed) : parsed;
   });
 
   useEffect(() => {

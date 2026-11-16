@@ -30,6 +30,7 @@ export type AiConfig = {
     imageModel: string;
     videoModel: string;
     textModel: string;
+    textDefaultMigrated?: boolean;
     audioModel: string;
     audioVoice: string;
     audioFormat: string;
@@ -102,7 +103,7 @@ export const defaultConfig: AiConfig = {
     model: "gpt-image-2",
     imageModel: "gpt-image-2",
     videoModel: "grok-imagine-video-1.5",
-    textModel: "gpt-6-astra",
+    textModel: "grok-4.7",
     audioModel: "gpt-4o-mini-tts",
     audioVoice: "alloy",
     audioFormat: "mp3",
@@ -422,6 +423,10 @@ export const useConfigStore = create<ConfigStore>()(
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
                 const config = { ...defaultConfig, ...persistedConfig };
+                if (persistedState.config && persistedConfig.textDefaultMigrated !== true && config.textModel === "gpt-6-astra") {
+                    config.textModel = defaultConfig.textModel;
+                }
+                config.textDefaultMigrated = true;
                 const localChannels = normalizeLocalChannels(config);
                 const localModels = normalizeModelList(localChannels.flatMap((channel) => channel.models));
                 const mergedConfig = {

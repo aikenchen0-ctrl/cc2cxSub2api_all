@@ -278,7 +278,12 @@ func normalizeSub2APIBaseURL(raw string) (string, error) {
 func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 	textModels := splitCSV(os.Getenv("SUB2API_RELAY_MODELS"))
 	if len(textModels) == 0 {
-		textModels = []string{firstNonEmpty(strings.TrimSpace(os.Getenv("SUB2API_RELAY_MODEL")), "gpt-6-astra")}
+		single := strings.TrimSpace(os.Getenv("SUB2API_RELAY_MODEL"))
+		if single != "" {
+			textModels = []string{single}
+		} else {
+			textModels = []string{"grok-4.7", "gpt-6-astra"}
+		}
 	}
 	imageModels := splitCSV(os.Getenv("SUB2API_RELAY_IMAGE_MODELS"))
 	videoModels := splitCSV(os.Getenv("SUB2API_RELAY_VIDEO_MODELS"))

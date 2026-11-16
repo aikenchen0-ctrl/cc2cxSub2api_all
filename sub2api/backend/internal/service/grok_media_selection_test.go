@@ -108,3 +108,37 @@ func TestGrokVideoStickySelectionIgnoresHealthEscape(t *testing.T) {
 	require.True(t, selection.Acquired)
 	selection.ReleaseFunc()
 }
+
+func TestGrokVideoOwnerBindingSurvivesLegacyStickyOverwrite(t *testing.T) {
+	groupID := int64(24)
+	cache := &schedulerTestGatewayCache{}
+	svc := &OpenAIGatewayService{cache: cache}
+	ctx := context.Background()
+
+	require.NoError(t, svc.BindGrokMediaVideoRequestAccount(ctx, &groupID, "task-owner", 10, 20, 77))
+	bound, err := svc.ResolveGrokMediaVideoRequestAccount(ctx, &groupID, "task-owner", 10, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(77), bound)
+
+	// A generic sticky write with the legacy key must not replace the owner.
+	legacyKey := svc.openAISessionCacheKey(GrokMediaVideoRequestSessionHash("task-owner", 10, 20))
+	require.NoError(t, cache.SetSessionAccountID(ctx, groupID, legacyKey, 88, time.Hour))
+
+	bound, err = svc.ResolveGrokMediaVideoRequestAccount(ctx, &groupID, "task-owner", 10, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(77), bound)
+}
+
+func TestGrokVideoOwnerBindingFallsBackToLegacyForOldTasks(t *testing.T) {
+	groupID := int64(24)
+	cache := &schedulerTestGatewayCache{}
+	svc := &OpenAIGatewayService{cache: cache}
+	ctx := context.Background()
+
+	legacyKey := svc.openAISessionCacheKey(GrokMediaVideoRequestSessionHash("old-task", 10, 20))
+	require.NoError(t, cache.SetSessionAccountID(ctx, groupID, legacyKey, 91, time.Hour))
+
+	bound, err := svc.ResolveGrokMediaVideoRequestAccount(ctx, &groupID, "old-task", 10, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(91), bound)
+}

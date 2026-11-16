@@ -771,3 +771,76 @@ AI3D：登录态 `/api/3d/health` 返回 `hunyuan.configured=true`、`mode=cloud
 备份与回滚：旧镜像 `local-deploy/sub2api:home-v3-20261028-1415`（`sha256:08e741b9fa97d1115521407ef6d0d9e529319579a064968d017870527d6e3dce`）保留；容器 `docker inspect` 快照 `.local/sub2api-skills-20261029/sub2api-before.json`；数据卷停写备份 `.local/sub2api-skills-20261029/sub2api-data-before.tgz`。回滚覆盖文件为 `.local/sub2api-skills-20261029/sub2api.rollback.json`。
 
 未执行：未登录本地实例做页面点击验证（本地库中不存在线上测试账号）；未部署到公网；未重建依赖容器与其他卫星。
+## 2026-11-02 本地业务全量启动
+
+范围：按本次要求启动既有本地部署，包含 1 个 Sub2API 主站、11 个卫星、1 个 AgentAPI 代理站，共 13 个项目入口、16 个应用容器、6 个依赖容器。未从源码重建镜像，未重建容器，未改动环境、凭据、端口、网络或数据卷。`sub2api-cost-console/` 及已有 `cost-console`、`cost-console-postgres`、`cost-console-redis` 排除，未停止或更新；仓库外容器未纳入。
+
+操作：Docker Desktop 引擎原先未运行。启动引擎后，既有容器按重启策略起来；随后执行 `scripts/Start-LocalDocker.ps1`。归因探测仍在主站内，未单独建容器。
+
+运行镜像未更换：主站 `local-deploy/sub2api:skills-20261029-1449`；11 个卫星应用容器为 `local-deploy/<service>:redeploy-20261024-1645`；代理站 `local-deploy/agentapi:20261028-141550`。
+
+验收：13 个首页均返回 200（18080、5199、4173、5174、3001、3522、3000、8080、8341、5221、5173、8081、18081）。`/health` 与 `/admin/upstream-audit` 返回 200，AgentAPI `/health` 返回 200。已配置健康检查的依赖和应用容器均为 `healthy`，`livart-minio-1` 无健康检查但在运行。`ju-backend-1` 启动时重启 1 次，当前 `healthy`，`/api/health/ready` 返回 200；日志中的 `runtime_policy` 缺失为既有查询，不影响本次启动。
+
+未执行：未做 SSO 登录、余额、票据重放或付费模型生成验收；未修改冻结的 `qrcode/`；未执行 `docker compose down -v`。
+## 2026-11-06 公网 Sub2API 支付盗刷修复覆盖部署
+
+范围：按用户本次要求只部署主应用 Sub2API 1 个项目、2 个应用容器（`sub2api` 与公网网关 `sub2api-scheduling-20261009`）；11 个卫星 0 个、AgentAPI 0 个、依赖容器 0 个重建。`sub2api-postgres`、`sub2api-redis` 容器 ID 与 `StartedAt` 均未变化；仓库外容器、CRM 容器、Nginx 配置、审计代理配置、`sub2api-cost-console/` 参考项目全部排除。
+
+前置核对：`docs/线上Docker部署验收-20260928.md` 与本文 2026-10-28 记录已确认公网 `cc2.cx` / `api.cc2.cx` 的 443 入口经 `00-cc2-audit-map.conf` 的 `$cc2_gateway_backend` 指向 `127.0.0.1:28080`，实际由容器 `sub2api-scheduling-20261009`（Compose 项目 `cc2-scheduling`、服务 `gateway`）承载。支付回调 `POST /api/v1/payment/webhook/easypay` 走同一条 `location /` 链路，因此只更新名为 `sub2api` 的容器不会让线上支付修复生效；本轮把两个实例覆盖到同一新镜像。这两个容器都是 Sub2API 应用容器，不属于“其他应用”或依赖数据库。
+
+发布产物：`cc2cx/sub2api:20261106-1739`（镜像 ID `sha256:8fc3445572c6f49a6764f1b5182b0b8f37d163eab8ff446d9138431b20db0e4f`，linux/amd64，47,006,895 字节），部署到 `sub2api`（`0.0.0.0:8080→8080`）与 `sub2api-scheduling-20261009`（`127.0.0.1:28080→8080`），两者均 `running/healthy`、`RestartCount=0`。镜像 tar 为 `/opt/cc2cx-production/sub2api-20261106-1739.tar`，SHA256 `f656eab6801242f794c5fe13994d5fc3360a775fde8d2bd2d51c4300f55b1ad8`，线上 `sha256sum` 与本地一致。
+
+本次包含的支付修复（相对线上原镜像 `cc2cx/sub2api:20261028-1635`）：EasyPay 通知参数白名单 `easyPayNotifyAllowedParams`，拒绝 `return_url` 等下单期字段，关闭“用下单签名回放伪造 `trade_status=TRADE_SUCCESS`”的盗刷路径；`VerifyNotification` 增加 `pid` 校验；新增 `NotificationConfirmer`，webhook 在入账前用 `api.php?act=order` 复核上游订单状态、金额（容差 0.005）与 `trade_no`。`service.CanonicalizeReturnURL` 丢弃客户端提供的 query。代码位置：`sub2api/backend/internal/payment/provider/easypay.go`、`sub2api/backend/internal/payment/types.go`、`sub2api/backend/internal/handler/payment_webhook_handler.go`、`sub2api/backend/internal/service/payment_resume_service.go`。
+
+构建与测试：本机 `docker build --platform linux/amd64 -t cc2cx/sub2api:20261106-1739 sub2api` 成功，镜像内完成 `pnpm build`（含 i18n 完整性测试）与 Go 编译。`sub2api/backend` 下 `go test ./internal/payment/... ./internal/handler/ ./internal/service/ ./internal/server/middleware/ -count=1` 全部通过，覆盖新增的 `easypay_confirm_test.go`、`easypay_notify_security_test.go`、`payment_notification_confirm_test.go`。
+
+部署前备份：`/opt/cc2cx-production/sub2api-backup-20261106-1739`（`container-before.json`、`sub2api.compose.before.json`、`sub2api-image.before.json`、`runtime.env.before`、`docker-compose.postgres-redis.before.yml`、39 个容器名与 ID 基线、`sub2api-db-before.dump` 216 MB 的 `pg_dump -Fc`）；`/opt/cc2cx-production/gateway-backup-20261106-1739`（网关容器切换前后快照、启动日志）。部署前数据库 3284 MB、`schema_migrations` 295 行。旧镜像保留标签 `cc2cx-backup/sub2api:20261106-1739` 与 `cc2cx-backup/sub2api:gateway-before-20261106-1739`，两者均指向原 `sha256:1b56afa6...`。
+
+逐项核对：`sub2api` 112 项环境变量哈希、端口绑定、挂载（`/opt/sub2api-deploy/data`）、网络（`sub2api-deploy_sub2api-network`）、`no-new-privileges`、`ulimits`、重启策略切换前后完全一致；网关容器 116 项环境变量、端口、挂载（`scheduling-20261009/candidate-data`）、网络、`Cmd`/`Entrypoint`、`ulimits`、重启策略同样一致。两个容器均为新建（仅它们 Created 时间为 2026-11-06），其余 37 个运行容器的容器 ID 无一变化，无新增/缺失容器。PostgreSQL/Redis 容器 ID 与启动时间保持不变。
+
+功能验收：`https://api.cc2.cx/health`、`/login`、`/api/v1/settings/public`、`https://cc2.cx/` 均 200；`/v1/models` 无 Key 返回 401 `API_KEY_REQUIRED`；`/admin/upstream-audit` 200；`/api/v1/auth/integrations/{agentapi,canvas,ju,ppt,aicut}/start` 未登录均 401（预期）；审计代理 `127.0.0.1:18489/openai/chat/completions` 返回网关 401，且网关日志记录到该请求。公网首页引用 `/assets/index-BWLPxFGJ.js`（本次构建产物，`upstream-audit` 字样存在）。
+
+支付链路实测（仅发送伪造/无效请求，未伪造真实入账）：`POST /api/v1/payment/webhook/easypay` 带 `return_url` 的伪造回调经公网返回 400，网关日志为 `[Payment Webhook] verify failed ... error="unexpected notify param: return_url"`；仅含白名单字段但签名错误返回 400 `invalid signature`；`/api/v1/payment/public/orders/verify` 空体返回 400 字段校验。新二进制内确认存在 `unexpected notify param`、`easypay confirm: amount mismatch`、`upstream confirmation failed` 三处新增符号。
+
+回滚：覆盖文件已生成并校验可解析——`/opt/cc2cx-production/release-20261009/sub2api-image-rollback-20261106-1739.override.json`（解析为 `cc2cx-backup/sub2api:20261106-1739`）与 `/opt/cc2cx-production/scheduling-20261009/gateway-rollback-20261106-1739.override.json`（解析为 `cc2cx-backup/sub2api:gateway-before-20261106-1739`）。命令：
+
+```bash
+docker compose -p cc2-scheduling \
+  -f /opt/cc2cx-production/scheduling-20261009/candidate.compose.json \
+  -f /opt/cc2cx-production/scheduling-20261009/gateway-rollback-20261106-1739.override.json \
+  up -d --no-deps --no-build --force-recreate gateway
+
+docker compose -p sub2api-deploy \
+  -f /opt/cc2cx-production/release-20261009/sub2api.compose.json \
+  -f /opt/cc2cx-production/release-20261009/sub2api-image-rollback-20261106-1739.override.json \
+  up -d --no-deps --no-build --force-recreate sub2api
+```
+
+本次未新增数据库迁移（切换前后 `schema_migrations` 均为 295 行，最新为 `247_retire_agent_provisioning.sql`），因此回滚只需回退镜像，不必恢复数据库。业务数据计数：`users=425`、`api_keys=26876`、`agent_shared_tenants=19`、`payment_orders=544`。
+
+本地证据：`.local/sub2api-deploy-20261106/`（构建日志与 tar、覆盖与回滚文件、备份/部署/验收脚本）。未执行：未用真实支付渠道发起支付或退款，未验证真实商户回调的完整入账；未重建任何卫星、AgentAPI、PostgreSQL、Redis 或其他仓库外容器；未修改 Nginx 与审计代理配置；未执行 `docker compose down -v`。部署后根分区剩余约 4.5 GB（98%），本次未做镜像清理。
+
+## 2026-11-10 本地 Sub2API 模型广场修复覆盖部署（14:39）
+
+本次仅覆盖本地主站：1 个主站、0 个卫星、0 个代理站、1 个应用容器（`sub2api`）、0 个依赖容器。卫星、AgentAPI、参考 Cost Console 与仓库外容器均排除；`sub2api-postgres` / `sub2api-redis` 仅复用未重建。
+
+修复两处模型广场问题：
+
+- 分组模型枚举改为「目录口径」：新增 `AccountRepository.ListCatalogModelCandidates`（忽略账号 `status` 与 `schedulable`，只保留未删除 + 平台范围），`ModelPlazaService.ListGroups` 通过可选接口 `plazaCatalogAccountLister` 优先调用，仓储未实现时回退原可用性口径。此前账号处于 `error`（如上游余额不足）会让整组模型从广场消失：组 10「文生图」13 个账号全为 `error`，整组不可见。
+- 缓存价统一在 DTO 层清空：`toModelPlazaGroupDTO` 改为对**所有**模型调用 `stripPlazaCachePricing`（实付与官方两侧、含分档区间与倍率），前端 `PlazaModelPricingTable.vue` 删除缓存 `<th>`/`<td>` 与相关 helper，表头由 8 列改为 6 列。
+
+构建与部署：`docker build --platform linux/amd64 --build-arg GOPROXY=https://goproxy.cn,direct --build-arg NPM_CONFIG_REGISTRY=https://registry.npmmirror.com -t local-deploy/sub2api:plaza3-20261110-1435 sub2api` 成功（镜像内完成 `pnpm build`，含 i18n 完整性检查与 `vue-tsc` 类型检查）。使用基础 Compose `.local/sub2api-oneclick-20261026-1022/sub2api.compose.json` 加镜像覆盖 `.local/sub2api-plaza-20261110/sub2api3.override.json`，执行 `docker compose -p deploy ... up -d --no-deps --no-build --force-recreate sub2api`。容器 `sub2api` 为 `running/healthy`、`RestartCount=0`、`0.0.0.0:18080 -> 8080`，数据卷仍为 `deploy_sub2api_data -> /app/data`，环境变量与挂载较部署前逐项一致。
+
+顺带修复构建上下文污染：`sub2api/.dockerignore` 原先的 `dist/` 只匹配顶层目录，遗漏 `backend/internal/web/dist/`，导致工作区里 2026-10-28 的过期前端产物进入构建上下文；Dockerfile 先 `COPY backend/ ./` 再叠加新前端产物，镜像内因此同时存在新旧两份 `ModelPlazaView` chunk（旧 chunk 仍可被访问且含缓存列）。已加入 `backend/internal/web/dist/` 忽略规则，重建后镜像内只剩当前 chunk。
+
+验收：
+
+- `GET http://127.0.0.1:18080/api/v1/model-plaza`：26 个分组、611 个模型，带缓存价的模型 0 个（部署前 25 个分组 / 502 个模型 / 499 个带缓存价）。
+- 组 10「文生图」回归（47 个模型：34 text + 9 image + 4 video），组 13「图片」2 个 image、组 11「视频」108 个模型（含 14 video / 8 image）均在列。
+- 仅无账号无渠道的空分组（20「claude max 无fable」、21「国模聚合」、25「国模聚合glm5.3」）保持隐藏。
+- 线上前端产物 `ModelPlazaView-DxKHWksA.js` 无 `cacheWriteShort` / `table.cache` 引用、`w-[30%]` 生效；旧 chunk `ModelPlazaView-CVJ5KgvN.js` 已从镜像移除。
+- 后端 `go build ./...` 通过；`go test -tags unit ./internal/handler/ ./internal/service/ ./internal/repository/ -run "Plaza|ModelPlaza|Catalog|ModelAvailability"` 全绿；前端 `vitest run src/components/modelPlaza` 34/34 通过，`pnpm run check:i18n` 通过。
+
+未执行：未动线上 `api.cc2.cx`（另一套部署）；未重建任何卫星、AgentAPI、PostgreSQL、Redis 或其他仓库外容器；未执行 `docker compose down -v`。既有失败与本次无关：`internal/repository` 的 `TestPgDumper*` 依赖 `sh`（Windows 无此命令），`internal/handler`/`internal/service` 的 `TestGrokMediaVideoLookupOnlyRetriesSameAccount`、`TestGatewayService_GroupResolution_*`、`TestOllamaProbeCallback_StaleLongDoesNotOverrideNewShort` 来自仓库中既有的网关/grok_media 改动。
+
+本地证据：`.local/sub2api-plaza-20261110/`（`build*.log`、`deploy*.log`、`tag*.txt`、`sub2api*.override.json`、`env-before.txt`、`mounts-before.json`、`old-image-id.txt`）。回滚：`docker compose -p deploy -f .local/sub2api-oneclick-20261026-1022/sub2api.compose.json -f <旧的 bilfix 覆盖> up -d --no-deps --no-build --force-recreate sub2api`（部署前镜像 `local-deploy/sub2api:bilfix-20261110-1215`，ID `sha256:41bb5d32852f`）。

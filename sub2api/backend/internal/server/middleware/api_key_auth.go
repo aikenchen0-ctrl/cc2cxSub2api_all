@@ -225,20 +225,13 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		}
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
-		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
-		accountBalanceRequest := c.Request.URL.Path == "/v1/sub2api/balance"
-		satelliteUsageRequest := c.Request.URL.Path == "/v1/sub2api/usage"
-		satelliteAvailableChannelsRequest := c.Request.URL.Path == "/v1/sub2api/available-channels"
-		satelliteChannelMonitorRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/channel-monitors")
-		satellitePaymentRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/payment")
-		satelliteSubscriptionsRequest := c.Request.URL.Path == "/v1/sub2api/subscriptions"
-		satelliteAffiliateRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/affiliate")
-		satelliteOrdersRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/sub2api/orders")
-		satelliteRedeemRequest := c.Request.URL.Path == "/v1/sub2api/redeem" || c.Request.URL.Path == "/v1/sub2api/redeem/history"
+		// Account routes manage the signed-in user. They are not model calls, so a
+		// zero balance must not block creating an API key or starting an identity bind.
+		accountRequest := satelliteAccountRequest(c.Request.URL.Path)
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || accountBalanceRequest || satelliteUsageRequest || satelliteAvailableChannelsRequest || satelliteChannelMonitorRequest || satellitePaymentRequest || satelliteSubscriptionsRequest || satelliteAffiliateRequest || satelliteOrdersRequest || satelliteRedeemRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := c.Request.URL.Path == "/v1/usage" || accountRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -250,7 +243,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			})
 			c.Set(string(ContextKeyUserRole), apiKey.User.Role)
 			setGroupContext(c, apiKey.Group)
-			if !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
+			if !accountRequest {
 				_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 			}
 			c.Next()
@@ -263,7 +256,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 
 		// 倍率/余额自省不需要订阅数据；/v1/usage 仍保留原有订阅读取行为。
-		if isSubscriptionType && subscriptionService != nil && !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
+		if isSubscriptionType && subscriptionService != nil && !accountRequest {
 			sub, subErr := subscriptionService.GetActiveSubscription(
 				c.Request.Context(),
 				apiKey.User.ID,
@@ -348,7 +341,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		})
 		c.Set(string(ContextKeyUserRole), apiKey.User.Role)
 		setGroupContext(c, apiKey.Group)
-		if !billingInfoRequest && !accountBalanceRequest && !satelliteUsageRequest && !satelliteAvailableChannelsRequest && !satelliteChannelMonitorRequest && !satellitePaymentRequest && !satelliteSubscriptionsRequest && !satelliteAffiliateRequest && !satelliteOrdersRequest && !satelliteRedeemRequest {
+		if !accountRequest {
 			_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 		}
 
@@ -463,6 +456,26 @@ func setGroupContext(c *gin.Context, group *service.Group) {
 // apiKeyBalanceBelowAuthThreshold 保持鉴权层的历史语义：仅在余额耗尽（<=0）时拒绝。
 // MinimumBalanceReserve 只作为 billing-cache 预检的保守下限，不得复用为鉴权硬门槛，
 // 否则已配置该值的存量部署升级后，0 < balance < reserve 的用户会在所有端点被静默 403。
+
+func satelliteAccountRequest(path string) bool {
+	switch path {
+	case "/v1/sub2api/billing",
+		"/v1/sub2api/balance",
+		"/v1/sub2api/usage",
+		"/v1/sub2api/available-channels",
+		"/v1/sub2api/subscriptions",
+		"/v1/sub2api/api-keys",
+		"/v1/sub2api/redeem",
+		"/v1/sub2api/redeem/history":
+		return true
+	}
+	return strings.HasPrefix(path, "/v1/sub2api/channel-monitors") ||
+		strings.HasPrefix(path, "/v1/sub2api/payment") ||
+		strings.HasPrefix(path, "/v1/sub2api/affiliate") ||
+		strings.HasPrefix(path, "/v1/sub2api/orders") ||
+		strings.HasPrefix(path, "/v1/sub2api/auth-identities")
+}
+
 func apiKeyBalanceBelowAuthThreshold(balance float64, _ *config.Config) bool {
 	return balance <= 0
 }

@@ -7,13 +7,13 @@ import { normalizeVisionInsight } from '../server/providers/vision.mjs'
 const ALLOWED_CATEGORIES = new Set(['artifact', 'road', 'vessel', 'aircraft', 'product', 'specimen'])
 
 describe('视觉模型默认值', () => {
-  it('托管模式默认使用可调度的 gpt-6-astra，而不是已下线的 gpt-5.5', () => {
-    assert.equal(DEFAULT_SUB2API_RELAY_MODEL, 'gpt-6-astra')
+  it('托管模式默认使用 grok-4.7，显式覆盖仍保留', () => {
+    assert.equal(DEFAULT_SUB2API_RELAY_MODEL, 'grok-4.7')
 
     const previous = process.env.SUB2API_RELAY_MODEL
     try {
       delete process.env.SUB2API_RELAY_MODEL
-      assert.equal(managedRelayModel(), 'gpt-6-astra')
+      assert.equal(managedRelayModel(), 'grok-4.7')
 
       // 部署方仍可显式覆盖。
       process.env.SUB2API_RELAY_MODEL = 'gpt-5.6-sol'
@@ -21,7 +21,7 @@ describe('视觉模型默认值', () => {
 
       // 空白值不应把模型名清空，否则上游会收到空 model 字段。
       process.env.SUB2API_RELAY_MODEL = '   '
-      assert.equal(managedRelayModel(), 'gpt-6-astra')
+      assert.equal(managedRelayModel(), 'grok-4.7')
     } finally {
       if (previous === undefined) delete process.env.SUB2API_RELAY_MODEL
       else process.env.SUB2API_RELAY_MODEL = previous

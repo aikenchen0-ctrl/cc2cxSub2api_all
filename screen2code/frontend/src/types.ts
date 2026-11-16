@@ -21,6 +21,8 @@ export interface Settings {
   editorTheme: EditorTheme;
   generatedCodeConfig: Stack;
   codeGenerationModel: CodeGenerationModel;
+  // Set after the one-time default migration from gpt-6-astra high to grok-4.7 high.
+  textDefaultMigrated?: boolean;
   selectedDesignSystemId: string | null;
   // Only relevant for hosted version
   isTermOfServiceAccepted: boolean;

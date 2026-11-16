@@ -79,6 +79,64 @@ func TestOpenAIContinuationSafetyRejectedReasoningRecovery(t *testing.T) {
 	}
 }
 
+func TestPlanOpenAIContinuationRecovery(t *testing.T) {
+	rejected := map[string]struct{}{openAIEncryptedContentDigest("stale"): {}}
+	for _, tc := range []struct {
+		name        string
+		body        string
+		rejected    map[string]struct{}
+		sameAccount bool
+		want        OpenAIContinuationPlan
+	}{
+		{
+			name: "plain_replay",
+			body: `{"input":[{"role":"user","content":"hello"}]}`,
+			want: ContinuationReplayExact,
+		},
+		{
+			name:        "same_account_rejected_cipher",
+			body:        `{"input":[{"type":"reasoning","encrypted_content":"stale","summary":[{"type":"summary_text","text":"keep"}]},{"type":"input_text","text":"hello"}]}`,
+			rejected:    rejected,
+			sameAccount: true,
+			want:        ContinuationStripRejectedCipherOnly,
+		},
+		{
+			name:     "cross_account_replayable_cipher",
+			body:     `{"input":[{"type":"reasoning","encrypted_content":"stale","id":"rs_1","summary":[{"type":"summary_text","text":"keep"}]},{"role":"user","content":"hello"}]}`,
+			rejected: rejected,
+			want:     ContinuationStripProviderCipherKeep,
+		},
+		{
+			name:     "previous_response_requires_local_rebuild",
+			body:     `{"previous_response_id":"resp_old","input":[{"type":"reasoning","encrypted_content":"stale"},{"type":"input_text","text":"hello"}]}`,
+			rejected: rejected,
+			want:     ContinuationRebuildFromLocalHistory,
+		},
+		{
+			name:     "opaque_compaction_is_unsafe",
+			body:     `{"input":[{"type":"compaction","encrypted_content":"stale"},{"role":"user","content":"hello"}]}`,
+			rejected: rejected,
+			want:     ContinuationUnsafeAcrossAccount,
+		},
+		{
+			name:     "remote_reference_is_unsafe",
+			body:     `{"input":[{"type":"reasoning","encrypted_content":"stale"},{"type":"item_reference","id":"item_old"},{"role":"user","content":"hello"}]}`,
+			rejected: rejected,
+			want:     ContinuationUnsafeAcrossAccount,
+		},
+		{
+			name:     "cipher_without_anchor_is_unsafe",
+			body:     `{"input":[{"type":"reasoning","encrypted_content":"stale"}]}`,
+			rejected: rejected,
+			want:     ContinuationUnsafeAcrossAccount,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, PlanOpenAIContinuationRecovery([]byte(tc.body), tc.rejected, tc.sameAccount))
+		})
+	}
+}
+
 func TestOpenAIWSReplayHistoryRequiresKnownParent(t *testing.T) {
 	payload := []byte(`{"previous_response_id":"resp_parent","input":"delta"}`)
 	replay := []json.RawMessage{

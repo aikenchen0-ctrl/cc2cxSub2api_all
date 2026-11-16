@@ -122,7 +122,7 @@ routeTest("rejects a missing app credential without contacting the upstream", as
   assertNoFetch();
 });
 
-routeTest("defaults to gpt-6-astra and binds normalized relay requests to the Session user", async () => {
+routeTest("defaults to grok-4.7 and binds normalized relay requests to the Session user", async () => {
   const urls = [
     { relay: undefined, link: "localhost:18080////", expected: "http://localhost:18080/v1/chat/completions" },
     { relay: "https://relay.test/v1///", link: "ignored.test", expected: "https://relay.test/v1/chat/completions" },
@@ -143,7 +143,7 @@ routeTest("defaults to gpt-6-astra and binds normalized relay requests to the Se
         "x-sub2api-satellite": "aiexcel",
       });
       const payload = JSON.parse(init.body);
-      assert.equal(payload.model, "gpt-6-astra");
+      assert.equal(payload.model, "grok-4.7");
       assert.equal(payload.reasoning_effort, "low");
       assert.deepEqual(payload.response_format, { type: "json_object" });
       assert.deepEqual(JSON.parse(payload.messages.at(-1).content), {
