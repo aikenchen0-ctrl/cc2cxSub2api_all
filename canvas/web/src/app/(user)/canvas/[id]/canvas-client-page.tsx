@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, Download, Globe2, Home, ImageIcon, Images, L
 import { saveAs } from "file-saver";
 
 import { deleteCanvasProjects, deleteCanvasTasks } from "@/services/api/canvas-tasks";
-import { createCanvasImageTask, pollCanvasImageTaskStatus, requestImageQuestion, type CanvasImageTask } from "@/services/api/image";
+import { CANVAS_IMAGE_TASK_MAX_WAIT_MS, createCanvasImageTask, pollCanvasImageTaskStatus, requestImageQuestion, type CanvasImageTask } from "@/services/api/image";
 import { createCanvasAudioTask, pollCanvasAudioTaskStatus, type CanvasAudioTask } from "@/services/api/audio";
 import { createVideoGenerationTask, pollVideoGenerationTaskStatus, VIDEO_POLL_INTERVAL_MS, type VideoResponse } from "@/services/api/video";
 import { channelProtocolForConfig, defaultConfig, resolveModelForCapability, type AiConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
@@ -448,6 +448,7 @@ function InfiniteCanvasPage({ projectId }: { projectId: string }) {
     const pendingConnectionCreateRef = useRef(pendingConnectionCreate);
     const pollingVideoNodeIdsRef = useRef(new Set<string>());
     const pollingImageNodeIdsRef = useRef(new Set<string>());
+    const imagePollFailuresRef = useRef(new Map<string, number>());
     const pollingAudioNodeIdsRef = useRef(new Set<string>());
     const hasLoadingTimedNodes = nodes.some((node) => node.metadata?.status === NODE_STATUS_LOADING && !node.metadata.content && (node.type === CanvasNodeType.Video || isCanvasImageNodeType(node.type) || node.type === CanvasNodeType.Audio));
 
@@ -635,10 +636,19 @@ function InfiniteCanvasPage({ projectId }: { projectId: string }) {
                 pollingImageNodeIdsRef.current.add(node.id);
                 void pollCanvasImageTaskStatus(node.metadata.imageTaskId)
                     .then((task) => {
+                        imagePollFailuresRef.current.delete(node.id);
                         setNodes((prev) => applyCanvasImageTaskUpdate(prev, node.id, task, node.metadata?.startedAt || Date.now(), { width: node.width, height: node.height }));
                         setConnections((prev) => applyCanvasImageTaskConnections(prev, node.id, task));
                     })
-                    .catch(() => undefined)
+                    .catch((error: unknown) => {
+                        const failures = (imagePollFailuresRef.current.get(node.id) || 0) + 1;
+                        imagePollFailuresRef.current.set(node.id, failures);
+                        if (failures < 3) return;
+                        imagePollFailuresRef.current.delete(node.id);
+                        setNodes((prev) => prev.map((item) => item.id === node.id && item.metadata?.status === NODE_STATUS_LOADING && item.metadata.imageTaskId === node.metadata?.imageTaskId
+                            ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails: `读取图片任务失败：${error instanceof Error ? error.message : "请稍后重试"}` } }
+                            : item));
+                    })
                     .finally(() => {
                         pollingImageNodeIdsRef.current.delete(node.id);
                     });
@@ -5230,10 +5240,11 @@ function applyCanvasImageTaskUpdate(nodes: CanvasNodeData[], nodeId: string, tas
         const completed = canvasTaskCompleted(task.status) || Boolean(url);
         const failed = canvasTaskFailed(task.status) || (completed && !url);
         const taskStartedAt = parseCanvasTaskTime(task.started_at ?? task.startedAt ?? task.created_at ?? task.createdAt) || startedAt;
+        const timedOut = !completed && !failed && Date.now() - taskStartedAt >= CANVAS_IMAGE_TASK_MAX_WAIT_MS;
         const metadata: CanvasNodeMetadata = {
             ...node.metadata,
-            status: failed ? NODE_STATUS_ERROR : completed ? NODE_STATUS_SUCCESS : NODE_STATUS_LOADING,
-            errorDetails: failed ? task.error?.message || "图片生成失败" : undefined,
+            status: failed || timedOut ? NODE_STATUS_ERROR : completed ? NODE_STATUS_SUCCESS : NODE_STATUS_LOADING,
+            errorDetails: timedOut ? "图片生成超时，请检查任务结果后再重试" : failed ? task.error?.message || "图片生成失败" : undefined,
             startedAt: taskStartedAt,
             durationMs: Date.now() - taskStartedAt,
             progress,

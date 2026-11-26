@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tigerowo/infinite-canvas/model"
 	"github.com/tigerowo/infinite-canvas/service"
@@ -246,6 +248,20 @@ type aiLogContext struct {
 }
 
 func copyAIResponse(w http.ResponseWriter, request *http.Request, channel model.ModelChannel, logContext aiLogContext, onFailure func()) {
+	// Refuse to call a relay URL that cannot be the model gateway. A panel
+	// origin or an /api/v1 base silently becomes /api/v1/v1/... and the panel
+	// answers with its HTML login page instead of an API error.
+	if service.IsSub2APIChannel(channel) {
+		if err := service.ValidateSub2APIRequestURL(request.URL.String()); err != nil {
+			log.Printf("AI proxy rejected relay URL: url=%s err=%v", request.URL.String(), err)
+			if onFailure != nil {
+				onFailure()
+			}
+			saveAIProxyLog(logContext, http.StatusBadGateway, "", err.Error())
+			FailWithStatus(w, http.StatusBadGateway, "模型网关地址配置错误："+err.Error())
+			return
+		}
+	}
 	response, err := service.HTTPClientForChannel(channel).Do(request)
 	if err != nil {
 		log.Printf("AI proxy request failed: url=%s err=%v", request.URL.String(), err)
@@ -270,6 +286,44 @@ func copyAIResponse(w http.ResponseWriter, request *http.Request, channel model.
 			status = http.StatusBadGateway
 		}
 		FailWithStatus(w, status, readUpstreamAIErrorMessage(payload, response.StatusCode))
+		return
+	}
+
+	// A redirect (302 to a login page, or to another host) is never a model
+	// answer either. The relay client intentionally does not follow redirects.
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+		location := redactedURLLocation(response.Header.Get("Location"))
+		log.Printf("AI upstream redirected instead of answering: url=%s status=%d location=%s", request.URL.String(), response.StatusCode, location)
+		if onFailure != nil {
+			onFailure()
+		}
+		message := fmt.Sprintf("上游把请求重定向到其他页面（HTTP %d），通常是未登录或网关地址配置错误；请检查模型网关地址与凭据", response.StatusCode)
+		if location != "" {
+			message += "（跳转目标：" + location + "）"
+		}
+		saveAIProxyLog(logContext, http.StatusBadGateway, "", message)
+		FailWithStatus(w, http.StatusBadGateway, message)
+		return
+	}
+
+	// Upstream 2xx bodies are expected to be API payloads. A wrong base URL,
+	// an expired panel session, or a proxy in front of the gateway can answer
+	// with an HTML login page instead; parsing that page as JSON only reports
+	// `invalid character '<'` after the fact, so fail fast and stay explicit.
+	bodyReader := bufio.NewReaderSize(response.Body, 32*1024)
+	response.Body = struct {
+		io.Reader
+		io.Closer
+	}{bodyReader, response.Body}
+	if isUpstreamWebPage(response, bodyReader) {
+		page, _ := io.ReadAll(io.LimitReader(bodyReader, 64*1024))
+		message := nonAPIWebPageMessage(channel, page)
+		log.Printf("AI upstream returned a web page instead of an API payload: url=%s status=%d contentType=%q title=%q", request.URL.String(), response.StatusCode, response.Header.Get("Content-Type"), htmlPageTitle(page))
+		if onFailure != nil {
+			onFailure()
+		}
+		saveAIProxyLog(logContext, http.StatusBadGateway, string(page), message)
+		FailWithStatus(w, http.StatusBadGateway, message)
 		return
 	}
 
@@ -311,6 +365,89 @@ func copyAIResponseBody(w http.ResponseWriter, body io.Reader, capture bool) str
 			return logBuffer.String()
 		}
 	}
+}
+
+// redactedURLLocation keeps a redirect target identifiable without leaking
+// query strings that may carry session tokens.
+func redactedURLLocation(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "[relative]"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+// isUpstreamWebPage reports whether a 2xx upstream response is a web page
+// (typically a panel login page) instead of an API payload.
+func isUpstreamWebPage(response *http.Response, reader *bufio.Reader) bool {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(response.Header.Get("Content-Type")))
+	if err == nil {
+		switch strings.ToLower(mediaType) {
+		case "text/html", "application/xhtml+xml":
+			return true
+		}
+	}
+	if isStreamingUpstreamContentType(strings.ToLower(mediaType)) {
+		// Never block an event stream or a binary download to sniff its prefix.
+		return false
+	}
+	head, _ := reader.Peek(64)
+	return looksLikeWebPageBody(head)
+}
+
+func isStreamingUpstreamContentType(mediaType string) bool {
+	return mediaType == "text/event-stream" ||
+		mediaType == "application/octet-stream" ||
+		mediaType == "application/zip" ||
+		strings.HasPrefix(mediaType, "video/") ||
+		strings.HasPrefix(mediaType, "audio/") ||
+		strings.HasPrefix(mediaType, "image/")
+}
+
+func looksLikeWebPageBody(head []byte) bool {
+	trimmed := bytes.TrimLeft(bytes.TrimSpace(head), "\xef\xbb\xbf")
+	return len(trimmed) > 0 && trimmed[0] == '<'
+}
+
+func htmlPageTitle(page []byte) string {
+	lower := bytes.ToLower(page)
+	start := bytes.Index(lower, []byte("<title"))
+	if start < 0 {
+		return ""
+	}
+	open := bytes.IndexByte(lower[start:], '>')
+	if open < 0 {
+		return ""
+	}
+	content := page[start+open+1:]
+	if end := bytes.Index(bytes.ToLower(content), []byte("</title>")); end >= 0 {
+		content = content[:end]
+	}
+	title := strings.Join(strings.Fields(string(content)), " ")
+	if utf8.RuneCountInString(title) > 60 {
+		title = string([]rune(title)[:60]) + "…"
+	}
+	return title
+}
+
+func nonAPIWebPageMessage(channel model.ModelChannel, page []byte) string {
+	title := htmlPageTitle(page)
+	reason := "上游返回的是网页而不是接口数据"
+	if title != "" {
+		reason = fmt.Sprintf("上游返回的是网页「%s」而不是接口数据", title)
+	}
+	if service.IsSub2APIChannel(channel) {
+		return reason + "：请检查 SUB2API_RELAY_BASE_URL 是否指向模型网关（如 https://api.cc2.cx 或 http://sub2api:8080/v1），确认应用凭据未失效，不要指向面板首页或登录页。"
+	}
+	return reason + "：请检查该渠道 Base URL 是否为 /v1 接口地址，以及上游登录凭据是否已失效。"
 }
 
 func saveAIProxyLog(context aiLogContext, status int, responseBody string, errorMessage string) {

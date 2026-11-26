@@ -153,7 +153,7 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="space-y-6">
+  <main class="agent-page">
     <header>
       <p class="text-sm text-primary-600 dark:text-primary-400">AgentAPI</p>
       <h1 class="text-2xl font-semibold text-accent-950 dark:text-white">API 密钥</h1>

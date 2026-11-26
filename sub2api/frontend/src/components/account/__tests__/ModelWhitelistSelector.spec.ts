@@ -153,6 +153,42 @@ describe('ModelWhitelistSelector', () => {
     expect(showSuccess).not.toHaveBeenCalled()
   })
 
+  it('warns with the upstream error when the live model list fell back to configured models', async () => {
+    syncUpstreamModels.mockResolvedValue({
+      models: ['gpt-5'],
+      warnings: [
+        {
+          code: 'upstream_model_list_unavailable',
+          message: 'Upstream model list is unavailable (HTTP 403 INSUFFICIENT_BALANCE); models were taken from the configured mapping.'
+        }
+      ]
+    })
+    const wrapper = mount(ModelWhitelistSelector, {
+      props: {
+        modelValue: [],
+        platform: 'openai',
+        accountId: 47
+      },
+      global: {
+        stubs: {
+          ModelIcon: true
+        }
+      }
+    })
+
+    const syncButton = wrapper
+      .findAll('button')
+      .find(button => button.text() === 'admin.accounts.syncUpstreamModels')
+    expect(syncButton).toBeDefined()
+    await syncButton!.trigger('click')
+    await flushPromises()
+
+    expect(showWarning).toHaveBeenCalledWith(
+      'Upstream model list is unavailable (HTTP 403 INSUFFICIENT_BALANCE); models were taken from the configured mapping.'
+    )
+    expect(showSuccess).not.toHaveBeenCalled()
+  })
+
   it('shows success and a partial warning when some capabilities were saved', async () => {
     syncUpstreamModels.mockResolvedValue({
       models: ['gpt-6-astra', 'gpt-image-2'],

@@ -88,8 +88,11 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// Skip API routes
-		if shouldBypassEmbeddedFrontend(path) {
+		// Skip API routes. Non-navigational methods must never receive the SPA
+		// shell: answering e.g. POST /v1/images/generations or a mistyped API
+		// path with index.html (HTTP 200) made API clients parse the login page
+		// as JSON and report "invalid character '<'".
+		if shouldBypassEmbeddedFrontend(path) || !isFrontendNavigationMethod(c.Request.Method) {
 			c.Next()
 			return
 		}
@@ -311,7 +314,7 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		if shouldBypassEmbeddedFrontend(path) {
+		if shouldBypassEmbeddedFrontend(path) || !isFrontendNavigationMethod(c.Request.Method) {
 			c.Next()
 			return
 		}
@@ -350,6 +353,17 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 	c.File(filePath)
 	c.Abort()
 	return true
+}
+
+// isFrontendNavigationMethod limits the SPA fallback to browser navigation so
+// API clients always get a real 404 instead of a 200 HTML login page.
+func isFrontendNavigationMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldBypassEmbeddedFrontend(path string) bool {

@@ -52,11 +52,11 @@
           <button
             type="button"
             class="btn btn-secondary whitespace-nowrap"
-            data-test="download-image-video-client"
-            @click="requestWindowsDownload(WINDOWS_DESKTOP_CLIENTS.imageVideo)"
+            data-test="download-image-skill"
+            @click="downloadFrontendFile(IMAGE_SKILL_DOWNLOAD)"
           >
             <Icon name="sparkles" size="md" class="mr-2" />
-            {{ t('keys.desktopDownloads.imageVideo') }}
+            {{ t(IMAGE_SKILL_DOWNLOAD.labelKey) }}
           </button>
           <button
             type="button"
@@ -1264,7 +1264,9 @@ import {
   type CcSwitchClientType
 } from '@/utils/ccswitchImport'
 import {
+  IMAGE_SKILL_DOWNLOAD,
   WINDOWS_DESKTOP_CLIENTS,
+  downloadFrontendFile,
   downloadWindowsDesktopClient,
   type WindowsDesktopClientDownload
 } from '@/utils/desktop-downloads'

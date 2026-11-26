@@ -282,7 +282,7 @@ func configuredSub2APIModels() ([]sub2APIRelayModel, error) {
 		if single != "" {
 			textModels = []string{single}
 		} else {
-			textModels = []string{"grok-4.7", "gpt-6-astra"}
+			textModels = []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol"}
 		}
 	}
 	imageModels := splitCSV(os.Getenv("SUB2API_RELAY_IMAGE_MODELS"))

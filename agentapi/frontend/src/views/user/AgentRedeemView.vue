@@ -46,7 +46,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-3xl space-y-4">
+  <main class="agent-page-narrow">
     <header>
       <p class="text-sm font-medium text-primary-600 dark:text-primary-300">REDEEM</p>
       <h1 class="mt-1 text-2xl font-bold">兑换</h1>
@@ -54,11 +54,11 @@ onMounted(() => void load())
     </header>
     <p v-if="error" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</p>
     <p v-if="notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ notice }}</p>
-    <section class="card flex flex-col gap-3 p-4 sm:flex-row">
+    <section class="card flex flex-col gap-3 p-5 sm:flex-row">
       <input v-model="code" class="input" maxlength="64" placeholder="输入兑换码" aria-label="兑换码">
       <button class="btn btn-primary" type="button" :disabled="saving || code.trim().length < 4" @click="submit">兑换到当前账户</button>
     </section>
-    <section class="card p-4">
+    <section class="card p-5 sm:p-6">
       <h2 class="font-semibold">我的兑换记录</h2>
       <p v-if="loading" class="mt-4 text-sm text-gray-500">正在读取记录…</p>
       <ul v-else class="mt-3 divide-y divide-gray-100 text-sm dark:divide-dark-700">

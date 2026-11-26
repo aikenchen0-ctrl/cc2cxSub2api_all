@@ -1,5 +1,5 @@
 <template>
-  <div class="card p-4">
+  <div class="card h-full p-5 sm:p-6">
     <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">令牌用量趋势</h3>
     <div v-if="loading" class="flex h-48 items-center justify-center"><LoadingSpinner /></div>
     <div v-else-if="hasObservedData && chartData" class="h-48"><Line :data="chartData" :options="lineOptions" /></div>

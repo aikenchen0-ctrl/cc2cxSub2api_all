@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const normalizedBaseUrl = configuredBaseUrl.includes("://") ? configuredBaseUrl : `http://${configuredBaseUrl}`;
     const baseUrl = normalizedBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
     if (!process.env.SUB2API_APP_CREDENTIAL?.trim()) return NextResponse.json({ error: "服务端尚未配置 SUB2API_APP_CREDENTIAL" }, { status: 503 });
-    const model = process.env.SUB2API_RELAY_MODEL?.trim() || "grok-4.7";
+    const model = process.env.SUB2API_RELAY_MODEL?.trim() || "gpt-6.1-sol";
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: satelliteHeaders(user.sub),

@@ -106,7 +106,7 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="space-y-6">
+  <main class="agent-page">
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold text-accent-950 dark:text-white">用量记录</h1>
@@ -115,7 +115,7 @@ onMounted(load)
       <button class="btn btn-secondary" type="button" :disabled="loading" @click="load">刷新</button>
     </header>
     <AgentUsageInsights />
-    <form class="card p-6" @submit.prevent="applyFilters">
+    <form class="card p-5 sm:p-6" @submit.prevent="applyFilters">
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div class="flex flex-1 flex-wrap items-end gap-4">
           <div class="w-full sm:w-auto sm:min-w-[220px]"><label for="usage-model" class="input-label">模型（精确匹配）</label><AgentInput id="usage-model" v-model="model" maxlength="256" /></div>

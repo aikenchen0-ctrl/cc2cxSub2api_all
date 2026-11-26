@@ -232,6 +232,28 @@
     @apply transition-all duration-300;
   }
 
+  /* Layout primitives shared by every console page. Pages should use these
+     instead of re-adding their own outer padding inside AppLayout. */
+  .agent-page {
+    @apply mx-auto w-full max-w-7xl space-y-6;
+  }
+
+  .agent-page-narrow {
+    @apply mx-auto w-full max-w-3xl space-y-6;
+  }
+
+  .agent-section-stack {
+    @apply space-y-6;
+  }
+
+  .agent-card-grid {
+    @apply grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .agent-stat-grid {
+    @apply grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4;
+  }
+
   .card-hover {
     @apply hover:-translate-y-0.5 hover:shadow-card-hover;
     @apply hover:border-primary-300 dark:hover:border-primary-700;
@@ -246,21 +268,21 @@
 
   .card-header {
     @apply border-b border-accent-200/70 dark:border-dark-700;
-    @apply px-6 py-4;
+    @apply px-5 py-4 sm:px-6;
   }
 
   .card-body {
-    @apply p-6;
+    @apply p-5 sm:p-6;
   }
 
   .card-footer {
     @apply border-t border-accent-200/70 dark:border-dark-700;
-    @apply px-6 py-4;
+    @apply px-5 py-4 sm:px-6;
   }
 
   /* ============ 统计卡片 ============ */
   .stat-card {
-    @apply card p-5;
+    @apply card h-full p-5 sm:p-6;
     @apply flex items-start gap-4;
   }
 

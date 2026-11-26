@@ -154,7 +154,7 @@ class UserApiConfigServiceTest {
     }
 
     @Test
-    void unknownChatModelFallsBackToGpt55() {
+    void unknownChatModelFallsBackToSol() {
         UUID userId = UUID.randomUUID();
         UserApiConfigMapper mapper = mock(UserApiConfigMapper.class);
         UserApiConfigEntity existingEntity = entity(userId, "https://api.example/v1", "sk-existing");
@@ -174,8 +174,8 @@ class UserApiConfigServiceTest {
         UserApiConfigDtos.Response response = service.getConfig(userId);
         UserApiConfigDtos.ResolvedConfig resolvedConfig = service.getRequiredConfig(userId);
 
-        assertThat(response.chatModel()).isEqualTo("grok-4.7");
-        assertThat(resolvedConfig.chatModel()).isEqualTo("grok-4.7");
+        assertThat(response.chatModel()).isEqualTo("gpt-6.1-sol");
+        assertThat(resolvedConfig.chatModel()).isEqualTo("gpt-6.1-sol");
     }
 
     private static UserApiConfigService service(UserApiConfigMapper mapper, String baseUrl, String apiKey) {

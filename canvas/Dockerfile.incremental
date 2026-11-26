@@ -1,0 +1,7 @@
+FROM cc2cx/canvas:20261117-flare2
+
+COPY server /app/server.tmp
+COPY web-standalone/ /app/web/
+COPY web-static/ /app/web/.next/static/
+
+RUN chmod +x /app/server.tmp && mv /app/server.tmp /app/server

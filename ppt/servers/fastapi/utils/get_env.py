@@ -291,15 +291,28 @@ def get_custom_model_env():
 
 def sub2api_text_model(model: str | None) -> str:
     # Persisted image/video selections cannot serve chat-based outline requests.
-    text_models = {"grok-4.7", "gpt-5.5", "gpt-5.6-sol", "gpt-5.4-mini", "gpt-5.6-luna", "deepseek-chat"}
+    text_models = {
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6.1-terra",
+        "gpt-6.2-astra",
+        "gpt-6.2-sol",
+        "grok-4.7",
+        "gpt-5.5",
+        "gpt-5.6-sol",
+        "gpt-5.4-mini",
+        "gpt-5.6-luna",
+        "deepseek-chat",
+    }
     selected = (model or "").strip()
     configured = os.getenv("SUB2API_MODEL", "").strip()
-    # The previous product default is not an explicit choice unless SUB2API_MODEL names it.
-    if selected == "gpt-5.6-sol" and not configured:
-        return "grok-4.7"
+    # Previous product defaults are treated as unset unless SUB2API_MODEL names them.
+    if selected in {"gpt-5.6-sol", "grok-4.7", "gpt-6-astra"} and selected != configured:
+        return configured if configured in text_models else "gpt-6.1-sol"
     if selected in text_models:
         return selected
-    return configured if configured in text_models else "grok-4.7"
+    return configured if configured in text_models else "gpt-6.1-sol"
 
 
 def get_pexels_api_key_env():

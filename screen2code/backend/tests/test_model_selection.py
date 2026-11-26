@@ -186,7 +186,7 @@ class TestModelSelectionOpenAIOnly:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("input_mode", ["text", "image"])
     async def test_openai_only(self, input_mode):
-        """OpenAI only: grok-4.7 high/low, then retained gpt-6-astra variants."""
+        """OpenAI only: gpt-6.1-sol defaults, then the other published GPT-6 names."""
         models = await self.model_selector.select_models(
             generation_type="create",
             input_mode=input_mode,
@@ -196,17 +196,27 @@ class TestModelSelectionOpenAIOnly:
         )
 
         expected = [
-            Llm.GROK_4_7_HIGH,
-            Llm.GROK_4_7_LOW,
+            Llm.GPT_6_1_SOL_HIGH,
+            Llm.GPT_6_1_SOL_LOW,
             Llm.GPT_6_ASTRA_HIGH,
             Llm.GPT_6_ASTRA_LOW,
+            Llm.GPT_6_SOL_HIGH,
+            Llm.GPT_6_SOL_LOW,
+            Llm.GPT_6_1_TERRA_HIGH,
+            Llm.GPT_6_1_TERRA_LOW,
+            Llm.GPT_6_2_ASTRA_HIGH,
+            Llm.GPT_6_2_ASTRA_LOW,
+            Llm.GPT_6_2_SOL_HIGH,
+            Llm.GPT_6_2_SOL_LOW,
+            Llm.GROK_4_7_HIGH,
+            Llm.GROK_4_7_LOW,
         ]
         assert models == expected
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("input_mode", ["text", "image"])
     async def test_openai_only_update_uses_two_gpt_6_variants(self, input_mode):
-        """OpenAI-only updates use the first two variants: grok-4.7 high and low."""
+        """OpenAI-only updates use the first two variants: gpt-6.1-sol high and low."""
         models = await self.model_selector.select_models(
             generation_type="update",
             input_mode=input_mode,
@@ -215,12 +225,12 @@ class TestModelSelectionOpenAIOnly:
             gemini_api_key=None,
         )
 
-        assert models == [Llm.GROK_4_7_HIGH, Llm.GROK_4_7_LOW]
+        assert models == [Llm.GPT_6_1_SOL_HIGH, Llm.GPT_6_1_SOL_LOW]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("generation_type", ["create", "update"])
     async def test_openai_only_video_uses_gpt_6(self, generation_type):
-        """Satellite / OpenAI-only video input stays at two grok-4.7 variants."""
+        """Satellite / OpenAI-only video input stays at the two gpt-6.1-sol variants."""
         models = await self.model_selector.select_models(
             generation_type=generation_type,
             input_mode="video",
@@ -230,8 +240,8 @@ class TestModelSelectionOpenAIOnly:
         )
 
         expected = [
-            Llm.GROK_4_7_HIGH,
-            Llm.GROK_4_7_LOW,
+            Llm.GPT_6_1_SOL_HIGH,
+            Llm.GPT_6_1_SOL_LOW,
         ]
         assert models == expected
 

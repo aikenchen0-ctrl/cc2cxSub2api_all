@@ -844,3 +844,107 @@ docker compose -p sub2api-deploy \
 未执行：未动线上 `api.cc2.cx`（另一套部署）；未重建任何卫星、AgentAPI、PostgreSQL、Redis 或其他仓库外容器；未执行 `docker compose down -v`。既有失败与本次无关：`internal/repository` 的 `TestPgDumper*` 依赖 `sh`（Windows 无此命令），`internal/handler`/`internal/service` 的 `TestGrokMediaVideoLookupOnlyRetriesSameAccount`、`TestGatewayService_GroupResolution_*`、`TestOllamaProbeCallback_StaleLongDoesNotOverrideNewShort` 来自仓库中既有的网关/grok_media 改动。
 
 本地证据：`.local/sub2api-plaza-20261110/`（`build*.log`、`deploy*.log`、`tag*.txt`、`sub2api*.override.json`、`env-before.txt`、`mounts-before.json`、`old-image-id.txt`）。回滚：`docker compose -p deploy -f .local/sub2api-oneclick-20261026-1022/sub2api.compose.json -f <旧的 bilfix 覆盖> up -d --no-deps --no-build --force-recreate sub2api`（部署前镜像 `local-deploy/sub2api:bilfix-20261110-1215`，ID `sha256:41bb5d32852f`）。
+
+## 2026-11-18 公网 Sub2API SKILL 下载静态增量发布（16:22，Asia/Shanghai）
+
+范围：按用户确认的安装包，仅更新 Sub2API 主站 1 个项目、2 个应用容器的持久化静态文件（`sub2api` 与实际承载公网的 `sub2api-scheduling-20261009`）。卫星 0 个、AgentAPI 代理站 0 个、依赖容器 0 个；参考 Cost Console、仓库外容器全部排除。本次为静态增量发布，镜像构建 0 次、容器重建 0 个；两实例继续使用 `cc2cx/sub2api:20261106-1739`，镜像 ID `sha256:8fc3445572c6f49a6764f1b5182b0b8f37d163eab8ff446d9138431b20db0e4f`。
+
+安装包：用户明确确认 `sub2api/frontend/public/downloads/genimg-skill.zip` 就是所需文件。大小 10,126 字节，SHA-256 为 `efc4530ef73432dbadb410a0005509ee9ffa9e16dacd0bb007070f4e3825dd5e`，内含 `sub2api-image/SKILL.md`、`INSTALL.md`、`agents/openai.yaml`、`scripts/image_api.py` 共 4 个文件。`python sub2api/skills/package-sub2api-image.py --check` 通过；其技能说明、配置和脚本与工作区 `genimg-skill/` 目录一致，安装文档为仓库打包说明版本。
+
+发布前，线上 `KeysView-CkKihF1g.js` 的 SKILL 按钮实际下载 Infinite Canvas Windows 安装程序，两个候选 ZIP 地址均被 SPA 回退为 HTML。本次针对线上既有编译文件做最小替换：将该按钮改为直接保存 `genimg-skill.zip`；补丁内嵌上述 ZIP 的原始字节，以 Blob 下载，保证直接访问 Docker 的 8080 入口时也能取得相同文件。保留 CC-Launch 下载按钮及其他页面逻辑。应用现有的 `data/public` 静态覆盖机制读取补丁，无需替换 Go 二进制。
+
+持久化文件分别位于 `/opt/sub2api-deploy/data/public/` 与 `/opt/cc2cx-production/scheduling-20261009/candidate-data/public/`：各包含 `assets/KeysView-CkKihF1g.js` 和 `downloads/genimg-skill.zip`，在两容器中均映射为 `/app/data/public/`。补丁 JS 为 121,723 字节，SHA-256 `bc5682a5aeea68b016016b783b56156927ebdb9def62b4a99f4860e172c1ad46`。Nginx 新增 `/etc/nginx/snippets/sub2api-skill-download.conf`，仅在 `cc2-apps.conf` 的 `api.cc2.cx` 与 `cc2.cx` 两个 HTTPS server 中包含，为 `/downloads/genimg-skill.zip` 提供精确静态下载，返回 `application/zip`、附件文件名和 `Cache-Control: no-store`。配置校验通过后执行平滑 reload。
+
+验收：
+
+- Windows 外网请求两个域名的 `/downloads/genimg-skill.zip` 均返回 HTTP 200、正确 ZIP MIME 与附件文件名，完整字节 SHA-256 与本地确认包一致，ZIP 校验通过。
+- 无头浏览器分别加载 `https://api.cc2.cx/keys`、`https://cc2.cx/keys` 和 `http://38.175.201.140:8080/keys` 的真实线上页面与脚本，点击 SKILL，三次均保存为 `genimg-skill.zip`，10,126 字节，哈希一致，页面脚本错误 0 个。测试使用隔离浏览器上下文，用户身份、密钥列表等 API 均由浏览器夹具拦截模拟；未登录真实用户，也未修改真实 API 密钥。
+- 本地 `KeysView.spec.ts` 27/27 通过；部署补丁通过 JavaScript 语法检查和下载字节校验；截图确认 API 密钥页面 SKILL 按钮可见、布局正常。
+- 两主站容器均 `running/healthy`、`RestartCount=0`。全部 39 个现有容器的 ID、镜像、启动时间、重启次数、环境变量哈希、挂载和端口绑定均与发布前一致；挂载列表按目标路径排序后比较，避免 Docker 返回顺序导致误判。
+
+缓存与后续升级：本次沿用线上既有 JS 文件名，已有浏览器可能仍缓存旧脚本，应在 API 密钥页面按 `Ctrl+F5` 强制刷新一次。以后发布完整主站镜像时，应同步或移除这次 `data/public/assets/KeysView-CkKihF1g.js` 覆盖及 Nginx 精确下载片段，并核对持久化 ZIP 与新镜像安装包，避免旧包优先于内嵌新版。仓库已有的 `frontend/public/downloads/genimg-skill.zip` 和对应源代码仍是后续完整构建的来源。
+
+备份与回滚：最终发布目录为 `/opt/cc2cx-production/sub2api-skill-download-20261118T082211Z/`，包含受限权限的原配置、原始/补丁 JS、安装包、文件回滚状态、脱敏容器快照和验收结果。首次发布因挂载列表顺序误判自动回滚，已核对所有文件还原且实际容器配置无变化，修正比较方式后完成本次最终发布。回滚命令会先核对部署后文件哈希，若存在后续改动则拒绝覆盖：
+
+```bash
+python3 /opt/cc2cx-production/sub2api-skill-download-20261118T082211Z/remote_deploy.py --rollback
+```
+
+本地证据：`.local/sub2api-skill-download-20261118/`，包含发布脚本、文件清单、发布结果、浏览器下载原件、截图与检查日志；脚本通过临时环境变量取得 SSH 密码，记录中不含密码。未执行真实账号登录、付费生成、支付或数据库迁移；未重建或重启应用、数据库、Redis、卫星或代理站容器。
+
+## 2026-11-18 公网 Sub2API 客服 QQ 展示配置（18:19，Asia/Shanghai）
+
+范围：仅调整 Sub2API 主站 1 个项目的现有展示配置；通过 `sub2api` 与 `sub2api-scheduling-20261009` 两实例的原生管理员设置接口更新并刷新各自的 HTML 注入缓存。卫星 0 个、AgentAPI 代理站 0 个；应用容器重建/重启 0 个、依赖容器更新 0 个。参考 Cost Console 与仓库外应用排除。本次无需构建镜像或修改前端代码。
+
+检查结果：未在主站前端发现独立站内投诉表单；已有 `contact_info` 客服联系方式和 `PAYMENT_HELP_TEXT` 充值帮助配置均为空。按用户提供的 QQ 账号，设置：
+
+- `contact_info`：`客服 QQ：3502037911`，由现有右上角用户菜单、个人资料等入口展示；兑换页沿用同一配置字段。
+- `PAYMENT_HELP_TEXT`：标题「支付与售后咨询」，突出显示 `客服 QQ：3502037911`，正文为「如遇充值未到账、支付异常，或需要订单、退款咨询，请联系上述 QQ，并提供订单号及支付凭证，便于核实处理。」充值/订阅页面 `/purchase` 使用原生帮助区域渲染。
+
+更新方式：使用线上既有管理员集成凭据，仅在服务器内存中读取并通过回环地址调用原生 `PUT /api/v1/admin/settings`，不生成新凭据，不把管理密钥发往浏览器。已确认运行版本支持省略字段保留现值；更新前后逐项比较设置值，实际仅 `contact_info` 和 `PAYMENT_HELP_TEXT` 两项变化。支付商户配置、退款规则、回调和收费逻辑均保持原值。
+
+验收：两个公网域名 `api.cc2.cx` / `cc2.cx` 及两个实例的公开设置、HTML 注入配置均返回新 QQ；两实例的原生管理员支付配置均返回新帮助文案。浏览器验证桌面端与 390px 手机端的个人资料页、用户菜单及充值页均显示联系信息，无页面脚本错误，充值页无横向溢出。个人资料及用户菜单读取真实线上公开配置；为避免操作真实账号，浏览器身份、订单等接口使用隔离测试夹具，充值帮助文本取自已回读核对的实际支付配置，未发起支付或退款。
+
+运行与回归：全部 39 个现有容器的 ID、镜像、启动时间、重启次数和健康状态均与操作前一致；两个主站实例持续健康。两个公网 SKILL 下载地址仍返回原 `genimg-skill.zip`，SHA-256 `efc4530ef73432dbadb410a0005509ee9ffa9e16dacd0bb007070f4e3825dd5e`，此前下载修复继续生效。
+
+备份与回滚：服务器目录 `/opt/cc2cx-production/sub2api-contact-20261118T101934Z/` 保存原展示值、设置值哈希、容器快照、请求字段与验收结果，目录及文件均限制权限。本地证据 `.local/sub2api-contact-20261118/` 包含脱敏结果和浏览器截图。回滚命令：
+
+```bash
+python3 /opt/cc2cx-production/sub2api-contact-20261118T101934Z/remote_configure.py --rollback
+```
+
+用户刷新页面即可读取新配置；已打开的页面可能仍使用会话内缓存。此次未修改源代码、第三方支付页面或任何投诉处理机制。
+
+## 2026-11-23 线上 Grok CLI 兼容修复与 135 个 OAuth 账号逐项复测
+
+范围：Sub2API 主站 1 个项目、2 个应用容器：管理端 `sub2api`（8080）及实际模型调度网关 `sub2api-scheduling-20261009`（28080）。卫星 0 个、AgentAPI 代理站 0 个、依赖容器重建 0 个。Cost Console 与仓库外应用排除。
+
+先对比用户提供的 `C:/Users/kodesh/Downloads/sub2api-0.2.24`，确认新版已将 Grok CLI 默认版本从 `0.2.120` 升为 `1.0.46`，最低支持版本改为 `1.0.13`，客户端标识改为 `grok-pager`、模式统一为 `interactive`，并更新 User-Agent 与共享传输层请求头。只移植这些 Grok 调用兼容修改及相关测试，未整体升级到 0.2.24。
+
+使用线上源码基线构建 Linux 二进制，复用既有主站镜像、前端与运行配置，生成 `cc2cx/sub2api:20261123-grok1046`。二进制版本 `0.2.4-grok-1.0.46`，构建标识 `grok-backport-0.2.24`，SHA-256 `82307d0b37e88863feb40e885e9dddbfe4fd8f9e40df8747a0a91a7ce9bf1a85`。两个容器仅通过指定服务、`--no-deps --no-build --force-recreate` 重建，环境变量指纹、挂载、端口、网络、启动配置及前端入口资源核对一致；数据库、账号配置及静态覆盖保留。线上源码 `/opt/cc2cxSub2api_all/sub2api` 同步 8 个相关文件的修改，其他代码保留；修改前逐项校验、备份，修改后校验实际文件哈希。
+
+验证：Grok CLI、请求头、传输层及服务相关测试通过。管理端将原先均返回 426 的 135 个 Grok OAuth 账号逐个串行测试，`grok-4.7` 文字生成 **135/135 成功，失败 0，版本过旧错误 0**。调度网关另抽首、中、末 3 个账号，**3/3 成功**。两实例健康，两个公网域名 `api.cc2.cx`、`cc2.cx` 的 `/health` 均返回 HTTP 200。本次未验证图片、视频、语音与所有其他模型；原生账号测试可能自动记录额度快照及临时运行状态。
+
+证据：本地 `.local/grok-update-20261123/` 保存补丁、构建产物哈希、部署日志、源码清单、`Grok升级与逐项复测报告.md` 与完整 JSON；服务器 `/opt/cc2cx-production/grok-update-20261123/` 保存容器前后快照、Compose 覆盖、源码原件 `source-before.tar.gz`、应用哈希清单及逐项复测结果。修复前全部上游检查报告保留在 `.local/upstream-audit-20261123/`，作为历史状态。
+
+回滚依据：管理端原镜像为 `cc2cx/sub2api:20261120-htmlpage`，固定备份标签 `cc2cx-backup/sub2api:sub2api-before-grok-20261123`；调度端原镜像为 `cc2cx/sub2api:20261120-modelsync2`，固定备份标签 `cc2cx-backup/sub2api:sub2api-scheduling-20261009-before-grok-20261123`。两个服务的实际 Compose 命令分别保存在服务器备份目录的 `sub2api-compose-command.json` 和 `sub2api-scheduling-20261009-compose-command.json`；需要回滚时在对应命令后追加仅覆盖该服务备份镜像的 override，再仅重建该服务，保留数据与配置。
+
+## 2026-11-23 线上 JU 菜单登录故障恢复
+
+范围：JU 卫星 1 个；只读核对 Sub2API 主站菜单与 SSO 入口，主站部署 0 个、AgentAPI 代理站 0 个。JU 的 2 个应用容器未重建或重启；仅启动原有 `cc2cx-ju-sso-redis` 依赖容器 1 个，保留原镜像、容器 ID、网络和持久卷。其余 10 个卫星、AgentAPI、Cost Console 及仓库外应用排除。本次没有应用源码或运行配置变更。
+
+根因：JU 首页和 `/projects` 能返回 HTTP 200，但登录回调 `/api/auth/sso/callback` 返回 HTTP 503。JU 后端的 `REDIS_URL` 正确指向 `cc2cx-ju-sso-redis`，两端 SSO 密钥指纹一致；Redis 容器已退出，Docker 保留错误为 `no space left on device`，健康记录也包含磁盘不足导致的 OCI 执行失败。检查时根盘可用空间不足 1 GiB。菜单地址、SSO 回调地址和前后端反向代理没有发现对应配置错误。
+
+处理：启动原 Redis 容器，等待其完成原 AOF 加载并通过 `PING` 与健康检查；随后清理 Docker 标记可回收、超过 24 小时未访问的旧构建缓存，保留约 3 GB 构建缓存空间，命令报告回收 5.761 GB。未执行镜像清理、卷清理或全量重新部署。处理后根盘可用空间约 6.2 GiB，实际使用率约 96.8%；空间仍紧张，后续需要容量治理或扩容。Redis 的 AOF 最近写入、AOF 重写和 RDB 保存状态均为 `ok`。
+
+验收：使用原生管理员用户接口创建余额为 0 的临时普通测试账号，经原生登录接口建立浏览器登录态，在独立无头浏览器上下文分别打开 `api.cc2.cx` 与 `cc2.cx`，点击真实侧栏 JU 链接；两次均观察到主站 SSO 启动 302、JU 回调 302、JU SSO 交换 200，最终到达 `https://ju.cc2.cx/projects`，`/api/auth/session` 返回 200 且业务码为 0。浏览器脚本错误均为 0，登录 Cookie 为 Secure + HttpOnly、期限 3 天，重复使用同一 ticket 被拒绝。零余额测试账号显示余额不足提示符合预期；本次未调用收费模型，未验证文本、图片或视频生成。临时主站账号经原生接口删除，JU 对应测试身份、会话、自动创建的积分账户及活动记录已限定到该测试身份清理；清理前备份其记录，不涉及真实用户业务数据。
+
+最终核对 40 个既有容器，只有 JU Redis 的运行状态、启动时间、重启计数和健康状态发生变化，全部容器的 ID、镜像和挂载均保持不变。JU 前后端与 Redis 均健康，JU 工作台、JU 健康端点及两个主站健康端点均返回 HTTP 200。未修改用户工作区原有未提交代码。
+
+证据：本地 `.local/ju-menu-fix-20261123/` 保存浏览器验证脚本、两个入口的截图、`browser-result.json` 和 `verification.json`；服务器 `/opt/cc2cx-production/ju-menu-fix-20261123/` 保存前后容器快照、脱敏验收结果、测试清理结果及受限权限的测试记录备份。SSH 密码只通过临时进程环境传入，未写入脚本或报告；临时测试账号密码文件已在测试完成后删除。此次恢复沿用既有容器与数据卷，无新增应用镜像或配置需要回滚；删除的构建缓存可在后续构建时重新生成。
+
+## 2026-11-23 移除 AI 一键复刻网站邮箱同意门槛
+
+范围：仅 screen2code（AI 一键复刻网站）前端 1 个卫星、1 个应用容器；后端、Sub2API 主站、其他 10 个卫星、AgentAPI 代理站及所有依赖均未更新。保留 SSO、三天 Secure/HttpOnly 会话、余额校验、端口、网络、挂载与环境值。
+
+在 `App.tsx` 移除旧 `TermsOfServiceDialog` 的导入、状态回调和页面入口，不再要求邮箱或把邮箱发送至旧表单服务；没有预置“已同意”状态。旧设置字段保留以兼容现有本地配置。基于线上已修复的 Vite 6.4.6 构建镜像生成 `cc2cx/screen2code-frontend:20261123-no-email`，以静态 Nginx 资源发布，避免重新开放 Vite 开发服务器。更新两个线上源码副本及现有 Compose image overrides，仅重建指定前端服务；保留回滚镜像与配置备份。
+
+验收：`api.cc2.cx` 与 `cc2.cx` 各通过真实侧栏 SSO。无邮箱输入框、邮箱同意弹窗或外部表单请求；预置旧 `isTermOfServiceAccepted=false` 仍可进入上传工作区。零余额提示仍按原逻辑显示，关闭提示后上传文件控件正常；页面脚本错误和 Vite overlay 均为 0，未调用生成 API。两入口会话期限约 259,190 秒，安全属性仍为 Secure + HttpOnly。生产构建成功；构建容器 lint 与已保存基线完全一致（既有 19 errors / 6 warnings），没有新增问题。Windows 本地未安装该前端的 `node_modules`，所以本地 `pnpm lint` 无法启动。最终容器对照仅 `cc2cx-screen2code-frontend` 发生变化，其余 39 个容器 ID、镜像和启动时间保持不变。临时普通测试用户与 screen2code 测试身份/会话均已删除。
+
+证据与回滚：本地 `.local/screen2code-no-email-20261123/` 保存精确补丁、浏览器脚本、截图、验证结果和部署脚本；服务器 `/opt/cc2cx-production/screen2code-no-email-20261123/` 保存容器快照、原源码及 Compose 备份、构建与测试日志。原镜像备份标签为 `cc2cx-backup/screen2code-frontend:before-no-email-20261123`。没有改动支付、账户余额或其他项目。
+
+## 2026-11-23 三个卫星前端 Vite 故障与恶意安装载荷修复
+
+范围：aicut、screen2code 前端、aihuoke 前端，共 3 个卫星、3 个不同前端应用容器；主站部署 0、AgentAPI 0、依赖重建 0。两个独立后端、其他 8 个卫星、Cost Console 和仓库外应用排除。screen2code 前端先补丁替换、再静态交付，因此同一前端有两次替换；最终仍只影响三个容器名称。既有业务卷、环境中的必要凭据、端口和网络保留。
+
+发现 screen2code / aihuoke 前端相同 `/tmp/.fix.sh`（SHA-256 `7dff90739ff6a70dcdbe45725de42437acb87d2b79fa6edde2ebc7812b53c4e1`），静态内容试图安装 XMRig。先保全配置、日志尾、进程、脚本和哈希，再暂时停止三个前端；未发现当时运行的矿工进程，不代表历史未运行。原始镜像保留为 `cc2cx-backup/<container>:before-vite-20261123`；未从受影响容器可写层提交镜像。
+
+最终镜像：`cc2cx/aicut:20261123-vite8.1.7`、`cc2cx/aihuoke-frontend:20261123-vite6.4.6`、`cc2cx/screen2code-frontend:20261123-production`。后者由 Vite 6.4.6 完成 `tsc && vite build`，运行层为 Nginx 静态文件及原后端代理，不含公开 Vite 开发服务。只用指定服务的 `--no-deps --no-build --force-recreate` 发布；复刻网站保留 API、WebSocket、local-assets 代理，修正外层重复 Host 头。三个 HTTPS 入口增加根目录点文件 404 防护，Nginx 配置检查通过后平滑 reload。AI 获客前端移除两项多余共享凭据，后端值不变。
+
+本地三组 package.json/lock、复刻网站 Dockerfile 和 Nginx 模板同步修复；两套线上源码及实际持久 image override 更新。未覆盖业务代码或工作区原有改动。构建与运行配置有私密备份和哈希；原/补丁镜像 lint 同为 19 errors / 6 warnings，均为未改业务文件的原问题。
+
+验收：两个主站 × 三个真实侧栏链接，共 6/6 通过；SSO、身份、零余额、三天 Secure/HttpOnly Cookie、页面渲染与无 Vite overlay / 脚本异常均核对。测试用户、两个卫星测试身份和会话、AI 剪辑测试租户目录按精确 subject 清理，保留清理前备份；无付费模型调用。最终核对 40 个既有容器，仅三个指定前端被替换，其余 37 个容器 ID、镜像及启动时间不变。
+
+限制：AI 剪辑仍使用与后端插件绑定的已修复 Vite 服务，冷加载曾超过一分钟，重测通过；未完成其架构分离或性能治理。共享凭据可能被旧执行环境读取，删除变量不等于撤销旧值；全站协同轮换、历史外传和主机持久化排查应独立安排，未擅自扩大本次部署范围。
+
+证据：本地 `.local/vite-incident-20261123/`；服务器 `/opt/cc2cx-production/vite-incident-20261123/`（0700）。正式记录见 [卫星前端 Vite 修复报告](2026-11-23_卫星前端Vite故障修复报告.md)。敏感配置和原日志仅保留受限目录；SSH 密码未写入脚本、源码或报告。安全回滚应先隔离公网入口，再使用原镜像和对应备份配置；不得把有已知问题的旧开发服务直接重新公开。

@@ -3416,6 +3416,21 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		service.WriteOpenAIUpstreamClientError(c, statusCode, responseBody, upstreamMsg)
 		return
 	}
+	if service.IsOpenAIUpstreamHTMLPageErrorBody(responseBody) {
+		message := service.OpenAIUpstreamHTMLPageClientMessage()
+		service.SetOpsUpstreamError(c, statusCode, message, "")
+		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", message, streamStarted)
+		return
+	}
+	// Every eligible image account reported that it cannot serve the requested
+	// model (404/405). Report one actionable 502 instead of relaying a bare
+	// upstream 404 that looks like a client-side mistake.
+	if statusCode == http.StatusNotFound && strings.HasPrefix(c.Request.URL.Path, "/v1/images/") {
+		message := service.OpenAIImageModelUnavailableClientMessage()
+		service.SetOpsUpstreamError(c, http.StatusBadGateway, message, "")
+		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", message, streamStarted)
+		return
+	}
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
 		service.SetOpsUpstreamError(c, statusCode, service.OpenAISilentRefusalClientMessage(), "")
 		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", service.OpenAISilentRefusalClientMessage(), streamStarted)

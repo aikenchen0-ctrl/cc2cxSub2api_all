@@ -75,7 +75,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="space-y-4">
+  <main class="agent-page">
     <header class="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-300">AFFILIATE</p>
@@ -88,12 +88,12 @@ onMounted(() => void load())
     <p v-if="notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ notice }}</p>
     <section v-if="loading" class="card p-8 text-center text-sm text-gray-500">正在读取主站返利…</section>
     <template v-else-if="detail">
-      <section class="grid gap-4 sm:grid-cols-3">
-        <div class="card p-4"><p class="text-xs text-gray-500">邀请码</p><p class="mt-1 font-mono text-lg">{{ detail.aff_code }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">可划转额度</p><p class="mt-1 text-lg font-semibold">{{ money(detail.aff_quota) }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">返利比例</p><p class="mt-1 text-lg font-semibold">{{ detail.effective_rebate_rate_percent }}%</p></div>
+      <section class="grid gap-5 sm:grid-cols-3">
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">邀请码</p><p class="mt-1 font-mono text-lg">{{ detail.aff_code }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">可划转额度</p><p class="mt-1 text-lg font-semibold">{{ money(detail.aff_quota) }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">返利比例</p><p class="mt-1 text-lg font-semibold">{{ detail.effective_rebate_rate_percent }}%</p></div>
       </section>
-      <section class="card flex flex-col gap-3 p-4 sm:flex-row">
+      <section class="card flex flex-col gap-3 p-5 sm:flex-row">
         <button class="btn btn-primary" type="button" :disabled="saving || detail.aff_quota <= 0" @click="transfer">划转到余额</button>
         <input v-model="bindCode" class="input sm:max-w-xs" maxlength="32" placeholder="绑定邀请码" aria-label="邀请码">
         <button class="btn btn-secondary" type="button" :disabled="saving || bindCode.trim().length < 4" @click="bind">绑定</button>
@@ -103,7 +103,7 @@ onMounted(() => void load())
         <button class="btn btn-secondary" :class="{ 'btn-primary': tab === 'rebates' }" type="button" @click="tab = 'rebates'">返利记录</button>
         <button class="btn btn-secondary" :class="{ 'btn-primary': tab === 'transfers' }" type="button" @click="tab = 'transfers'">划转记录</button>
       </div>
-      <section class="card overflow-x-auto p-4">
+      <section class="card overflow-x-auto p-5">
         <table v-if="tab === 'invites'" class="w-full text-left text-sm">
           <thead><tr class="text-xs text-gray-400"><th class="py-2">用户</th><th>返利</th><th>时间</th></tr></thead>
           <tbody><tr v-for="item in invites" :key="item.email + item.created_at"><td class="py-2">{{ item.username || item.email }}</td><td>{{ money(item.total_rebate) }}</td><td>{{ item.created_at || '—' }}</td></tr><tr v-if="!invites.length"><td colspan="3" class="py-8 text-center text-gray-500">暂无邀请记录</td></tr></tbody>

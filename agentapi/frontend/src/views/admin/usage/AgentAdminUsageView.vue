@@ -68,7 +68,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-7xl space-y-6 p-6 pb-12">
+  <main class="agent-page">
     <header class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">账本核对</p>
@@ -97,8 +97,8 @@ onMounted(() => void load())
     </div>
 
     <template v-else-if="context">
-      <div class="grid gap-4 md:grid-cols-3">
-        <div class="card p-5">
+      <div class="grid gap-5 md:grid-cols-3">
+        <div class="card h-full p-5">
           <p class="text-sm text-gray-500 dark:text-dark-400">同步记录</p>
           <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ settlements.length }}</p>
           <p class="mt-1 text-xs text-gray-400">仅本站请求</p>

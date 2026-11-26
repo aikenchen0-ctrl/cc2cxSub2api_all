@@ -74,7 +74,7 @@ function settlementLabel(value: string): string {
     </template>
 
     <template #filters>
-      <div class="card p-4 sm:p-6">
+      <div class="card p-5 sm:p-6">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div class="flex flex-1 flex-wrap items-end gap-4">
             <div class="w-full sm:min-w-[260px] sm:flex-1">

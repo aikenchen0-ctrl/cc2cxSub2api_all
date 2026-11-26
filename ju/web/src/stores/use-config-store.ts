@@ -451,8 +451,8 @@ const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 const LEGACY_DEFAULT_MODEL_NAMES = new Set(["gpt-image-2", "grok-imagine-video", "gpt-5.5", "gpt-5.6-sol", "minimax_h3_z0901", "gpt-4o-mini-tts"]);
-const LEGACY_DEFAULT_TEXT_MODEL = "gpt-6-astra";
-const DEFAULT_TEXT_MODEL = "grok-4.7";
+const LEGACY_DEFAULT_TEXT_MODELS = new Set(["gpt-6-astra", "grok-4.7"]);
+const DEFAULT_TEXT_MODEL = "gpt-6.1-sol";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_VIDEO_MODEL = "minimax_h3_z0901";
 
@@ -725,7 +725,7 @@ export function normalizeConfigSnapshot(snapshot: ConfigStoreSnapshot | undefine
             workflows: comfyBridgeWorkflows,
         },
     };
-    if (persistedConfig.textDefaultMigrated !== true && config.textModel === LEGACY_DEFAULT_TEXT_MODEL) {
+    if (persistedConfig.textDefaultMigrated !== true && LEGACY_DEFAULT_TEXT_MODELS.has(config.textModel)) {
         config.textModel = DEFAULT_TEXT_MODEL;
     }
     config.textDefaultMigrated = true;

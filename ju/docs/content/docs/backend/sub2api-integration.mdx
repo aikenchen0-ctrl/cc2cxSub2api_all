@@ -46,7 +46,7 @@ JU_SSO_CALLBACK_URL=https://ju.example.com/api/auth/sso/callback
 SUB2API_SSO_SECRET=<与Sub2API相同的密钥>
 SUB2API_RELAY_BASE_URL=http://sub2api:8080/v1
 SUB2API_APP_CREDENTIAL=<服务端卫星应用凭据>
-SUB2API_RELAY_MODELS=gpt-6-astra
+SUB2API_RELAY_MODELS=gpt-6.1-sol,gpt-6-astra,gpt-6-sol,gpt-6.1-terra,gpt-6.2-astra,gpt-6.2-sol
 SUB2API_RELAY_IMAGE_MODELS=gpt-image-2
 SUB2API_RELAY_VIDEO_MODELS=minimax_h3_z0901,minimax_h3_z0903,minimax_h3_z0902,...
 SUB2API_RELAY_ALLOW_LOCAL=false
@@ -57,7 +57,7 @@ CANVAS_REGISTRATION_ENABLED=false
 CANVAS_CORS_ORIGINS=https://ju.example.com
 ```
 
-文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。AI 导演台默认文本模型为 `gpt-6-astra`、默认图片模型为 `gpt-image-2`、默认视频模型为列表首项 `minimax_h3_z0901`。AutoDL 工作流在前端显示中文名称，保存和调用始终使用英文 ID。模型可见不代表上游已开通，必须用 Sub2API 管理员配置的上游权限和响应验证。每次请求仍由当前 Session subject 绑定到 Sub2API 用户，应用凭据和 SuperKey 不进入浏览器。
+文本保留 `SUB2API_RELAY_MODELS`，图片和视频分别由对应变量声明管理员验证可用的模型 ID，多个 ID 用英文逗号分隔。AI 导演台默认文本模型为 `gpt-6.1-sol`（可选 `gpt-6-astra`、`gpt-6-sol`、`gpt-6.1-terra`、`gpt-6.2-astra`、`gpt-6.2-sol`）、默认图片模型为 `gpt-image-2`、默认视频模型为列表首项 `minimax_h3_z0901`。AutoDL 工作流在前端显示中文名称，保存和调用始终使用英文 ID。模型可见不代表上游已开通，必须用 Sub2API 管理员配置的上游权限和响应验证。每次请求仍由当前 Session subject 绑定到 Sub2API 用户，应用凭据和 SuperKey 不进入浏览器。
 
 当前视频协议为 `sub2api-video-v1`，开放 `docs/卫星公开模型.md` 列出的 16 个 AutoDL 工作流。默认模型 `minimax_h3_z0901` 是无需参考素材的高质量文生视频；每个工作流的参考图片、视频、音频数量、时长和分辨率均由后端能力目录下发。前端显示 AutoDL 中文名称，提交、保存和上游调用只使用精确英文 ID。
 

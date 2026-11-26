@@ -103,7 +103,7 @@ function removeEmbeddedLogo(): void {
 
     <div v-if="activeTab === 'branding'" class="space-y-6">
       <div class="card overflow-hidden">
-        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+        <div class="card-header">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">品牌信息</h2>
           <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">自定义本站的名称和 Logo。修改只应用于当前站点。</p>
           <p v-if="!domain" class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
@@ -111,7 +111,7 @@ function removeEmbeddedLogo(): void {
           </p>
         </div>
 
-        <div class="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <div class="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <form class="space-y-5" @submit.prevent="emit('save')">
             <div class="grid gap-5 md:grid-cols-2">
               <div class="md:col-span-2">

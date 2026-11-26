@@ -23,6 +23,8 @@ export interface Settings {
   codeGenerationModel: CodeGenerationModel;
   // Set after the one-time default migration from gpt-6-astra high to grok-4.7 high.
   textDefaultMigrated?: boolean;
+  // Set after the one-time default migration to gpt-6.1-sol high.
+  textSolDefaultMigrated?: boolean;
   selectedDesignSystemId: string | null;
   // Only relevant for hosted version
   isTermOfServiceAccepted: boolean;

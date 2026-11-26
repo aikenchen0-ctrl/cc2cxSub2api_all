@@ -2,6 +2,7 @@ import axios from "axios";
 
 import { isMiniMaxChannel, miniMaxModels } from "@/lib/minimax-video";
 import { dataUrlToFile } from "@/lib/image-utils";
+import { imageTaskStorageWithinDeadline } from "@/lib/image-task-polling";
 import { isKIESeedreamLayerDecompositionModel } from "@/lib/kie-models";
 import { isMimoChannel, mimoModels } from "@/lib/mimo-tts";
 import { dataUrlToGeminiInlineData, geminiActionUrl, geminiDirectHeaders, geminiErrorMessage, isGeminiConfig, normalizeGeminiBaseUrl } from "@/lib/gemini";
@@ -109,6 +110,7 @@ const QUALITY_ALIASES: Record<string, string> = {
 };
 const IMAGE_MIME = "image/png";
 const IMAGE_REQUEST_TIMEOUT_SECONDS = 600;
+export const CANVAS_IMAGE_TASK_MAX_WAIT_MS = 30 * 60 * 1000;
 const PROMPT_REWRITE_GUARD_PREFIX = "Use the following text as the complete prompt. Do not rewrite it:";
 
 function normalizeQuality(quality: string) {
@@ -976,7 +978,12 @@ async function syncGeneratedImages(images: GeneratedImage[]) {
 async function syncCanvasImageTask(task: CanvasImageTask, resultId = task.started_at): Promise<CanvasImageTask> {
     if (!["completed", "complete", "done", "succeeded", "success"].includes((task.status || "").toLowerCase())) return task;
     const urls = [...new Set([...(task.image_urls || []), task.image_url || task.url || ""].map((url) => url.trim()).filter(Boolean))];
-    const imageStorage = await Promise.all(urls.map((url, index) => autoSyncImage(url, `${task.id}:${resultId}:${index}`, index === 0 ? task.storageKey : undefined)));
+    if (urls.some((url) => url.startsWith("/api/v1/canvas/image-tasks/"))) return task;
+    // Optional cloud storage must not hold a completed generation in the loading state.
+    const imageStorage = await imageTaskStorageWithinDeadline(
+        Promise.all(urls.map((url, index) => autoSyncImage(url, `${task.id}:${resultId}:${index}`, index === 0 ? task.storageKey : undefined))),
+    );
+    if (!imageStorage) return task;
     if (!imageStorage.some(Boolean)) return task;
     const syncedUrls = urls.map((url, index) => imageStorage[index]?.url || url);
     const stored = imageStorage[0];
@@ -1025,7 +1032,7 @@ export async function createCanvasImageTask(config: AiConfig & { seedIndex?: num
     }
     const params = createImageRequestParams({ ...config, count: "1" });
     const request = await createCanvasImageTaskRequest({ ...config, count: "1" }, prompt, references, params, options);
-    const response = await fetch("/api/v1/canvas/image-tasks", request);
+    const response = await fetch("/api/v1/canvas/image-tasks", { ...request, signal: AbortSignal.timeout(60_000) });
     if (!response.ok) {
         const error = await fetchErrorDetail(response, "图片任务创建失败");
         throw new ImageRequestError(error.message, error.detail);
@@ -1041,6 +1048,8 @@ export async function pollCanvasImageTaskStatus(taskId: string): Promise<CanvasI
     if (!token) throw new Error("请先登录后再使用云端渠道");
     const response = await fetch(`/api/v1/canvas/image-tasks/${encodeURIComponent(taskId)}`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(60_000),
     });
     if (!response.ok) {
         const error = await fetchErrorDetail(response, "读取图片任务失败");
@@ -1517,6 +1526,7 @@ export async function listCanvasImageTasks(config: AiConfig, sources: Array<"ima
     const query = sources.length ? `?${sources.map((source) => `source=${encodeURIComponent(source)}`).join("&")}` : "";
     const response = await fetch(`/api/v1/canvas/image-tasks${query}`, {
         headers: aiHeaders(config),
+        signal: AbortSignal.timeout(60_000),
     });
     if (!response.ok) {
         const error = await fetchErrorDetail(response, "读取图片任务失败");
@@ -1534,6 +1544,7 @@ export async function batchCanvasImageTaskStatus(config: AiConfig, ids: string[]
         method: "POST",
         headers: aiHeaders(config, "application/json"),
         body: JSON.stringify({ ids: taskIds }),
+        signal: AbortSignal.timeout(60_000),
     });
     if (!response.ok) {
         const error = await fetchErrorDetail(response, "读取图片任务失败");

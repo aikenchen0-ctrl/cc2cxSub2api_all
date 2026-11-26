@@ -3011,13 +3011,19 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 			case service.UpstreamModelSyncErrorInternal:
 				response.InternalError(c, syncErr.SafeMessage())
 			default:
-				slog.Warn("sync_upstream_models_failed", "account_id", accountID, "kind", syncErr.Kind)
+				slog.Warn("sync_upstream_models_failed",
+					"account_id", accountID,
+					"kind", syncErr.Kind,
+					"status_code", syncErr.StatusCode,
+					"error_code", syncErr.Code,
+					"upstream_detail", syncErr.SafeDetail(),
+				)
 				response.Error(c, http.StatusBadGateway, syncErr.SafeMessage())
 			}
 			return
 		}
 
-		slog.Warn("sync_upstream_models_failed", "account_id", accountID)
+		slog.Warn("sync_upstream_models_failed", "account_id", accountID, "error", err)
 		response.Error(c, http.StatusBadGateway, "Failed to sync upstream models from upstream")
 		return
 	}
@@ -3069,13 +3075,19 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 			case service.UpstreamModelSyncErrorInternal:
 				response.InternalError(c, syncErr.SafeMessage())
 			default:
-				slog.Warn("sync_upstream_models_preview_failed", "platform", req.Platform, "kind", syncErr.Kind)
+				slog.Warn("sync_upstream_models_preview_failed",
+					"platform", req.Platform,
+					"kind", syncErr.Kind,
+					"status_code", syncErr.StatusCode,
+					"error_code", syncErr.Code,
+					"upstream_detail", syncErr.SafeDetail(),
+				)
 				response.Error(c, http.StatusBadGateway, syncErr.SafeMessage())
 			}
 			return
 		}
 
-		slog.Warn("sync_upstream_models_preview_failed", "platform", req.Platform)
+		slog.Warn("sync_upstream_models_preview_failed", "platform", req.Platform, "error", err)
 		response.Error(c, http.StatusBadGateway, "Failed to sync upstream models from upstream")
 		return
 	}

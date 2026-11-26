@@ -70,10 +70,21 @@ ANTHROPIC_ONLY_MODELS = (
     Llm.CLAUDE_OPUS_4_8_MEDIUM,
     Llm.CLAUDE_SONNET_4_6,
 )
-# grok-4.7 is the default. gpt-6-astra stays available and is not renamed.
+# gpt-6.1-sol is the default. The other published GPT-6 names stay selectable,
+# and grok-4.7 remains available for existing preferences.
 OPENAI_ONLY_MODELS = (
-    Llm.GROK_4_7_HIGH,
-    Llm.GROK_4_7_LOW,
+    Llm.GPT_6_1_SOL_HIGH,
+    Llm.GPT_6_1_SOL_LOW,
     Llm.GPT_6_ASTRA_HIGH,
     Llm.GPT_6_ASTRA_LOW,
+    Llm.GPT_6_SOL_HIGH,
+    Llm.GPT_6_SOL_LOW,
+    Llm.GPT_6_1_TERRA_HIGH,
+    Llm.GPT_6_1_TERRA_LOW,
+    Llm.GPT_6_2_ASTRA_HIGH,
+    Llm.GPT_6_2_ASTRA_LOW,
+    Llm.GPT_6_2_SOL_HIGH,
+    Llm.GPT_6_2_SOL_LOW,
+    Llm.GROK_4_7_HIGH,
+    Llm.GROK_4_7_LOW,
 )

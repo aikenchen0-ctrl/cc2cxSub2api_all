@@ -1,6 +1,6 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <div class="card flex items-center gap-3 p-4">
+  <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="card flex h-full items-center gap-3 p-5 sm:p-6">
       <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30">
         <Icon name="document" size="md" />
       </div>
@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <div class="card flex items-center gap-3 p-4">
+    <div class="card flex h-full items-center gap-3 p-5 sm:p-6">
       <div class="rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/30">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>
       </div>
@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <div class="card flex items-center gap-3 p-4">
+    <div class="card flex h-full items-center gap-3 p-5 sm:p-6">
       <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
         <Icon name="dollar" size="md" />
       </div>
@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="card flex items-center gap-3 p-4">
+    <div class="card flex h-full items-center gap-3 p-5 sm:p-6">
       <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30">
         <Icon name="chart" size="md" />
       </div>

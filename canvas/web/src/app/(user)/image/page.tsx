@@ -45,7 +45,7 @@ import { normalizeLocalChannels, useConfigStore, useEffectiveConfig, type AiConf
 import { useThemeStore } from "@/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
-import { ImageRequestError, batchCanvasImageTaskStatus, createCanvasImageTask, deleteCanvasImageTask, listCanvasImageTasks, requestEdit, requestGeneration, type CanvasImageTask } from "@/services/api/image";
+import { CANVAS_IMAGE_TASK_MAX_WAIT_MS, ImageRequestError, batchCanvasImageTaskStatus, createCanvasImageTask, deleteCanvasImageTask, listCanvasImageTasks, requestEdit, requestGeneration, type CanvasImageTask } from "@/services/api/image";
 import { deleteImageGenerationLogs, fetchImageGenerationLogs, saveImageGenerationLogs } from "@/services/api/generation-logs";
 import { deleteStoredImages, imageToDataUrl, resolveImageUrl, uploadImage, uploadRemoteImageToServer } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -126,6 +126,7 @@ const CATEGORY_STORE_KEY = "infinite-canvas:image_generation_categories";
 const WORKBENCH_LAYOUT_KEY = "infinite-canvas:image-workbench-layout";
 const RESULT_VIEW_MODE_KEY = "infinite-canvas:image-result-view-mode";
 const IMAGE_TASK_POLL_INTERVAL_MS = 10000;
+const IMAGE_TASK_MAX_WAIT_MS = CANVAS_IMAGE_TASK_MAX_WAIT_MS;
 const WORKFLOW_BUTTON_POSITION_KEY = "infinite-canvas:workflow-button-position";
 const logStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
 const categoryStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_categories" });
@@ -162,7 +163,9 @@ export default function ImagePage() {
     const workflowButtonDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
     const accountHistorySyncEnabledRef = useRef(false);
     const saveLogChainRef = useRef<Promise<void>>(Promise.resolve());
+    const remoteLogChainRef = useRef<Promise<void>>(Promise.resolve());
     const pollingLogIdsRef = useRef(new Set<string>());
+    const pollFailuresRef = useRef(new Map<string, number>());
     const logsRef = useRef<GenerationLog[]>([]);
     const effectiveConfigRef = useRef(effectiveConfig);
 
@@ -770,7 +773,9 @@ export default function ImagePage() {
             setLogs(nextLogs);
             await Promise.all(duplicateLogs.map((item) => logStore.removeItem(item.id)));
             await logStore.setItem(log.id, serializeLog(persistedLog));
-            await persistImageHistory(nextLogs, categories);
+            // Keep remote writes ordered without delaying the visible task result.
+            remoteLogChainRef.current = remoteLogChainRef.current.catch(() => undefined)
+                .then(() => persistImageHistory([persistedLog], categories));
         })();
         saveLogChainRef.current = nextChain;
         await nextChain;
@@ -854,10 +859,50 @@ export default function ImagePage() {
                     const nextLog = imageLogFromTask(log, task);
                     await saveLog(nextLog);
                     if (nextLog.status === "生成中") {
-                        setResults((value) => updateResultByLogId(value, log.id, { task, progress: task.progress, durationMs: nextLog.durationMs, lastPolledAt: nextLog.lastPolledAt }));
+                        if (nextLog.durationMs >= IMAGE_TASK_MAX_WAIT_MS) {
+                            const timedOutLog: GenerationLog = {
+                                ...nextLog,
+                                status: "失败",
+                                failCount: 1,
+                                errors: ["图片生成超时，请重新生成"],
+                                errorDetails: [`等待超过 ${Math.round(IMAGE_TASK_MAX_WAIT_MS / 60000)} 分钟仍未拿到图片`],
+                            };
+                            await saveLog(timedOutLog);
+                            setResults((value) => updateResultByLogId(value, log.id, { status: "failed", error: timedOutLog.errors[0], errorDetail: timedOutLog.errorDetails?.[0], durationMs: timedOutLog.durationMs, lastPolledAt: timedOutLog.lastPolledAt }));
+                        } else {
+                            setResults((value) => updateResultByLogId(value, log.id, { task, progress: task.progress, durationMs: nextLog.durationMs, lastPolledAt: nextLog.lastPolledAt }));
+                        }
                     } else {
                         setResults((value) => value.filter((item) => !imageResultMatchesLog(item, nextLog)));
                     }
+                }),
+            );
+            pendingLogs.forEach((log) => pollFailuresRef.current.delete(log.id));
+        } catch (error) {
+            const message = errorMessage(error);
+            await Promise.all(
+                pendingLogs.map(async (log) => {
+                    const failures = (pollFailuresRef.current.get(log.id) || 0) + 1;
+                    pollFailuresRef.current.set(log.id, failures);
+                    if (failures < 3) return;
+                    const nextLog = {
+                        ...log,
+                        status: "失败" as const,
+                        durationMs: Date.now() - log.createdAt,
+                        failCount: 1,
+                        errors: [`读取图片任务失败：${message}`],
+                        errorDetails: [errorDetail(error)],
+                        lastPolledAt: Date.now(),
+                    };
+                    pollFailuresRef.current.delete(log.id);
+                    await saveLog(nextLog);
+                    setResults((value) => updateResultByLogId(value, log.id, {
+                        status: "failed",
+                        error: nextLog.errors[0],
+                        errorDetail: nextLog.errorDetails[0],
+                        durationMs: nextLog.durationMs,
+                        lastPolledAt: nextLog.lastPolledAt,
+                    }));
                 }),
             );
         } finally {

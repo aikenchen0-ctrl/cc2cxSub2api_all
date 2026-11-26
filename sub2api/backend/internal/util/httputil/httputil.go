@@ -50,6 +50,21 @@ func IsCloudflareChallengeResponse(statusCode int, headers http.Header, body []b
 	return false
 }
 
+// LooksLikeHTMLResponse reports whether an upstream response is a web page
+// rather than an API payload. Resellers and panels often answer an expired or
+// missing session with a 200 HTML login page, and relaying that page makes
+// clients fail with "invalid character '<' looking for beginning of value".
+func LooksLikeHTMLResponse(headers http.Header, body []byte) bool {
+	if headers != nil {
+		mediaType := strings.ToLower(strings.TrimSpace(headers.Get("content-type")))
+		if strings.Contains(mediaType, "text/html") || strings.Contains(mediaType, "application/xhtml") {
+			return true
+		}
+	}
+	preview := strings.TrimSpace(strings.TrimPrefix(string(TruncateBody(body, 512)), "\ufeff"))
+	return strings.HasPrefix(preview, "<")
+}
+
 // ExtractCloudflareRayID extracts cf-ray from headers or response body.
 func ExtractCloudflareRayID(headers http.Header, body []byte) string {
 	if headers != nil {

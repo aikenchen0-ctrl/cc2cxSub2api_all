@@ -1,5 +1,5 @@
 <template>
-  <div class="card p-4">
+  <div class="card h-full p-5 sm:p-6">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">模型分布</h3>
       <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800">

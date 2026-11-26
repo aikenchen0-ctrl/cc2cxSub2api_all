@@ -3,7 +3,7 @@ import AgentPaymentSettings from '@/views/admin/settings/AgentPaymentSettings.vu
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <main class="agent-page">
     <AgentPaymentSettings />
-  </div>
+  </main>
 </template>

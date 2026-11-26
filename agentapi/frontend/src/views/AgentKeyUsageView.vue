@@ -170,35 +170,35 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
           </template>
         </section>
 
-        <section class="mt-6 grid gap-4 md:grid-cols-3">
-          <article class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-dark-800 dark:bg-dark-900">
+        <section class="mt-6 grid gap-5 md:grid-cols-3">
+          <article class="card h-full p-5 sm:p-6">
             <p class="text-xs uppercase tracking-wider text-gray-400">Key 状态</p>
             <p class="mt-3 text-xl font-semibold text-emerald-600">正常</p>
             <p class="mt-1 text-sm text-gray-500">{{ result.key?.name || 'AgentAPI Key' }} · {{ result.key?.prefix }}…</p>
           </article>
-          <article class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-dark-800 dark:bg-dark-900">
+          <article class="card h-full p-5 sm:p-6">
             <p class="text-xs uppercase tracking-wider text-gray-400">账户余额</p>
             <p class="mt-3 text-3xl font-bold tabular-nums">{{ formatUSD(result.balance) }}</p>
             <p class="mt-1 text-sm text-gray-500">按本站统一计费规则结算</p>
           </article>
-          <article class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-dark-800 dark:bg-dark-900">
+          <article class="card h-full p-5 sm:p-6">
             <p class="text-xs uppercase tracking-wider text-gray-400">数据完整度</p>
             <p class="mt-3 text-xl font-semibold">{{ result.status_detail === 'partial' ? '部分同步' : result.status_detail === 'empty' ? '暂无用量' : '已同步' }}</p>
             <p class="mt-1 text-sm text-gray-500">展示本站已记录的权威用量快照</p>
           </article>
         </section>
 
-        <section class="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-dark-800 dark:bg-dark-900">
-          <div class="border-b border-gray-200 px-6 py-4 dark:border-dark-800"><h2 class="font-semibold">Token 与费用统计</h2></div>
-          <div class="grid grid-cols-2 gap-px bg-gray-100 md:grid-cols-4 dark:bg-dark-800">
-            <div v-for="cell in statCells" :key="cell[0]" class="bg-white px-5 py-4 dark:bg-dark-900">
+        <section class="card mt-6 overflow-hidden">
+          <div class="card-header"><h2 class="font-semibold">Token 与费用统计</h2></div>
+          <div class="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+            <div v-for="cell in statCells" :key="cell[0]" class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-dark-700 dark:bg-dark-800/60">
               <p class="text-xs text-gray-500 dark:text-dark-400">{{ cell[0] }}</p><p class="mt-1 font-semibold tabular-nums">{{ cell[1] }}</p>
             </div>
           </div>
         </section>
 
-        <section class="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-dark-800 dark:bg-dark-900">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-dark-800">
+        <section class="card mt-6 overflow-hidden">
+          <div class="card-header flex flex-wrap items-center justify-between gap-3">
             <h2 class="font-semibold">每日用量</h2>
             <div class="flex rounded-lg border border-gray-200 p-0.5 dark:border-dark-700">
               <button v-for="days in ([7, 30, 90] as const)" :key="days" type="button" class="rounded-md px-3 py-1 text-xs" :class="dailyDays === days ? 'bg-primary-400 text-accent-950' : 'text-gray-500'" @click="setDailyDays(days)">{{ days }} 天</button>
@@ -213,8 +213,8 @@ function formatUSD(value?: number): string { return `$${Number(value || 0).toFix
           </div>
         </section>
 
-        <section v-if="result.model_stats.length" class="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-dark-800 dark:bg-dark-900">
-          <div class="border-b border-gray-200 px-6 py-4 dark:border-dark-800"><h2 class="font-semibold">模型统计</h2></div>
+        <section v-if="result.model_stats.length" class="card mt-6 overflow-hidden">
+          <div class="card-header"><h2 class="font-semibold">模型统计</h2></div>
           <div class="overflow-x-auto"><table class="w-full min-w-[680px] text-sm"><thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-dark-950"><tr><th class="px-4 py-3 text-left">模型</th><th class="px-4 py-3 text-right">请求</th><th class="px-4 py-3 text-right">输入 Token</th><th class="px-4 py-3 text-right">输出 Token</th><th class="px-4 py-3 text-right">总 Token</th><th class="px-4 py-3 text-right">费用</th></tr></thead><tbody><tr v-for="row in result.model_stats" :key="row.model" class="border-t border-gray-100 dark:border-dark-800"><td class="px-4 py-3 font-medium">{{ row.model }}</td><td class="px-4 py-3 text-right">{{ formatNumber(row.requests) }}</td><td class="px-4 py-3 text-right">{{ formatNumber(row.input_tokens) }}</td><td class="px-4 py-3 text-right">{{ formatNumber(row.output_tokens) }}</td><td class="px-4 py-3 text-right">{{ formatNumber(row.total_tokens) }}</td><td class="px-4 py-3 text-right font-medium">{{ formatUSD(row.actual_cost) }}</td></tr></tbody></table></div>
         </section>
       </template>

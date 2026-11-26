@@ -56,9 +56,9 @@ onMounted(verify)
 </script>
 
 <template>
-  <main class="mx-auto max-w-2xl">
+  <main class="agent-page-narrow">
     <section class="card overflow-hidden text-center">
-      <div :class="['px-6 py-12', success ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-gray-50 dark:bg-dark-800']">
+      <div :class="['px-5 py-10 sm:px-6 sm:py-12', success ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-gray-50 dark:bg-dark-800']">
         <span :class="['mx-auto flex h-16 w-16 items-center justify-center rounded-full', success ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300']">
           <span v-if="loading" class="h-8 w-8 animate-spin rounded-full border-4 border-current/25 border-t-current"></span>
           <Icon v-else :name="success ? 'checkCircle' : 'clock'" size="xl" />
@@ -66,7 +66,7 @@ onMounted(verify)
         <h1 class="mt-5 text-2xl font-bold text-gray-900 dark:text-white">{{ loading ? '正在确认支付结果' : success ? '支付已确认' : '订单仍在处理中' }}</h1>
         <p class="mx-auto mt-3 max-w-lg text-sm leading-6 text-gray-500 dark:text-dark-400">{{ success ? '订单已经确认。余额或订阅权益以最终到账记录为准。' : '如果你已经完成支付，可以再次查询订单状态。' }}</p>
       </div>
-      <div class="space-y-5 p-6">
+      <div class="space-y-5 p-5 sm:p-6">
         <div v-if="error" role="alert" class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{{ error }}</div>
         <dl v-if="order" class="grid gap-3 rounded-xl border border-gray-200 p-4 text-left text-sm dark:border-dark-700 sm:grid-cols-2">
           <div><dt class="text-xs text-gray-400">订单号</dt><dd class="mt-1 break-all font-mono font-medium text-gray-800 dark:text-dark-100">{{ order.out_trade_no }}</dd></div>

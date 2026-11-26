@@ -186,8 +186,8 @@ func normalizePublicSettingWithChannels(setting model.PublicSetting, channels []
 		setting.Auth.AllowRegister = &enabled
 	}
 	setting.ModelChannel.AvailableModels = filterEnabledModels(setting.ModelChannel.AvailableModels, enabledChannelModels(channels))
-	setting.ModelChannel.DefaultTextModel = repairDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels, isTextModelName)
-	setting.ModelChannel.DefaultImageModel = repairDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels, isImageModelName)
+	setting.ModelChannel.DefaultTextModel = repairTextDefaultModel(setting.ModelChannel.DefaultTextModel, setting.ModelChannel.AvailableModels)
+	setting.ModelChannel.DefaultImageModel = repairImageDefaultModel(setting.ModelChannel.DefaultImageModel, setting.ModelChannel.AvailableModels)
 	setting.ModelChannel.DefaultVideoModel = repairDefaultModel(setting.ModelChannel.DefaultVideoModel, setting.ModelChannel.AvailableModels, isVideoModelName)
 	setting.ModelChannel.DefaultModel = repairDefaultModel(setting.ModelChannel.DefaultModel, setting.ModelChannel.AvailableModels, isTextModelName)
 	return setting
@@ -420,6 +420,36 @@ func repairDefaultModel(current string, models []string, preferred func(string) 
 		return models[0]
 	}
 	return ""
+}
+
+func repairTextDefaultModel(current string, models []string) string {
+	const preferred = "gpt-6.1-sol"
+	current = strings.TrimSpace(current)
+	for _, item := range models {
+		if item != preferred {
+			continue
+		}
+		if current == "" || current == "grok-4.7" || current == "gpt-6-astra" {
+			return preferred
+		}
+		break
+	}
+	return repairDefaultModel(current, models, isTextModelName)
+}
+
+func repairImageDefaultModel(current string, models []string) string {
+	const preferred = "gpt-image-2.6-flare"
+	current = strings.TrimSpace(current)
+	for _, item := range models {
+		if item != preferred {
+			continue
+		}
+		if current == "" || current == "gpt-image-2" || current == "gpt-image-2.5" {
+			return preferred
+		}
+		break
+	}
+	return repairDefaultModel(current, models, isImageModelName)
 }
 
 func isVideoModelName(modelName string) bool {

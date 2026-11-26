@@ -101,12 +101,12 @@ onMounted(() => { void load(); void loadEligibility() })
 </script>
 
 <template>
-  <main class="space-y-4">
+  <main class="agent-page">
     <header class="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p class="text-sm font-medium text-primary-600 dark:text-primary-300">{{ admin ? 'STATION ORDERS' : 'MY ORDERS' }}</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{{ admin ? '本站订单' : '订单记录' }}</h1><p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">{{ admin ? '管理本站收款订单，取消未付款订单并处理退款。' : '查看当前账户的订单、余额与退款状态。' }}</p></div>
       <button class="btn btn-primary" type="button" @click="router.push('/purchase')">充值 / 购买</button>
     </header>
-    <div class="card flex flex-wrap items-center gap-3 p-4">
+    <div class="card flex flex-wrap items-center gap-3 p-5">
       <AgentSelect v-model="status" :options="statusOptions" class="w-44" aria-label="订单状态" @change="changeFilter" />
       <button class="btn btn-secondary ml-auto" type="button" :disabled="loading" aria-label="刷新订单" @click="load"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />刷新</button>
     </div>

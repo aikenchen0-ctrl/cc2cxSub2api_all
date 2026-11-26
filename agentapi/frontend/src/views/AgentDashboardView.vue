@@ -100,7 +100,7 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="mx-auto max-w-6xl space-y-6 p-6">
+  <main class="agent-page">
     <header class="relative overflow-hidden rounded-2xl border border-primary-200/70 bg-white/85 p-5 shadow-card backdrop-blur-xl dark:border-primary-500/15 dark:bg-dark-900/70 sm:p-6">
       <div class="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-primary-300/25 blur-3xl dark:bg-primary-500/10"></div>
       <div class="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent"></div>
@@ -122,7 +122,7 @@ onMounted(load)
     <p v-if="error" class="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <p v-if="loading" class="text-sm text-accent-500 dark:text-dark-400">正在加载…</p>
 
-    <section v-if="context" class="grid grid-cols-1 gap-6 md:grid-cols-3">
+    <section v-if="context" class="grid grid-cols-1 gap-5 md:grid-cols-3">
       <StatCard v-if="context.user" title="可用余额" :value="context.balance_error ? '暂不可用' : money(context.user.balance_cents)" :icon="balanceIcon" />
       <StatCard title="代理站" :value="context.agent.site_name" :icon="siteIcon" icon-variant="primary" />
       <StatCard title="计费方式" value="账户余额计费" :icon="billingIcon" icon-variant="warning" />
@@ -131,10 +131,10 @@ onMounted(load)
 
     <AgentUsageInsights :key="insightsVersion" />
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <div class="lg:col-span-2">
         <section v-if="context" class="card overflow-hidden">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-accent-200/70 px-5 py-4 dark:border-dark-700">
+          <div class="card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 class="font-semibold text-accent-950 dark:text-white">最近用量</h2>
               <p class="mt-1 text-sm text-accent-500 dark:text-dark-400">AgentAPI 最近记录的 5 次请求。</p>

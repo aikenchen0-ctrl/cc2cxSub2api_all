@@ -1,6 +1,6 @@
 <template>
   <main class="min-h-screen bg-gray-50 px-4 py-10 dark:bg-dark-900">
-    <section class="card mx-auto max-w-2xl p-6">
+    <section class="card mx-auto max-w-2xl p-5 sm:p-6">
       <h1 class="text-lg font-semibold text-gray-900 dark:text-white">第三方账号绑定</h1>
       <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
         {{ error || '绑定已完成，正在返回个人资料页面…' }}

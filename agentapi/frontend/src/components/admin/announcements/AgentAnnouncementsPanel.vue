@@ -163,8 +163,8 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="space-y-5">
-    <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+  <section class="space-y-6">
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
       <div class="flex flex-wrap items-center gap-3">
         <AgentSearchInput v-model="search" class="min-w-56 flex-1 sm:max-w-72" placeholder="搜索公告标题或正文" aria-label="搜索公告" :debounce-ms="0" @search="applyFilters" />
         <AgentSelect v-model="status" :options="announcementFilterOptions" class="w-36" aria-label="公告状态" @change="applyFilters" />

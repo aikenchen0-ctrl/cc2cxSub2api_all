@@ -459,7 +459,7 @@ onBeforeUnmount(stopPolling)
 </script>
 
 <template>
-  <main class="mx-auto max-w-6xl space-y-6">
+  <main class="agent-page">
     <header class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">{{ siteName }}</p>
@@ -488,7 +488,7 @@ onBeforeUnmount(stopPolling)
       <section v-if="!checkout" class="card p-8 text-center text-sm text-gray-500">支付配置暂不可用。</section>
 
       <section v-else-if="payment" class="card overflow-hidden" data-testid="payment-status">
-        <div class="border-b border-gray-100 px-6 py-5 dark:border-dark-700">
+        <div class="border-b border-gray-100 px-5 py-5 dark:border-dark-700 sm:px-6">
           <p class="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">等待支付</p>
           <h2 class="mt-1 text-xl font-bold text-gray-900 dark:text-white">请完成 {{ methodLabel(payment.payment_type || selectedMethod) }}</h2>
         </div>
@@ -521,8 +521,8 @@ onBeforeUnmount(stopPolling)
           <button v-for="tab in ([['balance', '余额充值'], ['subscription', '订阅套餐']] as const)" :key="tab[0]" type="button" :class="['rounded-lg px-5 py-2 text-sm font-medium transition', activeTab === tab[0] ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white' : 'text-gray-500 dark:text-dark-300']" @click="activeTab = tab[0]">{{ tab[1] }}</button>
         </nav>
 
-        <div class="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <section class="card p-6">
+        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <section class="card p-5 sm:p-6">
             <template v-if="activeTab === 'balance' && hasBalance">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">充值金额</h2>
               <div class="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
@@ -563,7 +563,7 @@ onBeforeUnmount(stopPolling)
             </div>
           </section>
 
-          <aside class="space-y-4">
+          <aside class="min-w-0 space-y-5">
             <section class="card p-5 lg:sticky lg:top-24">
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">订单确认</h2>
               <dl class="mt-5 space-y-3 text-sm">

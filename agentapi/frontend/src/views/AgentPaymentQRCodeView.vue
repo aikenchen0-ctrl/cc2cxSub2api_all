@@ -147,7 +147,7 @@ onBeforeUnmount(cleanup)
 </script>
 
 <template>
-  <main class="mx-auto max-w-lg space-y-5 py-4">
+  <main class="agent-page-narrow">
     <header class="text-center">
       <p class="text-sm font-semibold text-primary-600 dark:text-primary-400">安全支付</p>
       <h1 class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">完成 {{ paymentLabel }}</h1>
@@ -158,7 +158,7 @@ onBeforeUnmount(cleanup)
       <span class="h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span>
     </section>
 
-    <section v-else class="card p-6 text-center">
+    <section v-else class="card p-5 text-center sm:p-6">
       <div v-if="error" role="alert" class="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{{ error }}</div>
       <template v-if="snapshot">
         <div v-if="snapshot.qrCode" class="mx-auto w-fit rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

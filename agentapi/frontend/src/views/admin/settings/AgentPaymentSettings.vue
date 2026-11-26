@@ -433,9 +433,7 @@ onMounted(() => void load())
         <div  class="space-y-6">
           <!-- Payment System Settings -->
           <div class="card">
-            <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
-            >
+            <div class="card-header">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.payment.title") }}
               </h2>
@@ -464,7 +462,7 @@ onMounted(() => void load())
                 </a>
               </p>
             </div>
-            <div class="space-y-4 p-6">
+            <div class="space-y-4 p-5 sm:p-6">
               <!-- Enable toggle -->
               <div class="flex items-center justify-between">
                 <div>

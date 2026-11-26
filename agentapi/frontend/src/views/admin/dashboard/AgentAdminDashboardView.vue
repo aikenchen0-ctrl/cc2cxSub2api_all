@@ -82,7 +82,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-7xl space-y-6 p-6 pb-12">
+  <main class="agent-page">
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">本站管理</p>
@@ -120,8 +120,8 @@ onMounted(() => void load())
         部分数据暂不可用：{{ partialFailures.join('、') }}。其余本站统计仍可使用。
       </p>
 
-      <section class="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="核心统计">
-        <div class="card flex items-center gap-3 p-4">
+      <section class="grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="核心统计">
+        <div class="card flex h-full items-center gap-3 p-5">
           <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="chart" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">24 小时请求</p>
@@ -129,7 +129,7 @@ onMounted(() => void load())
             <p class="text-xs text-gray-400">本站精确时间窗口</p>
           </div>
         </div>
-        <div class="card flex items-center gap-3 p-4">
+        <div class="card flex h-full items-center gap-3 p-5">
           <div class="rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"><Icon name="cube" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">已观测令牌</p>
@@ -137,7 +137,7 @@ onMounted(() => void load())
             <p class="text-xs text-gray-400">仅含本站用量快照</p>
           </div>
         </div>
-        <div class="card flex items-center gap-3 p-4">
+        <div class="card flex h-full items-center gap-3 p-5">
           <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="check" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">已测量请求</p>
@@ -145,7 +145,7 @@ onMounted(() => void load())
             <p class="text-xs text-primary-600 dark:text-primary-300">不展示租户用户目录</p>
           </div>
         </div>
-        <div class="card flex items-center gap-3 p-4">
+        <div class="card flex h-full items-center gap-3 p-5">
           <div class="rounded-lg bg-primary-100 p-2 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300"><Icon name="dollar" size="md" /></div>
           <div>
             <p class="text-xs font-medium text-gray-500">已报告实际费用</p>
@@ -155,23 +155,23 @@ onMounted(() => void load())
         </div>
       </section>
 
-      <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="运行状态">
-        <div class="card p-5">
+      <section class="grid gap-5 md:grid-cols-2 xl:grid-cols-4" aria-label="运行状态">
+        <div class="card h-full p-5">
           <p class="text-xs font-medium text-gray-500">站点状态</p>
           <div class="mt-2 flex items-center gap-2"><AgentStatusBadge :status="context.agent.status" :label="context.agent.status === 'active' ? '运行中' : context.agent.status" /></div>
           <p class="mt-2 truncate text-xs text-gray-400">{{ context.agent.domain || '域名待配置' }}</p>
         </div>
-        <div class="card p-5">
+        <div class="card h-full p-5">
           <p class="text-xs font-medium text-gray-500">计费方式</p>
           <p class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">用户余额计费</p>
           <p class="mt-2 text-xs text-gray-400">账户余额由统一账本管理</p>
         </div>
-        <div class="card p-5">
+        <div class="card h-full p-5">
           <p class="text-xs font-medium text-gray-500">待确认</p>
           <p class="mt-2 text-2xl font-bold text-amber-600">{{ pendingSettlements.toLocaleString() }}</p>
           <p class="mt-1 text-xs text-gray-400">本站待核对结算记录</p>
         </div>
-        <div class="card p-5">
+        <div class="card h-full p-5">
           <p class="text-xs font-medium text-gray-500">用量明细覆盖</p>
           <p class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{{ coverageLabel }}</p>
           <p class="mt-1 text-xs text-gray-400">{{ insights?.status === 'partial' ? '部分可用' : insights?.status === 'measured' ? '实测' : '暂无数据' }}</p>

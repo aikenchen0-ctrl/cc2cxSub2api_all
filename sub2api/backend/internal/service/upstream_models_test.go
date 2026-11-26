@@ -127,6 +127,43 @@ func TestBuildOpenAIModelsURL(t *testing.T) {
 	}
 }
 
+func TestAlternateModelsRequestSupportsCommonGatewayRoutes(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		base string
+		want string
+	}{
+		{base: "https://provider.example/v1/models", want: "https://provider.example/models"},
+		{base: "https://provider.example/models", want: "https://provider.example/v1/models"},
+		{base: "https://provider.example/api/v1/models", want: "https://provider.example/api/models"},
+		{base: "https://provider.example/api/models", want: "https://provider.example/api/v1/models"},
+	} {
+		req, err := http.NewRequest(http.MethodGet, tt.base, nil)
+		require.NoError(t, err)
+		alternate := alternateModelsRequest(req)
+		require.NotNil(t, alternate)
+		require.Equal(t, tt.want, alternate.URL.String())
+	}
+}
+
+func TestFetchUpstreamSupportedModelsRetriesAlternateEndpoint(t *testing.T) {
+	t.Parallel()
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(`{"error":"not found"}`))},
+		{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"gateway-model"}]}`))},
+	}}
+	svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+	models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+		ID: 101, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "key", "base_url": "https://provider.example/v1"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gateway-model"}, models)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://provider.example/v1/models", upstream.requests[0].URL.String())
+	require.Equal(t, "https://provider.example/models", upstream.requests[1].URL.String())
+}
+
 func TestBuildGeminiModelsURL(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +199,11 @@ func TestExtractUpstreamModelIDs(t *testing.T) {
 			name: "standard id wins over provider-specific model field",
 			body: `{"data":[{"id":"canonical-id","model":"display-model"}]}`,
 			want: []string{"canonical-id"},
+		},
+		{
+			name: "compatible model field fallback",
+			body: `{"data":[{"model":"model-field"},{"model_id":"snake-model"}]}`,
+			want: []string{"model-field", "snake-model"},
 		},
 		{
 			name: "codex manifest uses slug",
@@ -508,6 +550,11 @@ func TestSyncUpstreamModelCatalogUsesConfiguredModelsWhenListEndpointUnsupported
 			Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
 		},
 		{
+			StatusCode: http.StatusNotFound,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
+		},
+		{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body: io.NopCloser(strings.NewReader(`{
@@ -552,10 +599,13 @@ func TestSyncUpstreamModelCatalogUsesConfiguredModelsWhenListEndpointUnsupported
 	require.NoError(t, err)
 	require.Contains(t, account.GetUpstreamModelMetadataSnapshot().Models, "old-live-model", "an unavailable model-list endpoint is not evidence of removal")
 	require.Equal(t, []string{"glm-5.3"}, catalog.Models)
-	require.Empty(t, catalog.Warnings)
-	require.Len(t, upstream.requests, 2)
+	// 退回配置映射必须显式告警，避免后台把配置模型当成上游真实列表。
+	require.Len(t, catalog.Warnings, 1)
+	require.Equal(t, UpstreamModelListUnavailableCode, catalog.Warnings[0].Code)
+	require.Len(t, upstream.requests, 3)
 	require.Equal(t, "https://provider.example/v1/models", upstream.requests[0].URL.String())
-	require.Equal(t, modelsDevRegistryURL, upstream.requests[1].URL.String())
+	require.Equal(t, "https://provider.example/models", upstream.requests[1].URL.String())
+	require.Equal(t, modelsDevRegistryURL, upstream.requests[2].URL.String())
 	metadata := catalog.Metadata["glm-5.3"]
 	require.Equal(t, []string{"low", "medium", "high"}, metadata.SupportedReasoningLevels)
 	require.Equal(t, []string{"text"}, metadata.InputModalities)
@@ -637,9 +687,9 @@ func TestSyncUpstreamModelCatalogUsesConfiguredModelsForInsufficientBalance(t *t
 }
 
 func TestSyncUpstreamModelCatalogRequiresConfiguredModelsForUnsupportedListEndpoint(t *testing.T) {
-	upstream := &httpUpstreamRecorder{resp: &http.Response{
-		StatusCode: http.StatusMethodNotAllowed,
-		Body:       io.NopCloser(strings.NewReader(`{"error":"method not allowed"}`)),
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusMethodNotAllowed, Body: io.NopCloser(strings.NewReader(`{"error":"method not allowed"}`))},
+		{StatusCode: http.StatusMethodNotAllowed, Body: io.NopCloser(strings.NewReader(`{"error":"method not allowed"}`))},
 	}}
 	svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
 
@@ -649,7 +699,7 @@ func TestSyncUpstreamModelCatalogRequiresConfiguredModelsForUnsupportedListEndpo
 	})
 	require.Error(t, err)
 	require.Equal(t, http.StatusMethodNotAllowed, upstreamModelSyncStatusCode(err))
-	require.Len(t, upstream.requests, 1)
+	require.Len(t, upstream.requests, 2)
 }
 
 // Scenario: 完整上游模型清单优先保存能力。

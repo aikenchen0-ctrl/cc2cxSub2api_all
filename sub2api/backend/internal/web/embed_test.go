@@ -689,6 +689,23 @@ func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
 	}
 }
 
+// The API key page links to /downloads/genimg-skill.zip. Keep the packaged
+// skill archive inside the embedded frontend so a plain deploy can download it.
+func TestEmbeddedFrontendServesGenimgSkillDownload(t *testing.T) {
+	router := gin.New()
+	router.Use(ServeEmbeddedFrontend())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/downloads/genimg-skill.zip", nil)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "zip")
+	body := w.Body.Bytes()
+	require.Greater(t, len(body), 4)
+	assert.Equal(t, []byte("PK\x03\x04"), body[:4])
+}
+
 func TestNewFrontendServer(t *testing.T) {
 	t.Run("creates_server_successfully", func(t *testing.T) {
 		provider := &mockSettingsProvider{
@@ -908,4 +925,25 @@ func BenchmarkFrontendServerServeIndexHTML(b *testing.B) {
 
 		server.serveIndexHTML(c)
 	}
+}
+
+// API clients must never receive the SPA shell with a 200 status. A mistyped
+// gateway path used to answer POST with index.html, so satellites parsed a
+// login page as JSON and reported "invalid character '<'".
+func TestEmbeddedFrontendDoesNotAnswerNonGETRequestsWithSPA(t *testing.T) {
+	router := gin.New()
+	router.Use(ServeEmbeddedFrontend())
+
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(method, "/login", strings.NewReader("{}"))
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code, "method=%s", method)
+		assert.NotContains(t, w.Header().Get("Content-Type"), "text/html", "method=%s", method)
+	}
+
+	navigation := httptest.NewRecorder()
+	router.ServeHTTP(navigation, httptest.NewRequest(http.MethodGet, "/login", nil))
+	require.Equal(t, http.StatusOK, navigation.Code)
+	assert.Contains(t, navigation.Header().Get("Content-Type"), "text/html")
 }

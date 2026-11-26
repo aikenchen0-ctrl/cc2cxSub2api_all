@@ -83,10 +83,10 @@ export default {
     columnAlwaysVisible: 'This column is always visible',
     createKey: 'Create API Key',
     desktopDownloads: {
-      imageVideo: 'Image & Video',
+      imageSkill: 'SKILL',
       ccLaunch: 'CC-Launch',
-      confirmTitle: 'Download Windows Client',
-      confirmMessage: 'Download the Windows client installer for "{name}"?',
+      confirmTitle: 'Download Client',
+      confirmMessage: 'Download "{name}"?',
       download: 'Download'
     },
     editKey: 'Edit API Key',

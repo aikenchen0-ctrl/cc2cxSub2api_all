@@ -25,5 +25,7 @@ func main() {
 	service.StartPromptSyncScheduler()
 	service.StartCanvasProjectCleanupScheduler()
 	handler.StartVideoTaskPoller()
+	go service.MigrateLegacyImagePayloads()
+	service.StartCanvasImageTaskRecovery()
 	log.Fatal(router.New().Run(":" + config.Cfg.Port))
 }

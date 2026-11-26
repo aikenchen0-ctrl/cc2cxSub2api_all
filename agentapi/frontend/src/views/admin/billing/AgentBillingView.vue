@@ -132,7 +132,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-6xl space-y-6 p-6 pb-12">
+  <main class="agent-page">
     <header>
       <p class="text-sm font-medium text-primary-600">本站收费</p>
       <h1 class="mt-1 text-2xl font-bold">收费配置</h1>
@@ -145,9 +145,9 @@ onMounted(() => void load())
     <p v-if="notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ notice }}</p>
     <section v-if="loading" class="card p-8 text-center text-sm text-gray-500">正在读取本站收费配置…</section>
 
-    <form v-else-if="tab === 'settings' && settings" class="card space-y-4 p-6" @submit.prevent="saveSettings">
+    <form v-else-if="tab === 'settings' && settings" class="card space-y-5 p-5 sm:p-6" @submit.prevent="saveSettings">
       <label class="flex items-center justify-between gap-4 rounded-lg border p-4"><span><span class="block text-sm font-medium">开通本站收费</span><span class="mt-1 block text-xs text-gray-500">开通后，用户在本站按下面的渠道付款，额度记入本站账户。</span></span><input v-model="settings.enabled" type="checkbox" class="h-4 w-4"></label>
-      <div class="grid gap-4 md:grid-cols-3">
+      <div class="grid gap-5 md:grid-cols-3">
         <label class="text-sm">最低金额<AgentInput v-model="settings.min_amount" class="mt-1" /></label>
         <label class="text-sm">最高金额<AgentInput v-model="settings.max_amount" class="mt-1" /></label>
         <label class="text-sm">每日限额，0 为不限<AgentInput v-model="settings.daily_limit" class="mt-1" /></label>
@@ -171,16 +171,16 @@ onMounted(() => void load())
       <div class="flex justify-end"><button class="btn btn-primary" type="submit" :disabled="saving">保存收费设置</button></div>
     </form>
 
-    <section v-else-if="tab === 'providers'" class="space-y-4">
-      <form class="card space-y-4 p-6" @submit.prevent="saveProvider">
+    <section v-else-if="tab === 'providers'" class="space-y-5">
+      <form class="card space-y-5 p-5 sm:p-6" @submit.prevent="saveProvider">
         <h2 class="text-lg font-semibold">{{ providerForm.id ? '编辑渠道' : '新增渠道' }}</h2>
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-5 md:grid-cols-3">
           <label class="text-sm">渠道类型<select v-model="providerForm.provider_key" class="input mt-1"><option v-for="key in providerKeys" :key="key" :value="key">{{ key }}</option></select></label>
           <label class="text-sm">名称<AgentInput v-model="providerForm.name" class="mt-1" /></label>
           <label class="text-sm">模式<AgentInput v-model="providerForm.payment_mode" class="mt-1" placeholder="popup 或 qrcode" /></label>
         </div>
         <label class="text-sm">支持的支付方式<AgentInput :model-value="providerForm.supported_types.join(',')" class="mt-1" @update:model-value="providerForm.supported_types = String($event).split(',').map(item => item.trim()).filter(Boolean)" /></label>
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-5 md:grid-cols-2">
           <label v-for="field in configFields[providerForm.provider_key] || []" :key="field" class="text-sm">{{ field }}<AgentInput :model-value="providerForm.config?.[field] || ''" class="mt-1" :type="['pkey','privateKey','apiV3Key','secretKey','webhookSecret','apiKey','publicKey'].includes(field) ? 'password' : 'text'" :placeholder="providerForm.config_configured?.[field] ? '已配置，留空不修改' : ''" @update:model-value="providerForm.config = { ...(providerForm.config || {}), [field]: String($event) }" /></label>
         </div>
         <label class="block text-sm">单渠道限额 JSON<AgentInput v-model="providerForm.limits" class="mt-1 font-mono" placeholder='{"alipay":{"single_min":1,"single_max":5000,"currency":"CNY"}}' /></label>
@@ -189,14 +189,14 @@ onMounted(() => void load())
         <label class="flex items-center gap-2 text-sm"><input v-model="providerForm.allow_user_refund" type="checkbox">允许用户申请退款</label>
         <div class="flex justify-end gap-2"><button class="btn btn-secondary" type="button" @click="providerForm = emptyProvider()">清空</button><button class="btn btn-primary" type="submit" :disabled="saving">保存渠道</button></div>
       </form>
-      <article v-for="item in providers" :key="item.id" class="card flex flex-wrap items-center justify-between gap-3 p-4">
+      <article v-for="item in providers" :key="item.id" class="card flex flex-wrap items-center justify-between gap-3 p-5">
         <div><p class="font-medium">{{ item.name }} · {{ item.provider_key }}</p><p class="text-xs text-gray-500">{{ item.supported_types.join(', ') }} · {{ item.enabled ? '启用' : '停用' }}</p><p v-if="item.webhook_path" class="mt-1 font-mono text-xs text-gray-400">{{ item.webhook_path }}</p></div>
         <div class="flex gap-2"><button class="btn btn-secondary" type="button" @click="editProvider(item)">编辑</button><button class="btn btn-secondary" type="button" @click="item.id && removeProvider(item.id)">删除</button></div>
       </article>
     </section>
 
-    <section v-else-if="tab === 'plans'" class="space-y-4">
-      <form class="card grid gap-4 p-6 md:grid-cols-3" @submit.prevent="savePlan">
+    <section v-else-if="tab === 'plans'" class="space-y-5">
+      <form class="card grid gap-5 p-5 sm:p-6 md:grid-cols-3" @submit.prevent="savePlan">
         <label class="text-sm">名称<AgentInput v-model="planForm.name" class="mt-1" /></label>
         <label class="text-sm">价格<AgentInput v-model="planForm.price" class="mt-1" /></label>
         <label class="text-sm">币种<AgentInput v-model="planForm.currency" class="mt-1" /></label>
@@ -208,20 +208,20 @@ onMounted(() => void load())
         <label class="flex items-center gap-2 text-sm"><input v-model="planForm.for_sale" type="checkbox">在售</label>
         <div class="md:col-span-3 flex justify-end gap-2"><button class="btn btn-secondary" type="button" @click="planForm = emptyPlan()">清空</button><button class="btn btn-primary" type="submit" :disabled="saving">保存套餐</button></div>
       </form>
-      <article v-for="item in plans" :key="item.id" class="card flex items-center justify-between p-4">
+      <article v-for="item in plans" :key="item.id" class="card flex items-center justify-between gap-3 p-5">
         <div><p class="font-medium">{{ item.name }} · {{ item.price }} {{ item.currency }}</p><p class="text-xs text-gray-500">{{ item.for_sale ? '在售' : '下架' }} · {{ item.validity_days }} {{ item.validity_unit }}</p></div>
         <div class="flex gap-2"><button class="btn btn-secondary" type="button" @click="editPlan(item)">编辑</button><button class="btn btn-secondary" type="button" @click="item.id && removePlan(item.id)">删除</button></div>
       </article>
     </section>
 
-    <section v-else class="space-y-4">
-      <div v-if="dashboard" class="grid gap-4 sm:grid-cols-4">
-        <div class="card p-4"><p class="text-xs text-gray-500">已完成</p><p class="text-2xl font-bold">{{ dashboard.completed_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">待支付</p><p class="text-2xl font-bold">{{ dashboard.pending_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">退款</p><p class="text-2xl font-bold">{{ dashboard.refunded_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">实收</p><p class="text-2xl font-bold">{{ dashboard.amount_available ? dashboard.completed_pay_amount : '待确认' }}</p></div>
+    <section v-else class="space-y-5">
+      <div v-if="dashboard" class="grid gap-5 sm:grid-cols-4">
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">已完成</p><p class="text-2xl font-bold">{{ dashboard.completed_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">待支付</p><p class="text-2xl font-bold">{{ dashboard.pending_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">退款</p><p class="text-2xl font-bold">{{ dashboard.refunded_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">实收</p><p class="text-2xl font-bold">{{ dashboard.amount_available ? dashboard.completed_pay_amount : '待确认' }}</p></div>
       </div>
-      <article v-for="item in orders" :key="String(item.id)" class="card flex flex-wrap items-center justify-between gap-3 p-4">
+      <article v-for="item in orders" :key="String(item.id)" class="card flex flex-wrap items-center justify-between gap-3 p-5">
         <div><p class="font-mono text-sm">{{ item.out_trade_no }}</p><p class="text-sm">{{ item.pay_amount }} {{ item.currency }} · {{ item.status }} · {{ item.payment_type }}</p></div>
         <div class="flex gap-2">
           <button v-if="item.status === 'PENDING'" class="btn btn-secondary" type="button" @click="agentAPI.billing.cancelOrder(Number(item.id)).then(load)">取消</button>

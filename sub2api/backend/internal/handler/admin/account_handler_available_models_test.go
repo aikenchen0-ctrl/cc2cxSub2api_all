@@ -403,6 +403,11 @@ func TestAccountHandlerSyncUpstreamModelsPreviewUsesProvidedModelMapping(t *test
 			Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
 		},
 		{
+			StatusCode: http.StatusNotFound,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
+		},
+		{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body: io.NopCloser(strings.NewReader(`{

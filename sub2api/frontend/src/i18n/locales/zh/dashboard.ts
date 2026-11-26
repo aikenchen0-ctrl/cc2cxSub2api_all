@@ -83,10 +83,10 @@ export default {
     columnAlwaysVisible: '该列固定显示，不可隐藏',
     createKey: '创建密钥',
     desktopDownloads: {
-      imageVideo: 'SKILL',
+      imageSkill: 'SKILL',
       ccLaunch: '一键安装skill',
-      confirmTitle: '下载 Windows 客户端',
-      confirmMessage: '是否下载“{name}”Windows 客户端安装程序？',
+      confirmTitle: '下载客户端',
+      confirmMessage: '是否下载“{name}”？',
       download: '下载'
     },
     editKey: '编辑密钥',

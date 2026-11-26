@@ -46,7 +46,7 @@ onMounted(load)
 
 <template>
   <section class="space-y-4" aria-label="用量分析">
-    <div class="card flex flex-wrap items-center justify-between gap-3 p-4">
+    <div class="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
       <div>
         <h2 class="font-semibold text-gray-900 dark:text-white">用量与费用分析</h2>
         <p class="mt-1 text-xs text-gray-500">数据源：本站请求留存的用量快照；只读统计，不重新计费。</p>
@@ -72,12 +72,12 @@ onMounted(load)
 
       <AgentUsageStatsCards :stats="data" />
 
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <AgentModelDistributionChart v-model:metric="metric" :model-stats="data.models" />
         <AgentTokenUsageTrend :trend-data="data.trend" />
       </div>
 
-      <div class="card p-4 text-sm text-gray-600 dark:text-gray-300">
+    <div class="card p-5 text-sm text-gray-600 dark:text-gray-300 sm:p-6">
         <p>模型路由一致性：{{ data.route_observed ? `${data.route_mismatch} 条不一致 / ${data.route_observed} 条已观测` : '未观测' }}</p>
         <p class="mt-1 text-xs text-gray-500">图表的空时间桶表示该桶内没有本站请求；“无数据”表示明细尚未同步，二者含义不同。</p>
       </div>

@@ -22,7 +22,7 @@ const recommendation = computed(() => recommendDownload())
       </nav>
     </header>
 
-    <main class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+    <main class="mx-auto max-w-5xl space-y-6 px-4 py-12 sm:px-6 sm:py-16">
       <div class="max-w-2xl">
         <p class="text-sm font-medium uppercase tracking-[0.18em] text-primary-600 dark:text-primary-400">CCSwitch</p>
         <h1 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">客户端下载</h1>
@@ -31,7 +31,7 @@ const recommendation = computed(() => recommendDownload())
         </p>
       </div>
 
-      <section class="mt-10 rounded-2xl border border-primary-200 bg-primary-50/70 p-5 dark:border-primary-900/60 dark:bg-primary-950/30">
+      <section class="rounded-2xl border border-primary-200 bg-primary-50/70 p-5 dark:border-primary-900/60 dark:bg-primary-950/30">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p class="text-sm font-medium text-primary-700 dark:text-primary-300">为当前设备推荐</p>
@@ -49,7 +49,7 @@ const recommendation = computed(() => recommendDownload())
         </div>
       </section>
 
-      <section class="mt-8 grid gap-4 md:grid-cols-2" aria-label="CCSwitch 下载列表">
+      <section class="grid gap-5 md:grid-cols-2" aria-label="CCSwitch 下载列表">
         <a
           v-for="item in downloads"
           :key="item.key"

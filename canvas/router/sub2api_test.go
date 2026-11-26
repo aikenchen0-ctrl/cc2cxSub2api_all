@@ -39,6 +39,7 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 		return
 	}
 	config.Cfg = config.Config{StorageDriver: "sqlite", DatabaseDSN: t.TempDir() + "/test.db", JWTSecret: strings.Repeat("j", 32), AILogDir: t.TempDir()}
+	t.Setenv("GENERATED_IMAGE_DIR", t.TempDir())
 	t.Cleanup(func() {
 		if db, err := repository.DB(); err == nil {
 			if sqlDB, err := db.DB(); err == nil {
@@ -55,12 +56,24 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 			if r.Header.Get("Authorization") != "Bearer satellite-test-credential" || r.Header.Get("X-Sub2API-On-Behalf-Of") != "http-user" || r.Header.Get("X-Sub2API-Satellite") != "canvas" {
 				t.Error("missing image satellite identity")
 			}
-			var body struct{ Model string }
+			var body struct {
+				Model  string
+				Prompt string
+			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Model != "gpt-image-2" {
 				t.Error("image model was not forwarded unchanged")
 			}
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":[{"b64_json":"aW1hZ2UtZml4dHVyZQ=="}]}`)
+			if body.Prompt == "failed image" {
+				w.WriteHeader(http.StatusForbidden)
+				io.WriteString(w, `{"error":{"message":"upstream unavailable for this image"}}`)
+				return
+			}
+			if body.Prompt == "remote image" {
+				io.WriteString(w, `{"data":[{"url":"http://`+r.Host+`/remote.png"}]}`)
+				return
+			}
+			io.WriteString(w, `{"data":[{"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="}]}`)
 			return
 		}
 		if r.URL.Path == "/v1/videos/provider-video/content" {
@@ -154,7 +167,7 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	request.AddCookie(sessionCookie)
 	router.ServeHTTP(image, request)
-	if image.Code != 200 || !strings.Contains(image.Body.String(), "aW1hZ2UtZml4dHVyZQ==") || upstreamCalls.Load() != 2 {
+	if image.Code != 200 || !strings.Contains(image.Body.String(), "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=") || upstreamCalls.Load() != 2 {
 		t.Fatalf("image relay failed: %d %s", image.Code, image.Body.String())
 	}
 	imageTask := httptest.NewRecorder()
@@ -182,8 +195,78 @@ func TestSub2APISSOAndRelayHTTP(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if generated.Status != "completed" || generated.ImageURL == "" || generated.Error != "" || upstreamCalls.Load() != 3 {
+	if generated.Status != "completed" || generated.ImageURL == "" || strings.HasPrefix(generated.ImageURL, "data:") || generated.ResponseBody != "" || generated.Error != "" || upstreamCalls.Load() != 3 {
 		t.Fatalf("async image task failed: status=%s error=%s", generated.Status, generated.Error)
+	}
+	imageContent := httptest.NewRecorder()
+	request = httptest.NewRequest("GET", generated.ImageURL, nil)
+	request.AddCookie(sessionCookie)
+	router.ServeHTTP(imageContent, request)
+	if imageContent.Code != 200 || imageContent.Header().Get("Content-Type") != "image/png" || imageContent.Body.Len() == 0 {
+		t.Fatalf("generated image content failed: %d %s", imageContent.Code, imageContent.Header().Get("Content-Type"))
+	}
+	remoteTaskResponse := httptest.NewRecorder()
+	request = httptest.NewRequest("POST", "/api/v1/canvas/image-tasks", strings.NewReader(`{"channelId":"sub2api-relay","request":{"model":"gpt-image-2","prompt":"remote image"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(sessionCookie)
+	router.ServeHTTP(remoteTaskResponse, request)
+	var remoteCreated struct {
+		Code int
+		Data struct{ ID string }
+	}
+	if err := json.Unmarshal(remoteTaskResponse.Body.Bytes(), &remoteCreated); err != nil || remoteCreated.Code != 0 || remoteCreated.Data.ID == "" {
+		t.Fatalf("remote image task create failed: %s", remoteTaskResponse.Body.String())
+	}
+	var remoteGenerated model.CanvasImageTask
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		var found bool
+		var err error
+		remoteGenerated, found, err = service.GetUserCanvasImageTask(result.Data.User.ID, remoteCreated.Data.ID)
+		if err != nil || !found {
+			t.Fatal("remote image task missing")
+		}
+		if remoteGenerated.Status == "completed" || remoteGenerated.Status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if remoteGenerated.Status != "completed" || !strings.HasPrefix(remoteGenerated.ImageURL, "http://") || !strings.HasSuffix(remoteGenerated.ImageURL, "/remote.png") || remoteGenerated.ResponseBody != "" || upstreamCalls.Load() != 4 {
+		t.Fatalf("remote image URL was not preserved: status=%s url=%s calls=%d", remoteGenerated.Status, remoteGenerated.ImageURL, upstreamCalls.Load())
+	}
+	failedTask := httptest.NewRecorder()
+	request = httptest.NewRequest("POST", "/api/v1/canvas/image-tasks", strings.NewReader(`{"channelId":"sub2api-relay","request":{"model":"gpt-image-2","prompt":"failed image"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(sessionCookie)
+	router.ServeHTTP(failedTask, request)
+	if err := json.Unmarshal(failedTask.Body.Bytes(), &created); err != nil || created.Code != 0 {
+		t.Fatalf("failed image task create: %s", failedTask.Body.String())
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		status := httptest.NewRecorder()
+		request = httptest.NewRequest("GET", "/api/v1/canvas/image-tasks/"+created.Data.ID, nil)
+		request.AddCookie(sessionCookie)
+		router.ServeHTTP(status, request)
+		if status.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("image task status must not be cached")
+		}
+		if strings.Contains(status.Body.String(), `"status":"failed"`) {
+			if !strings.Contains(status.Body.String(), "upstream unavailable for this image") {
+				t.Fatalf("image task lost upstream error: %s", status.Body.String())
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("failed upstream left image task processing")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	batch := httptest.NewRecorder()
+	request = httptest.NewRequest("POST", "/api/v1/canvas/image-tasks/status", strings.NewReader(`{"ids":["`+created.Data.ID+`","`+remoteGenerated.ID+`"]}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(sessionCookie)
+	router.ServeHTTP(batch, request)
+	if batch.Header().Get("Cache-Control") != "no-store" || !strings.Contains(batch.Body.String(), `"status":"failed"`) || !strings.Contains(batch.Body.String(), `"status":"completed"`) {
+		t.Fatalf("batch did not return terminal image states: %s", batch.Body.String())
 	}
 	task, err := service.CreateVideoTask(service.VideoTaskCreateInput{UserID: result.Data.User.ID, Model: "gpt-5.5", ChannelID: "sub2api-relay", ClientTaskID: "local-video", UpstreamTaskID: "provider-video", Status: "completed"})
 	if err != nil {

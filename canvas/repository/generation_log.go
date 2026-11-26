@@ -121,6 +121,35 @@ func ListImageGenerationLogs(userID string, limit int) ([]model.ImageGenerationL
 	return logs, err
 }
 
+func ListImageGenerationLogPayloadsWithEmbeddedImages(excluded map[string]bool, limit int) ([]model.ImageGenerationLog, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 4
+	}
+	query := db.Select("id", "user_id", "payload_json").
+		Where("deleted_at = ? AND payload_json LIKE ?", "", "%data:image/%")
+	if len(excluded) > 0 {
+		query = query.Where("id NOT IN ?", mapKeys(excluded))
+	}
+	var logs []model.ImageGenerationLog
+	err = query.Order("created_at ASC").Limit(limit).Find(&logs).Error
+	return logs, err
+}
+
+func UpdateImageGenerationLogPayload(id string, payload string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return db.Model(&model.ImageGenerationLog{}).Where("id = ?", strings.TrimSpace(id)).Updates(map[string]any{
+		"payload_json": payload,
+		"updated_at":   userConfigTimestamp(),
+	}).Error
+}
+
 func HasAnyImageGenerationLog(userID string) (bool, error) {
 	db, err := DB()
 	if err != nil {
@@ -254,4 +283,3 @@ func generationLogIdentityValues(values ...string) []string {
 	}
 	return result
 }
-

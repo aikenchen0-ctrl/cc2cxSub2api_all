@@ -61,6 +61,7 @@ func ObserveAttemptPolicy(
 	obs.RequestScopedTransient = err.RequestScopedTransient
 	obs.AccountAuthFailure = err.IsCredentialFailure()
 	obs.AccountStateFailure = err.Scope == GatewayFailureScopeAccount && err.StatusCode == http.StatusForbidden
+	obs.UpstreamModelMiss = attemptpolicy.IsUpstreamModelMissStatus(err.StatusCode)
 	obs.RequestInvalid = !err.ShouldRetryNextAccount() ||
 		err.StatusCode == http.StatusBadRequest || err.StatusCode == http.StatusUnprocessableEntity
 	obs.CipherOrSignature = isCipherOrSignatureFailoverReason(err.Reason) ||

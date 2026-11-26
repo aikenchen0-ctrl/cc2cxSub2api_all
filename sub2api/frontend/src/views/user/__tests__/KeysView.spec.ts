@@ -43,6 +43,8 @@ const messages: Record<string, string> = {
   'keys.columnSettings': 'Column Settings',
   'keys.createKey': 'Create API Key',
   'keys.created': 'Created',
+  'keys.desktopDownloads.imageSkill': 'SKILL',
+  'keys.desktopDownloads.ccLaunch': 'CC-Launch',
   'keys.expiresAt': 'Expires',
   'keys.group': 'Group',
   'keys.id': 'ID',
@@ -413,15 +415,42 @@ describe('user KeysView column settings', () => {
     wrapper.unmount()
   })
 
-  it('places the Windows client download buttons before refresh', async () => {
+  it('places the SKILL and Windows client download buttons before refresh', async () => {
     const wrapper = await mountView()
-    const imageVideoButton = wrapper.get('[data-test="download-image-video-client"]')
+    const skillButton = wrapper.get('[data-test="download-image-skill"]')
     const ccLaunchButton = wrapper.get('[data-test="download-cc-launch-client"]')
 
-    expect(imageVideoButton.text()).toContain('keys.desktopDownloads.imageVideo')
-    expect(ccLaunchButton.text()).toContain('keys.desktopDownloads.ccLaunch')
+    expect(skillButton.text()).toContain('SKILL')
+    expect(ccLaunchButton.text()).toContain('CC-Launch')
     expect(ccLaunchButton.element.nextElementSibling?.getAttribute('title')).toBe('Refresh')
     wrapper.unmount()
+  })
+
+  it('downloads the image SKILL zip immediately without a confirmation dialog', async () => {
+    const wrapper = await mountView()
+    let downloadedUrl = ''
+    let downloadedFilename = ''
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloadedUrl = this.href
+        downloadedFilename = this.download
+      })
+
+    try {
+      await wrapper.get('[data-test="download-image-skill"]').trigger('click')
+      const dialog = wrapper
+        .findAllComponents({ name: 'ConfirmDialog' })
+        .find((item) => item.props('title') === 'keys.desktopDownloads.confirmTitle')
+
+      expect(dialog?.props('show')).toBe(false)
+      expect(downloadedUrl).toContain('/downloads/genimg-skill.zip')
+      expect(downloadedFilename).toBe('genimg-skill.zip')
+      expect(clickSpy).toHaveBeenCalledOnce()
+    } finally {
+      clickSpy.mockRestore()
+      wrapper.unmount()
+    }
   })
 
   it('downloads the Windows client only after confirmation', async () => {

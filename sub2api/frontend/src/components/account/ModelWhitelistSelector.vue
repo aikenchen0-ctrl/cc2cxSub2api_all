@@ -330,12 +330,23 @@ const syncUpstreamModels = async () => {
 
     emit('update:modelValue', newModels)
     const warnings = result.warnings ?? []
+    const listUnavailableWarning = warnings.find(
+      warning => warning.code === 'upstream_model_list_unavailable'
+    )
     const hasPartialMetadata = warnings.some(
       warning => warning.code === 'upstream_model_metadata_partial'
     )
     const hasIncompleteMetadata = warnings.some(
       warning => warning.code === 'upstream_model_metadata_incomplete'
     )
+    if (listUnavailableWarning) {
+      // 上游 /models 读不到时后端会退回账号配置的模型映射：必须告诉管理员
+      // 这批模型不是上游实时列表，否则会被误当成同步成功。
+      appStore.showWarning(
+        listUnavailableWarning.message || t('admin.accounts.syncUpstreamModelsMetadataIncomplete')
+      )
+      return
+    }
     if (hasIncompleteMetadata) {
       appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataIncomplete'))
       return

@@ -65,6 +65,9 @@ func New() *gin.Engine {
 	v1.GET("/canvas/image-tasks/:id", func(c *gin.Context) {
 		handler.GetCanvasImageTask(c.Writer, c.Request, c.Param("id"))
 	})
+	v1.GET("/canvas/image-tasks/:id/content", func(c *gin.Context) {
+		handler.CanvasImageTaskContent(c.Writer, c.Request, c.Param("id"))
+	})
 	v1.DELETE("/canvas/image-tasks/:id", func(c *gin.Context) {
 		handler.DeleteUserCanvasImageTask(c.Writer, c.Request, c.Param("id"))
 	})

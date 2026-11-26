@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/tigerowo/infinite-canvas/config"
 	"github.com/tigerowo/infinite-canvas/model"
 	"github.com/tigerowo/infinite-canvas/service"
 )
@@ -42,6 +43,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		FailError(w, err)
 		return
 	}
+	service.SetSessionCookie(w, r, session.Token, sessionCookieAge())
 	OK(w, session)
 }
 
@@ -53,6 +55,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		FailError(w, err)
 		return
 	}
+	service.SetSessionCookie(w, r, session.Token, sessionCookieAge())
 	OK(w, session)
 }
 
@@ -71,6 +74,7 @@ func LinuxDoCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loginRedirect(r, redirect, "", err.Error()), http.StatusFound)
 		return
 	}
+	service.SetSessionCookie(w, r, session.Token, sessionCookieAge())
 	http.Redirect(w, r, loginRedirect(r, redirect, session.Token, ""), http.StatusFound)
 }
 
@@ -86,11 +90,21 @@ func AdminLogin(w http.ResponseWriter, r *http.Request) {
 		Fail(w, "需要管理员权限")
 		return
 	}
+	service.SetSessionCookie(w, r, session.Token, sessionCookieAge())
 	OK(w, session)
 }
 
 func CurrentUser(w http.ResponseWriter, r *http.Request) {
 	if user, ok := service.UserFromContext(r.Context()); ok {
+		// Legacy browser sessions may still authenticate with a Bearer token.
+		// Mirror it into the HttpOnly cookie so <img> requests to generated
+		// image content are authenticated as well.
+		if _, err := r.Cookie(service.SessionCookieName); err != nil {
+			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if token != "" && !strings.HasPrefix(token, "cookie:") {
+				service.SetSessionCookie(w, r, token, sessionCookieAge())
+			}
+		}
 		OK(w, user)
 		return
 	}
@@ -183,4 +197,12 @@ func AdminDeleteUser(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	OK(w, true)
+}
+
+func sessionCookieAge() int {
+	hours := config.Cfg.JWTExpireHours
+	if hours <= 0 {
+		hours = 72
+	}
+	return hours * 60 * 60
 }

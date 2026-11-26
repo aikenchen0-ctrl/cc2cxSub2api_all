@@ -358,7 +358,7 @@ curl -X POST https://gogotool.top/api/v1/external/api-keys
 IMAGE_API_BASE_URL=https://example.com/v1/
 IMAGE_API_MODEL=gpt-image-2
 IMAGE_API_KEY=your-api-key
-PROMPT_OPTIMIZER_MODEL=gpt-5.5
+PROMPT_OPTIMIZER_MODEL=gpt-6.1-sol
 ```
 
 不要把真实 `frontend/.env.local`、`backend/.env` 或任何 API Key 提交到仓库。用户在界面里保存的 API Key 会写入后端数据库的个人配置表。

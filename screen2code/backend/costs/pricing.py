@@ -36,6 +36,23 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
     "gpt-6-astra": ModelPricing(
         input=10.00, output=50.00, cache_read=1.00, cache_write=12.50
     ),
+    # Provisional cards for the other published GPT-6 text names. Reuse the
+    # closest verified tier until Sub2API publishes dedicated rates.
+    "gpt-6-sol": ModelPricing(
+        input=5.00, output=30.00, cache_read=0.50
+    ),
+    "gpt-6.1-sol": ModelPricing(
+        input=5.00, output=30.00, cache_read=0.50
+    ),
+    "gpt-6.1-terra": ModelPricing(
+        input=2.50, output=15.00, cache_read=0.25
+    ),
+    "gpt-6.2-astra": ModelPricing(
+        input=10.00, output=50.00, cache_read=1.00, cache_write=12.50
+    ),
+    "gpt-6.2-sol": ModelPricing(
+        input=5.00, output=30.00, cache_read=0.50
+    ),
     # grok-4.7 follows the Sub2API Grok 4.6 card until a separate card is published.
     "grok-4.7": ModelPricing(
         input=2.00, output=6.00, cache_read=0.50

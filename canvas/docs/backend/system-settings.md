@@ -17,15 +17,15 @@ description: settings 表中 public 和 private 配置结构说明
 ```json
 {
   "modelChannel": {
-    "availableModels": ["grok-4.7", "gpt-6-astra", "gpt-image-2"],
+    "availableModels": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "gpt-image-2.6-flare", "gpt-image-2", "gpt-image-2.5", "grok-imagine-image-1.5"],
     "modelCosts": [
-      { "model": "grok-4.7", "credits": 1 },
+      { "model": "gpt-6.1-sol", "credits": 1 },
       { "model": "gpt-6-astra", "credits": 1 },
-      { "model": "gpt-image-2", "credits": 10 }
+      { "model": "gpt-image-2.6-flare", "credits": 10 }
     ],
     "defaultModel": "gpt-image-2",
-    "defaultImageModel": "gpt-image-2",
-    "defaultTextModel": "grok-4.7",
+    "defaultImageModel": "gpt-image-2.6-flare",
+    "defaultTextModel": "gpt-6.1-sol",
     "systemPrompt": "",
     "allowCustomChannel": true
   },
@@ -87,7 +87,7 @@ description: settings 表中 public 和 private 配置结构说明
       "name": "默认渠道",
       "baseUrl": "https://api.example.com",
       "apiKey": "sk-xxx",
-      "models": ["grok-4.7", "gpt-6-astra", "gpt-image-2"],
+      "models": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "gpt-image-2.6-flare", "gpt-image-2", "gpt-image-2.5", "grok-imagine-image-1.5"],
       "weight": 1,
       "enabled": true,
       "remark": ""

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sub2API Image"
+  short_description: "Generate and edit images using a separate Sub2API image key."
+  default_prompt: "Use $sub2api-image to generate or edit the requested image."

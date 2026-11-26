@@ -130,7 +130,7 @@ onMounted(() => void loadContext())
 </script>
 
 <template>
-  <main class="mx-auto max-w-7xl space-y-6 p-6 pb-12">
+  <main class="agent-page">
     <header class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p class="text-sm font-medium text-primary-600 dark:text-primary-400">本站管理</p>

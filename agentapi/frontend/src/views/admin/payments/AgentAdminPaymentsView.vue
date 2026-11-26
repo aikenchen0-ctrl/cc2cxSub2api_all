@@ -30,7 +30,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-5xl space-y-6 p-6 pb-12">
+  <main class="agent-page">
     <header class="flex items-start justify-between gap-4">
       <div>
         <p class="text-sm font-medium text-primary-600">本站管理</p>
@@ -45,11 +45,11 @@ onMounted(() => void load())
       <p v-if="stats.partial || stats.lookup_failures" role="status" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         当前是抽样结果：已查看 {{ stats.members_sampled }} / {{ stats.members_total }} 名成员，{{ stats.lookup_failures }} 次查询失败。未抽样到的金额不会补成 0。
       </p>
-      <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="card p-4"><p class="text-xs text-gray-500">已完成订单</p><p class="mt-1 text-2xl font-bold">{{ stats.completed_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">待支付</p><p class="mt-1 text-2xl font-bold">{{ stats.pending_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">退款申请</p><p class="mt-1 text-2xl font-bold">{{ stats.refund_requested_count }}</p></div>
-        <div class="card p-4"><p class="text-xs text-gray-500">抽样实付</p><p class="mt-1 text-2xl font-bold">{{ stats.amount_available && stats.completed_pay_amount != null ? money(stats.completed_pay_amount, stats.currency || 'USD') : '待确认' }}</p></div>
+      <section class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">已完成订单</p><p class="mt-1 text-2xl font-bold">{{ stats.completed_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">待支付</p><p class="mt-1 text-2xl font-bold">{{ stats.pending_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">退款申请</p><p class="mt-1 text-2xl font-bold">{{ stats.refund_requested_count }}</p></div>
+        <div class="card h-full p-5"><p class="text-xs text-gray-500">抽样实付</p><p class="mt-1 text-2xl font-bold">{{ stats.amount_available && stats.completed_pay_amount != null ? money(stats.completed_pay_amount, stats.currency || 'USD') : '待确认' }}</p></div>
       </section>
     </template>
   </main>

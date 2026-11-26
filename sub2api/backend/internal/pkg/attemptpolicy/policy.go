@@ -27,6 +27,7 @@ type FailureClass string
 
 const (
 	FailureRequestInvalid       FailureClass = "request_invalid"
+	FailureUpstreamModelMiss    FailureClass = "upstream_model_miss"
 	FailureAccountAuth          FailureClass = "account_auth"
 	FailureAccountQuota         FailureClass = "account_quota"
 	FailureAccountState         FailureClass = "account_state"
@@ -82,6 +83,7 @@ type Observation struct {
 	AccountQuotaFailure    bool
 	AccountStateFailure    bool
 	RequestInvalid         bool
+	UpstreamModelMiss      bool
 	CipherOrSignature      bool
 	TransportAfterSend     bool
 	RequestScopedTransient bool
@@ -219,6 +221,20 @@ func Classify(obs Observation) Decision {
 		return repairOrSwitch(FailureTransportAfterSend, endpoint, obs)
 	}
 
+	// An image upstream answering 404/405 for the requested model is reporting
+	// that this account cannot serve that model (the caller records a per-account
+	// model cooldown for it). Another account may still serve it, so switch
+	// accounts instead of failing the caller's whole request.
+	if obs.UpstreamModelMiss && canSwitchOnModelMiss(endpoint) {
+		return Decision{
+			Class:        FailureUpstreamModelMiss,
+			Action:       ActionSwitchAccount,
+			RepairLimit:  limit,
+			RepairDelay:  defaultRepairDelay,
+			ClientStatus: http.StatusBadGateway,
+		}
+	}
+
 	if isTransientStatus(obs.StatusCode) || obs.RetryableOnSameAccount {
 		class := FailureTransientSameAccount
 		if obs.RequestScopedTransient {
@@ -326,6 +342,24 @@ func cooldownFor(penalize bool, cooldown time.Duration) time.Duration {
 		return 0
 	}
 	return cooldown
+}
+
+// canSwitchOnModelMiss reports whether an upstream model-miss status should be
+// retried on another account for the endpoint. Video lookups use 404 to mean
+// "not ready yet", so they keep their existing handling.
+func canSwitchOnModelMiss(endpoint EndpointKind) bool {
+	switch normalizeEndpoint(endpoint) {
+	case EndpointImageSync, EndpointImageAsync:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsUpstreamModelMissStatus reports upstream statuses that mean "this account
+// cannot serve the requested model/route".
+func IsUpstreamModelMissStatus(status int) bool {
+	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
 }
 
 func isAccountHardStatus(status int) bool {

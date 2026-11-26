@@ -20,6 +20,16 @@ class Llm(Enum):
     GROK_4_7_LOW = "grok-4.7 (low thinking)"
     GPT_6_ASTRA_LOW = "gpt-6-astra (low thinking)"
     GPT_6_ASTRA_HIGH = "gpt-6-astra (high thinking)"
+    GPT_6_SOL_LOW = "gpt-6-sol (low thinking)"
+    GPT_6_SOL_HIGH = "gpt-6-sol (high thinking)"
+    GPT_6_1_SOL_LOW = "gpt-6.1-sol (low thinking)"
+    GPT_6_1_SOL_HIGH = "gpt-6.1-sol (high thinking)"
+    GPT_6_1_TERRA_LOW = "gpt-6.1-terra (low thinking)"
+    GPT_6_1_TERRA_HIGH = "gpt-6.1-terra (high thinking)"
+    GPT_6_2_ASTRA_LOW = "gpt-6.2-astra (low thinking)"
+    GPT_6_2_ASTRA_HIGH = "gpt-6.2-astra (high thinking)"
+    GPT_6_2_SOL_LOW = "gpt-6.2-sol (low thinking)"
+    GPT_6_2_SOL_HIGH = "gpt-6.2-sol (high thinking)"
     GPT_5_6_SOL_NONE = "gpt-5.6-sol (no thinking)"
     GPT_5_6_SOL_LOW = "gpt-5.6-sol (low thinking)"
     GPT_5_6_SOL_MEDIUM = "gpt-5.6-sol (medium thinking)"
@@ -85,6 +95,16 @@ MODEL_PROVIDER: dict[Llm, str] = {
     Llm.GROK_4_7_LOW: "openai",
     Llm.GPT_6_ASTRA_LOW: "openai",
     Llm.GPT_6_ASTRA_HIGH: "openai",
+    Llm.GPT_6_SOL_LOW: "openai",
+    Llm.GPT_6_SOL_HIGH: "openai",
+    Llm.GPT_6_1_SOL_LOW: "openai",
+    Llm.GPT_6_1_SOL_HIGH: "openai",
+    Llm.GPT_6_1_TERRA_LOW: "openai",
+    Llm.GPT_6_1_TERRA_HIGH: "openai",
+    Llm.GPT_6_2_ASTRA_LOW: "openai",
+    Llm.GPT_6_2_ASTRA_HIGH: "openai",
+    Llm.GPT_6_2_SOL_LOW: "openai",
+    Llm.GPT_6_2_SOL_HIGH: "openai",
     Llm.GPT_5_6_SOL_NONE: "openai",
     Llm.GPT_5_6_SOL_LOW: "openai",
     Llm.GPT_5_6_SOL_MEDIUM: "openai",
@@ -161,6 +181,16 @@ OPENAI_MODEL_CONFIG: dict[Llm, dict[str, str]] = {
     Llm.GROK_4_7_LOW: {"api_name": "grok-4.7", "reasoning_effort": "low"},
     Llm.GPT_6_ASTRA_LOW: {"api_name": "gpt-6-astra", "reasoning_effort": "low"},
     Llm.GPT_6_ASTRA_HIGH: {"api_name": "gpt-6-astra", "reasoning_effort": "high"},
+    Llm.GPT_6_SOL_LOW: {"api_name": "gpt-6-sol", "reasoning_effort": "low"},
+    Llm.GPT_6_SOL_HIGH: {"api_name": "gpt-6-sol", "reasoning_effort": "high"},
+    Llm.GPT_6_1_SOL_LOW: {"api_name": "gpt-6.1-sol", "reasoning_effort": "low"},
+    Llm.GPT_6_1_SOL_HIGH: {"api_name": "gpt-6.1-sol", "reasoning_effort": "high"},
+    Llm.GPT_6_1_TERRA_LOW: {"api_name": "gpt-6.1-terra", "reasoning_effort": "low"},
+    Llm.GPT_6_1_TERRA_HIGH: {"api_name": "gpt-6.1-terra", "reasoning_effort": "high"},
+    Llm.GPT_6_2_ASTRA_LOW: {"api_name": "gpt-6.2-astra", "reasoning_effort": "low"},
+    Llm.GPT_6_2_ASTRA_HIGH: {"api_name": "gpt-6.2-astra", "reasoning_effort": "high"},
+    Llm.GPT_6_2_SOL_LOW: {"api_name": "gpt-6.2-sol", "reasoning_effort": "low"},
+    Llm.GPT_6_2_SOL_HIGH: {"api_name": "gpt-6.2-sol", "reasoning_effort": "high"},
     Llm.GPT_5_6_SOL_NONE: {"api_name": "gpt-5.6-sol", "reasoning_effort": "none"},
     Llm.GPT_5_6_SOL_LOW: {"api_name": "gpt-5.6-sol", "reasoning_effort": "low"},
     Llm.GPT_5_6_SOL_MEDIUM: {"api_name": "gpt-5.6-sol", "reasoning_effort": "medium"},

@@ -25,6 +25,11 @@ const (
 	UpstreamModelMetadataExtraKey             = "upstream_model_metadata"
 	UpstreamModelMetadataIncompleteCode       = "upstream_model_metadata_incomplete"
 	UpstreamModelMetadataPartialCode          = "upstream_model_metadata_partial"
+	// UpstreamModelListUnavailableCode marks a sync that fell back to the
+	// account's configured model mapping because the live /models list could
+	// not be read. Without it the response looks like a successful upstream
+	// sync even though the real list was never fetched.
+	UpstreamModelListUnavailableCode = "upstream_model_list_unavailable"
 )
 
 type UpstreamModelMetadata struct {
@@ -144,11 +149,12 @@ const (
 
 // UpstreamModelSyncError keeps internal failure details wrapped while exposing a safe client message.
 type UpstreamModelSyncError struct {
-	Kind       UpstreamModelSyncErrorKind
-	Message    string
-	StatusCode int
-	Code       string
-	Err        error
+	Kind            UpstreamModelSyncErrorKind
+	Message         string
+	StatusCode      int
+	Code            string
+	UpstreamMessage string
+	Err             error
 }
 
 func (e *UpstreamModelSyncError) Error() string {
@@ -169,11 +175,69 @@ func (e *UpstreamModelSyncError) Unwrap() error {
 }
 
 // SafeMessage returns the sanitized message that can be sent to API clients.
+// Provider-side details (HTTP status, provider error code and message) are
+// appended so admins can tell "insufficient balance" from "invalid api key"
+// instead of only seeing a generic sync failure.
 func (e *UpstreamModelSyncError) SafeMessage() string {
 	if e == nil || strings.TrimSpace(e.Message) == "" {
 		return "Failed to sync upstream models"
 	}
+	if detail := e.upstreamDetail(); detail != "" {
+		return e.Message + ": " + detail
+	}
 	return e.Message
+}
+
+// upstreamDetail renders the provider failure as
+// "HTTP 403 INSUFFICIENT_BALANCE (Insufficient account balance)".
+func (e *UpstreamModelSyncError) upstreamDetail() string {
+	if e == nil {
+		return ""
+	}
+	head := ""
+	if e.StatusCode > 0 {
+		head = fmt.Sprintf("HTTP %d", e.StatusCode)
+	}
+	if code := strings.TrimSpace(e.Code); code != "" {
+		if head == "" {
+			head = code
+		} else {
+			head += " " + code
+		}
+	}
+	message := sanitizeUpstreamProviderMessage(e.UpstreamMessage)
+	switch {
+	case head != "" && message != "":
+		return head + " (" + message + ")"
+	case head != "":
+		return head
+	default:
+		return message
+	}
+}
+
+// SafeDetail exposes only the sanitized provider-side detail so callers can
+// log it without leaking credentials or wrapping error strings.
+func (e *UpstreamModelSyncError) SafeDetail() string {
+	if e == nil {
+		return ""
+	}
+	return e.upstreamDetail()
+}
+
+// sanitizeUpstreamProviderMessage keeps provider error text single-line and
+// bounded before it is surfaced to admins or written to logs.
+func sanitizeUpstreamProviderMessage(raw string) string {
+	message := strings.TrimSpace(raw)
+	if message == "" {
+		return ""
+	}
+	message = strings.Join(strings.Fields(message), " ")
+	const limit = 200
+	if runes := []rune(message); len(runes) > limit {
+		message = string(runes[:limit]) + "\u2026"
+	}
+	return message
 }
 
 func newUpstreamModelSyncConfigError(message string, err error) error {
@@ -227,6 +291,12 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		)
 	}
 	catalog := &UpstreamModelCatalog{Models: models, Metadata: make(map[string]UpstreamModelMetadata)}
+	if !liveListAvailable {
+		catalog.Warnings = append(catalog.Warnings, UpstreamModelSyncWarning{
+			Code:    UpstreamModelListUnavailableCode,
+			Message: upstreamModelListUnavailableMessage(err),
+		})
+	}
 	if len(body) > 0 {
 		_, directMetadata, parseErr := extractUpstreamModelCatalog(body, account != nil && account.IsGrok())
 		if parseErr == nil {
@@ -317,6 +387,19 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		}
 	}
 	return catalog, nil
+}
+
+// upstreamModelListUnavailableMessage explains that the returned model IDs came
+// from the account's configured mapping instead of the upstream /models list.
+func upstreamModelListUnavailableMessage(err error) string {
+	message := "Upstream model list is unavailable"
+	var syncErr *UpstreamModelSyncError
+	if errors.As(err, &syncErr) {
+		if detail := syncErr.SafeDetail(); detail != "" {
+			message += " (" + detail + ")"
+		}
+	}
+	return message + "; models were taken from the account's configured model mapping."
 }
 
 func upstreamModelSyncStatusCode(err error) int {
@@ -760,33 +843,74 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 		return nil, nil, err
 	}
 
-	proxyURL := upstreamModelsProxyURL(account)
-	resp, err := s.doUpstreamModelsRequest(req, proxyURL, account)
-	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
 	bodyLimit := resolveModelsListReadLimit(s.cfg)
-	body, err := io.ReadAll(io.LimitReader(resp.Body, bodyLimit+1))
-	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
+	proxyURL := upstreamModelsProxyURL(account)
+	// A number of OpenAI-compatible gateways expose the discovery endpoint at
+	// /models while others use /v1/models. Keep the historical URL as the first
+	// attempt, then retry only a clear endpoint-missing response. This preserves
+	// auth and server-error semantics while matching common client behavior.
+	requests := []*http.Request{req}
+	if alternate := alternateModelsRequest(req); alternate != nil {
+		requests = append(requests, alternate)
 	}
-	if int64(len(body)) > bodyLimit {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", bodyLimit))
+	var resp *http.Response
+	var body []byte
+	for index, candidate := range requests {
+		resp, err = s.doUpstreamModelsRequest(candidate, proxyURL, account)
+		if err != nil {
+			return nil, nil, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
+		}
+		body, err = io.ReadAll(io.LimitReader(resp.Body, bodyLimit+1))
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, nil, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
+		}
+		if int64(len(body)) > bodyLimit {
+			return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", bodyLimit))
+		}
+		if (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed) && index+1 < len(requests) {
+			continue
+		}
+		break
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		var errorPayload struct {
-			Code string `json:"code"`
+			Code    string          `json:"code"`
+			Message string          `json:"message"`
+			Error   json.RawMessage `json:"error"`
 		}
 		_ = json.Unmarshal(body, &errorPayload)
+		providerCode := strings.TrimSpace(errorPayload.Code)
+		providerMessage := strings.TrimSpace(errorPayload.Message)
+		var nestedError struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if len(errorPayload.Error) > 0 && json.Unmarshal(errorPayload.Error, &nestedError) == nil {
+			if providerCode == "" {
+				providerCode = strings.TrimSpace(nestedError.Code)
+			}
+			if providerMessage == "" {
+				providerMessage = strings.TrimSpace(nestedError.Message)
+			}
+		}
+		if providerMessage == "" {
+			// Preserve useful non-JSON gateway pages, while avoiding arbitrary JSON
+			// error fields that may echo credentials or other secrets.
+			if !json.Valid(body) {
+				providerMessage = string(body)
+			} else {
+				providerMessage = "upstream returned an error response"
+			}
+		}
 		return nil, nil, &UpstreamModelSyncError{
-			Kind:       UpstreamModelSyncErrorUpstream,
-			Message:    fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
-			StatusCode: resp.StatusCode,
-			Code:       strings.TrimSpace(errorPayload.Code),
-			Err:        fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
+			Kind:            UpstreamModelSyncErrorUpstream,
+			Message:         fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
+			StatusCode:      resp.StatusCode,
+			Code:            providerCode,
+			UpstreamMessage: providerMessage,
+			Err:             fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
 		}
 	}
 
@@ -803,6 +927,38 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	}
 
 	return models, body, nil
+}
+
+// alternateModelsRequest returns a request for the gateway's other common
+// model-list route. It only removes a version segment immediately before
+// /models (for example /v1/models -> /models); arbitrary provider prefixes are
+// retained (for example /api/v1/models -> /api/models). Versioned provider
+// prefixes such as /api/coding/v4 remain intact and get /v1/models appended.
+func alternateModelsRequest(req *http.Request) *http.Request {
+	if req == nil || req.URL == nil {
+		return nil
+	}
+	path := strings.TrimRight(req.URL.Path, "/")
+	if !strings.HasSuffix(strings.ToLower(path), "/models") {
+		return nil
+	}
+	withoutModels := strings.TrimSuffix(path, "/models")
+	lastSlash := strings.LastIndex(withoutModels, "/")
+	alternatePath := ""
+	if lastSlash >= 0 && strings.EqualFold(withoutModels[lastSlash+1:], "v1") {
+		alternatePath = strings.TrimRight(withoutModels[:lastSlash], "/") + "/models"
+	} else if lastSlash < 0 || !isOpenAIAPIVersionSegment(withoutModels[lastSlash+1:]) {
+		alternatePath = withoutModels + "/v1/models"
+	} else {
+		return nil
+	}
+	alternate := req.Clone(req.Context())
+	urlCopy := *req.URL
+	alternate.URL = &urlCopy
+	alternate.URL.Path = alternatePath
+	alternate.URL.RawPath = ""
+	alternate.RequestURI = ""
+	return alternate
 }
 
 func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
@@ -1497,7 +1653,20 @@ func extractUpstreamModelIDsWithSelector(body []byte, selectID func(upstreamMode
 }
 
 func upstreamModelEntryID(entry upstreamModelEntry) string {
+	// OpenAI-compatible gateways commonly use id, while lightweight relays
+	// often return model/model_id or name. Keep the same tolerant precedence as
+	// the standalone model-list tool without changing canonical IDs when id is
+	// present.
 	modelID := strings.TrimSpace(entry.ID)
+	if modelID == "" {
+		modelID = strings.TrimSpace(entry.Model)
+	}
+	if modelID == "" {
+		modelID = strings.TrimSpace(entry.ModelID)
+	}
+	if modelID == "" {
+		modelID = strings.TrimSpace(entry.ModelIDSnake)
+	}
 	if modelID == "" {
 		modelID = strings.TrimSpace(entry.Slug)
 	}

@@ -16,6 +16,12 @@ export const AVAILABLE_MODELS = [
 ];
 
 export const AVAILABLE_CHAT_MODELS = [
+  'gpt-6.1-sol',
+  'gpt-6-astra',
+  'gpt-6-sol',
+  'gpt-6.1-terra',
+  'gpt-6.2-astra',
+  'gpt-6.2-sol',
   'grok-4.7',
   'gpt-5.5',
   'gpt-5.4-mini'

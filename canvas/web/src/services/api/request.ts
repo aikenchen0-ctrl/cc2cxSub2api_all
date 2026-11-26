@@ -55,6 +55,7 @@ async function apiRequest<T>(config: { url: string; method: "GET" | "POST" | "DE
     let response;
     try {
         response = await axios.request<ApiResponse<T>>({
+            timeout: 60_000,
             url: config.url,
             method: config.method,
             params: config.params,

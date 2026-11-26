@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/util/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"github.com/imroc/req/v3"
@@ -644,6 +645,34 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(upstreamCtx, c, account, err, false)
+	}
+	// 上游转售/中转面板在会话失效时常用 200 HTML 登录页作答。这类响应既不是
+	// 图片数据也不是错误 JSON，直接透传会让调用方解析失败（invalid character
+	// '<'），因此改写为 403 访问状态错误，交给既有的失败切换与账号冷却逻辑。
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && !isEventStreamResponse(resp.Header) {
+		reader := bufio.NewReaderSize(resp.Body, 32*1024)
+		head, _ := reader.Peek(512)
+		resp.Body = struct {
+			io.Reader
+			io.Closer
+		}{reader, resp.Body}
+		if httputil.LooksLikeHTMLResponse(resp.Header, head) {
+			page, _ := io.ReadAll(io.LimitReader(reader, 64*1024))
+			_ = resp.Body.Close()
+			body := OpenAIImagesUpstreamHTMLPageErrorBody(page)
+			logger.LegacyPrintf(
+				"service.openai_gateway",
+				"[OpenAI] Images upstream returned an HTML page account_id=%d title=%q bytes=%d",
+				account.ID,
+				HTMLPageTitle(page),
+				len(page),
+			)
+			resp.StatusCode = http.StatusForbidden
+			resp.Header.Set("Content-Type", "application/json")
+			resp.Header.Del("Content-Length")
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			resp.ContentLength = int64(len(body))
+		}
 	}
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)

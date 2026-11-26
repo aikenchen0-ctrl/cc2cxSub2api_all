@@ -53,7 +53,7 @@ services:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
-      SUB2API_RELAY_MODELS: grok-4.7,gpt-6-astra
+      SUB2API_RELAY_MODELS: gpt-6.1-sol,gpt-6-astra,gpt-6-sol,gpt-6.1-terra,gpt-6.2-astra,gpt-6.2-sol
       SUB2API_RELAY_IMAGE_MODELS: gpt-image-2
       SUB2API_RELAY_VIDEO_MODELS: minimax_h3_z0901,minimax_h3_z0903,minimax_h3_z0902,minimax_h3_zm_u24,minimax_h3_zm_u08,minimax_h3_b99_002,minimax_h3_b99_001,minimax_h3_b99_003_12s,wan2.2animate-v4-motion_retargeting,minimax_h3_image_audio_to_video_v2_15s,minimax_h3_lightx2v_v5_15s,minimax_h3_image_audio_to_video_v2,minimax_h3_image_audio_to_video,minimax_h3_lightx2v_v5,minimax_h3_lightx2v_no_pic,minimax_h3_lightx2v
       SUB2API_RELAY_ALLOW_LOCAL: "false"
@@ -269,8 +269,6 @@ services:
     restart: unless-stopped
     ports: ["127.0.0.1:3001:3000"]
     environment:
-      SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
-      SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       VITE_API_PROXY_TARGET: http://aihuoke-backend:8000
     depends_on: [aihuoke-backend]
     networks: [gateway]
@@ -377,7 +375,7 @@ services:
       SUB2API_SSO_SECRET: ${SUB2API_SSO_SECRET}
       SUB2API_APP_CREDENTIAL: ${SUB2API_APP_CREDENTIAL}
       SUB2API_RELAY_BASE_URL: http://sub2api:8080/v1
-      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-grok-4.7,gpt-6-astra}
+      SUB2API_RELAY_MODELS: ${SUB2API_RELAY_MODELS:-gpt-6.1-sol,gpt-6-astra,gpt-6-sol,gpt-6.1-terra,gpt-6.2-astra,gpt-6.2-sol}
       CANVAS_CORS_ORIGINS: https://canvas.cc2.cx
     volumes: ["/opt/cc2cxSub2api_260920/canvas/data:/app/data"]
     networks: [gateway]

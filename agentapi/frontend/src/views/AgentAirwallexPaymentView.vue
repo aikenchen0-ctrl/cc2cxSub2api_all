@@ -54,7 +54,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="mx-auto max-w-lg py-4">
+  <main class="agent-page-narrow">
     <section v-if="loading" class="card p-10 text-center">
       <span class="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500"></span>
       <h1 class="mt-5 text-xl font-bold text-gray-900 dark:text-white">正在打开 Airwallex</h1>

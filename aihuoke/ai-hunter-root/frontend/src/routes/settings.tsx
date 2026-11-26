@@ -47,8 +47,8 @@ const PROVIDERS: Provider[] = [
     label: "OpenAI",
     apiKeyField: "openai_api_key",
     apiKeyPlaceholder: "sk-…",
-    defaultModels: ["grok-4.7", "grok-4.5", "grok-4.6", "gpt-5.6-sol", "gpt-5.5", "gpt-4o-mini", "gpt-4o"],
-    reasoningModels: ["grok-4.7", "grok-4.5", "grok-4.6", "gpt-5.6-sol", "gpt-5.5", "gpt-4o", "o1-mini"],
+    defaultModels: ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "grok-4.7", "grok-4.5", "grok-4.6", "gpt-5.6-sol", "gpt-5.5", "gpt-4o-mini", "gpt-4o"],
+    reasoningModels: ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "grok-4.7", "grok-4.5", "grok-4.6", "gpt-5.6-sol", "gpt-5.5", "gpt-4o", "o1-mini"],
   },
   {
     id: "anthropic",
@@ -315,7 +315,7 @@ function LLMProviderPanel({
         </CardHeader>
         <CardContent>
           <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-            模型由 Sub2API 托管，当前默认公开模型 <span className="font-mono font-medium">grok-4.7</span>。
+            模型由 Sub2API 托管，当前默认公开模型 <span className="font-mono font-medium">gpt-6.1-sol</span>（可选 gpt-6-astra、gpt-6-sol、gpt-6.1-terra、gpt-6.2-astra、gpt-6.2-sol）。
             本页面不会要求或保存模型 API Key。
           </div>
         </CardContent>

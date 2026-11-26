@@ -5,7 +5,6 @@ import { NEW_DESIGN_SYSTEM_CONTENT } from "./lib/design-systems";
 import { IS_RUNNING_ON_CLOUD } from "./config";
 import { OnboardingNote } from "./components/messages/OnboardingNote";
 import { usePersistedState } from "./hooks/usePersistedState";
-import TermsOfServiceDialog from "./components/TermsOfServiceDialog";
 import { USER_CLOSE_WEB_SOCKET_CODE } from "./constants";
 import toast from "react-hot-toast";
 import { nanoid } from "nanoid";
@@ -41,14 +40,15 @@ import { AiEditCommit, Commit } from "./components/commits/types";
 import { createCommit } from "./components/commits/utils";
 
 function migrateStoredSettings(settings: Settings): Settings {
-  if (settings.textDefaultMigrated) return settings;
+  if (settings.textSolDefaultMigrated) return settings;
   return {
     ...settings,
     codeGenerationModel:
-      settings.codeGenerationModel === CodeGenerationModel.GPT_6_ASTRA_HIGH
-        ? CodeGenerationModel.GROK_4_7_HIGH
+      settings.codeGenerationModel === CodeGenerationModel.GPT_6_ASTRA_HIGH ||
+      settings.codeGenerationModel === CodeGenerationModel.GROK_4_7_HIGH
+        ? CodeGenerationModel.GPT_6_1_SOL_HIGH
         : settings.codeGenerationModel,
-    textDefaultMigrated: true,
+    textSolDefaultMigrated: true,
   };
 }
 
@@ -109,8 +109,9 @@ function App() {
       isImageGenerationEnabled: true,
       editorTheme: EditorTheme.COBALT,
       generatedCodeConfig: Stack.HTML_TAILWIND,
-      codeGenerationModel: CodeGenerationModel.GROK_4_7_HIGH,
+      codeGenerationModel: CodeGenerationModel.GPT_6_1_SOL_HIGH,
       textDefaultMigrated: true,
+      textSolDefaultMigrated: true,
       selectedDesignSystemId: null,
       // Only relevant for hosted version
       isTermOfServiceAccepted: false,
@@ -752,13 +753,6 @@ function App() {
     );
   }
 
-  const handleTermDialogOpenChange = (open: boolean) => {
-    setSettings((s) => ({
-      ...s,
-      isTermOfServiceAccepted: !open,
-    }));
-  };
-
   function setStack(stack: Stack) {
     setSettings((prev) => ({
       ...prev,
@@ -803,13 +797,6 @@ function App() {
           : "min-h-screen"
       }`}
     >
-      {IS_RUNNING_ON_CLOUD && (
-        <TermsOfServiceDialog
-          open={!settings.isTermOfServiceAccepted}
-          onOpenChange={handleTermDialogOpenChange}
-        />
-      )}
-
       {/* Icon strip - always visible */}
       <div
         className="sticky top-0 z-50 lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-16 lg:flex-col"

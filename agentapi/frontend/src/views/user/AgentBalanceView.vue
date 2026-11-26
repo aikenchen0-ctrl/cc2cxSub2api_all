@@ -49,8 +49,8 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-4xl space-y-4">
-    <header class="flex items-end justify-between gap-3">
+  <main class="agent-page">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <p class="text-sm font-medium text-primary-600">BALANCE</p>
         <h1 class="mt-1 text-2xl font-bold">余额</h1>
@@ -58,29 +58,29 @@ onMounted(() => void load())
           站内余额用于本站模型调用扣费，充值成功后即时到账。主站余额仅作参考，这里不能修改任何余额。
         </p>
       </div>
-      <button class="btn btn-secondary" type="button" :disabled="loading" @click="load">刷新</button>
+      <button class="btn btn-secondary shrink-0" type="button" :disabled="loading" @click="load">刷新</button>
     </header>
     <p v-if="error" role="alert" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{{ error }}</p>
     <section v-if="loading" class="card p-8 text-center text-sm text-gray-500">正在读取余额…</section>
     <template v-else-if="balance != null">
-      <section class="grid gap-4 sm:grid-cols-3">
-        <div class="card p-4">
+      <section class="grid gap-5 sm:grid-cols-3">
+        <div class="card h-full p-5">
           <p class="text-xs text-gray-500">可用余额<span v-if="usesStationWallet">（站内）</span></p>
           <p class="mt-1 text-2xl font-bold" data-testid="station-balance">{{ moneyCents(balance) }}</p>
           <p v-if="frozen > 0" class="mt-1 text-xs text-amber-600">冻结 {{ moneyCents(frozen) }}</p>
         </div>
-        <div class="card p-4">
+        <div class="card h-full p-5">
           <p class="text-xs text-gray-500">主站余额（参考）</p>
           <p class="mt-1 text-2xl font-bold text-gray-600 dark:text-gray-300" data-testid="main-balance">
             {{ mainBalance == null ? '—' : moneyCents(mainBalance) }}
           </p>
         </div>
-        <div class="card p-4">
+        <div class="card h-full p-5">
           <p class="text-xs text-gray-500">累计充值</p>
           <p class="mt-1 text-2xl font-bold">{{ totalRecharged == null ? '待确认' : money(totalRecharged) }}</p>
         </div>
       </section>
-      <section class="card overflow-x-auto p-4">
+      <section class="card overflow-x-auto p-5 sm:p-6">
         <h2 class="font-semibold">余额变动</h2>
         <table class="mt-3 w-full text-left text-sm">
           <thead><tr class="text-xs text-gray-400"><th class="py-2">类型</th><th>金额</th><th>余额</th><th>状态</th><th>时间</th></tr></thead>

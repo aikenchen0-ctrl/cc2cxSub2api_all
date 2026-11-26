@@ -112,6 +112,29 @@ func IsSub2APIChannel(channel model.ModelChannel) bool {
 	return channel.ID == sub2APIRelayChannelID
 }
 
+// ValidateSub2APIRequestURL rejects relay requests that cannot be a gateway
+// API call. A base URL such as https://host/api/v1 or a panel page turns into
+// /api/v1/v1/images/generations, which the panel answers with its HTML login
+// page (HTTP 200) instead of an API error, so the failure looked like
+// "invalid character '<' looking for beginning of value" much later.
+func ValidateSub2APIRequestURL(rawURL string) error {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return errors.New("Sub2API 渠道地址无效")
+	}
+	path := strings.ToLower(parsed.Path)
+	if strings.Contains(path, "/v1/v1") {
+		return fmt.Errorf("Sub2API 渠道地址重复了 /v1（当前路径 %s）", parsed.Path)
+	}
+	if strings.HasPrefix(path, "/api/") {
+		return fmt.Errorf("Sub2API 渠道地址指向账户接口而不是模型网关（当前路径 %s），应使用 /v1", parsed.Path)
+	}
+	if path != "/v1" && !strings.HasPrefix(path, "/v1/") && !strings.HasPrefix(path, "/v1beta/") {
+		return fmt.Errorf("Sub2API 渠道地址必须以模型网关 /v1 开头（当前路径 %q）", parsed.Path)
+	}
+	return nil
+}
+
 // SelectSub2APIRelayChannelForModel returns the managed server-side relay.
 // It is used for ordinary users so browser-supplied channel IDs cannot bypass
 // the shared Sub2API billing and access policy.
@@ -268,14 +291,14 @@ func configuredSub2APIChannel() (model.ModelChannel, error) {
 		if strings.TrimSpace(raw) == "" && strings.TrimSpace(os.Getenv("SUB2API_APP_CREDENTIAL")) != "" {
 			switch name {
 			case "SUB2API_RELAY_MODELS":
-				raw = "grok-4.7,gpt-6-astra"
+				raw = "gpt-6.1-sol,gpt-6-astra,gpt-6-sol,gpt-6.1-terra,gpt-6.2-astra,gpt-6.2-sol"
 			case "SUB2API_RELAY_IMAGE_MODELS":
-				raw = "gpt-image-2,grok-imagine-image-1.5"
+				raw = "gpt-image-2.6-flare,gpt-image-2,gpt-image-2.5,grok-imagine-image-1.5"
 			case "SUB2API_RELAY_VIDEO_MODELS":
 				raw = "grok-imagine-video-1.5,seedance-2.0,kling-v3"
 			}
 		} else if name == "SUB2API_RELAY_MODELS" && strings.TrimSpace(raw) == "" {
-			raw = "grok-4.7,gpt-6-astra"
+			raw = "gpt-6.1-sol,gpt-6-astra,gpt-6-sol,gpt-6.1-terra,gpt-6.2-astra,gpt-6.2-sol"
 		}
 		if name == "SUB2API_RELAY_VIDEO_MODELS" {
 			// Existing deployments often explicitly list only the original three models.

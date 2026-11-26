@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -81,6 +82,7 @@ func CreateCanvasImageTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetCanvasImageTask(w http.ResponseWriter, r *http.Request, id string) {
+	w.Header().Set("Cache-Control", "no-store")
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
@@ -99,7 +101,35 @@ func GetCanvasImageTask(w http.ResponseWriter, r *http.Request, id string) {
 	OK(w, service.CanvasImageTaskResponse(task))
 }
 
+func CanvasImageTaskContent(w http.ResponseWriter, r *http.Request, id string) {
+	user, ok := service.UserFromContext(r.Context())
+	if !ok {
+		FailWithStatus(w, http.StatusUnauthorized, "未登录或权限不足")
+		return
+	}
+	filename, err := service.CanvasGeneratedImagePath(user.ID, id, r.URL.Query().Get("key"))
+	if err != nil {
+		FailWithStatus(w, http.StatusNotFound, "图片不存在")
+		return
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		FailWithStatus(w, http.StatusNotFound, "图片不存在")
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		FailWithStatus(w, http.StatusNotFound, "图片不存在")
+		return
+	}
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("Content-Disposition", "inline")
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
 func UserCanvasImageTasks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
@@ -115,6 +145,7 @@ func UserCanvasImageTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func BatchCanvasImageTasks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	user, ok := service.UserFromContext(r.Context())
 	if !ok {
 		Fail(w, "未登录或权限不足")
@@ -255,7 +286,13 @@ func runCanvasImageTask(task model.CanvasImageTask, user model.AuthUser, body []
 	task.Status = "processing"
 	task.Progress = 10
 	task.StartedAt = current
-	task, _ = service.SaveCanvasImageTask(task)
+	var err error
+	task, err = service.SaveCanvasImageTask(task)
+	if err != nil {
+		log.Printf("start canvas image task failed: id=%s err=%v", task.ID, err)
+		saveFailedCanvasImageTask(task, "图片任务启动失败", err.Error())
+		return
+	}
 
 	payload, status, responseContentType, err := executeCanvasAIRequest(user, task.Endpoint, body, contentType, channelID, userChannelID)
 	if err != nil {
@@ -277,22 +314,60 @@ func runCanvasImageTask(task model.CanvasImageTask, user model.AuthUser, body []
 		saveFailedCanvasImageTask(task, err.Error(), string(payload))
 		return
 	}
+	storedURLs := make([]string, 0, len(imageURLs))
+	seenURLs := make(map[string]bool, len(imageURLs))
+	width, height := 0, 0
+	for index, candidate := range imageURLs {
+		if strings.HasPrefix(candidate, "data:image/") {
+			data, detectedMimeType, readErr := imageCandidateBytes(candidate)
+			if readErr != nil || len(data) == 0 {
+				detail := "图片内容为空"
+				if readErr != nil {
+					detail = readErr.Error()
+				}
+				saveFailedCanvasImageTask(task, "解析生成图片失败", detail)
+				return
+			}
+			storedURL, saveErr := service.SaveGeneratedImage(task.UserID, task.ID, data, detectedMimeType)
+			if saveErr != nil {
+				saveFailedCanvasImageTask(task, "保存生成图片失败", saveErr.Error())
+				return
+			}
+			candidate = storedURL
+			if index == 0 {
+				mimeType = detectedMimeType
+				bytes = int64(len(data))
+				width, height = imageSize(data)
+			}
+		}
+		if !seenURLs[candidate] {
+			seenURLs[candidate] = true
+			storedURLs = append(storedURLs, candidate)
+		}
+	}
+	if len(storedURLs) == 0 {
+		saveFailedCanvasImageTask(task, "图片接口没有返回图片", string(payload))
+		return
+	}
 	task.Status = "completed"
 	task.Progress = 100
 	task.CompletedAt = taskTime()
-	task.ResponseBody = string(payload)
-	task.ImageURL = imageURLs[0]
+	task.ResponseBody = ""
+	task.ImageURL = storedURLs[0]
 	if collectAll {
-		task.ImageURLs = imageURLs
+		task.ImageURLs = storedURLs
 	}
 	task.StorageKey = ""
 	task.MimeType = mimeType
 	task.Bytes = bytes
-	task.Width = 0
-	task.Height = 0
+	task.Width = width
+	task.Height = height
 	task.Error = ""
 	task.ErrorDetail = ""
-	_, _ = service.SaveCanvasImageTask(task)
+	if _, err := service.SaveCanvasImageTask(task); err != nil {
+		log.Printf("save completed canvas image task failed: id=%s err=%v", task.ID, err)
+		saveFailedCanvasImageTask(task, "保存生成图片结果失败", err.Error())
+	}
 }
 
 func runCanvasAudioTask(task model.CanvasAudioTask, user model.AuthUser, body []byte, contentType string, channelID string, userChannelID string) {
@@ -376,7 +451,9 @@ func saveFailedCanvasImageTask(task model.CanvasImageTask, message string, detai
 	task.CompletedAt = taskTime()
 	task.Error = firstNonEmpty(message, "图片生成失败")
 	task.ErrorDetail = detail
-	_, _ = service.SaveCanvasImageTask(task)
+	if _, err := service.SaveCanvasImageTask(task); err != nil {
+		log.Printf("save failed canvas image task failed: id=%s err=%v", task.ID, err)
+	}
 }
 
 func saveFailedCanvasAudioTask(task model.CanvasAudioTask, message string, detail string) {

@@ -26,8 +26,8 @@ import java.util.UUID;
 @Service
 public class KnowledgeIngestionService {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeIngestionService.class);
-    private static final String ONLY_CHAT_MODEL = "grok-4.7";
-    private static final Set<String> CHAT_MODELS = Set.of("grok-4.7", "gpt-5.5", "gpt-5.4-mini");
+    private static final String ONLY_CHAT_MODEL = "gpt-6.1-sol";
+    private static final Set<String> CHAT_MODELS = Set.of("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "grok-4.7", "gpt-5.5", "gpt-5.4-mini");
 
     private final KnowledgeChunkMapper mapper;
     private final KnowledgeEmbeddingService embeddingService;
@@ -45,7 +45,7 @@ public class KnowledgeIngestionService {
             @Value("${artisan.knowledge.auto-index-enabled:true}") boolean autoIndexEnabled,
             @Value("${artisan.ai.default-base-url:}") String defaultBaseUrl,
             @Value("${artisan.ai.default-api-key:}") String defaultApiKey,
-            @Value("${artisan.ai.default-chat-model:grok-4.7}") String defaultChatModel,
+            @Value("${artisan.ai.default-chat-model:gpt-6.1-sol}") String defaultChatModel,
             @Value("${artisan.knowledge.embedding-batch-size:24}") int embeddingBatchSize
     ) {
         this.mapper = mapper;

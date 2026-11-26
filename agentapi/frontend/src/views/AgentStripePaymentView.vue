@@ -174,11 +174,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="mx-auto max-w-lg space-y-5 py-4">
+  <main class="agent-page-narrow">
     <section v-if="loading" class="card flex min-h-72 items-center justify-center">
       <span class="h-9 w-9 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span>
     </section>
-    <section v-else-if="initError" class="card p-8 text-center">
+      <section v-else-if="initError" class="card p-5 text-center sm:p-8">
       <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300"><Icon name="exclamationCircle" size="xl" /></span>
       <h1 class="mt-4 text-xl font-bold text-gray-900 dark:text-white">Stripe 加载失败</h1>
       <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ initError }}</p>
@@ -193,30 +193,30 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-if="wechatQR" class="card p-6 text-center">
+      <section v-if="wechatQR" class="card p-5 text-center sm:p-6">
         <h1 class="text-lg font-bold text-gray-900 dark:text-white">使用微信扫描二维码</h1>
         <img v-if="wechatQRSafe" :src="wechatQRSafe" alt="微信支付二维码" class="mx-auto mt-5 h-64 w-64 rounded-xl bg-white p-3" />
         <p class="mt-4 text-sm text-gray-500 dark:text-dark-400">页面会自动确认支付结果。</p>
       </section>
 
-      <section v-else-if="redirecting" class="card p-10 text-center">
+      <section v-else-if="redirecting" class="card p-8 text-center sm:p-10">
         <span class="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500"></span>
         <p class="mt-4 text-sm text-gray-500 dark:text-dark-400">正在打开支付宝支付页面…</p>
       </section>
 
-      <section v-else-if="success" class="card p-8 text-center">
+      <section v-else-if="success" class="card p-5 text-center sm:p-8">
         <Icon name="checkCircle" size="xl" class="mx-auto text-emerald-500" />
         <h1 class="mt-3 text-xl font-bold text-gray-900 dark:text-white">支付已提交</h1>
       </section>
 
-      <section v-else-if="showPaymentElement" class="card p-6">
+      <section v-else-if="showPaymentElement" class="card p-5 sm:p-6">
         <h1 class="mb-5 text-lg font-bold text-gray-900 dark:text-white">选择 Stripe 支付方式</h1>
         <div id="agent-stripe-payment-element" class="min-h-48"></div>
         <p v-if="paymentError" role="alert" class="mt-4 text-sm text-red-600 dark:text-red-300">{{ paymentError }}</p>
         <button class="btn btn-primary mt-6 w-full py-3" type="button" :disabled="submitting || !ready" @click="pay">{{ submitting ? '正在提交…' : '立即支付' }}</button>
       </section>
 
-      <section v-if="paymentError && !showPaymentElement" class="card p-4 text-center">
+      <section v-if="paymentError && !showPaymentElement" class="card p-5 text-center">
         <p role="alert" class="text-sm text-red-600 dark:text-red-300">{{ paymentError }}</p>
         <RouterLink class="btn btn-secondary mt-4" to="/purchase">返回购买页</RouterLink>
       </section>

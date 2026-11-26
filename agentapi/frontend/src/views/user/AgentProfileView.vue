@@ -75,7 +75,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <main class="mx-auto max-w-3xl space-y-6">
+  <main class="agent-page-narrow">
     <header>
       <p class="text-sm font-medium text-primary-600 dark:text-primary-300">ACCOUNT</p>
       <h1 class="mt-1 text-2xl font-bold">个人资料</h1>
@@ -85,7 +85,7 @@ onMounted(() => void load())
     <p v-if="notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ notice }}</p>
     <section v-if="loading" class="card p-8 text-center text-sm text-gray-500" role="status">正在读取个人资料…</section>
     <template v-else-if="profile">
-      <section class="card space-y-4 p-5">
+      <section class="card space-y-5 p-5 sm:p-6">
         <h2 class="font-semibold">基本信息</h2>
         <p class="text-sm text-gray-500">邮箱 {{ profile.email || '未提供' }}</p>
         <label class="block text-sm font-medium" for="profile-username">显示名称</label>
@@ -95,13 +95,13 @@ onMounted(() => void load())
         <button class="btn btn-primary" type="button" :disabled="saving || !profile.can_edit" @click="saveProfile">保存资料</button>
         <p v-if="!profile.can_edit" class="text-sm text-amber-700">当前会话不能修改主站资料，请使用密码登录后再试。</p>
       </section>
-      <section class="card space-y-4 p-5">
+      <section class="card space-y-5 p-5 sm:p-6">
         <h2 class="font-semibold">修改密码</h2>
         <input v-model="oldPassword" class="input" type="password" autocomplete="current-password" placeholder="当前密码" aria-label="当前密码">
         <input v-model="newPassword" class="input" type="password" autocomplete="new-password" placeholder="新密码，至少 6 位" aria-label="新密码">
         <button class="btn btn-secondary" type="button" :disabled="saving || newPassword.length < 6" @click="changePassword">更新密码并重新登录</button>
       </section>
-      <section class="card space-y-3 p-5">
+      <section class="card space-y-3 p-5 sm:p-6">
         <h2 class="font-semibold">登录方式</h2>
         <p v-if="!bindings.length" class="text-sm text-gray-500">暂未读取到可展示的绑定方式。</p>
         <ul class="space-y-2">
